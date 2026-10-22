@@ -1,0 +1,3 @@
+__pycache__/
+*.pyc
+.dsh-ops-update-*.lock

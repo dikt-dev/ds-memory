@@ -1,0 +1,15 @@
+name: astrbot_plugin_file_reader
+display_name: 文件读取给大肥鱼
+desc: 在 AstrBot 端读取用户发来的文件（文本 / PDF / Word / Excel / PPT），解析成文字后注入给上游大模型，解决 Cloudflare Worker 拿不到本地文件路径的问题。
+short_desc: 让 AI 读懂 QQ 里发来的文件（含 PDF/Word/Excel）
+version: 1.1.0
+author: dikt-dev
+repo: https://github.com/dikt-dev/ds-memory
+astrbot_version: ">=4.16"
+support_platforms:
+  - aiocqhttp
+  - qq_official
+  - telegram
+  - discord
+  - lark
+  - dingtalk

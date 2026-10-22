@@ -1,0 +1,27 @@
+{
+  "name": "ds-memory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "DeepSeek 长期记忆代理（Cloudflare Worker + D1 + R2 + KV + Workers AI）",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "tsc --noEmit",
+    "test": "vitest run",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute ds-memory-db --remote --file=./schema.sql",
+    "password:hash": "node scripts/hash-password.mjs"
+  },
+  "dependencies": {
+    "aws4fetch": "^1.0.20",
+    "hono": "^4.6.14",
+    "jpeg-js": "^0.4.4",
+    "upng-js": "^2.1.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20251015.0",
+    "typescript": "^5.6.3",
+    "vitest": "^3.0.5",
+    "wrangler": "^4.1.0"
+  }
+}

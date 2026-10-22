@@ -1,0 +1,17 @@
+# 本地开发环境变量模板：复制为 .dev.vars 后填写（.dev.vars 已被 gitignore）
+# 与 `wrangler secret put` 同名的变量在本地开发时优先读 .dev.vars
+
+# DeepSeek API Key（https://platform.deepseek.com）
+DEEPSEEK_API_KEY=sk-xxxxxxxx
+
+# 访问口令哈希：node scripts/hash-password.mjs <你的口令> 生成（格式 salt:hash）
+ACCESS_PASSWORD_HASH=REPLACE_ME
+
+# OpenAI 兼容端点（AstrBot 等）的 Bearer 密钥：node -e "console.log(require('crypto').randomBytes(32).toString('hex'))" 生成
+ASTROBOT_API_KEY=REPLACE_ME
+
+# 小号 R2（S3 兼容 API）：主账号容量用尽后启用（Dashboard → R2 → Manage R2 API Tokens 创建）
+SECONDARY_R2_ACCOUNT_ID=REPLACE_ME
+SECONDARY_R2_BUCKET=ds-memory-r2
+SECONDARY_R2_ACCESS_KEY_ID=REPLACE_ME
+SECONDARY_R2_SECRET_ACCESS_KEY=REPLACE_ME

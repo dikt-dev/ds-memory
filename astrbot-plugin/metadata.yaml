@@ -1,0 +1,13 @@
+name: astrbot_plugin_memory_push
+display_name: 大肥鱼主动消息推送
+desc: 轮询大肥鱼（Cloudflare Worker）的待发队列，把 AI 主动想说的话推送到 QQ 等平台。支持自动学习会话、免打扰时段、失败重试。
+short_desc: 让大肥鱼主动找你聊天
+version: 1.0.0
+author: dikt-dev
+repo: https://github.com/dikt-dev/ds-memory
+astrbot_version: ">=4.0.0"
+support_platforms:
+  - aiocqhttp
+  - qq_official
+  - telegram
+  - discord

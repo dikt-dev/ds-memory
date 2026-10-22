@@ -1,0 +1,20 @@
+{
+  "max_chars": {
+    "description": "单个文件最多注入多少字符",
+    "type": "int",
+    "default": 16000,
+    "slider": { "min": 1000, "max": 60000, "step": 1000 },
+    "hint": "太长会挤占上下文。超出部分会被截断并提示。"
+  },
+  "allowed_ext": {
+    "description": "允许读取的扩展名（逗号分隔）",
+    "type": "string",
+    "default": ".txt,.md,.markdown,.json,.log,.csv,.yml,.yaml,.toml,.ini,.conf,.xml,.html,.css,.js,.ts,.py,.c,.h,.cpp,.java,.go,.rs,.sql,.sh,.pdf,.docx,.xlsx,.pptx",
+    "hint": "文本类直接读；pdf/docx/xlsx/pptx 走解析库（需安装 requirements.txt）。图片走视觉理解，不用这里。"
+  },
+  "enable": {
+    "description": "启用文件读取注入",
+    "type": "bool",
+    "default": true
+  }
+}
