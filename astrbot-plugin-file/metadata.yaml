@@ -4,7 +4,7 @@ desc: 在 AstrBot 端读取用户发来的文件（文本 / PDF / Word / Excel /
 short_desc: 让 AI 读懂 QQ 里发来的文件（含 PDF/Word/Excel）
 version: 1.1.0
 author: dikt-dev
-repo: https://github.com/dikt-dev/ds-memory
+repo: https://github.com/dikt-dev/ds-memory-public
 astrbot_version: ">=4.16"
 support_platforms:
   - aiocqhttp

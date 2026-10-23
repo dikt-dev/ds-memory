@@ -4,7 +4,7 @@ desc: 轮询小忆（Cloudflare Worker）的待发队列，把 AI 主动想说�
 short_desc: 让小忆主动找你聊天
 version: 1.1.0
 author: dikt-dev
-repo: https://github.com/dikt-dev/ds-memory
+repo: https://github.com/dikt-dev/ds-memory-public
 astrbot_version: ">=4.0.0"
 support_platforms:
   - aiocqhttp
