@@ -1,7 +1,7 @@
 # 小忆 · 项目结构与流程总结
 
 > 版本 v3.0（messages 表重构后）｜2026-10-22
-> 线上：https://your-worker.example.com ｜ 仓库：https://github.com/dikt-dev/ds-memory-public
+> 线上：https://your-worker.example.com ｜ 仓库：https://github.com/dikt-dev/ds-memory
 
 ---
 
