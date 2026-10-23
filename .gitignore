@@ -23,3 +23,6 @@ Thumbs.db
 # 编辑器/工具临时文件
 .dsh-ops-*.lock
 *.log
+
+# 本地真实绑定（含账号/资源 id，绝不提交）
+wrangler.local.toml
