@@ -89,7 +89,7 @@ export interface SignatureSet {
 const SIGNATURE_TIERS: Array<{ min: number; set: SignatureSet }> = [
   { min: 0, set: { happy: '哈哈', frustrated: '嗯…', shy: '真的假的' } },
   { min: 350, set: { happy: '嘿嘿', frustrated: '…', shy: '真的吗？' } },
-  { min: 700, set: { happy: '嘿嘿嘿', frustrated: '啧', shy: '真的假的！' } },
+  { min: 700, set: { happy: '哼哼', frustrated: '啧', shy: '真的假的！' } },
 ];
 
 /** 按亲密度取当前阶段的专属口头禅。 */
