@@ -21,8 +21,8 @@ export const ARCHIVE_R2_KEY = 'memory/archive.md';
 const ARCHIVE_KV_KEY = 'archive:cache';
 const ARCHIVE_CACHE_TTL = 300;
 
-/** 核心层（memory.md）的目标体积：12KB，质量优先，超出的往事无损沉进档案 */
-export const CORE_TARGET_BYTES = 12000;
+/** 核心层（memory.md）的目标体积：24KB，质量优先，超出的往事无损沉进档案 */
+export const CORE_TARGET_BYTES = 24000;
 /** 一次注入最多带几条往事 */
 export const RECALL_LIMIT = 4;
 /** 命中分数下限（低于它视为噪声，宁缺毋滥） */

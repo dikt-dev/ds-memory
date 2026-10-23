@@ -28,7 +28,7 @@ export function byteLength(s: string): number {
  *
  * 事实、日期、分区标题全部保留，因此不会改变文件本身。
  */
-export const MEMORY_PROMPT_MAX_BYTES = 12288;
+export const MEMORY_PROMPT_MAX_BYTES = 24576;
 
 function stripMemoryForPrompt(text: string): string {
   const lines = text

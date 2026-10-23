@@ -17,7 +17,7 @@ import { byteLength } from './memory-maintenance';
 import { getCityConfig, setCity } from './settings';
 import { fetchWeather } from './weather';
 import { saveImage } from './media';
-import { getObject, getStorageMode, listKeys, secondaryEnabled } from './storage';
+import { deleteObject, getObject, getStorageMode, listKeys, secondaryEnabled } from './storage';
 import { runDailyArchive, runContextRefresh, runMonthlyMerge } from './jobs';
 import { getOrCreateDayContext } from './context';
 import { parseRelationValues, reportSectionBudgets } from './memory-maintenance';
@@ -308,6 +308,30 @@ app.post('/api/admin/memory/refresh', requireAuth, async (c) => {
   const memory = await getMemory(c.env);
   const entries = (memory.match(/^-\s*\[(?:\d{4}|\d{2})-\d{2}-\d{2}\]/gm) ?? []).length;
   return c.json({ ok: true, bytes: byteLength(memory), entries, empty: !memory.trim() });
+});
+/** 危险操作：清空 D1 全部业务表 + R2 全部对象（主/小号）+ 记忆相关 KV，仅测试期使用。 */
+app.post('/api/admin/wipe-data', requireAuth, async (c) => {
+  const tables = ['messages', 'proactive_feedback', 'proactive_log', 'proactive_queue', 'cron_runs'];
+  const d1 = { tables: 0, rows: 0 };
+  for (const t of tables) {
+    const r = await c.env.DB.prepare(`DELETE FROM ${t}`).run();
+    d1.tables += 1;
+    d1.rows += r.meta.changes ?? 0;
+  }
+  const keys = await listKeys(c.env, '');
+  let r2 = 0;
+  for (const k of keys) {
+    await deleteObject(c.env, k).catch(() => {});
+    r2 += 1;
+  }
+  const kvKeys = [
+    MEMORY_KV_KEY, 'archive:cache', 'memo:24h', 'memo:lock',
+    'profile:user', 'profile:dirty', 'proactive:heartbeat',
+    'summary:2026-10-23', 'summary:2026-10-24',
+    'mood:usage:2026-10-23', 'mood:usage:2026-10-24',
+  ];
+  for (const k of kvKeys) await c.env.KV.delete(k).catch(() => {});
+  return c.json({ ok: true, d1, r2_deleted: r2, kv_cleared: kvKeys.length });
 });
 app.post('/api/admin/run-daily', requireAuth, async (c) => {
   const result = await runDailyArchive(c.env, new Date());
