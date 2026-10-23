@@ -130,7 +130,7 @@ describe('signatureFor —— 口头禅随关系演化', () => {
   });
 
   it('很亲近后变得更放开', () => {
-    expect(signatureFor(900).happy).toBe('嘿嘿嘿');
+    expect(signatureFor(900).happy).toBe('哼哼');
     expect(signatureFor(900).frustrated).toBe('啧');
   });
 });
