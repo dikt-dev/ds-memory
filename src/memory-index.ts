@@ -23,7 +23,7 @@ import {
   strongWords,
   stripTags,
 } from './memory-archive';
-import { ENTRY_RE, ENTRY_PREFIX_RE, normalizeDateKey } from './memory-maintenance';
+import { DATE_PREFIX_RE, ENTRY_RE, normalizeDateKey } from './memory-maintenance';
 
 /** 永远常驻注入、不参与检索的分区（核心层）。 */
 export const CORE_SECTIONS = ['人物底色', '称呼与关系', '雷区与禁忌'];
@@ -85,7 +85,10 @@ export function parseMemoryEntries(
     if (!line || line.startsWith('<!--') || line.startsWith('>') || line.startsWith('#')) continue;
     if (!/^-\s/.test(line)) continue;
     const em = line.match(ENTRY_RE);
-    const content = line.replace(ENTRY_PREFIX_RE, '').trim();
+    const content = line
+      .replace(/^-\s*/, '')
+      .replace(DATE_PREFIX_RE, '')
+      .trim();
     if (!content) continue;
     // 关系数值行只属于核心层，不进索引
     if (/^(好感度|亲密度|心情值?)\s*[:：]/.test(content)) continue;
@@ -140,14 +143,21 @@ export async function reindexMemory(
     }
     const entries = [...seen.values()];
 
-    const existing = await env.DB.prepare('SELECT id FROM memory_entries').all<{ id: string }>();
+    const existing = await env.DB.prepare('SELECT id, vec FROM memory_entries').all<{
+      id: string;
+      vec: string | null;
+    }>();
     const have = new Set((existing.results ?? []).map((r) => r.id));
+    const vecMap = new Map<string, string | null>(
+      (existing.results ?? []).map((r) => [r.id, r.vec]),
+    );
 
     const now = Date.now();
     const toEmbed: Array<{ id: string; text: string }> = [];
     const rows: MemoryEntryRow[] = entries.map((p) => {
       const id = hashId(p.section, p.date, p.content);
       const tags = autoTags(p.content, 3);
+      const isNew = !have.has(id);
       const row: MemoryEntryRow = {
         id,
         section: p.section,
@@ -159,7 +169,17 @@ export async function reindexMemory(
         vec: null,
         source: p.source,
       };
-      if (!have.has(id)) toEmbed.push({ id, text: `${p.section}：${p.content}` });
+      if (isNew) {
+        toEmbed.push({ id, text: `${p.section}：${p.content}` });
+      } else {
+        // 保留已有向量，避免 INSERT OR REPLACE 把旧向量抹掉
+        const oldVec = vecMap.get(id);
+        if (oldVec) {
+          row.vec = safeJson(oldVec);
+        } else {
+          toEmbed.push({ id, text: `${p.section}：${p.content}` }); // 旧行缺向量，补上
+        }
+      }
       return row;
     });
 
@@ -183,28 +203,44 @@ export async function reindexMemory(
        (id, section, content, date, importance, tags, keywords, vec, source, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
-    await env.DB.batch(
-      rows.map((r) =>
-        stmt.bind(
-          r.id,
-          r.section,
-          r.content,
-          r.date,
-          r.importance,
-          JSON.stringify(r.tags),
-          JSON.stringify(r.keywords),
-          r.vec ? JSON.stringify(r.vec) : null,
-          r.source,
-          now,
-          now,
+    for (let i = 0; i < rows.length; i += 100) {
+      const chunk = rows.slice(i, i + 100);
+      await env.DB.batch(
+        chunk.map((r) =>
+          stmt.bind(
+            r.id,
+            r.section,
+            r.content,
+            r.date,
+            r.importance,
+            JSON.stringify(r.tags),
+            JSON.stringify(r.keywords),
+            r.vec ? JSON.stringify(r.vec) : null,
+            r.source,
+            now,
+            now,
+          ),
         ),
-      ),
-    );
+      );
+    }
+    // 清理"幽灵条目"：本体里已经删掉/改掉的旧行，不能再被召回
+    const currentIds = new Set(rows.map((r) => r.id));
+    const staleIds = [...have].filter((id) => !currentIds.has(id));
+    for (let i = 0; i < staleIds.length; i += 100) {
+      const chunk = staleIds.slice(i, i + 100);
+      await env.DB.batch(
+        chunk.map((id) => env.DB.prepare('DELETE FROM memory_entries WHERE id = ?').bind(id)),
+      );
+    }
+
+    const vecCount = await env.DB.prepare(
+      'SELECT COUNT(*) AS c FROM memory_entries WHERE vec IS NOT NULL',
+    ).first<{ c: number }>();
     // 预热缓存：isolate 内存 + KV（跨 isolate）
     rowsCache = { key: `${rows.length}|${now}`, rows };
     memCache = { key: 'reindex', rows, at: now };
     await putIndexKv(env, rows);
-    return { entries: rows.length, withVec: rows.filter((r) => r.vec).length, errors: null };
+    return { entries: rows.length, withVec: vecCount?.c ?? 0, errors: null };
   } catch (e) {
     console.error('[memory-index] reindex failed:', e);
     return { entries: 0, withVec: 0, errors: e instanceof Error ? e.message : String(e) };

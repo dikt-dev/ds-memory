@@ -115,7 +115,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
 
   // ── ② 稳定（每天 04:00 才变）：长期记忆 ─────────────────────
   lines.push('');
-  lines.push('## 关于用户的长期记忆');
+  lines.push('## 核心记忆（永远带上的长期设定）');
   lines.push(compactMemoryForPrompt(memory) || '（暂无记忆）');
   lines.push('');
   lines.push('## 记忆使用规则（重要性权重，不是字数占比）');
