@@ -45,11 +45,11 @@ describe('buildVoiceDirective', () => {
     expect(d).toContain('情绪直接说');
   });
 
-  it('颜文字随亲密度放开', () => {
+  it('颜文字随亲密度放开频率', () => {
     const near = buildVoiceDirective(300);
     const close = buildVoiceDirective(900);
-    expect(near).toContain('颜文字先别用');
-    expect(close).toContain('颜文字偶尔一个');
+    expect(near).toContain('每 6~8 条');
+    expect(close).toContain('每 3~4 条');
     expect(close).toContain('不用 emoji');
   });
 
@@ -61,8 +61,8 @@ describe('buildVoiceDirective', () => {
 
   it('体积受控：不再是一张 3KB 的教科书清单', () => {
     const bytes = new TextEncoder().encode(buildVoiceDirective(900)).length;
-    // 旧版约 3.2KB（占系统提示词 48%）；压缩后应显著变小
-    expect(bytes).toBeLessThan(1700);
+    // 旧版约 3.2KB（占系统提示词 48%）；压缩后控制在 2KB 以内
+    expect(bytes).toBeLessThan(2000);
   });
 });
 

@@ -526,16 +526,18 @@ openaiApp.post('/chat/completions', async (c) => {
     return cost;
   };
 
-  // 4) 流式 / 非流式
-  if (body?.stream !== false) {
-    return streamDeepSeek(c.env, upstream, { appendUsageEvent: false, onFinish });
-  }
-
   // ★ 客户端只能压低、不能抬高预算：如果客户端写死 4096，会把「按长度自适应」盖掉
   const budget = replyTokenBudget(lastUserCleaned);
   const requested =
     typeof body?.max_tokens === 'number' && body.max_tokens > 0 ? Math.floor(body.max_tokens) : null;
   const maxTokens = requested ? Math.min(requested, budget) : budget;
+
+  // 4) 流式 / 非流式
+  if (body?.stream !== false) {
+    // ★ 流式也要带上预算，否则 QQ 客户端切到流式后又会变成长篇大论
+    return streamDeepSeek(c.env, upstream, { appendUsageEvent: false, maxTokens, onFinish });
+  }
+
   const result = await completeDeepSeek(c.env, upstream, now, maxTokens);
   if ('error' in result) return openaiError(c, result.status, result.error);
   if (!skipRecording && normalizeAssistantText(result.text) && userMessageId) {

@@ -143,7 +143,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
       '- 排版：对方在 QQ 这类聊天软件里看，不要用 Markdown（**加粗**、# 标题、表格、代码块），用纯文本和换行。',
     );
     lines.push(
-      '- 想带点情绪时，可以在句末加 [face:微笑]（可用：微笑、呲牙、调皮、得意、害羞、偷笑、白眼、惊讶、难过、斜眼笑），系统会换成 QQ 表情。一句最多一个，别滥用。',
+      '- 想带点情绪时，在句末加 [face:微笑]（可用：微笑、呲牙、调皮、得意、害羞、偷笑、白眼、惊讶、难过、斜眼笑），系统会换成 QQ 表情。大约每 2~3 条带一个，一条最多一个。',
     );
     if (voiceReply) {
       lines.push(

@@ -180,12 +180,14 @@ export function buildVoiceDirective(intimacy: number): string {
   lines.push('- 带起伏：“呀”“啦”“欸”、“好耶——”“真的假的！”；不要每句都用句号收尾。');
   lines.push('- 可以先一个短反应再接内容：“诶？” “好啊，”');
   lines.push('- 情绪直接说：开心 / 有点委屈 / 被夸得不好意思，不用绕。');
+  lines.push('- 有劲儿一点：好笑就笑出声（“哈哈”“笑死”），惊到就“啊？”“真的假的？”，别每条都一个温度。');
+  lines.push('- 先给反应，再给看法；别一上来就科普原理、列分析。');
   lines.push('- 别给人下性格判断（「你这人挺较真」这种），也别每句都「我感觉你…」开场；顺着事聊就行。');
   lines.push('- 允许犹豫、改口、只说半句。');
   lines.push('- 提一句具体的东西（他前面说的事、现在几点、外面天气）比空泛关心更像真的。');
   lines.push(
     level < 0.3
-      ? '- 颜文字先别用，你们还不熟。'
+      ? `- 颜文字可以很少地用（约每 6~8 条一次，放句尾）；讲正事、安慰他时不用；不用 emoji。例：${KAOMOJI.happy[0]}`
       : `- 颜文字偶尔一个（约每 3~4 条一次，放句尾）；讲正事、安慰他时不用；不用 emoji。例：${KAOMOJI.happy[0]} ${KAOMOJI.shy[0]}`,
   );
   const sig = signatureFor(intimacy);
