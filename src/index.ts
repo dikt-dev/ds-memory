@@ -440,6 +440,38 @@ app.post('/api/admin/trigger-proactive', requireAuth, async (c) => {
   return c.json({ ok: true, kind, ...result });
 });
 
+/**
+ * 兜底路由：静态资源透传 + HTML 角色名注入。
+ *
+ * ★ `/api/*` 与 `/v1/*` 不在此处理：它们各自有专属路由，未匹配时应当 404，
+ *   不能把 API 的 404 变成一个 HTML 页面（会让客户端 JSON 解析踩坑）。
+ *
+ * 对 HTML 做角色名替换（「小忆」→ 部署者 CHARACTER_NAME），
+ * 这样源码保持开源的干净设定，私有部署只改环境变量就有自己的角色名。
+ * 二进制资源（图片/字体等）原样透传，不做字符串处理。
+ */
+app.get('*', async (c) => {
+  const path = c.req.path;
+  if (path.startsWith('/api/') || path.startsWith('/v1/')) {
+    return c.json({ error: 'not found' }, 404);
+  }
+
+  const upstream = await c.env.ASSETS.fetch(c.req.raw);
+  const ct = upstream.headers.get('content-type') ?? '';
+  if (!ct.toLowerCase().includes('text/html')) return upstream;
+
+  const name = c.env.CHARACTER_NAME?.trim() || '小忆';
+  const original = await upstream.text();
+  const replaced = original.replace(/小忆/g, name);
+  return new Response(replaced, {
+    // 内容长度已变，去掉沿袭自上游的 content-length，避免响应被截断
+    headers: new Headers(
+      [...upstream.headers].filter(([k]) => k.toLowerCase() !== 'content-length'),
+    ),
+    status: upstream.status,
+  });
+});
+
 app.onError((err, c) => {
   console.error('[worker] unhandled error:', err);
   return c.json({ error: 'internal error' }, 500);

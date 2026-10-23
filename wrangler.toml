@@ -47,6 +47,13 @@ STORAGE_THRESHOLD_BYTES = "9126805504"
 # 主动消息强度：quiet（少说）/ normal（正常）/ active（活跃）
 PROACTIVE_LEVEL = "normal"
 
+# ── 角色身份（可选）──────────────────────────────────────────
+# 不填则用开源默认值：角色名「小忆」、按记忆自然称呼对方。
+# 想换成自己的设定就填这两项，**不用改源码**：
+#   CHARACTER_NAME = "阿七"
+#   USER_ADDRESS   = "主人"   # 换成你想被叫的称呼
+# 它们会同时影响系统提示词、角色状态卡和网页标题。
+
 # 主动消息（AstrBot HTTP API）：AstrBot 的公网地址与会话 UMO；留空则走队列模式
 # UMO 形如 default_1234567890:FriendMessage:ABCDEF...
 ASTRBOT_BASE_URL = ""
@@ -71,6 +78,9 @@ binding = "AI"
 [assets]
 directory = "./public"
 binding = "ASSETS"
+# 让 Worker 先接管首页，才能对 HTML 注入 CHARACTER_NAME（角色名）。
+# 其余静态文件（图片等）仍由 CDN 直出，不经过 Worker。
+run_worker_first = ["/", "/index.html"]
 
 [triggers]
 # Cloudflare 免费版限制 3 个 cron 触发器，所以合并成 3 条、在代码里分发：

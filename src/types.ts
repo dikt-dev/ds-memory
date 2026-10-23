@@ -23,6 +23,9 @@ export interface Env {
   PRICE_INPUT_HIT_PEAK: string;
   PRICE_INPUT_MISS_PEAK: string;
   PRICE_OUTPUT_PEAK: string;
+  // ── 角色身份（部署方可覆盖，开源默认值见 src/identity.ts）──
+  CHARACTER_NAME?: string; // 角色自称：缺省为「小忆」，可自行改（见 src/identity.ts）
+  USER_ADDRESS?: string;  // 期望对方怎么称呼自己：缺省按记忆自然称呼
 
   // secrets（可选：未配置时对应功能降级）
   DEEPSEEK_API_KEY?: string;

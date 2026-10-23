@@ -329,6 +329,7 @@ openaiApp.post('/chat/completions', async (c) => {
     dateKey,
     wasIgnored: facts.wasIgnored,
     ignoredMessage: facts.ignoredMessage,
+    characterName: c.env.CHARACTER_NAME,
   });
   const moodNote = sessionMoodNote(sessionMood);
   const cardTextWithMood = moodNote ? `${charCard.cardText}\n- 情绪残留：${moodNote}` : charCard.cardText;
@@ -356,6 +357,8 @@ openaiApp.post('/chat/completions', async (c) => {
       characterCard: cardTextWithMood,
       voice: buildVoiceDirective(relation.intimacy),
       attitude: describeAttitude(relation.affinity, relation.intimacy, effectiveMood),
+      characterName: c.env.CHARACTER_NAME,
+      userAddress: c.env.USER_ADDRESS,
     }),
   ].join('\n\n');
   const upstream: DeepSeekMessage[] = [

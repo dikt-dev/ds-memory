@@ -1,16 +1,13 @@
 /**
- * 小忆「活人感」—— 角色状态卡（阶段 2 核心）。
+ * 角色「活人感」—— 角色状态卡（阶段 2 核心）。
  *
- * 目标：每轮动态生成「现在的小忆是什么状态」，注入系统提示词。
+ * 目标：每轮动态生成「现在的它是什么状态」，注入系统提示词。
  * 让它的开场白、语气、状态都跟「距上次聊天多久、现在几点、今天聊了多少」挂钩。
  *
- * 三分量：
- * 1. 开场白引导（距上次聊天间隔）—— "终于想起我啦？都过去大半天了"
- * 2. 时段状态（几点 + 心情）—— "下午容易犯困，想喝奶茶"
- * 3. 疲惫度（今日聊了多少轮）—— 聊久了会累、会敷衍
- *
- * 全部是纯函数，可单测。
+ * 注：角色名由调用方通过 `CharacterStateInput.characterName` 传入（来自
+ * 环境变量 CHARACTER_NAME），不要在这里写死具体角色名，保持开源干净。
  */
+import { resolveCharacterName } from './identity';
 
 /** 距上次聊天间隔 → 开场白情绪引导（不写死句子，只给"情绪倾向"，让模型自然发挥）。 */
 export function awayAperture(hoursSinceLastContact: number | null): string {
@@ -199,6 +196,8 @@ export interface CharacterStateInput {
   wasIgnored?: boolean;
   /** 被冷落的主动消息内容（可选，用于自然引用） */
   ignoredMessage?: string | null;
+  /** 角色名（缺省为开源默认值，见 identity.ts） */
+  characterName?: string;
 }
 
 export interface CharacterState {
@@ -243,8 +242,9 @@ export function buildCharacterCard(input: CharacterStateInput): CharacterState {
         ? '你们挺熟了，说话放松，可以用语气词'
         : '你们很亲近，可以像老朋友一样随意、有小情绪';
 
+  const name = input.characterName?.trim() || resolveCharacterName(undefined);
   const lines = [
-    '## 当前的小忆（这是"现在"的你，不是固定人设）',
+    `## 当前的${name}（这是"现在"的你，不是固定人设）`,
     `- 距上次聊天：${formatAway(input.hoursSinceLastContact)}`,
     `- 开场情绪：${away}`,
     ...(offline ? [`- 刚才在做什么：${offline}`] : []),

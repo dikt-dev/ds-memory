@@ -91,6 +91,7 @@ export async function streamChat(
     dateKey,
     wasIgnored: facts.wasIgnored,
     ignoredMessage: facts.ignoredMessage,
+    characterName: env.CHARACTER_NAME,
   });
   // 情绪残留单独注一句（附在状态卡后面）
   const cardTextWithMood = moodNote ? `${charCard.cardText}\n- 情绪残留：${moodNote}` : charCard.cardText;
@@ -126,6 +127,8 @@ export async function streamChat(
         characterCard: cardTextWithMood,
         voice: buildVoiceDirective(relationVals.intimacy),
         attitude: describeAttitude(relationVals.affinity, relationVals.intimacy, effectiveMood),
+        characterName: env.CHARACTER_NAME,
+        userAddress: env.USER_ADDRESS,
       }),
     },
     ...history.map((m) => ({ role: m.role, content: m.content })),

@@ -64,6 +64,43 @@ describe('buildSystemPrompt', () => {
     });
     expect(prompt).toContain('（暂无记忆）');
   });
+
+  it('角色名可被环境变量覆盖（开源默认是「小忆」）', () => {
+    const base = {
+      now: new Date('2026-10-21T01:00:00Z'),
+      ctx,
+      memory: 'x',
+      channel: 'web' as const,
+    };
+    // 未指定：用开源默认值
+    expect(buildSystemPrompt(base)).toContain('你是「小忆」');
+    // 指定后：换成部署方自己的角色名
+    const custom = buildSystemPrompt({ ...base, characterName: '阿七' });
+    expect(custom).toContain('你是「阿七」');
+    expect(custom).not.toContain('你是「小忆」');
+  });
+
+  it('未配置 USER_ADDRESS 时按记忆自然称呼', () => {
+    const prompt = buildSystemPrompt({
+      now: new Date('2026-10-21T01:00:00Z'),
+      ctx,
+      memory: 'x',
+      channel: 'web',
+    });
+    expect(prompt).toContain('按记忆里的约定称呼对方');
+  });
+
+  it('配置 USER_ADDRESS 后写死该称呼', () => {
+    const prompt = buildSystemPrompt({
+      now: new Date('2026-10-21T01:00:00Z'),
+      ctx,
+      memory: 'x',
+      channel: 'web',
+      userAddress: '主人',
+    });
+    expect(prompt).toContain('你叫他"主人"');
+    expect(prompt).not.toContain('按记忆里的约定称呼对方');
+  });
 });
 
 describe('normalizeChannel', () => {

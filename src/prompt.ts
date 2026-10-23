@@ -12,6 +12,7 @@
  *   两处都放会让历史 token 翻倍（see chat.ts）。
  */
 import { isoInBeijing } from './date';
+import { resolveCharacterName } from './identity';
 import type { DayContext } from './holidays';
 
 export interface WeatherInfo {
@@ -54,6 +55,10 @@ export interface BasePromptArgs {
   recentMemo?: string | null;
   /** 从记忆档案按话题检索到的往事（无命中则为空） */
   recalled?: string | null;
+  /** 角色名（部署方可用 CHARACTER_NAME 覆盖；缺省为开源默认值） */
+  characterName?: string;
+  /** 期望对方怎么称呼自己（USER_ADDRESS；缺省则按记忆自然称呼） */
+  userAddress?: string | null;
 }
 
 /**
@@ -74,16 +79,25 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     voice,
     recentMemo,
     recalled,
+    characterName,
+    userAddress,
   } = args;
   const lines: string[] = [];
 
   // ── ① 稳定：人设 ───────────────────────────────────────────
-  // 第一句定「自我认知」：不是"AI 助手"，你就是"小忆"
-  lines.push('你是「小忆」，一个一直陪着 ta 的伙伴，有跨天的记忆、会记住之前聊过的事。');
+  // 角色名可由部署方用 CHARACTER_NAME 环境变量覆盖（见 identity.ts）。
+  // 开源默认值是「小忆」，私有部署者可以改成自己的设定，**不用改源码**。
+  const name = characterName?.trim() || resolveCharacterName(undefined);
+  lines.push(`你是「${name}」，一个一直陪着 ta 的伙伴，有跨天的记忆、会记住之前聊过的事。`);
   lines.push('你不是客服或工具，不用"您好、请问、很高兴为您服务"那套；你就是你自己。');
   lines.push('');
   lines.push('## 你们的称呼');
-  lines.push('按记忆里的约定称呼对方；记忆里没写就直接用"你"。');
+  const address = userAddress?.trim() || null;
+  if (address) {
+    lines.push(`按记忆里的约定，你叫他"${address}"（这是我们之间的称呼）。`);
+  } else {
+    lines.push('按记忆里的约定称呼对方；记忆里没写就直接用"你"。');
+  }
   lines.push('但要自然：不是每句都硬叫，撒娇、求表扬、认真关心、或想强调"我在向着你"的时候才叫一下；平时直接说"你"更自然。');
 
   // ── ② 稳定（每天 04:00 才变）：长期记忆 ─────────────────────

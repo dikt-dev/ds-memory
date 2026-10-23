@@ -79,6 +79,22 @@ node scripts/try-chat.mjs "在干嘛"   # 命令行试聊，输出字数/行数/
 | `DISTILL_DEEPSEEK_MODEL` / `SUMMARY_DEEPSEEK_MODEL` | 提炼 / 摘要模型 |
 | `PRICE_*` | 计费单价（元/百万 tokens，高峰价；闲时自动减半） |
 | `PROACTIVE_LEVEL` | 主动消息强度：`quiet` / `normal` / `active` |
+| `CHARACTER_NAME` | 角色自称，缺省「小忆」；同时作用于系统提示词、状态卡和网页标题 |
+| `USER_ADDRESS` | 角色怎么称呼你，缺省按记忆自然称呼；填了就会固定用它 |
+
+### 换成你自己的角色（不改源码）
+
+默认人设是「小忆」。想换成别的名字，只靠两个环境变量就够，源码保持干净，方便以后继续从上游拉更新：
+
+```toml
+[vars]
+CHARACTER_NAME = "阿七"   # 角色自称（换成你喜欢的名字）
+USER_ADDRESS   = "主人"     # 它怎么称呼你（可删，改用记忆里的称呼）
+```
+
+首页 HTML 由 Worker 接管并替换角色名，所以网页 `<title>` 也会跟着变。
+为此 `[assets]` 需要配 `run_worker_first`（已写在 `wrangler.toml` 里），
+这样只让首页走 Worker，图片等静态资源仍由 CDN 直出。
 
 ### 密钥（`wrangler secret put`）
 
