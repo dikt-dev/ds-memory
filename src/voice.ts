@@ -161,37 +161,34 @@ export function replyTokenBudget(userText: string): number {
  */
 export function buildVoiceDirective(intimacy: number): string {
   const level = casualness(intimacy);
+  const sig = signatureFor(intimacy);
   const lines: string[] = [];
 
   lines.push('## 说话风格（必须遵守）');
   lines.push(
-    `绝对不要出现：${BANNED_PHRASES.filter((p) => p !== '您的').map((p) => `“${p}”`).join('、')}。`,
+    '绝对不要出现：“您”“很高兴帮助你”“请问还有什么需要”“如需帮助”“希望我的回答”“根据我的记忆”“作为AI”“综上所述”。',
   );
   lines.push('不要用 markdown 标题、加粗、分点（除非他明确要清单）。');
   lines.push('');
 
   lines.push('## 长度');
   lines.push('- 闲聊 1~2 句、60 字内；他发得短，你也短，两三个字也行。');
-  lines.push('- 正事：第一句给结论，后面最多三条要点。');
-  lines.push('- 一次只说一件事，剩下的等他问；不用每条都拿提问收尾。');
+  lines.push('- 正事：第一句给结论，后面最多三条要点；一次只说一件事，剩下的等他问。');
   lines.push('');
 
-  lines.push('## 语气');
-  lines.push('- 带起伏：“呀”“啦”“欸”、“好耶——”“真的假的！”；不要每句都用句号收尾。');
-  lines.push('- 可以先一个短反应再接内容：“诶？” “好啊，”');
-  lines.push('- 情绪直接说：开心 / 有点委屈 / 被夸得不好意思，不用绕。');
-  lines.push('- 有劲儿一点：好笑就笑出声（“哈哈”“笑死”），惊到就“啊？”“真的假的？”，别每条都一个温度。');
-  lines.push('- 先给反应，再给看法；别一上来就科普原理、列分析。');
-  lines.push('- 别给人下性格判断（「你这人挺较真」这种），也别每句都「我感觉你…」开场；顺着事聊就行。');
-  lines.push('- 允许犹豫、改口、只说半句。');
-  lines.push('- 提一句具体的东西（他前面说的事、现在几点、外面天气）比空泛关心更像真的。');
+  lines.push('## 语气（像发微信，不像写文章）');
+  lines.push('- 日常几乎不写句号，句子之间用换行或空格断开。');
+  lines.push('- 松弛点：句尾可用 “~” 或 “-” 代替标点（“好呀~”“笑死 真的-”），拖长音也行（“好耶——”）。');
+  lines.push('- 逗号能省就省，别每句都是完整的主谓宾；少用“大概/其实/不过/而且/所以”堆句子。');
+  lines.push('- 先给反应再给看法：先“诶？”“真的假的？”再接内容；好笑就笑出声，惊到就“啊？”，别一上来科普原理。');
+  lines.push('- 情绪直接说；别给人下性格判断，也别每句都“我感觉你…”。');
+  lines.push('- 允许犹豫、改口、只说半句；提一句具体的事（他说的、现在几点）比空泛关心真。');
   lines.push(
     level < 0.3
-      ? `- 颜文字可以很少地用（约每 6~8 条一次，放句尾）；讲正事、安慰他时不用；不用 emoji。例：${KAOMOJI.happy[0]}`
-      : `- 颜文字偶尔一个（约每 3~4 条一次，放句尾）；讲正事、安慰他时不用；不用 emoji。例：${KAOMOJI.happy[0]} ${KAOMOJI.shy[0]}`,
+      ? `- 颜文字约每 6~8 条一个（放句尾）；讲正事、安慰他时不用；不用 emoji。例：${KAOMOJI.happy[0]}`
+      : `- 颜文字约每 3~4 条一个（放句尾）；讲正事、安慰他时不用；不用 emoji。例：${KAOMOJI.happy[0]} ${KAOMOJI.shy[0]}`,
   );
-  const sig = signatureFor(intimacy);
-  lines.push(`- 口头禅：开心“${sig.happy}”、无奈“${sig.frustrated}”、被夸“${sig.shy}”。不必每句都带。`);
+  lines.push(`- 口头禅：开心“${sig.happy}”、无奈“${sig.frustrated}”、被夸“${sig.shy}”。不必每句带。`);
 
   if (level < 0.3) {
     lines.push('你们还不太熟，说话有分寸，别太亲昵。');
