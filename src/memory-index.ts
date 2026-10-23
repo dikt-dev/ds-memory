@@ -42,7 +42,8 @@ export interface MemoryEntryRow {
   importance: number;
   tags: string[];
   keywords: string[];
-  vec: number[] | null;
+  /** 存储态向量：int8 量化 JSON（{min,max,b:base64}），或旧版 float 数组 JSON */
+  vec: string | null;
   source: 'memory' | 'archive';
 }
 
@@ -172,12 +173,12 @@ export async function reindexMemory(
       if (isNew) {
         toEmbed.push({ id, text: `${p.section}：${p.content}` });
       } else {
-        // 保留已有向量，避免 INSERT OR REPLACE 把旧向量抹掉
-        const oldVec = vecMap.get(id);
-        if (oldVec) {
-          row.vec = safeJson(oldVec);
+        // 保留已有向量；旧版 float 数组就地转 int8，缺向量才重新计算
+        const parsed = decodeVec(vecMap.get(id) ?? null);
+        if (parsed) {
+          row.vec = quantizeVec(parsed);
         } else {
-          toEmbed.push({ id, text: `${p.section}：${p.content}` }); // 旧行缺向量，补上
+          toEmbed.push({ id, text: `${p.section}：${p.content}` });
         }
       }
       return row;
@@ -193,7 +194,7 @@ export async function reindexMemory(
       batch.forEach((b, j) => {
         if (vecs[j]) {
           const row = rows.find((r) => r.id === b.id);
-          if (row) row.vec = vecs[j];
+          if (row) row.vec = quantizeVec(vecs[j]);
         }
       });
     }
@@ -215,7 +216,7 @@ export async function reindexMemory(
             r.importance,
             JSON.stringify(r.tags),
             JSON.stringify(r.keywords),
-            r.vec ? JSON.stringify(r.vec) : null,
+            r.vec,
             r.source,
             now,
             now,
@@ -262,6 +263,54 @@ function cosine(a: number[], b: number[]): number {
   return dot / (Math.sqrt(na) * Math.sqrt(nb));
 }
 
+/* ---------- int8 量化：1024 维 float 数组 → 约 1.4KB JSON ---------- */
+
+interface QuantizedVec {
+  min: number;
+  max: number;
+  b: string; // Int8Array 的 base64
+}
+
+/** 把 float 向量量化成 int8（-128~127），cosine 基本不变，体积约省 60%。 */
+export function quantizeVec(vec: number[]): string | null {
+  if (!vec || vec.length === 0) return null;
+  let min = Infinity;
+  let max = -Infinity;
+  for (const v of vec) {
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
+  const range = max - min || 1;
+  const bytes = new Uint8Array(vec.length);
+  for (let i = 0; i < vec.length; i++) {
+    bytes[i] = Math.round(((vec[i] - min) / range) * 255) & 0xff;
+  }
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return JSON.stringify({ min, max, b: btoa(bin) });
+}
+
+/** 解码存储态向量：兼容旧版 float 数组 JSON 与新版 int8 JSON。 */
+export function decodeVec(raw: string | null): number[] | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as number[] | QuantizedVec;
+    if (Array.isArray(parsed)) return parsed; // 旧格式
+    if (typeof parsed === 'object' && parsed && typeof parsed.b === 'string') {
+      const bin = atob(parsed.b);
+      const range = (parsed.max ?? 1) - (parsed.min ?? 0) || 1;
+      const out: number[] = [];
+      for (let i = 0; i < bin.length; i++) {
+        out.push(parsed.min + (bin.charCodeAt(i) / 255) * range);
+      }
+      return out;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 let rowsCache: { key: string; rows: MemoryEntryRow[] } | null = null;
 
 const INDEX_KV_KEY = 'memory:index';
@@ -275,6 +324,7 @@ interface MemCache {
   at: number;
 }
 let memCache: MemCache | null = null;
+const qvecMem = new Map<string, number[]>();
 
 async function putIndexKv(env: Env, rows: MemoryEntryRow[]): Promise<void> {
   try {
@@ -344,7 +394,7 @@ async function loadRows(env: Env): Promise<MemoryEntryRow[]> {
     importance: r.importance,
     tags: safeJson(r.tags),
     keywords: safeJson(r.keywords),
-    vec: r.vec ? safeJson(r.vec) : null,
+    vec: r.vec,
     source: r.source === 'archive' ? 'archive' : 'memory',
   }));
   rowsCache = { key, rows };
@@ -379,13 +429,37 @@ export async function recallMemoryForChat(
     const tagCtx = expandQuery(q).toLowerCase();
 
     let qVec: number[] | null = null;
-    const model = env.EMBEDDING_MODEL || DEFAULT_EMBEDDING_MODEL;
-    try {
-      const res = (await env.AI.run(model as never, { text: [q] })) as { data?: number[][] };
-      if (Array.isArray(res?.data) && res.data[0]) qVec = res.data[0];
-    } catch {
-      qVec = null;
+    // 查询向量缓存：先内存，再 KV（1h），都没有才调 AI
+    const qKey = `memory:qvec:${hashId('q', null, q.slice(0, 200))}`;
+    const cachedQ = qvecMem.get(qKey);
+    if (cachedQ) {
+      qVec = cachedQ.length > 0 ? cachedQ : null;
+    } else {
+      try {
+        const kvQ = (await env.KV.get(qKey, 'json').catch(() => null)) as number[] | null;
+        if (Array.isArray(kvQ) && kvQ.length > 0) {
+          qVec = kvQ;
+        } else {
+          const model = env.EMBEDDING_MODEL || DEFAULT_EMBEDDING_MODEL;
+          const res = (await env.AI.run(model as never, { text: [q] })) as { data?: number[][] };
+          if (Array.isArray(res?.data) && res.data[0]) {
+            qVec = res.data[0];
+            await env.KV.put(qKey, JSON.stringify(qVec), { expirationTtl: 3600 }).catch(() => {});
+          }
+        }
+      } catch {
+        qVec = null;
+      }
+      if (qvecMem.size > 200) qvecMem.clear();
+      qvecMem.set(qKey, qVec ?? []);
     }
+
+    const decoded = new Map<string, number[] | null>();
+    const vecOf = (r: MemoryEntryRow): number[] | null => {
+      if (!r.vec) return null;
+      if (!decoded.has(r.id)) decoded.set(r.id, decodeVec(r.vec));
+      return decoded.get(r.id) ?? null;
+    };
 
     const scored = rows.map((r) => {
       let score = 0;
@@ -393,7 +467,10 @@ export async function recallMemoryForChat(
       for (const t of r.tags) if (tagCtx.includes(t)) score += 3;
       for (const w of qWords) if (r.content.toLowerCase().includes(w)) score += 2;
       for (const a of aliases) if (r.content.toLowerCase().includes(a)) score += 2;
-      if (qVec && r.vec) score += cosine(qVec, r.vec) * 3;
+      if (qVec) {
+        const rv = vecOf(r);
+        if (rv) score += cosine(qVec, rv) * 3;
+      }
       return { r, score };
     });
 

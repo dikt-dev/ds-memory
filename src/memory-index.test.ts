@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractCoreMemory, parseMemoryEntries } from './memory-index';
+import { decodeVec, extractCoreMemory, parseMemoryEntries, quantizeVec } from './memory-index';
 
 const SAMPLE = `# 长期记忆
 
@@ -38,5 +38,22 @@ describe('parseMemoryEntries', () => {
     expect(contents).not.toContain('名字=大肥鱼'); // 核心分区不进索引
     expect(entries.some((e) => e.content.includes('好感度'))).toBe(false);
     expect(entries.every((e) => e.section)).toBe(true);
+  });
+});
+
+describe('向量 int8 量化', () => {
+  it('量化→解码往返误差受控，且兼容旧 float 数组', () => {
+    const orig = [0.5, -0.25, 0.9, -0.9, 0.1];
+    const q = quantizeVec(orig);
+    expect(q).toBeTruthy();
+    const dec = decodeVec(q!);
+    expect(dec).toHaveLength(orig.length);
+    if (dec) {
+      const range = Math.max(...orig) - Math.min(...orig);
+      dec.forEach((v, i) => expect(Math.abs(v - orig[i])).toBeLessThanOrEqual(range / 255 + 1e-9));
+    }
+    // 旧格式（float 数组 JSON）仍然可解码
+    expect(decodeVec(JSON.stringify(orig))).toEqual(orig);
+    expect(decodeVec(null)).toBeNull();
   });
 });
