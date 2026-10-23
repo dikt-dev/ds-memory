@@ -135,7 +135,11 @@ R2 根目录/
 | `config:city` | 永久 | 城市配置 |
 | `auth:token` | 7天 | 登录会话 |
 | `storage:mode` | 永久 | main / secondary（存储切换） |
-| `proactive:sent:*` | 3天 | 外部推送通道的时段标记 |
+| `memo:24h` | 27h | 中期记忆：最近 24 小时纪要 |
+
+> 主动消息的幂等**不再依赖 KV**：KV 是最终一致的，写入后各边缘节点有延迟，
+> 可能导致同一时段重复发送。现在改用 D1 `proactive_log` 的 `UNIQUE(date_key, slot_key)`，
+> 强一致、不会重复。（历史文档里的 `proactive:sent:*` 键已废弃。）
 
 ---
 
@@ -379,7 +383,7 @@ ds_memory/
 │   ├── session-state.ts    # 活人感：会话级情绪残留
 │   ├── session-facts.ts    # 活人感：状态数据采集
 │   ├── vendor.d.ts         # 第三方模块类型声明
-│   └── *.test.ts           # 单元测试（29 个，与模块同名）
+│   └── *.test.ts           # 单元测试（30 个，与模块同名）
 ├── public/
 │   ├── index.html          # 聊天页面
 │   ├── avatar.png          # 小忆头像

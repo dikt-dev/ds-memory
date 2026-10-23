@@ -44,9 +44,15 @@
 | 7 | memory.md 阈值 | >12KB 触发二次提炼；提炼后仍 >15KB 删除最旧记忆 |
 | 8 | D1 保留策略 | 长期保留，按月归档后清理 3 个月前的数据 |
 | 9 | 会话结构 | 单一连续会话，每次注入最近 10 轮历史 |
-| 10 | DeepSeek 模型 | 默认 `deepseek-chat`（环境变量可换） |
+| 10 | DeepSeek 模型 | 默认 `deepseek-flash`（环境变量可换） |
 
 ### 1.4 技术选型
+
+> ⚠️ 本节是 2026-10-21 的初始决策记录，保留原貌。两处已被后续实现取代：
+> - **Workers AI 模型**：原计划的 `@cf/llama/llama-3.1-8b-instruct` 已被 Cloudflare 下架
+>   （调用会报错 5007），现用 `@cf/meta/llama-3.2-3b-instruct`。
+> - **对话模型**：`deepseek-chat` 已换成 `deepseek-flash`（提炼用 `deepseek-v4-pro`）。
+> 当前实际值以 `wrangler.toml` 为准。
 
 | 项 | 选型 | 说明 |
 |----|------|------|
@@ -54,8 +60,8 @@
 | 数据库 | Cloudflare D1 | 消息表、定时任务防重表 |
 | 对象存储 | Cloudflare R2 | memory.md、context/、chat_logs/、images/ |
 | 缓存 | Cloudflare KV | memory 缓存(24h)、天气缓存(30min)、登录会话(7d) |
-| AI 提炼 | Workers AI | 默认 `@cf/llama/llama-3.1-8b-instruct`（可配），提炼/压缩记忆 |
-| 对话模型 | DeepSeek API | `deepseek-chat`，流式，API Key 存 Worker Secret |
+| AI 提炼 | Workers AI | 兜底模型 `@cf/meta/llama-3.2-3b-instruct`（可配），提炼/压缩记忆 |
+| 对话模型 | DeepSeek API | `deepseek-flash`，流式，API Key 存 Worker Secret |
 | 定时任务 | Cloudflare Cron Triggers | 每日 20:00 UTC；每月 1 日 20:05 UTC |
 | 前端 | 原生 HTML/CSS/JS 单页 | 由 Worker 静态托管（Assets），零构建 |
 | 部署工具 | Wrangler CLI | 本地 dev + 一键发布 |

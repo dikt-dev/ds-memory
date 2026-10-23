@@ -136,7 +136,7 @@ Worker 提供 OpenAI 兼容端点，AstrBot 作为「OpenAI Compatible」服务�
 |---|---|
 | Base URL | `https://<你的域名>/v1` |
 | API Key | `ASTROBOT_API_KEY` 的值 |
-| 模型 | `deepseek-chat`（自定义） |
+| 模型 | 随便填（如 `deepseek-flash`）；服务端按 `DEEPSEEK_MODEL` 变量实际转发，不校验此字段 |
 
 - 完整对话记录自动落 D1，参与每日归档与记忆提炼
 - 平台包装（`<system_reminder>`、`<attachment>` 文件附件、图片占位）在落库前自动清洗
