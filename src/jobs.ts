@@ -18,6 +18,7 @@ import { attachDistillation, attachRelation, attachWeather, getOrCreateDayContex
 import { fetchWeather } from './weather';
 import { getMemory, putMemory } from './memory';
 import { reindexMemory } from './memory-index';
+import { maybeGenerateRollups } from './memory-rollups';
 import { buildRelationStatus } from './attitude';
 import { distillDay } from './distill';
 import { archiveCompletedItems, byteLength, mergeMemoryEntry, parseRelationValues, pruneTransientSections, setRelationValues } from './memory-maintenance';
@@ -340,6 +341,14 @@ async function archiveOneDay(env: Env, target: string, now: Date): Promise<Daily
       else console.log(`[daily] 记忆索引重建：${idx.entries} 条，含向量 ${idx.withVec} 条`);
     } catch (e) {
       console.error('[daily] memory reindex error:', e);
+    }
+    // 时间金字塔：周一滚上周摘要、每月 1 日滚上月摘要（幂等，失败不影响归档）
+    try {
+      const rl = await maybeGenerateRollups(env, now);
+      if (rl.generated.length) console.log(`[daily] 记忆摘要滚动：${rl.generated.join('、')}`);
+      if (rl.errors.length) console.error('[daily] rollup errors:', rl.errors.join(';'));
+    } catch (e) {
+      console.error('[daily] rollup error:', e);
     }
     // 当天已归档，清理滚动摘要（新的一天用新键）
     await env.KV.delete(summaryKey(target)).catch(() => {});

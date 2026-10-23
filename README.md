@@ -158,6 +158,9 @@ Worker 提供 OpenAI 兼容端点，AstrBot 作为「OpenAI Compatible」服务�
 | GET/POST | `/api/proactive/pending`、`/ack` | Bearer | 主动消息队列 |
 | POST | `/api/admin/*` | Cookie | 手动归档 / 合并 / 触发主动消息 / 刷新 memory 缓存 |
 | POST | `/api/admin/memory/refresh` | Cookie | 手动改完 R2 memory.md 后强制刷新 KV 缓存 |
+| POST | `/api/admin/memory/reload` | Cookie | 刷新 KV 缓存 + 重建记忆检索索引 |
+| POST | `/api/admin/memory/reindex` | Cookie | 只重建记忆检索索引 |
+| POST | `/api/admin/memory/rollup` | Cookie | 生成周/月摘要（`{level, period}`） |
 | GET | `/api/admin/relation` | Cookie | 情感全貌（5 轴关系 / 8 维情绪 / 芥蒂） |
 | POST | `/api/admin/emotion/simulate` | Cookie | 预览一段对话会生成的情绪快照 |
 

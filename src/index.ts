@@ -20,6 +20,7 @@ import { saveImage } from './media';
 import { deleteObject, getObject, getStorageMode, listKeys, secondaryEnabled } from './storage';
 import { runDailyArchive, runContextRefresh, runMonthlyMerge } from './jobs';
 import { reindexMemory } from './memory-index';
+import { generateRollup, previousPeriods } from './memory-rollups';
 import { getOrCreateDayContext } from './context';
 import { parseRelationValues, reportSectionBudgets } from './memory-maintenance';
 import { analyzeMood } from './mood';
@@ -314,6 +315,33 @@ app.post('/api/admin/memory/refresh', requireAuth, async (c) => {
 app.post('/api/admin/memory/reindex', requireAuth, async (c) => {
   const result = await reindexMemory(c.env);
   return c.json({ ok: true, ...result });
+});
+/** 合并版：刷新 memory KV 缓存 + 重建检索索引（改完 R2 文件后一键调用）。 */
+app.post('/api/admin/memory/reload', requireAuth, async (c) => {
+  await c.env.KV.delete(MEMORY_KV_KEY).catch(() => {});
+  const memory = await getMemory(c.env);
+  const idx = await reindexMemory(c.env);
+  return c.json({
+    ok: true,
+    bytes: byteLength(memory),
+    entries: idx.entries,
+    withVec: idx.withVec,
+    errors: idx.errors,
+  });
+});
+/** 手动生成周/月摘要：body { level?: 'week'|'month', period?: 'YYYY-MM-DD' | 'YYYY-MM' }。 */
+app.post('/api/admin/memory/rollup', requireAuth, async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const level = body?.level === 'month' ? 'month' : 'week';
+  const prev = previousPeriods(dateKeyInBeijing(new Date()));
+  const period =
+    typeof body?.period === 'string' && body.period
+      ? body.period
+      : level === 'month'
+        ? prev.month
+        : prev.week;
+  const rollup = await generateRollup(c.env, level, period);
+  return c.json({ ok: true, level, period, rollup });
 });
 /** 危险操作：清空 D1 全部业务表 + R2 全部对象（主/小号）+ 记忆相关 KV，仅测试期使用。 */
 app.post('/api/admin/wipe-data', requireAuth, async (c) => {

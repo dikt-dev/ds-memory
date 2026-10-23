@@ -24,6 +24,7 @@ import {
   stripTags,
 } from './memory-archive';
 import { DATE_PREFIX_RE, ENTRY_RE, normalizeDateKey } from './memory-maintenance';
+import { loadRollups } from './memory-rollups';
 
 /** 永远常驻注入、不参与检索的分区（核心层）。 */
 export const CORE_SECTIONS = ['人物底色', '称呼与关系', '雷区与禁忌'];
@@ -461,6 +462,11 @@ export async function recallMemoryForChat(
       return decoded.get(r.id) ?? null;
     };
 
+    // 时间金字塔：60 天前的原始条目权重减半，让周/月摘要接管常规召回
+    const bjNow = new Date(Date.now() + 8 * 3600 * 1000);
+    const cutoff = new Date(bjNow.getTime() - 60 * 86400000);
+    const cutoffKey = `${cutoff.getUTCFullYear()}-${String(cutoff.getUTCMonth() + 1).padStart(2, '0')}-${String(cutoff.getUTCDate()).padStart(2, '0')}`;
+
     const scored = rows.map((r) => {
       let score = 0;
       for (const g of bigrams(r.content)) if (qGrams.has(g)) score += 1;
@@ -471,6 +477,7 @@ export async function recallMemoryForChat(
         const rv = vecOf(r);
         if (rv) score += cosine(qVec, rv) * 3;
       }
+      if (r.date && r.date < cutoffKey) score *= 0.5;
       return { r, score };
     });
 
@@ -487,6 +494,28 @@ export async function recallMemoryForChat(
     const lines = picked
       .map((x) => `- ${x.r.date ? `[${x.r.date}] ` : ''}${stripTags(x.r.content)}`)
       .filter(Boolean);
+
+    // 周/月摘要也参与召回（关键词命中即注入，最多 2 条），让老记忆用更少字被想起
+    try {
+      const rollups = await loadRollups(env);
+      const rScored = rollups
+        .map((r) => {
+          let score = 0;
+          for (const g of bigrams(r.content)) if (qGrams.has(g)) score += 1;
+          for (const w of qWords) if (r.content.toLowerCase().includes(w)) score += 2;
+          for (const a of aliases) if (r.content.toLowerCase().includes(a)) score += 2;
+          return { r, score };
+        })
+        .filter((x) => x.score > 0)
+        .sort((a, b) => b.score - a.score || b.r.period.localeCompare(a.r.period))
+        .slice(0, 2);
+      for (const x of rScored) {
+        lines.push(`- 【${x.r.level === 'week' ? '周' : '月'}摘要】${stripTags(x.r.content)}`);
+      }
+    } catch {
+      /* 摘要加载失败不影响条目召回 */
+    }
+
     if (lines.length === 0) return '';
     return ['## 相关记忆（按话题检索）', ...lines].join('\n');
   } catch (e) {

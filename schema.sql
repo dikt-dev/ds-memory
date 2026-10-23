@@ -118,3 +118,16 @@ CREATE TABLE IF NOT EXISTS memory_entries (
 
 CREATE INDEX IF NOT EXISTS idx_memory_entries_section ON memory_entries(section);
 CREATE INDEX IF NOT EXISTS idx_memory_entries_date ON memory_entries(date);
+
+-- ---------- 时间金字塔摘要（周/月，条目索引的压缩视图） ----------
+CREATE TABLE IF NOT EXISTS memory_rollups (
+  id          TEXT PRIMARY KEY,        -- week:YYYY-MM-DD（周一） / month:YYYY-MM
+  level       TEXT NOT NULL,           -- week | month
+  period      TEXT NOT NULL,
+  content     TEXT NOT NULL,
+  entry_count INTEGER NOT NULL DEFAULT 0,
+  created_at  INTEGER NOT NULL,
+  updated_at  INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_memory_rollups_period ON memory_rollups(period);
