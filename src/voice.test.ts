@@ -59,6 +59,13 @@ describe('buildVoiceDirective', () => {
     expect(buildVoiceDirective(900)).toContain('非常亲近');
   });
 
+  it('允许口头语与纯反应式短回复', () => {
+    const d = buildVoiceDirective(900);
+    expect(d).toContain('就那个啥');
+    expect(d).toContain('有时候一句就够');
+    expect(d).toContain('笑死');
+  });
+
   it('体积受控：不再是一张 3KB 的教科书清单', () => {
     const bytes = new TextEncoder().encode(buildVoiceDirective(900)).length;
     // 旧版约 3.2KB（占系统提示词 48%）；压缩后控制在 2KB 以内
