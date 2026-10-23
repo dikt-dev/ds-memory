@@ -16,8 +16,19 @@ import type { Env } from './types';
 /** 会话情绪残留的 KV 键（只存"情绪标签 + 时间戳"，轻量）。 */
 const SESSION_MOOD_KEY = 'session:mood';
 
-/** 残留的衰减：每次读取时按这个速率向 0 回落。 */
-const DECAY_PER_MINUTE = 0.08; // 约 12 分钟归零
+/** 残留的衰减：每次读取时按这个速率向 0 回落。
+ *
+ * ★ 取值依据：文档要求「约 12 分钟指数衰减」。
+ *   exp(-0.25 × 12) ≈ 0.050，即 12 分钟后只剩 5%，可视为基本消散。
+ *   （原值 0.08 对应 12 分钟后仍保留 38%，比文档描述慢三倍，已修正）
+ *   半衰期 = ln2 / 0.25 ≈ 2.8 分钟。
+ */
+export const DECAY_PER_MINUTE = 0.25;
+
+/** 把「距上次多少分钟」算出残留保留系数（可单测）。 */
+export function decayFactor(elapsedMinutes: number): number {
+  return Math.exp(-DECAY_PER_MINUTE * Math.max(0, elapsedMinutes));
+}
 
 /** 各情绪标签对应的残留偏移（叠加到心情值上）。 */
 const MOOD_OFFSET: Record<string, number> = {
@@ -78,7 +89,7 @@ export async function getSessionMood(env: Env, now: number): Promise<SessionMood
     if (!raw) return { offset: 0, label: 'neutral', at: now };
     const parsed = JSON.parse(raw) as SessionMood;
     const elapsedMin = (now - parsed.at) / 60000;
-    const decay = Math.exp(-DECAY_PER_MINUTE * elapsedMin); // 指数衰减
+    const decay = decayFactor(elapsedMin); // 指数衰减
     const offset = Math.round(parsed.offset * decay);
     return offset === 0 ? { offset: 0, label: 'neutral', at: now } : { offset, label: parsed.label, at: parsed.at };
   } catch {

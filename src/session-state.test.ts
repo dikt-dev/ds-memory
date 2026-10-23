@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inferTag, mergeMoodOffset, sessionMoodNote } from './session-state';
+import { decayFactor, inferTag, mergeMoodOffset, sessionMoodNote } from './session-state';
 
 describe('inferTag —— 从对话文本推断即时情绪', () => {
   it('开心', () => {
@@ -78,5 +78,35 @@ describe('mergeMoodOffset —— 情绪合并（纯函数）', () => {
   it('边界钳制在 ±100', () => {
     expect(mergeMoodOffset({ offset: 100, label: 'happy' }, 40, 'happy').offset).toBeLessThanOrEqual(100);
     expect(mergeMoodOffset({ offset: -100, label: 'low' }, -30, 'low').offset).toBeGreaterThanOrEqual(-100);
+  });
+});
+
+describe('★ decayFactor —— 与文档「约 12 分钟衰减」对齐', () => {
+  it('0 分钟不衰减', () => {
+    expect(decayFactor(0)).toBe(1);
+  });
+
+  it('12 分钟后基本消散（≤ 5%）', () => {
+    expect(decayFactor(12)).toBeLessThanOrEqual(0.05);
+  });
+
+  it('半衰期约 2.8 分钟', () => {
+    expect(decayFactor(2.77)).toBeCloseTo(0.5, 1);
+  });
+
+  it('单调递减', () => {
+    const pts = [0, 1, 3, 6, 12, 24].map(decayFactor);
+    for (let i = 1; i < pts.length; i++) expect(pts[i]).toBeLessThan(pts[i - 1]);
+  });
+
+  it('负数时间按 0 处理（防系统时钟回拨）', () => {
+    expect(decayFactor(-5)).toBe(1);
+  });
+
+  it('实际残留量：happy(+40) 在几个时间点的值', () => {
+    const at = (m: number) => Math.round(40 * decayFactor(m));
+    expect(at(0)).toBe(40);
+    expect(at(3)).toBeLessThan(40);
+    expect(at(12)).toBeLessThanOrEqual(2);
   });
 });

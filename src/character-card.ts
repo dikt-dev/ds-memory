@@ -29,11 +29,35 @@ export function formatAway(hoursSinceLastContact: number | null): string {
   return `${Math.round(h / 24)} 天前`;
 }
 
+/**
+ * 心情档位（0-1000 分 5 档）。
+ *
+ * ★ 为什么需要分档：之前只有 350 / 600 两个阀值，心情值在 350~600 之间
+ *   对状态卡完全没有影响，导致 ±40 的情绪残留基本落不到阀值上，
+ *   验收标准「情绪不重置」实际上体感不到。现在分成 5 档，每档都有独立的表达。
+ */
+export type MoodTier = 'low' | 'meh' | 'calm' | 'good' | 'great';
+
+/** 把 0-1000 的心情值映射到 5 个档位。 */
+export function moodTier(mood: number): MoodTier {
+  if (mood < 300) return 'low';
+  if (mood < 450) return 'meh';
+  if (mood < 620) return 'calm';
+  if (mood < 800) return 'good';
+  return 'great';
+}
+
+/** 各档位对应的「当下状态」描述（叠加在时段描述后面）。 */
+const MOOD_TIER_NOTE: Record<MoodTier, string> = {
+  low: '现在心情有点低落，表现得安静、克制一点',
+  meh: '心情不太高，没那么有精神，可以少说两句',
+  calm: '情绪平稳，平常心',
+  good: '现在心情不错，可以更活泼、更爱接话',
+  great: '心情特别好，话多、爱笑、容易兴奋',
+};
+
 /** 时段状态：几点 + 心情，产出"当下的它"在做什么/什么状态。 */
 export function timeOfDayState(hour: number, mood: number): string {
-  const happy = mood >= 600;
-  const down = mood <= 350;
-
   let base = '';
   if (hour >= 0 && hour < 6) base = '凌晨了，精神不太好，说话简短、有点迷糊';
   else if (hour >= 6 && hour < 9) base = '早上刚醒，还有点迷糊，但愿意陪你';
@@ -44,8 +68,8 @@ export function timeOfDayState(hour: number, mood: number): string {
   else if (hour >= 21 && hour < 23) base = '晚上，可以聊聊今天发生的事';
   else base = '深夜了，困了，说话简短，可能催你早点睡';
 
-  if (down) base += '；现在心情有点低落，表现得安静、克制一点';
-  else if (happy) base += '；现在心情不错，可以更活泼、更爱接话';
+  // ★ 心情按 5 档叠加（不再是只有高低两个阀值）
+  base += `；${MOOD_TIER_NOTE[moodTier(mood)]}`;
 
   return base;
 }
@@ -153,16 +177,38 @@ const SOUR_POOL: Disposition[] = [
  * @param seed 时间块种子（3 小时内稳定）
  */
 export function dispositionFor(affinity: number, intimacy: number, mood: number, seed: number): Disposition {
-  // 心情低落或好感度低：安抚/克制，绝不嬉皮笑脸
-  if (mood < 350 || affinity < 400) {
-    const idx = Math.abs(Math.floor(seed)) % SOUR_POOL.length;
-    return SOUR_POOL[idx];
-  }
-  // 正常：亲密度高才亲昵
+  const rnd = (n: number) => Math.abs(Math.floor(seed)) % Math.max(1, n);
+
+  // 好感度低：安抚/克制，绝不嬉皮笑脸（优先级最高，与心情无关）
+  if (affinity < 400) return SOUR_POOL[rnd(SOUR_POOL.length)];
+
+  // ★ 心情不再只有「低于 350 才生效」，而是 5 档各影响池子权重：
+  //   low(克制) / meh(抑制亲昵) / calm(正常) / good(亲昵×2) / great(亲昵×4)
+  const tier = moodTier(mood);
+  if (tier === 'low') return SOUR_POOL[rnd(SOUR_POOL.length)];
+
   const isClose = intimacy >= 650;
-  const pool = isClose ? [...GENERAL_POOL, ...CLOSE_POOL] : GENERAL_POOL;
-  const idx = Math.abs(Math.floor(seed)) % pool.length;
-  return pool[idx];
+
+  // 心情偏低：不给亲昵倾向（撒娇/摆烂在情绪不好时不合逻辑）
+  if (tier === 'meh') return GENERAL_POOL[rnd(GENERAL_POOL.length)];
+
+  // 心情极好：强倾斜亲昵池（权重 ×4）
+  if (tier === 'great') {
+    const weighted = isClose
+      ? [...GENERAL_POOL, ...CLOSE_POOL, ...CLOSE_POOL, ...CLOSE_POOL, ...CLOSE_POOL]
+      : GENERAL_POOL;
+    return weighted[rnd(weighted.length)];
+  }
+
+  // 心情不错：亲昵池权重 ×2
+  if (tier === 'good') {
+    const weighted = isClose ? [...GENERAL_POOL, ...CLOSE_POOL, ...CLOSE_POOL] : GENERAL_POOL;
+    return weighted[rnd(weighted.length)];
+  }
+
+  // 平静：正常权重
+  const basePool = isClose ? [...GENERAL_POOL, ...CLOSE_POOL] : GENERAL_POOL;
+  return basePool[rnd(basePool.length)];
 }
 
 /**

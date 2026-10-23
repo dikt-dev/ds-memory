@@ -28,8 +28,42 @@ function replaceNin(text: string): string {
 }
 
 /**
+ * 判断文本是否只剩标点/空白（删完套话后的空壳）。
+ *
+ * 例：「请问还有什么需要？」清洗后剩「？」，看上去非空，
+ * 但落库后会变成一条无意义的回复、还会污染记忆提炼。
+ *
+ * ★ 判定策略（保守，宁可放过不可误杀）：
+ *   1. 去掉标点/空白/零宽字符后什么都不剩 → 空壳
+ *   2. 只由单字语气助词组成、且**总长度≤3 且带重复**（如「吗？」「呢呢」）→ 空壳
+ *   但「嗯嗯」「哈哈」这类是有实际对话功能的短回应，必须保留。
+ *   因此只把「孤立单助词 + 标点」这种典型清扫残留当空壳。
+ */
+export function isMeaninglessResidue(text: string): boolean {
+  // 去掉所有标点、空白、零宽字符、emoji 变体选择符
+  const stripped = text
+    .replace(/[\s\u3000]/g, '')
+    .replace(/[，。、；：！？,.;:!?~～…\-—－_'""''（）()【】\[\]{}《》<>·•*#@&%+=\/\\|^$`]/g, '')
+    .replace(/[\u200b-\u200f\u2060\ufeff]/g, '')
+    .replace(/[\uFE00-\uFE0F]/g, '');
+
+  if (stripped.length === 0) return true;
+
+  // 只剩疑问/语气助词，且**不是重复叠词**（叠词「嗯嗯」「哈哈」是正常回应）
+  const isAllParticle = /^[吗呢啊吧呀哦嘛呗哟噢诶欸唉哇]+$/.test(stripped);
+  const isRepeated = /^(.)\1+$/.test(stripped);
+  if (isAllParticle && !isRepeated) return true;
+
+  return false;
+}
+
+/**
  * 清洗 AI 味（幂等，可单测）。
  * 返回 { text, cleaned }：cleaned 表示是否真的动过内容。
+ *
+ * ★ 若清洗后只剩标点/空白，text 会被置为空串——
+ *   调用方（chat.ts / openai.ts）的 `if (text.trim())` 就会跳过落库，
+ *   避免「？」单独成为一条消息。
  */
 export function scrubAiFlavor(raw: string): { text: string; cleaned: boolean } {
   let text = raw;
@@ -61,5 +95,12 @@ export function scrubAiFlavor(raw: string): { text: string; cleaned: boolean } {
     cleaned = true;
   }
 
-  return { text: text.trim(), cleaned };
+  const finalText = text.trim();
+
+  // ★ 只剩标点的空壳一律归空：否则「？」「！」会成为一条真实消息
+  if (finalText && isMeaninglessResidue(finalText)) {
+    return { text: '', cleaned: true };
+  }
+
+  return { text: finalText, cleaned };
 }

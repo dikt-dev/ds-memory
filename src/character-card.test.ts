@@ -6,6 +6,7 @@ import {
   dispositionFor,
   fatigueLevel,
   formatAway,
+  moodTier,
   offlineLife,
   timeOfDayState,
 } from './character-card';
@@ -216,4 +217,67 @@ describe('voice —— 语言层', () => {
 
   // 注意：小癖好/小脾气已移到 memory.md「人物底色」，voice 不再重复，
   // 避免同一性格设定在 prompt 里出现两次（占 token 且易不一致）。
+});
+
+describe('moodTier —— 心情 5 档', () => {
+  it('阈值划分', () => {
+    expect(moodTier(0)).toBe('low');
+    expect(moodTier(299)).toBe('low');
+    expect(moodTier(300)).toBe('meh');
+    expect(moodTier(449)).toBe('meh');
+    expect(moodTier(450)).toBe('calm');
+    expect(moodTier(619)).toBe('calm');
+    expect(moodTier(620)).toBe('good');
+    expect(moodTier(799)).toBe('good');
+    expect(moodTier(800)).toBe('great');
+    expect(moodTier(1000)).toBe('great');
+  });
+});
+
+describe('★ 心情值必须实际影响状态卡（不再是只有 4 个阀值）', () => {
+  const base = { hour: 15, hoursSinceLastContact: 0.5, affinity: 600, intimacy: 700, todayTurns: 25, dateKey: '2026-10-23' };
+
+  it('时段描述随心情 5 档各不同', () => {
+    const notes = [250, 400, 550, 700, 900].map((m) => timeOfDayState(15, m));
+    // 5 个档位应产生 5 种不同描述
+    expect(new Set(notes).size).toBe(5);
+  });
+
+  it('±40 的情绪残留能跨档位（这才是「情绪不重置」的前提）', () => {
+    // 550(calm) 叠加 +40 → 590 仍在 calm；但 600 → 640 就进入 good
+    expect(timeOfDayState(15, 550)).toBe(timeOfDayState(15, 590));
+    expect(timeOfDayState(15, 610)).not.toBe(timeOfDayState(15, 650));
+  });
+
+  it('不同心情 → 人格倾向池权重不同', () => {
+    // 高亲密下，心情极好时更容易抽到亲昵倾向
+    const closeLuck = (mood: number) => {
+      let n = 0;
+      for (let s = 0; s < 200; s++) {
+        const d = dispositionFor(700, 800, mood, s);
+        if (['想撒娇', '想吐槽', '想摆烂', '有点想被夸'].includes(d.label)) n++;
+      }
+      return n;
+    };
+    const calm = closeLuck(550);
+    const good = closeLuck(700);
+    const great = closeLuck(900);
+    // 心情越好，亲昵倾向出现越多
+    expect(good).toBeGreaterThan(calm);
+    expect(great).toBeGreaterThan(good);
+  });
+
+  it('心情偏低时抑制亲昵倾向', () => {
+    for (let s = 0; s < 100; s++) {
+      const d = dispositionFor(700, 900, 380, s);
+      expect(['想撒娇', '想摆烂', '有点想被夸']).not.toContain(d.label);
+    }
+  });
+
+  it('好感度低时无论心情多好都走克制池', () => {
+    for (let s = 0; s < 50; s++) {
+      const d = dispositionFor(300, 800, 950, s);
+      expect(['有点别扭', '克制', '认真', '想关心']).toContain(d.label);
+    }
+  });
 });
