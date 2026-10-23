@@ -111,10 +111,27 @@ export function randomTargetMinutes(dateKey: string, index: number): number {
 
 /* ---------- 投递通道 ---------- */
 
+export interface DeliveryResult {
+  ok: boolean;
+  mode: 'direct' | 'queue';
+  /**
+   * 实际状态：
+   * - `sent`：直连模式，AstrBot 已确认收到 → 确实送达
+   * - `queued`：队列模式，**仅代表已入队**，不代表对方已收到
+   * - `failed`：直连失败或入队失败
+   */
+  status: 'sent' | 'queued' | 'failed';
+}
+
 /**
  * 投递主动消息：两种模式
  * - 直连模式（已配置 ASTRBOT_BASE_URL）：Worker 直接调 AstrBot HTTP API
  * - 队列模式（未配置）：消息入队，由 AstrBot 插件轮询拉取后本地发送（无需公网入口）
+ *
+ * ★ 语义提醒：队列模式下「入队成功」≠「用户收到」。
+ *   真正的送达要等插件 ack。因此返回值区分 `queued` 与 `sent`，
+ *   避免把「已入队」记成「已发送」而掩盖投递失败。
+ *
  * @param messageId 关联的 messages.id（已落库的网页端主动消息），用于队列追踪
  */
 export async function deliverProactive(
@@ -122,12 +139,20 @@ export async function deliverProactive(
   text: string,
   now: Date,
   messageId?: number,
-): Promise<{ ok: boolean; mode: 'direct' | 'queue' }> {
+): Promise<DeliveryResult> {
   if (env.ASTRBOT_BASE_URL && env.ASTROBOT_OPENAPI_KEY && env.ASTRBOT_UMO) {
-    return { ok: await sendToAstrBot(env, text), mode: 'direct' };
+    const ok = await sendToAstrBot(env, text);
+    return { ok, mode: 'direct', status: ok ? 'sent' : 'failed' };
   }
-  await enqueueProactive(env, text, now, messageId);
-  return { ok: true, mode: 'queue' };
+  try {
+    const id = await enqueueProactive(env, text, now, messageId);
+    // 入队拿不到 id 说明语句异常，按失败处理
+    if (!id) return { ok: false, mode: 'queue', status: 'failed' };
+    return { ok: true, mode: 'queue', status: 'queued' };
+  } catch (e) {
+    console.error('[proactive] 入队失败:', e);
+    return { ok: false, mode: 'queue', status: 'failed' };
+  }
 }
 
 /** 直连模式：Worker 调 AstrBot HTTP API 发送。 */

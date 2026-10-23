@@ -313,7 +313,7 @@ async function finishSlot(
   env: Env,
   dateKey: string,
   slotKey: string,
-  opts: { messageId?: number; status: 'sent' | 'failed'; detail?: string },
+  opts: { messageId?: number; status: 'sent' | 'queued' | 'failed'; detail?: string },
 ): Promise<void> {
   await env.DB.prepare(
     'UPDATE proactive_log SET message_id = ?, status = ?, detail = ? WHERE date_key = ? AND slot_key = ?',
@@ -411,7 +411,8 @@ async function emit(
   const delivery = await deliverProactive(env, generated.text, now, saved.id);
   await finishSlot(env, dateKey, slotKey, {
     messageId: saved.id,
-    status: delivery.ok ? 'sent' : 'failed',
+    // ★ 队列模式记 'queued'：入队≠送达，真正的送达要等插件 ack
+    status: delivery.status,
     detail: `score=${decision.score}; delivery=${delivery.mode}; ${decision.reasons.join('; ')}`,
   });
   return {

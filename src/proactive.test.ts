@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   PROACTIVE_WINDOWS,
   RANDOM_MAX_PER_DAY,
@@ -6,6 +6,7 @@ import {
   RANDOM_WINDOW,
   beijingMinutes,
   currentSlot,
+  deliverProactive,
   randomCountFor,
   randomTargetMinutes,
   sanitizeProactiveText,
@@ -134,5 +135,95 @@ describe('纯随机主动聊天', () => {
       times.add(randomTargetMinutes(`2026-12-${String(d).padStart(2, '0')}`, 0));
     }
     expect(times.size).toBeGreaterThan(20); // 30 天里几乎都不重复
+  });
+});
+
+describe('deliverProactive —— 投递状态语义', () => {
+  it('★ 队列模式不能报成 sent（入队 ≠ 送达）', async () => {
+    const env = {
+      ASTRBOT_BASE_URL: '',
+      ASTROBOT_OPENAPI_KEY: '',
+      ASTRBOT_UMO: '',
+      DB: {
+        prepare: () => ({
+          bind: () => ({ first: async () => ({ id: 42 }) }),
+        }),
+      },
+    } as never;
+    const r = await deliverProactive(env, '在吗', new Date());
+    expect(r.mode).toBe('queue');
+    expect(r.ok).toBe(true);
+    expect(r.status).toBe('queued');
+    expect(r.status).not.toBe('sent');
+  });
+
+  it('入队拿不到 id → failed', async () => {
+    const env = {
+      ASTRBOT_BASE_URL: '',
+      ASTROBOT_OPENAPI_KEY: '',
+      ASTRBOT_UMO: '',
+      DB: { prepare: () => ({ bind: () => ({ first: async () => null }) }) },
+    } as never;
+    const r = await deliverProactive(env, '在吗', new Date());
+    expect(r.ok).toBe(false);
+    expect(r.status).toBe('failed');
+  });
+
+  it('入队抛异常 → failed（不让异常冒到调用方）', async () => {
+    const env = {
+      ASTRBOT_BASE_URL: '',
+      ASTROBOT_OPENAPI_KEY: '',
+      ASTRBOT_UMO: '',
+      DB: {
+        prepare: () => {
+          throw new Error('D1 down');
+        },
+      },
+    } as never;
+    const r = await deliverProactive(env, '在吗', new Date());
+    expect(r.ok).toBe(false);
+    expect(r.status).toBe('failed');
+  });
+
+  it('★ 直连：三个配置齐全才走直连（ASTROBOT_UMO 拼写 bug 回归）', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('{}', { status: 200 }));
+    const env = {
+      ASTRBOT_BASE_URL: 'https://bot.example.com',
+      ASTROBOT_OPENAPI_KEY: 'k',
+      ASTRBOT_UMO: 'aiocqhttp:FriendMessage:1',
+    } as never;
+    const r = await deliverProactive(env, '在吗', new Date());
+    expect(r.mode).toBe('direct');
+    expect(r.status).toBe('sent');
+    expect(fetchSpy).toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it('直连返回非 2xx → failed', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('boom', { status: 500 }));
+    const env = {
+      ASTRBOT_BASE_URL: 'https://bot.example.com',
+      ASTROBOT_OPENAPI_KEY: 'k',
+      ASTRBOT_UMO: 'aiocqhttp:FriendMessage:1',
+    } as never;
+    const r = await deliverProactive(env, '在吗', new Date());
+    expect(r.mode).toBe('direct');
+    expect(r.status).toBe('failed');
+    fetchSpy.mockRestore();
+  });
+
+  it('缺少 UMO 时不走直连（避免发不出去）', async () => {
+    const env = {
+      ASTRBOT_BASE_URL: 'https://bot.example.com',
+      ASTROBOT_OPENAPI_KEY: 'k',
+      ASTRBOT_UMO: '',
+      DB: { prepare: () => ({ bind: () => ({ first: async () => ({ id: 1 }) }) }) },
+    } as never;
+    const r = await deliverProactive(env, '在吗', new Date());
+    expect(r.mode).toBe('queue');
   });
 });

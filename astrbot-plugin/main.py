@@ -23,8 +23,55 @@ from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.star import Context, Star
 
+# 日志前缀（与仓库内公开版保持一致的默认角色名）
+LOG_TAG = "小忆"
+
 # 北京时间
 TZ_SHANGHAI = timezone(timedelta(hours=8))
+
+# UMO 形如 `aiocqhttp:FriendMessage:123456789` / `aiocqhttp:GroupMessage:987654321`。
+# 只有「私聊」会话才允许被自动学习：群聊里任何人说一句话就会改写 target_umo，
+# 而主动消息内容是私密对话，绝不能因为一次群内发言就发到群里。
+PRIVATE_MESSAGE_SEGMENTS = frozenset(
+    {
+        "friendmessage",
+        "privatemessage",
+        "friend",
+        "private",
+        "directmessage",
+    }
+)
+
+# 带这些段的会话一律视为群/频道/临时会话，不自动接管。
+NON_PRIVATE_SEGMENTS = frozenset(
+    {
+        "groupmessage",
+        "group",
+        "channelmessage",
+        "channel",
+        "guildmessage",
+        "guild",
+        "tempmessage",
+        "tempmessage",
+        "discussionmessage",
+    }
+)
+
+
+def is_private_umo(umo: str) -> bool:
+    """判断 UMO 是否代表私聊会话。
+
+    UMO 格式为 `platform:MessageType:id`。判定策略（保守优先）：
+    1. 含显式的群/频道段 → 非私聊
+    2. 含显式的私聊段 → 私聊
+    3. 无法识别时按**非私聊**处理（宁可不自动学习，也不能把私密内容发错地方）
+    """
+    if not umo or not isinstance(umo, str):
+        return False
+    parts = [seg.strip().lower() for seg in umo.split(":") if seg.strip()]
+    if any(seg in NON_PRIVATE_SEGMENTS for seg in parts):
+        return False
+    return any(seg in PRIVATE_MESSAGE_SEGMENTS for seg in parts)
 
 
 class MemoryPushPlugin(Star):
@@ -113,31 +160,41 @@ class MemoryPushPlugin(Star):
         if not messages:
             return
 
+        # ★ 积压保护：免打扰/停机一段时间后队列可能积了多条，
+        #   一次性全部推出去像刷屏。这里只推**最新一条**，
+        #   其余旧的直接 ack 丢弃（它们已经不合时宜了）。
+        batch, dropped = self._select_batch(messages)
+        stale_ids = [m["id"] for m in dropped]
+        if stale_ids:
+            await self._ack(stale_ids)
+            logger.info(
+                "[%s] 队列积压 %d 条，仅推送最新 1 条，丢弃过期 %d 条",
+                LOG_TAG,
+                len(messages),
+                len(stale_ids),
+            )
+
         acked: list[int] = []
-        for msg in messages:
+        for msg in batch:
             content = (msg.get("content") or "").strip()
             if not content:
                 # 空内容直接 ack，避免卡在队列里重试
                 acked.append(int(msg["id"]))
                 continue
 
-            try:
-                chain = MessageChain().message(content)
-                ok = await self.context.send_message(ump, chain)
-                if ok:
-                    acked.append(int(msg["id"]))
-                    self._fail_streak = 0
-                    logger.info(f"[小忆] 已推送 #{msg['id']}：{content[:40]}...")
-                else:
-                    logger.warning(
-                        f"[小忆] 推送 #{msg['id']} 失败：目标会话 {ump} 不可用"
-                        "（换过适配器/机器人后旧会话会失效）"
-                    )
-                    await self._nack([int(msg["id"])])
-                    await self._handle_send_failure()
-                    break
-            except Exception as e:
-                logger.error(f"[小忆] 推送 #{msg['id']} 异常：{e}")
+            ok, err = await self._send_to_target(ump, content)
+            if ok:
+                acked.append(int(msg["id"]))
+                self._fail_streak = 0
+                logger.info("[%s] 已推送 #%s：%s...", LOG_TAG, msg["id"], content[:40])
+            else:
+                logger.warning(
+                    "[%s] 推送 #%s 失败：目标会话 %s 不可用（%s）",
+                    LOG_TAG,
+                    msg["id"],
+                    ump,
+                    err or "换过适配器/机器人后旧会话会失效",
+                )
                 await self._nack([int(msg["id"])])
                 await self._handle_send_failure()
                 break
@@ -148,6 +205,42 @@ class MemoryPushPlugin(Star):
         if acked:
             await self._ack(acked)
             self._last_push_at = time.time()
+
+    def _select_batch(
+        self, messages: list[dict]
+    ) -> tuple[list[dict], list[dict]]:
+        """把拉取到的消息分成「要发的」与「该丢弃的」。
+
+        规则：
+        - 只有 1 条：正常发
+        - 多条且开启积压保护：只留最后一条，其余归入 dropped
+        - 关闭积压保护：全部发（保持旧行为，给需要的人留后门）
+        - id 不是整数的脏数据直接归入 dropped，避免整批卡住
+        """
+        valid: list[dict] = []
+        invalid: list[dict] = []
+        for m in messages:
+            try:
+                int(m["id"])
+            except (KeyError, TypeError, ValueError):
+                continue  # 无 id 无法 ack，只能忽略
+            valid.append(m)
+
+        keep_all = bool(self.config.get("push_backlog_all", False))
+        if keep_all or len(valid) <= 1:
+            return valid, invalid
+        return valid[-1:], valid[:-1] + invalid
+
+    async def _send_to_target(self, umo: str, content: str) -> tuple[bool, str | None]:
+        """向指定会话发送一条文本；返回 (是否成功, 错误描述)。"""
+        if not umo:
+            return False, "未配置目标会话"
+        try:
+            chain = MessageChain().message(content)
+            ok = await self.context.send_message(umo, chain)
+            return bool(ok), None if ok else "send_message 返回 False"
+        except Exception as e:  # noqa: BLE001 - 适配器异常类型不确定
+            return False, str(e)
 
     # ── 与 Worker 通信 ────────────────────────────────────
 
@@ -291,35 +384,50 @@ class MemoryPushPlugin(Star):
 
     @filter.command("肥鱼立即推送")
     async def push_now(self, event: AstrMessageEvent):
-        """立即拉取并推送一次（调试用）。"""
-        if not self._target_umo():
+        """立即拉取并推送一次（调试用）。
+
+        ★ 语义修正：以前用 `yield event.plain_result(content)`，那是「回复当前
+        消息」，而不是主动发到 target_umo。在群里执行调试会把私密内容当众发出。
+        现在统一走 `_send_to_target()`，与轮询完全同一条路径。
+        """
+        target = self._target_umo()
+        if not target:
             yield event.plain_result("还没学习到会话 UMO，请先直接发一条消息给我。")
             return
+
         messages = await self._fetch_pending()
         if not messages:
-            yield event.plain_result("当前队列是空的，小忆暂时没想说的话。")
+            yield event.plain_result("当前队列是空的，暂时没想说的话。")
             return
 
-        pulled_ids = [int(m["id"]) for m in messages]
-        count = 0
         sent_ids: list[int] = []
+        failed: list[str] = []
         for msg in messages:
             content = (msg.get("content") or "").strip()
             if not content:
                 sent_ids.append(int(msg["id"]))
                 continue
-            try:
-                yield event.plain_result(content)
+            ok, err = await self._send_to_target(target, content)
+            if ok:
                 sent_ids.append(int(msg["id"]))
-                count += 1
-                await asyncio.sleep(1.5)
-            except Exception as e:
-                logger.error(f"[小忆] 手动推送失败：{e}")
-                break
+            else:
+                failed.append(f"#{msg['id']}({err})")
+                await self._nack([int(msg["id"])])
+            await asyncio.sleep(1.5)
 
         if sent_ids:
             await self._ack(sent_ids)
-        logger.info(f"[小忆] 手动推送了 {count} 条（拉取 {len(pulled_ids)} 条）")
+        logger.info(
+            "[%s] 手动推送 %d 条 → %s（失败 %d）",
+            LOG_TAG,
+            len(sent_ids),
+            target,
+            len(failed),
+        )
+        summary = f"已向目标会话推送 {len(sent_ids)} 条"
+        if failed:
+            summary += f"，失败 {len(failed)} 条：{', '.join(failed)}"
+        yield event.plain_result(summary)
 
     @filter.command("肥鱼记住这里")
     async def remember_here(self, event: AstrMessageEvent):
@@ -330,11 +438,18 @@ class MemoryPushPlugin(Star):
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def auto_learn(self, event: AstrMessageEvent):
-        """自动学习：收到消息就把该会话记为目标。
+        """自动学习：仅**私聊**会话可被自动记为目标。
 
-        ★ 不再「已配置就跳过」——换了适配器（NapCat→QQ 官方）、换了群/好友后，
-        旧 UMO 会永久失效，必须让最近说话的会话自动接管。
+        ★ 安全约束（重要）：
+        之前只要任意消息就无条件覆盖 target_umo，而你加入的某个群里有人
+        随口说一句，主动消息（内容是私密对话）就会被发到那个群。
+        现在只有私聊会话才能自动接管；群聊/频道必须显式用
+        `肥鱼记住这里` 指定。
         """
         if not self.config.get("enable_auto_learn", True):
             return
-        await self._remember_umo(event.unified_msg_origin)
+        umo = event.unified_msg_origin
+        if not is_private_umo(umo):
+            logger.debug("[%s] 忽略非私聊会话的自动学习：%s", LOG_TAG, umo)
+            return
+        await self._remember_umo(umo)

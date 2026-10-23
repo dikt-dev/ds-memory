@@ -26,10 +26,16 @@
     "hint": "多久拉取一次待发消息。太小会浪费请求次数，建议 60"
   },
   "enable_auto_learn": {
-    "description": "自动学习会话 UMO",
+    "description": "自动学习会话 UMO（仅限私聊）",
     "type": "bool",
     "default": true,
-    "hint": "开启后，收到任意消息就把该会话记为目标，之后主动消息发到那里"
+    "hint": "开启后，收到**私聊**消息就把该会话记为目标。群聊/频道不会被自动接管（防止私密内容发到群里），需要的话用「肥鱼记住这里」手动指定。"
+  },
+  "push_backlog_all": {
+    "description": "积压时全部推送",
+    "type": "bool",
+    "default": false,
+    "hint": "关闭时（推荐），若队列积压多条（如免打扰期间），只推最新的 1 条，其余丢弃，避免一次性刷屏。打开则全部按顺序推送。"
   },
   "quiet_hours": {
     "description": "免打扰时段（小时，24 制）",

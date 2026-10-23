@@ -62,7 +62,10 @@ CREATE TABLE IF NOT EXISTS proactive_log (
   slot_key   TEXT    NOT NULL,   -- 'morning' | 'evening' | 'random-0' | 'random-1'
   kind       TEXT    NOT NULL,   -- 'morning' | 'evening' | 'random'
   message_id INTEGER,            -- 关联 messages.id
-  status     TEXT    NOT NULL CHECK (status IN ('sent', 'failed')),
+  -- sent   = 直连模式，已确认送达
+  -- queued = 队列模式，仅代表已入队（真正的送达要等插件 ack）
+  -- failed = 投递失败
+  status     TEXT    NOT NULL CHECK (status IN ('sent', 'queued', 'failed')),
   detail     TEXT,
   created_at TEXT    NOT NULL,
   UNIQUE(date_key, slot_key)
@@ -89,9 +92,10 @@ CREATE TABLE IF NOT EXISTS proactive_queue (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   content    TEXT    NOT NULL,
   created_at TEXT    NOT NULL,
-  sent_at    TEXT,                      -- NULL = 待发送
+  sent_at    TEXT,                      -- NULL = 待发送（ISO8601 北京时间，带 T 和 +08:00）
   attempts   INTEGER NOT NULL DEFAULT 0,
-  message_id INTEGER                    -- 关联 messages.id（便于追踪）
+  message_id INTEGER,                   -- 关联 messages.id（便于追踪）
+  leased_at  TEXT                       -- 拉取占位的租约时间；NULL = 未被任何客户端取走
 );
 
 CREATE INDEX IF NOT EXISTS idx_proactive_pending ON proactive_queue(sent_at, id);
