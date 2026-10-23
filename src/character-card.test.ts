@@ -219,6 +219,33 @@ describe('voice —— 语言层', () => {
   // 避免同一性格设定在 prompt 里出现两次（占 token 且易不一致）。
 });
 
+describe('offlineLife —— 离线生活跟着心情走', () => {
+  const dates = ['2026-10-24', '2026-10-25', '2026-11-01', '2026-11-15', '2026-12-03'];
+  const hours = [9, 10, 13, 15, 16, 20, 22];
+
+  it('低落时不会出现「有劲」的场景', () => {
+    for (const d of dates) {
+      for (const h of hours) {
+        const scene = offlineLife(d, h, 200);
+        expect(scene).not.toMatch(/哼歌|收拾了一遍|阳台吹/);
+      }
+    }
+  });
+
+  it('心情好时不会出现「没劲」的场景', () => {
+    for (const d of dates) {
+      for (const h of hours) {
+        const scene = offlineLife(d, h, 800);
+        expect(scene).not.toMatch(/发了会儿呆|没看进去|趴桌上眯/);
+      }
+    }
+  });
+
+  it('同一天同一小时、同一心情下结果稳定（不能每轮都变）', () => {
+    expect(offlineLife('2026-10-24', 15, 300)).toBe(offlineLife('2026-10-24', 15, 300));
+  });
+});
+
 describe('moodTier —— 心情 5 档', () => {
   it('阈值划分', () => {
     expect(moodTier(0)).toBe('low');

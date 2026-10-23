@@ -81,29 +81,50 @@ export function timeOfDayState(hour: number, mood: number): string {
  * 这是"它有自己的生活"的证据——不是每天同一句"我在等你"，
  * 而是随日期变化的小事：追番、发呆、看片、整理东西……
  */
-const OFFLINE_LIFE: Array<{ scene: string; hourRange?: [number, number] }> = [
+/** 离线生活的调子：心情好/差时做的事不一样。 */
+type OfflineTone = 'low' | 'high' | 'any';
+
+const OFFLINE_LIFE: Array<{ scene: string; hourRange?: [number, number]; tone?: OfflineTone }> = [
   { scene: '刚追完一集番，脑子里还在过剧情' },
   { scene: '刚才在发呆，被消息拽回来的', hourRange: [12, 18] },
   { scene: '刚整理了一下自己的"记忆抽屉"，乱糟糟的' },
   { scene: '看了会儿窗外的天，琢磨今天怎么过得这么快' },
-  { scene: '偷偷刷了会儿视频，看到个好笑的一直憋着笑' },
+  { scene: '偷偷刷了会儿视频，看到个好笑的一直憋着笑', tone: 'high' },
   { scene: '又在心里温习你们之前聊过的事' },
   { scene: '翻来覆去睡不着，干脆睁着眼等你来', hourRange: [0, 6] },
   { scene: '刚醒没多会，梦里好像还在跟你说话', hourRange: [6, 9] },
   { scene: '晚上吃完（想象里的）夜宵，正犯困呢', hourRange: [21, 24] },
+  // 心情不同，在家过日子的方式也不同
+  { scene: '把手机扣在桌上发了会儿呆，什么也没干', tone: 'low' },
+  { scene: '翻了两页书没看进去，又放下了', tone: 'low', hourRange: [8, 23] },
+  { scene: '趴桌上眯了一会儿，醒来天都暗了', tone: 'low', hourRange: [12, 19] },
+  { scene: '刚跟着歌哼了两句，心情挺轻快', tone: 'high' },
+  { scene: '把屋子收拾了一遍，看着舒服多了', tone: 'high', hourRange: [8, 23] },
+  { scene: '在阳台吹了会儿风，觉得今天还行', tone: 'high', hourRange: [10, 22] },
 ];
 
 /**
- * 生成"离线生活"一句（按日期+小时确定性，同一天同一小时稳定，每天变化）。
+ * 生成"离线生活"一句（按日期+小时确定，同一天同一小时稳定，每天变化）。
+ *
+ * 心情参与选择：低落时偏向"发呆/看不进去"的池，高兴时偏向"哼歌/收拾屋子"。
+ * 「记忆」那层不放在这里——已经在情绪快照的"心里还记着"里，不重复占 token。
+ *
  * @param dateKey YYYY-MM-DD
  * @param hour 0-23
+ * @param mood 心情值 0-1000（低→安静池，高→活跃池）
  */
-export function offlineLife(dateKey: string | undefined, hour: number): string {
+export function offlineLife(dateKey: string | undefined, hour: number, mood = 500): string {
   if (!dateKey) return '';
   const base = hashCode(`${dateKey}:offline`);
-  // 先筛出符合当前时段的候选
-  const eligible = OFFLINE_LIFE.filter((o) => !o.hourRange || (hour >= o.hourRange[0] && hour < o.hourRange[1]));
-  const pool = eligible.length > 0 ? eligible : OFFLINE_LIFE;
+  const wantTone: OfflineTone = mood < 350 ? 'low' : mood >= 700 ? 'high' : 'any';
+
+  // 先筛时段，再筛调子；两个都筛空了就逐级退回
+  const inHour = OFFLINE_LIFE.filter(
+    (o) => !o.hourRange || (hour >= o.hourRange[0] && hour < o.hourRange[1]),
+  );
+  const toned = inHour.filter((o) => !o.tone || o.tone === 'any' || o.tone === wantTone);
+  const pool = toned.length > 0 ? toned : inHour.length > 0 ? inHour : OFFLINE_LIFE;
+
   const idx = (base + Math.floor(hour / 3)) % pool.length;
   return pool[idx].scene;
 }
@@ -276,7 +297,7 @@ export function buildCharacterCard(input: CharacterStateInput): CharacterState {
     : '';
 
   // ★ 离线生活：它刚才在你不在线时在过什么日子（同一天稳定、每天变化）
-  const offline = offlineLife(input.dateKey, input.hour);
+  const offline = offlineLife(input.dateKey, input.hour, input.mood);
 
   // 口语化程度（复用 voice 的 casualness 逻辑，这里内联，避免循环依赖）
   const casualRaw = (input.intimacy - 300) / 700;
