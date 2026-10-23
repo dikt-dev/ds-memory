@@ -32,15 +32,69 @@ FILE_MARKER_RE = re.compile(
     r"\[File Attachment:\s*name\s+(?P<name>[^,\]]+?)\s*,\s*path\s+(?P<path>[^\]]+?)\]",
     re.IGNORECASE,
 )
-# 兜底：裸的本地临时文件路径（/root/data/temp/... 之类）
-TEMP_PATH_RE = re.compile(r"(/(?:root|tmp|home|data|var)/[^\s\]\)]+)")
+
+# 兜底用的路径白名单前缀（只允许这些目录下的文件）
+SAFE_PATH_PREFIXES = ("root", "tmp", "home", "data", "var")
+
+# 兜底：裸的本地临时文件路径。
+#
+# ★ 防误读：仅靠「长得像路径」不够——用户在聊天里说一句
+#   “我把配置放在 /home/me/project 里了”，也会被当成文件去读，
+#   结果注入一条「读取失败：文件不存在」，干扰对话。
+#   因此要求路径末尾带一个已知的文件扩展名，才当作候选。
+_KNOWN_EXTS = (
+    # 文本类
+    "txt", "md", "markdown", "json", "yaml", "yml", "xml", "csv", "tsv",
+    "log", "ini", "toml", "conf", "cfg", "env", "sql", "py", "js", "ts",
+    "jsx", "tsx", "html", "htm", "css", "scss", "sh", "bash", "zsh",
+    "java", "c", "h", "cpp", "hpp", "go", "rs", "rb", "php", "swift",
+    "kt", "lua", "r", "m", "tex",
+    # 文档类
+    "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+)
+_EXT_ALT = "|".join(_KNOWN_EXTS)
+TEMP_PATH_RE = re.compile(
+    rf"(/(?:{'|'.join(SAFE_PATH_PREFIXES)})/[^\s\]\)]*\.(?:{_EXT_ALT}))(?![\w])",
+    re.IGNORECASE,
+)
 
 MAX_FILE_BYTES = 2 * 1024 * 1024  # 单文件读取上限（防超大文件拖垮）
 
 # 二进制文档扩展名 → 解析器（需要 requirements.txt 里的第三方库）
 DOC_EXTS = {".pdf", ".docx", ".xlsx", ".pptx"}
-# 旧版 Office 格式暂不支持（需 LibreOffice 等重引擎）
-LEGACY_DOC_EXTS = {".doc", ".xls", ".ppt"}
+# 旧版 Office 格式 → 建议另存的格式（不要用 f"{ext}x" 这种“巧合”写法）
+LEGACY_DOC_SUGGEST = {
+    ".doc": ".docx",
+    ".xls": ".xlsx",
+    ".ppt": ".pptx",
+}
+LEGACY_DOC_EXTS = set(LEGACY_DOC_SUGGEST)
+
+# PDF 硬性上限（字符数之外再加页数，防图片型 PDF 遍历三千页）
+MAX_PDF_PAGES = 300
+PDF_MAX_CHARS = 60000
+
+"""单次注入的字符预算下限 / 上限（防御配置写错）。"""
+MAX_CHARS_FLOOR = 1000
+MAX_CHARS_CEIL = 200000
+
+
+def _normalize_posix_path(path: str) -> str:
+    """纯字符串归一化 POSIX 路径（不依赖平台，不碰文件系统）。
+
+    - 折叠重复斜杠：`/root//a.txt` → `/root/a.txt`
+    - 去除 `.` 段：`/root/./a.txt` → `/root/a.txt`
+    - 保留 `..` 原样（真去解析可能跳出允许目录，交给后续路径校验）
+
+    ★ 不用 os.path.normpath：它在 Windows 上输出反斜杠，
+      而 AstrBot 跑在 Linux，路径必须保持正斜杠。
+    """
+    if not path or not path.startswith("/"):
+        return ""
+    parts = [seg for seg in path.split("/") if seg not in ("", ".")]
+    if not parts:
+        return ""
+    return "/" + "/".join(parts)
 
 
 class FileReaderPlugin(Star):
@@ -51,8 +105,31 @@ class FileReaderPlugin(Star):
         self.config = config
 
     def _allowed_exts(self) -> set[str]:
+        """读取允许的扩展名。空集 = 不限制（走默认白名单）。"""
         raw = str(self.config.get("allowed_ext") or "")
-        return {e.strip().lower() for e in raw.split(",") if e.strip()}
+        exts: set[str] = set()
+        for e in raw.split(","):
+            e = e.strip().lower()
+            if not e:
+                continue
+            # 容错：用户可能写成 "txt" 或 ".txt"
+            if not e.startswith("."):
+                e = "." + e
+            exts.add(e)
+        return exts
+
+    def _max_chars(self) -> int:
+        """读取并**限制**字符预算：配置写错时不抛异常。"""
+        try:
+            n = int(self.config.get("max_chars", 16000))
+        except (TypeError, ValueError):
+            logger.warning("[文件读取] max_chars 配置非法，回退默认 16000")
+            return 16000
+        if n < MAX_CHARS_FLOOR:
+            return MAX_CHARS_FLOOR
+        if n > MAX_CHARS_CEIL:
+            return MAX_CHARS_CEIL
+        return n
 
     @filter.on_llm_request()
     async def inject_file_content(self, event: AstrMessageEvent, req) -> None:
@@ -65,16 +142,17 @@ class FileReaderPlugin(Star):
             if not candidates:
                 return
 
-            max_chars = int(self.config.get("max_chars", 16000))
+            max_chars = self._max_chars()
             allowed = self._allowed_exts()
             blocks: list[str] = []
 
             for name, path in candidates:
                 ext = Path(name or path).suffix.lower()
                 if ext in LEGACY_DOC_EXTS:
+                    suggest = LEGACY_DOC_SUGGEST[ext]
                     blocks.append(
                         f"【文件：{name}】\n（旧版 Office 格式 {ext} 暂不支持，"
-                        f"请在 Office/WPS 里另存为 {ext}x 后再发）"
+                        f"请在 Office/WPS 里另存为 {suggest} 后再发）"
                     )
                     continue
                 if allowed and ext not in allowed and ext not in DOC_EXTS:
@@ -123,9 +201,28 @@ class FileReaderPlugin(Star):
     def _collect_file_refs(self, event: AstrMessageEvent) -> list[tuple[str, str]]:
         """从消息链与消息文本中收集（文件名, 本地路径）。
 
-        优先读消息链里的 File/File 组件真实路径；拿不到就退回正则匹配文本标记。
+        优先读消息链里的 File 组件真实路径；拿不到就退回正则匹配文本标记。
+
+        ★ 路径归一化：同一文件可能在三个来源里以不同写法出现
+          （`/root/a.txt` / `/root/./a.txt` / `root/a.txt`），
+          不归一化会重复读、重复注入。这里用 os.path.normpath 去重。
         """
-        found: dict[str, str] = {}  # path -> name
+        found: dict[str, str] = {}  # normalized_path -> name
+
+        def add(path: str, name: str) -> None:
+            """归一化后收录；保留第一个出现的名字。
+
+            ★ 不用 os.path.normpath：它在 Windows 上会把 `/root/a.txt` 转成
+              `\\root\\a.txt`，而 AstrBot 跑在 Linux，路径必须保持正斜杠。
+              这里只做纯字符串层面的归一化（折叠 `.` / 重复斜杠）。
+            """
+            p = (path or "").strip()
+            if not p or not p.startswith("/"):
+                return
+            norm = _normalize_posix_path(p)
+            if not norm or norm in found:
+                return
+            found[norm] = name or norm.rsplit("/", 1)[-1]
 
         # ① 消息链组件（不同适配器字段名不同，做宽松探测）
         try:
@@ -142,25 +239,22 @@ class FileReaderPlugin(Star):
                             name = val
                         elif not path:
                             path = val
-                if path and path.startswith("/"):
-                    found[path] = name or os.path.basename(path)
+                add(path, name)
         except Exception:
             pass
 
         text = getattr(event, "message_str", "") or ""
 
         # ② 正则匹配 AstrBot 的 File Attachment 标记
+        #    这是**明确标记**，不要求扩展名（附件可能是任意类型，
+        #    后面由 allowed_ext / DOC_EXTS 把关）
         for m in FILE_MARKER_RE.finditer(text):
-            p = (m.group("path") or "").strip()
-            n = (m.group("name") or "").strip()
-            if p:
-                found.setdefault(p, n or os.path.basename(p))
+            add((m.group("path") or "").strip(), (m.group("name") or "").strip())
 
-        # ③ 兜底：裸的临时文件路径
+        # ③ 兜底：裸的临时文件路径（已限定必须是已知扩展名结尾）
         for m in TEMP_PATH_RE.finditer(text):
-            p = m.group(1).strip().rstrip(".,;:")
-            if p and p not in found:
-                found[p] = os.path.basename(p)
+            p = m.group(1).strip().rstrip(".,;:!?")
+            add(p, os.path.basename(p))
 
         return [(name, path) for path, name in found.items()]
 
@@ -234,19 +328,33 @@ class FileReaderPlugin(Star):
             return "", "缺少 pypdf 库，请在 AstrBot 环境执行 pip install pypdf"
 
         reader = PdfReader(path)
+        total_pages = len(reader.pages)
+
+        # ★ 页数硬上限：图片型 PDF 每页都提取不到文字，
+        #   若只按字符数判断，会遍历完所有页（三千页会卡很久）。
+        page_limit = min(total_pages, MAX_PDF_PAGES)
+
         parts: list[str] = []
-        for i, page in enumerate(reader.pages, 1):
+        extracted_chars = 0
+        for i in range(page_limit):
+            page = reader.pages[i]
             try:
                 t = page.extract_text() or ""
             except Exception:
                 t = ""
             if t.strip():
-                parts.append(f"## 第 {i} 页\n{t.strip()}")
-            if sum(len(x) for x in parts) > 60000:  # 超大 PDF 保护
+                parts.append(f"## 第 {i + 1} 页\n{t.strip()}")
+                extracted_chars += len(t)
+            if extracted_chars > PDF_MAX_CHARS:  # 超大 PDF 保护
                 parts.append("…（页数太多，已截断）")
                 break
+
+        if total_pages > page_limit and not parts:
+            return "", f"PDF 共 {total_pages} 页，只扫描了前 {page_limit} 页且未找到文字"
         if not parts:
             return "", "PDF 里没有可提取的文字（可能是扫描件/图片型 PDF）"
+        if total_pages > page_limit:
+            parts.append(f"…（共 {total_pages} 页，只提取了前 {page_limit} 页）")
         return "\n\n".join(parts), None
 
     def _read_docx(self, path: str) -> tuple[str, str | None]:
