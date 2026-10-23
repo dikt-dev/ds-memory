@@ -407,11 +407,16 @@ ds_memory/
 │   ├── character-card.ts   # 活人感：角色状态卡
 │   ├── voice.ts            # 活人感：语言层（禁用词/口语化）
 │   ├── anti-ai-flavor.ts   # 活人感：AI 味兜底清洗
-│   ├── session-state.ts    # 活人感：会话级情绪残留
+│   ├── emotion-events.ts   # 情感事件（14 类，规则优先 + AI 复核）
+│   ├── emotion-vector.ts   # 8 维情绪向量与衰减（心情值由它派生）
+│   ├── emotion-snapshot.ts # 情绪快照（原因 + 行为指令）
+│   ├── emotion-context.ts  # 情感编排：KV 轮级增量 → 每日结算
+│   ├── relation-facets.ts  # 5 轴关系 + 关系原型
+│   ├── sse-scrub.ts        # 流式回复 AI 味清洗
 │   ├── session-facts.ts    # 活人感：状态数据采集
 │   ├── identity.ts         # 角色名/称呼解析（CHARACTER_NAME / USER_ADDRESS）
 │   ├── vendor.d.ts         # 第三方模块类型声明
-│   └── *.test.ts           # 单元测试（32 个，与模块同名）
+│   └── *.test.ts           # 单元测试（39 个，与模块同名）
 ├── public/
 │   ├── index.html          # 聊天页面
 │   ├── avatar.png          # 助手头像

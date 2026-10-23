@@ -182,7 +182,9 @@ src/
 ├── attitude.ts / relation-*.ts  # 关系数值与态度矩阵
 ├── identity.ts         # 角色名/称呼解析（CHARACTER_NAME / USER_ADDRESS）
 ├── relation-store.ts   # 累计聊天天数持久化（防 D1 清理导致亲密度上限倒退）
-├── session-state.ts    # 会话级情绪残留
+├── emotion-*.ts        # 情感系统：事件 / 8 维情绪 / 快照 / KV 编排
+├── relation-facets.ts  # 5 轴关系与关系原型
+├── sse-scrub.ts        # 流式回复的 AI 味清洗（重写 SSE delta）
 ├── anti-ai-flavor.ts   # AI 套话确定性清洗（含空壳拦截）
 └── media.ts / storage.ts / weather.ts / holidays.ts …
 ```
@@ -191,7 +193,7 @@ src/
 
 ```bash
 pnpm build   # tsc --noEmit
-pnpm test    # vitest（32 个测试文件，463 个用例）
+pnpm test    # vitest（39 个测试文件，601 个用例）
 ```
 
 ## 隐私与免责
