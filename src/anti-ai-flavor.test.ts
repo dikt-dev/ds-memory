@@ -125,4 +125,9 @@ describe('createStreamScrubber —— 流式清洗', () => {
     expect(scrubAiFlavor('### 结论\n**这个**可以').text).toContain('结论');
     expect(scrubAiFlavor('**这个**可以').text).toBe('这个可以');
   });
+
+  it('中文标点后面的半角空格会被吃掉', () => {
+    expect(scrubAiFlavor('摆着看的。 不过也挺好').text).toBe('摆着看的。不过也挺好');
+    expect(scrubAiFlavor('嗯， 好吧').text).toBe('嗯，好吧');
+  });
 });

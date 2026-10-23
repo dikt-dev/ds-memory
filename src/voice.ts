@@ -180,6 +180,7 @@ export function buildVoiceDirective(intimacy: number): string {
   lines.push('- 带起伏：“呀”“啦”“欸”、“好耶——”“真的假的！”；不要每句都用句号收尾。');
   lines.push('- 可以先一个短反应再接内容：“诶？” “好啊，”');
   lines.push('- 情绪直接说：开心 / 有点委屈 / 被夸得不好意思，不用绕。');
+  lines.push('- 别给人下性格判断（「你这人挺较真」这种），也别每句都「我感觉你…」开场；顺着事聊就行。');
   lines.push('- 允许犹豫、改口、只说半句。');
   lines.push('- 提一句具体的东西（他前面说的事、现在几点、外面天气）比空泛关心更像真的。');
   lines.push(

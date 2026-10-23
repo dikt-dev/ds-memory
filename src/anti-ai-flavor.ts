@@ -97,6 +97,7 @@ function applyRules(raw: string): { text: string; cleaned: boolean } {
     .replace(/[，,]\s*[，,]+/g, '，') // 连续逗号
     .replace(/^[，,\s]+/, '') // 开头逗号
     .replace(/\s{2,}/g, ' ') // 连续空格
+    .replace(/([。！？，、；：])\s+/g, '$1') // 中文标点后不该跟空格（模型偶尔中英混排留下）
     .replace(/[。！？!?]\s*[。！？!?]+/, (m) => m[0]); // 连续标点
   if (tightened !== text) {
     text = tightened;
