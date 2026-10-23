@@ -62,10 +62,15 @@ export function maxIntimacyForDays(activeDays: number): number {
  * 返回未经上限截断的原始增量。
  */
 export function computeIntimacyGain(sig: IntimacySignals): number {
-  let gain = 0;
+  // ★ 保底：当天真的聊过，至少 +1。
+  //   之前只按「每 10 轮 +1」计，导致「每天 8 轮」这种常见强度算出来是 0，
+  //   聊满一年亲密度愣是没变——这显然不是「日积月累」该有的样子。
+  if (sig.userMessages <= 0) return 0;
 
-  // ① 聊天轮次：每 10 轮 +1，上限 +3
-  gain += Math.min(3, Math.floor(sig.userMessages / 10));
+  let gain = 1;
+
+  // ① 聊天轮次：每 10 轮额外 +1，最多 +2（叠加保底后总上限仍是 +3）
+  gain += Math.min(2, Math.floor(sig.userMessages / 10));
 
   // ② 连续聊天 ≥7 天：额外 +1（习惯性陪伴）
   if (sig.streakDays >= 7) gain += 1;
@@ -85,7 +90,10 @@ export function intimacyDecay(daysSinceInteraction: number): number {
 }
 
 /**
- * 应用亲密度变化：先加增量，再按硬上限截断，最后处理衰减。
+ * 应用亲密度变化：先加增量，再按硬上限截断。
+ *
+ * ★ **不在这里做失联衰减**：衰减统一由 applyRelationDecay 负责（脱敏时只吃一次）。
+ *   历史上两处都会扣，导致同一天归档里亲密度被扣两次。
  *
  * 硬上限规则：
  * - 未达上限 → 正常增长
@@ -113,10 +121,6 @@ export function applyIntimacyChange(
       cappedByDays = true;
     }
   }
-
-  // 长期失联衰减（与增长可同时发生）
-  const decay = intimacyDecay(sig.daysSinceInteraction);
-  if (decay > 0) next -= decay;
 
   next = Math.min(Math.max(Math.round(next), 0), RELATION_MAX);
   return { next, applied: next - cur, cappedByDays };

@@ -8,13 +8,75 @@
 
 import type { Env } from './types';
 import { scanQuality, type AffinitySignals, type IntimacySignals, type QualityScan } from './relation-drivers';
+import { getActiveDaysState, mergeActiveDays, setActiveDaysState } from './relation-store';
+import { analyzeMood } from './mood';
 
-/** 累计有效聊天天数（有消息的不同日期数）。 */
+/**
+ * 当天用户情绪低落、但确实有陪伴（AI 有回复）。
+ *
+ * 语义：“陪伴低落情绪”应当算一份好感度正向信号。
+ * 判定：用户当天多数消息情绪偏负面，且当天发生了一轮以上完整对话。
+ *
+ * @param userTexts 当天用户消息文本
+ * @param hasAssistantReply 当天是否有助手回复（陪伴发生）
+ */
+export function detectLowMoodButCompanioned(
+  userTexts: string[],
+  hasAssistantReply: boolean,
+): boolean {
+  if (!hasAssistantReply || userTexts.length === 0) return false;
+  // 只看有实质内容的消息，避免一条“嗯”拉偏整体
+  const meaningful = userTexts.filter((t) => t && t.trim().length >= 2);
+  if (meaningful.length === 0) return false;
+
+  let negative = 0;
+  for (const text of meaningful) {
+    const r = analyzeMood(text);
+    // 负向或者虽然中性但被识别为疲惫/忙碌，都算“状态不高”
+    if (r.valence < -0.1 || r.mood === 'low' || r.mood === 'tired' || r.mood === 'busy') {
+      negative += 1;
+    }
+  }
+  // 半数以上消息偏负面 → 当天整体低落
+  return negative * 2 >= meaningful.length;
+}
+
+/** 当天助手是否回复过（用于判断“陪伴”是否真的发生）。 */
+export async function hasAssistantReplyOn(env: Env, dateKey: string): Promise<boolean> {
+  const row = await env.DB.prepare(
+    `SELECT COUNT(*) AS c FROM messages
+     WHERE date_key = ? AND role = 'assistant' AND turn_type = 'chat'`,
+  )
+    .bind(dateKey)
+    .first<{ c: number | null }>();
+  return (row?.c ?? 0) > 0;
+}
+
+/** 累计有效聊天天数（有消息的不同日期数，仅 D1 当前可见范围）。
+ *
+ * ★ 这个值会因月度归档清理而**倒退**，不能直接当「历史累计天数」用。
+ *   历史累计请用 resolveActiveDays（KV 持久化 + 与 D1 取最大值）。
+ */
 export async function countActiveDays(env: Env): Promise<number> {
   const row = await env.DB.prepare(
     `SELECT COUNT(DISTINCT date_key) AS c FROM messages`,
   ).first<{ c: number | null }>();
   return row?.c ?? 0;
+}
+
+/**
+ * 取「历史累计有效聊天天数」，并把目标日期计入历史。
+ *
+ * D1 会被月度任务删掉 3 个月前数据，故取「KV 历史值」与「D1 现值」的较大者；
+ * 并行的 mergeActiveDays 会为新出现的日期 +1。
+ */
+export async function resolveActiveDays(env: Env, forDate: string): Promise<number> {
+  const [stored, d1Days] = await Promise.all([getActiveDaysState(env), countActiveDays(env)]);
+  const merged = mergeActiveDays(stored, d1Days, forDate);
+  if (merged.advanced || merged.state.days !== stored.days || merged.state.lastDate !== stored.lastDate) {
+    await setActiveDaysState(env, merged.state);
+  }
+  return merged.effective;
 }
 
 /** 当天用户消息条数与文本。 */
@@ -68,13 +130,17 @@ export async function collectDayRelationStats(
   newMemoryEntries: number,
   opts: { streakDays: number; daysSinceInteraction: number },
 ): Promise<DayRelationStats> {
-  const [{ count: userMessages, texts }, activeDays, userSilent] = await Promise.all([
+  // ★ 用历史累计天数（KV 持久化），而不是 D1 现值：后者会被月度归档清理而倒退
+  const [{ count: userMessages, texts }, activeDays, userSilent, hasReply] = await Promise.all([
     getDayUserMessages(env, dateKey),
-    countActiveDays(env),
+    resolveActiveDays(env, dateKey),
     wasUserSilent(env, dateKey),
+    hasAssistantReplyOn(env, dateKey),
   ]);
 
   const quality = scanQuality(texts);
+  // ★ 真正计算“陪伴低落情绪”：之前这里写死 false，导致该信号永远不生效
+  const lowMoodButCompanioned = detectLowMoodButCompanioned(texts, hasReply);
 
   return {
     intimacy: {
@@ -89,7 +155,7 @@ export async function collectDayRelationStats(
       gratefulCount: quality.gratefulCount,
       offensiveCount: quality.offensiveCount,
       hadConflict: quality.hadConflict,
-      lowMoodButCompanioned: false, // 由调用方结合 mood 判断
+      lowMoodButCompanioned, // 由当天用户情绪 + 是否真有回复共同判定
       ignoredAllDay: userSilent,
     },
     quality,

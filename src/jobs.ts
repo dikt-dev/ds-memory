@@ -21,7 +21,7 @@ import { buildRelationStatus } from './attitude';
 import { compressMemory, distillDay } from './distill';
 import { archiveCompletedItems, byteLength, DEMOTE_HEADERS, demoteSectionEntries, enforceSectionBudgets, mergeMemoryEntry, parseRelationValues, pruneTransientSections, setRelationValues, trimOldestEntries } from './memory-maintenance';
 import { accumulateCandidates, formatAversionEntry, loadCandidates, mergeAversionEntries, saveCandidates, scanAversions } from './aversion';
-import { applyMoodDrift, computeMoodDrift } from './mood-env';
+import { applyMoodDriftAccumulated, computeMoodDrift, getMoodDriftUsage, saveMoodDriftUsage } from './mood-env';
 import { computeStreak, daysSinceLastUserMessage, countMemoryEntries } from './milestone';
 import { collectDayRelationStats } from './relation-stats';
 import { applyRelationDecay } from './memory-maintenance';
@@ -531,15 +531,21 @@ export async function runContextRefresh(env: Env, now: Date): Promise<void> {
 
     let updatedMemory = memory;
     if (drift.delta !== 0) {
-      const { mood, applied } = applyMoodDrift(relation.mood, drift);
-      if (applied !== 0) {
+      // ★ 受「单日累计额度」约束：每天多次刷新 & 每次聊天不能各自推满 80
+      const usage = await getMoodDriftUsage(env.KV, dateKey);
+      const result = applyMoodDriftAccumulated(relation.mood, drift, usage);
+      if (result.applied !== 0) {
         updatedMemory = setRelationValues(memory, {
           affinity: relation.affinity,
           intimacy: relation.intimacy,
-          mood,
+          mood: result.mood,
         });
         await putMemory(env, updatedMemory);
-        console.log(`[context] mood drift ${applied > 0 ? '+' : ''}${applied} → ${mood}（${drift.reasons.join('；')}）`);
+        await saveMoodDriftUsage(env.KV, result.usage);
+        console.log(
+          `[context] mood drift ${result.applied > 0 ? '+' : ''}${result.applied} → ${result.mood}` +
+            `（当日已用 ${result.usage.used}/${80}；${drift.reasons.join('；')}）`,
+        );
       }
     }
 

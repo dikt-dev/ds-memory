@@ -228,8 +228,8 @@ describe('关系变量（好感度/亲密度）', () => {
     });
     // 好感度：质量驱动 warmTurns=9 → +3（不取 AI 提议的 900）
     expect(withDrivers).toContain('- 好感度：503 / 1000');
-    // 亲密度：20 轮 → +2
-    expect(withDrivers).toContain('- 亲密度：302 / 1000');
+    // 亲密度：20 轮 → 保底 1 + 轮次 2 = +3
+    expect(withDrivers).toContain('- 亲密度：303 / 1000');
     expect((withDrivers.match(/好感度[:：]/g) || []).length).toBe(1);
   });
 

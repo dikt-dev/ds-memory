@@ -57,20 +57,25 @@ describe('computeIntimacyGain —— 只看互动量', () => {
     expect(computeIntimacyGain(baseIntimacy)).toBe(0);
   });
 
-  it('10 轮 +1，20 轮 +2，30 轮以上封顶 +3', () => {
-    expect(computeIntimacyGain({ ...baseIntimacy, userMessages: 10 })).toBe(1);
-    expect(computeIntimacyGain({ ...baseIntimacy, userMessages: 20 })).toBe(2);
+  it('★ 当天聊过就有保底 +1（每天 8 轮也能涨）', () => {
+    expect(computeIntimacyGain({ ...baseIntimacy, userMessages: 1 })).toBe(1);
+    expect(computeIntimacyGain({ ...baseIntimacy, userMessages: 8 })).toBe(1);
+  });
+
+  it('10 轮额外 +1，20 轮以上封顶 +3', () => {
+    expect(computeIntimacyGain({ ...baseIntimacy, userMessages: 10 })).toBe(2);
+    expect(computeIntimacyGain({ ...baseIntimacy, userMessages: 20 })).toBe(3);
     expect(computeIntimacyGain({ ...baseIntimacy, userMessages: 100 })).toBe(3);
   });
 
-  it('连续 7 天额外 +1', () => {
-    expect(computeIntimacyGain({ ...baseIntimacy, streakDays: 7 })).toBe(1);
-    expect(computeIntimacyGain({ ...baseIntimacy, streakDays: 6 })).toBe(0);
+  it('连续 7 天额外 +1（叠加保底）', () => {
+    expect(computeIntimacyGain({ ...baseIntimacy, userMessages: 1, streakDays: 7 })).toBe(2);
+    expect(computeIntimacyGain({ ...baseIntimacy, userMessages: 1, streakDays: 6 })).toBe(1);
   });
 
   it('新增记忆每 5 条 +1，上限 +2', () => {
-    expect(computeIntimacyGain({ ...baseIntimacy, newMemoryEntries: 5 })).toBe(1);
-    expect(computeIntimacyGain({ ...baseIntimacy, newMemoryEntries: 20 })).toBe(2);
+    expect(computeIntimacyGain({ ...baseIntimacy, userMessages: 1, newMemoryEntries: 5 })).toBe(2);
+    expect(computeIntimacyGain({ ...baseIntimacy, userMessages: 1, newMemoryEntries: 20 })).toBe(3);
   });
 
   it('单日总涨幅封顶 +4', () => {
@@ -81,7 +86,7 @@ describe('computeIntimacyGain —— 只看互动量', () => {
   it('★ 不看情绪质量：聊天内容再难听，只要聊了就涨', () => {
     // 亲密度只接收 IntimacySignals，根本没有情绪字段
     const gained = computeIntimacyGain({ ...baseIntimacy, userMessages: 20 });
-    expect(gained).toBe(2);
+    expect(gained).toBe(3);
   });
 });
 
@@ -104,8 +109,8 @@ describe('intimacyDecay —— 长期失联', () => {
 describe('applyIntimacyChange —— 综合应用', () => {
   it('正常增长', () => {
     const r = applyIntimacyChange(300, { ...baseIntimacy, userMessages: 20, activeDays: 100 });
-    expect(r.next).toBe(302);
-    expect(r.applied).toBe(2);
+    expect(r.next).toBe(303);
+    expect(r.applied).toBe(3);
   });
 
   it('被天数上限卡住时仍有宽恕增长（不卡死）', () => {
@@ -121,9 +126,11 @@ describe('applyIntimacyChange —— 综合应用', () => {
     expect(r.applied).toBe(0);
   });
 
-  it('失联时下降', () => {
+  it('★ 失联衰减不在这里做（避免与 applyRelationDecay 重复扣两次）', () => {
     const r = applyIntimacyChange(500, { ...baseIntimacy, activeDays: 100, daysSinceInteraction: 20 });
-    expect(r.next).toBeLessThan(500);
+    // 当天没聊：既不涨也不掉，衰减统一交给 applyRelationDecay
+    expect(r.next).toBe(500);
+    expect(r.applied).toBe(0);
   });
 });
 
