@@ -17,7 +17,7 @@ import { dateKeyInBeijing, isoInBeijing } from './date';
 import { buildBaseSystemPrompt } from './prompt';
 import { getMemory } from './memory';
 import { fetchWeather } from './weather';
-import { getOrCreateDayContext } from './context';
+import { getOrCreateDayContext, type DayContextFile } from './context';
 import { getTodaySummary } from './summary';
 import { recentMessages, recentProactiveMessages, insertProactiveMessage, updateMessageUsage } from './db';
 import { parseRelationValues } from './memory-maintenance';
@@ -132,32 +132,29 @@ async function refreshDynamicFields(
 }
 
 /** 收集环境信号。 */
-async function collectEnvironment(env: Env, now: Date, dayCtx: { is_holiday: boolean }): Promise<EnvironmentSignal> {
+async function collectEnvironment(env: Env, now: Date, dayCtx: DayContextFile): Promise<EnvironmentSignal> {
+  const hour = Math.floor(beijingMinutes(now) / 60);
   const dateKey = dateKeyInBeijing(now);
-  const minutes = beijingMinutes(now);
-  const hour = Math.floor(minutes / 60);
 
   // 天气变化：对比当天 context 里已记录的天气与当前实时天气
   let weatherChanged = false;
   try {
-    const current = await getOrCreateDayContext(env, dateKey);
+    // 复用调用方已读到的 dayCtx，避免同一个 tick 里重复读一次 R2
+    const current = (await getOrCreateDayContext(env, dateKey, dayCtx)).weather;
     const live = await fetchWeather(env);
-    if (current.weather && live) {
-      const tempDiff = Math.abs(current.weather.temp_c - live.temp_c);
-      const descDiff = current.weather.desc !== live.desc;
+    if (current && live) {
+      const tempDiff = Math.abs(current.temp_c - live.temp_c);
+      const descDiff = current.desc !== live.desc;
       weatherChanged = tempDiff >= 6 || descDiff;
     }
   } catch {
     /* 忽略 */
   }
 
-  // 特殊日期：节假日当天（不含普通周末）
-  const isSpecialDay = dayCtx.is_holiday && !/^周末$/.test(dateKey) ? false : false;
-  // 简化：节假日标记由 holiday_note 判断
-  const ctx = await getOrCreateDayContext(env, dateKey);
-  const special = ctx.is_holiday && ctx.holiday_note !== '周末';
+  // 特殊日期：法定节假日当天（元旦/春节/国庆…），普通周末不算
+  const isSpecialDay = dayCtx.is_holiday && dayCtx.holiday_note !== '周末';
 
-  return { hour, isRestDay: ctx.is_holiday, weatherChanged, isSpecialDay: special || isSpecialDay };
+  return { hour, isRestDay: dayCtx.is_holiday, weatherChanged, isSpecialDay };
 }
 
 /** 生成带事由的主动消息。 */
@@ -169,17 +166,18 @@ async function generateProactive(
   toneHint: string,
 ): Promise<{ text: string; cost: number; promptTokens: number; completionTokens: number } | { error: string }> {
   const dateKey = dateKeyInBeijing(now);
-  const [memory, weather, dayCtx, todaySummaryRaw, history, recentProactive] = await Promise.all([
+  const [memory, weather, dayCtx, recentMemoRaw, todaySummaryRaw, history, recentProactive] = await Promise.all([
     getMemory(env),
     fetchWeather(env),
     getOrCreateDayContext(env, dateKey),
+    getRecentMemo(env),
     getTodaySummary(env, dateKey),
     recentMessages(env, 12),
     recentProactiveMessages(env, 6),
   ]);
   const relation = parseRelationValues(memory);
   // 中期记忆优先：它存在时跳过今日摘要，避免重复
-  const recentMemo = formatRecentMemoBlock(await getRecentMemo(env));
+  const recentMemo = formatRecentMemoBlock(recentMemoRaw);
   const todaySummary = recentMemo ? null : todaySummaryRaw;
   const ctx = {
     date: dayCtx.date,

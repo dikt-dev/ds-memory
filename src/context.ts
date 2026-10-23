@@ -64,7 +64,18 @@ function cacheDrop(dateKey: string): void {
   ctxCache.delete(dateKey);
 }
 
-export async function getOrCreateDayContext(env: Env, dateKey: string): Promise<DayContextFile> {
+/**
+ * 读取（或首次创建）当天上下文文件。
+ *
+ * `current` 可由调用方传入它刚读到的结果：同一个 tick 里多处需要上下文时，
+ * 省掉重复的 R2 读（与 attachWeather 的约定一致）。
+ */
+export async function getOrCreateDayContext(
+  env: Env,
+  dateKey: string,
+  current?: DayContextFile,
+): Promise<DayContextFile> {
+  if (current && current.date === dateKey) return current;
   const cached = cacheGet(dateKey);
   if (cached) return cached;
 

@@ -29,15 +29,21 @@ export function normalizeUsage(
 
 const encoder = new TextEncoder();
 
+/** 流式结束回调的返回值：可以只给费用，也可以带上刚落库的消息 id（前端用来推进轮询游标）。 */
+export type FinishResult = number | { cost: number; ids?: { user?: number; assistant?: number } };
+
 /**
  * 流式调用 DeepSeek，原样透传 SSE。
- * onFinish：流结束后回调（落库/计费），返回本次费用（元）。
+ * onFinish：流结束后回调（落库/计费），返回费用或 {cost, ids}。
  * appendUsageEvent：网页端为 true，会在流末尾追加 usage 事件。
  */
 export async function streamDeepSeek(
   env: Env,
   messages: DeepSeekMessage[],
-  opts: { appendUsageEvent: boolean; onFinish: (text: string, usage: TokenUsage | null) => Promise<number> },
+  opts: {
+    appendUsageEvent: boolean;
+    onFinish: (text: string, usage: TokenUsage | null) => Promise<FinishResult>;
+  },
 ): Promise<Response> {
   const apiKey = env.DEEPSEEK_API_KEY;
   if (!apiKey) {
@@ -105,15 +111,25 @@ export async function streamDeepSeek(
     async flush(controller) {
       if (carry) handleLine(carry);
       let cost = 0;
+      let ids: { user?: number; assistant?: number } | undefined;
       try {
         // ★ 落库前清洗 AI 味（流式已推出的原样，但落库/记忆/历史回放用干净版）
         const cleaned = scrubAiFlavor(assistantText);
-        cost = await opts.onFinish(cleaned.text, usage);
+        const r = await opts.onFinish(cleaned.text, usage);
+        if (typeof r === 'number') {
+          cost = r;
+        } else {
+          cost = r.cost;
+          ids = r.ids;
+        }
       } catch (e) {
         console.error('[deepseek] onFinish failed:', e);
       }
       if (opts.appendUsageEvent) {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ event: 'usage', cost_rmb: cost, usage })}\n\n`));
+        // 带上刚落库的消息 id：前端靠它推进轮询游标，否则 3 秒后的增量拉取会把
+        // 刚发出的消息当成“新消息”再渲染一遍（网页上就出现了重复）
+        const payload = { event: 'usage', cost_rmb: cost, usage, ...(ids ? { ids } : {}) };
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
       }
     },
   });

@@ -63,14 +63,15 @@ export async function markAttempt(env: Env, ids: number[]): Promise<void> {
 }
 
 /** 队列统计（供 stats 接口使用）。 */
-export async function queueStats(env: Env): Promise<{ pending: number; sent: number }> {
+export async function queueStats(env: Env): Promise<{ pending: number; sent: number; failed: number }> {
   const row = await env.DB.prepare(
     `SELECT
        SUM(CASE WHEN sent_at IS NULL AND attempts < 5 THEN 1 ELSE 0 END) AS pending,
-       SUM(CASE WHEN sent_at IS NOT NULL THEN 1 ELSE 0 END) AS sent
+       SUM(CASE WHEN sent_at IS NOT NULL THEN 1 ELSE 0 END) AS sent,
+       SUM(CASE WHEN sent_at IS NULL AND attempts >= 5 THEN 1 ELSE 0 END) AS failed
      FROM proactive_queue`,
-  ).first<{ pending: number | null; sent: number | null }>();
-  return { pending: row?.pending ?? 0, sent: row?.sent ?? 0 };
+  ).first<{ pending: number | null; sent: number | null; failed: number | null }>();
+  return { pending: row?.pending ?? 0, sent: row?.sent ?? 0, failed: row?.failed ?? 0 };
 }
 
 /** 清理 30 天前的已发送记录。 */

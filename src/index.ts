@@ -402,9 +402,18 @@ app.get('/api/proactive/pending', async (c) => {
   const limitRaw = Number(c.req.query('limit') ?? '5');
   const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 5, 1), 20);
   const messages = await takePending(c.env, limit);
-  // 拉取即计一次尝试，避免坏消息无限重试（插件失败不 ack 的话会在 5 次后放弃）
-  if (messages.length > 0) await markAttempt(c.env, messages.map((m) => m.id));
+  // ★ 不再在拉取时计尝试次数：拉取不代表发送。失败由插件调 /nack 上报，
+  //   否则「插件发送失败 / UMO 失效」会静默地把消息在 5 分钟后丢掉。
   return c.json({ messages });
+});
+
+/** 上报发送失败（插件调用）：attempts+1，5 次后不再下发。 */
+app.post('/api/proactive/nack', async (c) => {
+  if (!(await checkQueueAuth(c))) return c.json({ error: 'unauthorized' }, 401);
+  const body = await c.req.json().catch(() => null);
+  const ids = body && Array.isArray(body.ids) ? body.ids.filter((x: unknown) => typeof x === 'number') : [];
+  await markAttempt(c.env, ids);
+  return c.json({ ok: true, failed: ids.length });
 });
 
 /** 确认已发送。 */

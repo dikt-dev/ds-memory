@@ -35,17 +35,28 @@ export async function readSessionFacts(env: Env, now: Date, dateKey: string): Pr
   try {
     const pro = await env.DB.prepare(
       `SELECT p.id, p.content, p.created_ms,
-              (SELECT MIN(m.id) FROM messages m WHERE m.role = 'user' AND m.id > p.id) AS reply_id
+              (SELECT MIN(m.id) FROM messages m WHERE m.role = 'user' AND m.id > p.id) AS reply_id,
+              (SELECT COUNT(*) FROM proactive_queue q WHERE q.message_id = p.id) AS queued,
+              (SELECT COUNT(*) FROM proactive_queue q WHERE q.message_id = p.id AND q.sent_at IS NOT NULL) AS delivered
          FROM messages p
         WHERE p.turn_type = 'proactive'
         ORDER BY p.id DESC
         LIMIT 1`,
-    ).first<{ id: number; content: string; created_ms: number; reply_id: number | null }>();
+    ).first<{
+      id: number;
+      content: string;
+      created_ms: number;
+      reply_id: number | null;
+      queued: number | null;
+      delivered: number | null;
+    }>();
 
     if (pro) {
       const elapsed = now.getTime() - pro.created_ms;
+      // ★ 没投递成功的主动消息不算「被冷落」：队列模式下消息可能根本没送到用户
+      const reallySent = (pro.queued ?? 0) === 0 || (pro.delivered ?? 0) > 0;
       // 只关心 2 小时~48 小时内的（太久远的"冷落"没意义，也不算新鲜情绪）
-      if (elapsed > 2 * 3600000 && elapsed < 48 * 3600000 && pro.reply_id === null) {
+      if (elapsed > 2 * 3600000 && elapsed < 48 * 3600000 && pro.reply_id === null && reallySent) {
         wasIgnored = true;
         ignoredMessage = pro.content;
       }

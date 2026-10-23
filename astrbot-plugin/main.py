@@ -43,6 +43,8 @@ class MemoryPushPlugin(Star):
         self._last_push_at: float = 0.0
         # 是否已经提示过配置缺失（避免刷日志）
         self._warned_missing_config = False
+        # 连续发送失败次数（用于自动清理失效会话）
+        self._fail_streak = 0
 
     # ── 生命周期 ──────────────────────────────────────────
 
@@ -124,12 +126,20 @@ class MemoryPushPlugin(Star):
                 ok = await self.context.send_message(ump, chain)
                 if ok:
                     acked.append(int(msg["id"]))
+                    self._fail_streak = 0
                     logger.info(f"[小忆] 已推送 #{msg['id']}：{content[:40]}...")
                 else:
-                    logger.warning(f"[小忆] 推送 #{msg['id']} 返回失败，稍后重试")
+                    logger.warning(
+                        f"[小忆] 推送 #{msg['id']} 失败：目标会话 {ump} 不可用"
+                        "（换过适配器/机器人后旧会话会失效）"
+                    )
+                    await self._nack([int(msg["id"])])
+                    await self._handle_send_failure()
                     break
             except Exception as e:
                 logger.error(f"[小忆] 推送 #{msg['id']} 异常：{e}")
+                await self._nack([int(msg["id"])])
+                await self._handle_send_failure()
                 break
 
             # 多条之间稍作停顿，避免被平台判定为刷屏
@@ -187,6 +197,50 @@ class MemoryPushPlugin(Star):
                     logger.warning(f"[小忆] ack 失败 HTTP {resp.status}：{text[:200]}")
         except aiohttp.ClientError as e:
             logger.warning(f"[小忆] ack 网络错误：{e}")
+
+    async def _nack(self, ids: list[int]) -> None:
+        """POST /api/proactive/nack：告诉 Worker 这次发送失败了。
+
+        Worker 侧拉取不再计尝试次数（拉取≠送达），必须由插件主动上报失败，
+        否则「发送失败」会让消息在几次轮询后被静默丢弃。
+        """
+        if not ids:
+            return
+        url = f"{self._base_url()}/api/proactive/nack"
+        try:
+            async with self._http_session().post(
+                url, headers=self._headers(), json={"ids": ids}
+            ) as resp:
+                if resp.status != 200:
+                    text = await resp.text()
+                    logger.warning(f"[小忆] nack 失败 HTTP {resp.status}：{text[:120]}")
+        except aiohttp.ClientError as e:
+            logger.warning(f"[小忆] nack 网络错误：{e}")
+
+    async def _handle_send_failure(self) -> None:
+        """连续失败两次就清掉失效的目标会话，等用户再发消息时重新学习。
+
+        典型场景：从 NapCat 换到 QQ 官方接口后，旧 UMO 里的平台标识失效，
+        send_message 永远返回 False。
+        """
+        self._fail_streak += 1
+        if self._fail_streak < 2:
+            return
+        if not self.config.get("enable_auto_learn", True):
+            return
+        if not self._target_umo():
+            return
+        self.config["target_umo"] = ""
+        try:
+            self.config.save_config()
+        except Exception as e:
+            logger.warning(f"[小忆] 清除失效会话失败：{e}")
+            return
+        logger.warning(
+            "[小忆] 连续发送失败，已清除失效的目标会话；"
+            "请在要接收主动消息的聊天窗口发一句话，插件会自动重新学习"
+        )
+        self._fail_streak = 0
 
     # ── UMO 管理 ─────────────────────────────────────────
 
@@ -276,9 +330,11 @@ class MemoryPushPlugin(Star):
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def auto_learn(self, event: AstrMessageEvent):
-        """自动学习：收到消息就记住这个会话（如果还没配置目标）。"""
+        """自动学习：收到消息就把该会话记为目标。
+
+        ★ 不再「已配置就跳过」——换了适配器（NapCat→QQ 官方）、换了群/好友后，
+        旧 UMO 会永久失效，必须让最近说话的会话自动接管。
+        """
         if not self.config.get("enable_auto_learn", True):
-            return
-        if self._target_umo():
             return
         await self._remember_umo(event.unified_msg_origin)

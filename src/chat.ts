@@ -137,6 +137,7 @@ export async function streamChat(
     appendUsageEvent: true,
     onFinish: async (text, usage) => {
       let cost = 0;
+      let assistantId: number | undefined;
       if (text.trim()) {
         // 费用与 token 随 INSERT 一次写入（少一条 UPDATE）
         const saved = await insertAssistantReply(env, text, userRow.id, now, {
@@ -148,13 +149,15 @@ export async function streamChat(
           completionTokens: usage?.completion_tokens ?? 0,
         });
         cost = saved.cost_rmb;
+        assistantId = saved.id;
       }
       // ★ 会话情绪残留：用本轮用户消息推断情绪并写入 KV（下一轮生效）
       try {
         const tag = inferTag(content, text);
         await updateSessionMood(env, now.getTime(), tag);
       } catch { /* 忽略 */ }
-      return cost;
+      // 把 id 一并返回：前端用它推进轮询游标，避免重复渲染同一轮
+      return { cost, ids: { user: userRow.id, assistant: assistantId } };
     },
   });
 }

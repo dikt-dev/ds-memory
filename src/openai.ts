@@ -156,9 +156,48 @@ export function stripAttachmentWrapper(content: string): string {
     .trim();
 }
 
+/** 去掉平台注入的 <system_notice>…</system_notice>（如图片蒙太奇说明）。 */
+export function stripSystemNotice(content: string): string {
+  return content
+    .replace(/<system_notice>[\s\S]*?<\/system_notice>/gi, '')
+    .replace(/<system_notice>[\s\S]*$/i, '') // 未闭合的也去掉
+    .trim();
+}
+
 /** 统一的用户文本清洗链：平台元信息 → 附件包装 → 图片占位。 */
 export function cleanUserText(text: string): string {
-  return stripAttachmentWrapper(stripImagePlaceholders(stripSystemReminder(text)));
+  return stripAttachmentWrapper(stripImagePlaceholders(stripSystemNotice(stripSystemReminder(text))));
+}
+
+/**
+ * 动图蒙太奇：给模型补一句中文交代。
+ *
+ * 客户端会把动图抽帧、拼成一张「多帧并排」的大图（附一句英文 system_notice）。
+ * 实测光说“只看第一帧”不够——模型仍会顺带描述变暗/重复的副本，所以明确要求忽略。
+ */
+export function withMontageHint(cleaned: string, raw: string): string {
+  if (!/animation\s+montage/i.test(raw)) return cleaned;
+  return (
+    cleaned +
+    '\n（这是动图抽帧拼成的一张图：画面里可能有并排、重复或变暗的副本。' +
+    '把它当成一张普通照片，只描述第一个完整画面，不要提帧、拼图或重复部分。）'
+  );
+}
+
+/**
+ * 组装「最后一条用户消息」发给模型的内容（纯函数，可单测）。
+ *
+ * ★ 带图片时也必须用 withMontageHint 的结果，否则蒙太奇提示会被丢掉
+ *   （之前就是这个 bug：图片分支用的是未加提示的清洗文本，提示从未发出去）。
+ */
+export function buildLastUserContent(
+  cleaned: string,
+  raw: string,
+  images: Array<{ type: 'image_url'; image_url: { url: string } }>,
+): DeepSeekMessage['content'] {
+  const text = withMontageHint(cleaned, raw);
+  if (images.length === 0) return text;
+  return text ? [{ type: 'text', text }, ...images] : images;
 }
 
 /** 是否为主动/定时任务触发的请求（这类消息不进入聊天历史与记忆，只用于生成回复）。 */
@@ -240,15 +279,11 @@ openaiApp.post('/chat/completions', async (c) => {
   // 把清洗结果写回上游消息（保留图片部分）
   if (lastUser) {
     const images = Array.isArray(lastUser.content)
-      ? lastUser.content.filter((p) => p.type === 'image_url')
+      ? lastUser.content.filter(
+          (p): p is { type: 'image_url'; image_url: { url: string } } => p.type === 'image_url',
+        )
       : [];
-    if (images.length > 0) {
-      lastUser.content = lastUserCleaned
-        ? [{ type: 'text' as const, text: lastUserCleaned }, ...images]
-        : images;
-    } else {
-      lastUser.content = lastUserCleaned;
-    }
+    lastUser.content = buildLastUserContent(lastUserCleaned, lastUserText, images);
   }
 
   if (!textMessages.some((m) => m.role === 'user')) {
@@ -363,6 +398,20 @@ openaiApp.post('/chat/completions', async (c) => {
     }
   }
 
+  /**
+   * 会话情绪残留：用本轮用户消息 + 回复推断情绪，写进 KV（下一轮生效）。
+   * 流式与非流式都调它——之前只有流式会写，非流式（部分客户端）情绪永远不更新。
+   */
+  const recordSessionMood = async (replyText: string) => {
+    if (skipRecording) return;
+    try {
+      const tag = inferTag(lastUserCleaned, replyText);
+      await updateSessionMood(c.env, now.getTime(), tag);
+    } catch {
+      /* 忽略 */
+    }
+  };
+
   const onFinish = async (text: string, usage: TokenUsage | null) => {
     let cost = 0;
     if (!skipRecording && text.trim() && userMessageId) {
@@ -378,12 +427,7 @@ openaiApp.post('/chat/completions', async (c) => {
       cost = saved.cost_rmb;
     }
     // ★ 会话情绪残留：用本轮用户消息推断情绪并写入 KV（下一轮生效）
-    if (!skipRecording) {
-      try {
-        const tag = inferTag(lastUserCleaned, text);
-        await updateSessionMood(c.env, now.getTime(), tag);
-      } catch { /* 忽略 */ }
-    }
+    await recordSessionMood(text);
     return cost;
   };
 
@@ -403,6 +447,8 @@ openaiApp.post('/chat/completions', async (c) => {
       completionTokens: result.usage?.completion_tokens ?? 0,
     });
   }
+  // ★ 非流式也要更新会话情绪残留（与流式保持一致）
+  await recordSessionMood(result.text);
   const promptTokens = (result.usage?.prompt_cache_hit_tokens ?? 0) + (result.usage?.prompt_cache_miss_tokens ?? 0);
   return c.json({
     id: result.id,

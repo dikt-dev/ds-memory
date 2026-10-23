@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BANNED_PHRASES, buildVoiceDirective, casualness } from './voice';
+import { BANNED_PHRASES, KAOMOJI, buildVoiceDirective, casualness } from './voice';
 
 describe('casualness', () => {
   it('亲密度映射到 0~1，并做边界钳制', () => {
@@ -33,6 +33,20 @@ describe('buildVoiceDirective', () => {
     expect(BANNED_PHRASES).toContain('您');
     expect(d).toContain('"您"');
     expect(d.indexOf('绝对不要出现')).toBeLessThan(d.indexOf('消息长度'));
+  });
+
+  it('包含「别把话压得太干」与颜文字规则', () => {
+    const d = buildVoiceDirective(900);
+    expect(d).toContain('别把话压得太干');
+    expect(d).toContain('颜文字');
+    expect(d).toContain(KAOMOJI.happy[0]);
+    expect(d).toContain('同一条最多一个');
+    expect(d).toContain('不用 emoji 表情符号');
+  });
+
+  it('刚认识时颜文字更克制', () => {
+    expect(buildVoiceDirective(300)).toContain('最多每 6~8 条');
+    expect(buildVoiceDirective(900)).not.toContain('最多每 6~8 条');
   });
 
   it('按亲密度切换口语化程度', () => {

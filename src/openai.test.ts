@@ -7,6 +7,9 @@ import {
   stripAttachmentWrapper,
   stripImagePlaceholders,
   stripSystemReminder,
+  stripSystemNotice,
+  withMontageHint,
+  buildLastUserContent,
 } from './openai';
 
 describe('extractText', () => {
@@ -173,5 +176,37 @@ describe('cleanUserText', () => {
       '</attachment>',
     ].join('\n');
     expect(cleanUserText(raw)).toBe('看看这个\n文件正文');
+  });
+
+  it('清掉平台的 system_notice（动图蒙太奇说明）', () => {
+    const raw = [
+      '<system_notice>',
+      'Images labeled as animation montages contain frames in reading order.',
+      '</system_notice>',
+      '[图片:images/2026-10-22/1.jpg]',
+    ].join('\n');
+    expect(cleanUserText(raw)).toBe('[图片:images/2026-10-22/1.jpg]');
+    expect(stripSystemNotice('看看<system_notice>truncated')).toBe('看看');
+  });
+
+  it('动图蒙太奇才补提示语，普通图片不补', () => {
+    const montage = 'Images labeled as animation montages contain frames in reading order.';
+    expect(withMontageHint('看图', montage)).toContain('只描述第一个完整画面');
+    expect(withMontageHint('看图', '普通一条消息')).toBe('看图');
+  });
+
+  it('带图片时提示语也要进请求（上次的 bug 就是这里丢了）', () => {
+    const images = [{ type: 'image_url' as const, image_url: { url: 'data:image/jpeg;base64,AAA' } }];
+    const montage = 'Images labeled as animation montages contain frames in reading order.';
+    const content = buildLastUserContent('你看到了几张图片？', montage, images);
+    expect(Array.isArray(content)).toBe(true);
+    const parts = content as Array<{ type: string; text?: string }>;
+    expect(parts[0].type).toBe('text');
+    expect(parts[0].text).toContain('只描述第一个完整画面');
+    expect(parts[1].type).toBe('image_url');
+
+    // 普通图片不带提示语
+    const plain = buildLastUserContent('看图', '普通消息', images) as Array<{ type: string; text?: string }>;
+    expect(plain[0].text).toBe('看图');
   });
 });

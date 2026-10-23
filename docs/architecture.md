@@ -240,13 +240,17 @@ cron "0 20 * * *"
 
 ## 六、记忆体系（四层）
 
-| 层级 | 内容 | 存储 | 生命周期 |
-|------|------|------|---------|
-| **人物底色** | AI 的固定性格设定 | memory.md 区块 | 永不修改/删除 |
-| **称呼与关系** | 称呼、暗号、好感度/亲密度 | memory.md 区块 | 半永久，每日微调 |
-| **长期记忆** | 关于用户/偏好/进行中事项 | memory.md 条目 | 每日追加，超限裁剪 |
-| **今日摘要** | 当天对话的 100 字速写 | KV `summary:日期` | 1 天，归档后删除 |
-| **短期** | 最近 20 条原文 | D1 | 滚动 |
+按时间尺度分四层（README 有完整说明）：
+
+| 层级 | 内容 | 存储 | 生命周期 | 注入方式 |
+|------|------|------|---------|---------|
+| **长期核心** | 人物底色、称呼与关系、长期记忆、偏好、进行中事项、共同经历、雷区、近期动态 | R2 `memory.md`（≤6.5KB 核心） | 每日归档维护，受保护分区不自动删 | 每轮全文注入 |
+| **长期档案** | 核心溢出后「只搬不删」的旧条目，带 `#标签` | R2 `memory/archive.md` | 永久 | **按需检索**，命中最多 4 条 |
+| **中期** | 最近 24 小时的电报体纪要（3~6 条） | KV `memo:24h` | 3 小时或每 15 条消息滚动刷新 | 每轮注入（存在时替代今日摘要） |
+| **短期** | 最近 20 条原文 | D1 | 滚动 | 每轮 |
+
+> 另有「今日摘要」（KV `summary:日期`，100 字速写，TTL 36h）作为中期记忆的兜底：
+> 中期纪要存在时不注入，避免同一段内容发两遍。
 
 **保护机制**：
 - 人物底色：提炼时忽略、压缩时取出放回、裁剪时跳过（三重保护）
@@ -265,16 +269,20 @@ cron "0 20 * * *"
 | POST | `/api/logout` | - | 退出 |
 | POST | `/api/chat` | Cookie | 聊天（SSE，支持图片/渠道） |
 | GET | `/api/history` | Cookie | 历史分页 |
+| GET | `/api/history/since` | Cookie | 增量拉取（前端轮询实时刷新） |
 | GET | `/api/usage` | Cookie | 计费统计 |
 | GET | `/api/balance` | Cookie | DeepSeek 余额 |
 | GET/POST | `/api/settings`、`/api/admin/settings` | -/Cookie | 城市配置 |
 | POST | `/api/admin/run-daily` | Cookie | 手动归档 |
 | POST | `/api/admin/run-monthly` | Cookie | 手动月度合并 |
+| POST | `/api/admin/run-context` | Cookie | 手动刷新 context（天气/心情/关系快照） |
+| POST | `/api/admin/test-mood` | Cookie | 情绪识别链路自检 |
 | POST | `/api/admin/trigger-proactive` | Cookie | 手动触发主动消息 |
-| GET | `/api/admin/stats` | Cookie | 系统统计 |
+| GET | `/api/admin/stats` | Cookie | 系统统计（含分层记忆指标） |
 | GET | `/api/image/*` | Cookie | 图片回放 |
 | GET/POST | `/v1/models`、`/v1/chat/completions` | Bearer | OpenAI 兼容端点 |
-| GET/POST | `/api/proactive/pending`、`/api/proactive/ack` | Bearer | 主动消息队列 |
+| GET/POST | `/api/proactive/pending`、`/api/proactive/ack`、`/api/proactive/nack` | Bearer | 主动消息队列（拉取/回执/失败上报） |
+| GET | `/api/proactive/stats` | Cookie | 主动消息队列状态 |
 
 ---
 
@@ -283,10 +291,11 @@ cron "0 20 * * *"
 | cron（UTC） | 北京时间 | 内容 |
 |-------------|---------|------|
 | `0 20 * * *` | 04:00 | 每日归档（每月 1 日加月度合并） |
-| `*/5 1-14 * * *` | 09:00-22:30 每 5 分钟 | 随机主动消息 |
-| `*/5 23,0,14,15,16 * * *` | 07:45-08:15 / 22:45-23:15 每 5 分钟 | 早晚固定主动消息 + context 刷新（北京 08:00 / 24:00） |
+| `*/5 1-14 * * *` | 09:00-22:30 每 5 分钟 | 随机主动消息（含 UTC 8 点 → 北京 16:00 的 context 刷新） |
+| `*/5 23,0,14,15,16 * * *` | 07:45-08:15 / 22:45-23:15 每 5 分钟 | 早晚固定主动消息 + context 刷新（北京 08:00 / 16:00 / 24:00） |
 
-> Cloudflare 免费版限制 3 个 cron，故合并分发。
+> Cloudflare 免费版限制 3 个 cron，故合并分发。context 刷新只在 UTC 0 / 8 / 16 点整的前 5 分钟内执行
+> （`maybeRefreshContext` 按 `getUTCMinutes() < 5` 过滤，其余 tick 直接返回）。
 
 ---
 
@@ -321,36 +330,67 @@ cron "0 20 * * *"
 ds_memory/
 ├── src/
 │   ├── index.ts            # Worker 入口：路由 + cron 分发
+│   ├── types.ts            # 环境变量与绑定类型
+│   ├── date.ts             # 北京时间工具
+│   ├── auth.ts             # 口令哈希
+│   ├── settings.ts         # 城市配置
+│   ├── storage.ts          # 双账号 R2 抽象层
 │   ├── db.ts               # D1 消息存取（v2 结构）
-│   ├── chat.ts             # 网页聊天链路
-│   ├── openai.ts           # OpenAI 兼容端点（AstrBot）
+│   ├── context.ts          # 当天上下文文件（日期/天气/关系快照）
+│   ├── holidays.ts         # 中国节假日（2026 官方表）
+│   ├── weather.ts          # 天气（Open-Meteo）
+│   ├── media.ts            # 图片压缩与存储
+│   ├── pricing.ts          # 计费
+│   ├── llm-cost.ts         # 提炼/摘要等非聊天调用记账
+│   │
 │   ├── deepseek.ts         # DeepSeek 调用核心（流式/非流式）
 │   ├── prompt.ts           # 系统提示词组装 + 渠道定义
+│   ├── chat.ts             # 网页聊天链路
+│   ├── openai.ts           # OpenAI 兼容端点（AstrBot）
+│   │
 │   ├── memory.ts           # memory.md 读写（R2+KV）
-│   ├── memory-maintenance.ts # 记忆合并/压缩/裁剪/关系变量
+│   ├── memory-maintenance.ts # 记忆合并/压缩/裁剪/分区配额/关系变量
+│   ├── memory-archive.ts   # 长期档案 + 按需检索（同义词/标签/区分度）
+│   ├── recent-memory.ts    # 中期记忆：最近 24 小时纪要
+│   ├── summary.ts          # 当日滚动摘要（中期记忆的兜底）
 │   ├── distill.ts          # 提炼与压缩（DeepSeek 优先，AI 兜底）
-│   ├── summary.ts          # 当日滚动摘要
-│   ├── proactive.ts        # 主动消息时间规则 + 外部推送通道
-│   ├── webproactive.ts     # 网页端主动消息（落 D1）
-│   ├── queue.ts            # 主动消息外发队列
+│   ├── aversion.ts         # 雷区与禁忌的主动学习
+│   │
 │   ├── jobs.ts             # 每日归档 + 月度合并 + context 刷新
-│   ├── context.ts          # 当天上下文文件
+│   ├── proactive.ts        # 主动消息时间规则 + 投递通道
+│   ├── proactive-engine.ts # 主动消息打分决策（纯函数）
+│   ├── webproactive.ts     # AI 主动消息主流程（落 D1 + 入队）
+│   ├── queue.ts            # 主动消息外发队列
+│   ├── profile-cache.ts    # 用户活跃画像缓存
+│   ├── feedback.ts         # 主动消息质量反馈
+│   ├── milestone.ts        # 里程碑（认识天数/连续聊天）
+│   │
 │   ├── attitude.ts         # 好感度/亲密度阶段与态度矩阵
-│   ├── pricing.ts          # 计费
-│   ├── media.ts            # 图片压缩与存储
-│   ├── storage.ts          # 双账号 R2 抽象层
-│   ├── weather.ts          # 天气（Open-Meteo）
-│   ├── holidays.ts         # 中国节假日（2026 官方表）
-│   ├── settings.ts         # 城市配置
-│   ├── auth.ts             # 口令哈希
-│   ├── date.ts             # 北京时间工具
-│   └── types.ts            # 环境变量与绑定类型
+│   ├── relation-drivers.ts # 好感度/亲密度驱动信号
+│   ├── relation-growth.ts  # 渐进增长模型
+│   ├── relation-stats.ts   # 当日关系统计（从 D1 汇总）
+│   ├── mood.ts             # 情绪感知（关键词）
+│   ├── mood-ai.ts          # 情绪识别 AI 复核 + 合并
+│   ├── mood-env.ts         # 心情的环境漂移
+│   │
+│   ├── character-card.ts   # 活人感：角色状态卡
+│   ├── voice.ts            # 活人感：语言层（禁用词/口语化）
+│   ├── anti-ai-flavor.ts   # 活人感：AI 味兜底清洗
+│   ├── session-state.ts    # 活人感：会话级情绪残留
+│   ├── session-facts.ts    # 活人感：状态数据采集
+│   ├── vendor.d.ts         # 第三方模块类型声明
+│   └── *.test.ts           # 单元测试（29 个，与模块同名）
 ├── public/
 │   ├── index.html          # 聊天页面
 │   ├── avatar.png          # 小忆头像
 │   └── user-avatar.png     # 用户头像
-├── astrbot-plugin/         # AstrBot 反向轮询插件（可选）
+├── astrbot-plugin/         # AstrBot 反向轮询插件（主动消息推送）
+├── astrbot-plugin-file/    # AstrBot 文件读取插件
+├── docs/
+│   └── liveliness-plan.md  # 活人感改造计划与三通道覆盖基线
+├── scripts/                # 口令哈希、本地试聊、聊天记录提取
 ├── schema.sql              # D1 表结构
+├── memory-template.md      # 首次部署写入 R2 的 memory.md 模板
 ├── wrangler.toml           # 部署配置
 └── README.md               # 使用文档
 ```
@@ -367,3 +407,7 @@ ds_memory/
 6. **降级不阻断**：记忆/天气/提炼失败都不影响聊天主流程
 7. **图片双轨**：R2 存文件（供回放），base64 传 DeepSeek（供理解）
 8. **单用户硬约束**：永不添加多用户/注册功能，口令只存哈希
+
+---
+
+> 本文档随代码演进；新增模块（分层记忆、活人感、主动消息引擎…）后请同步更新「十一、目录结构」与 README 的目录结构。

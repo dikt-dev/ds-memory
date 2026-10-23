@@ -793,9 +793,12 @@ async function resetAndLoadHistory() {
 const POLL_INTERVAL_MS = 3000;
 let pollTimer = null;
 let pollingNow = false;
+let sending = false;
 
 async function pollNewMessages() {
   if (pollingNow) return;
+  // 正在发消息/流式中：这一轮还没拿到真实 id，拉取会把刚发出的两条再渲染一遍
+  if (sending) return;
   if (document.visibilityState === 'hidden') return; // 后台标签页不轮询
   pollingNow = true;
   try {
@@ -1185,6 +1188,11 @@ async function send() {
         try {
           const parsed = JSON.parse(payload);
           if (parsed.event === 'usage') {
+            // ★ 推进轮询游标：这一轮已经由流式渲染过了，否则 3 秒后的增量拉取会重复渲染
+            if (parsed.ids) {
+              const id = Number(parsed.ids.assistant || parsed.ids.user || 0);
+              if (Number.isFinite(id) && id > latestSeenId) latestSeenId = id;
+            }
             const tag = document.createElement('span');
             tag.className = 'cost-tag';
             tag.textContent = '≈¥' + Number(parsed.cost_rmb || 0).toFixed(4);
@@ -1216,10 +1224,10 @@ async function send() {
     sending = false;
     $('send').disabled = false;
     input.focus();
+    // 流结束后补一次拉取，兼顾这期间从 QQ 发来的消息
+    pollNewMessages();
   }
 }
-
-let sending = false;
 
 /* ---------- 会话恢复：有有效 Cookie（7 天内）自动免登录 ---------- */
 async function initSession() {

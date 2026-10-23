@@ -47,7 +47,7 @@ export const QUERY_ALIASES: string[][] = [
   ['作息', '熬夜', '通宵', '晚睡', '失眠', '凌晨', '不睡'],
   ['部署', '上线', '发布', 'deploy', 'worker', 'workers'],
   ['机器人', 'astrbot', 'napcat', 'qq', 'bot', '插件'],
-  ['记忆', 'memory', '长期记忆', '迁移', '移植'],
+  ['记忆', 'memory', '长期记忆', '赛博搬家', '移植'],
   ['插座', '充电', '米家', 'miio', '小爱'],
   ['游戏', 'gbvs', 'switch', 'steam', 'dlc'],
   ['服务器', 'cloudflare', 'cf', 'r2', 'd1', 'kv', '域名'],
