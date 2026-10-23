@@ -301,9 +301,12 @@ cron "0 20 * * *"
 | GET | `/api/balance` | Cookie | DeepSeek 余额 |
 | GET/POST | `/api/settings`、`/api/admin/settings` | -/Cookie | 城市配置 |
 | POST | `/api/admin/run-daily` | Cookie | 手动归档 |
+| POST | `/api/admin/memory/refresh` | Cookie | 手动刷新 memory KV 缓存 |
 | POST | `/api/admin/run-monthly` | Cookie | 手动月度合并 |
 | POST | `/api/admin/run-context` | Cookie | 手动刷新 context（天气/心情/关系快照） |
 | POST | `/api/admin/test-mood` | Cookie | 情绪识别链路自检 |
+| GET | `/api/admin/relation` | Cookie | 情感全貌（5 轴 / 8 维情绪 / 未化解芥蒂 / 当前快照） |
+| POST | `/api/admin/emotion/simulate` | Cookie | 喂一段对话，预览会生成的情绪快照（不写 KV） |
 | POST | `/api/admin/trigger-proactive` | Cookie | 手动触发主动消息 |
 | GET | `/api/admin/stats` | Cookie | 系统统计（含分层记忆指标） |
 | GET | `/api/image/*` | Cookie | 图片回放 |
@@ -413,8 +416,6 @@ ds_memory/
 │   ├── index.html          # 聊天页面
 │   ├── avatar.png          # 助手头像
 │   └── user-avatar.png     # 用户头像
-├── astrbot-plugin/         # AstrBot 反向轮询插件（主动消息推送）
-├── astrbot-plugin-file/    # AstrBot 文件读取插件
 ├── docs/
 │   └── liveliness-plan.md  # 活人感改造计划与三通道覆盖基线
 ├── scripts/                # 口令哈希、本地试聊、聊天记录提取

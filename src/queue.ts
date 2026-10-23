@@ -1,6 +1,6 @@
 /**
  * 主动消息队列（方案 B：反向轮询）。
- * Worker 生成消息后入队；AstrBot 插件定时拉取并在本地发送，发送成功后 ack。
+ * Worker 生成消息后入队；客户端定时拉取并在本地发送，发送成功后 ack。
  * 表：proactive_queue（D1）
  *
  * ★ 时间格式约定（重要）：`created_at` / `sent_at` 一律用 `isoInBeijing()`，
@@ -108,6 +108,27 @@ export async function markAttempt(env: Env, ids: number[]): Promise<void> {
   )
     .bind(...ids)
     .run();
+}
+
+/**
+ * 主动丢弃（积压保护）。
+ *
+ * ★ 不能用 ack：ack 会把 sent_at 写上，Worker 就会以为「已经送到」；
+ *   而 session-facts 正是用 sent_at 判断「发了没回」，于是用户根本没收到
+ *   的消息却被算成「被冷落」，角色的情绪会跟着跑偏。
+ *   这里把 attempts 直接拉满：不会再投递，也不会被当成已送达。
+ */
+export async function dropMessages(env: Env, ids: number[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  const placeholders = ids.map(() => '?').join(',');
+  const res = await env.DB.prepare(
+    `UPDATE proactive_queue
+        SET attempts = ?, leased_at = NULL
+      WHERE id IN (${placeholders}) AND sent_at IS NULL`,
+  )
+    .bind(MAX_ATTEMPTS, ...ids)
+    .run();
+  return res.meta.changes ?? 0;
 }
 
 /** 队列统计（供 stats 接口使用）。 */

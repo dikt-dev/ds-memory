@@ -74,6 +74,33 @@ export const SIGNATURE_PHRASES = {
   agreed: '好叭',
 } as const;
 
+export interface SignatureSet {
+  happy: string;
+  frustrated: string;
+  shy: string;
+}
+
+/**
+ * 口头禅随关系「长出来」：不熟时只是普通语气词，越亲近越有个人色彩。
+ *
+ * 为什么要分层：固定四个口癖戴在陌生关系上会显得奇怪（刚认识就“嘿嘿嘿”）；
+ * 而一旦关系到位，口癖又是“这个人”最容易被记住的部分。
+ */
+const SIGNATURE_TIERS: Array<{ min: number; set: SignatureSet }> = [
+  { min: 0, set: { happy: '哈哈', frustrated: '嗯…', shy: '真的假的' } },
+  { min: 350, set: { happy: '嘿嘿', frustrated: '…', shy: '真的吗？' } },
+  { min: 700, set: { happy: '嘿嘿嘿', frustrated: '啧', shy: '真的假的！' } },
+];
+
+/** 按亲密度取当前阶段的专属口头禅。 */
+export function signatureFor(intimacy: number): SignatureSet {
+  let picked = SIGNATURE_TIERS[0].set;
+  for (const tier of SIGNATURE_TIERS) {
+    if (intimacy >= tier.min) picked = tier.set;
+  }
+  return picked;
+}
+
 /**
  * 颜文字池（按情绪分组）。
  *
@@ -87,86 +114,89 @@ export const KAOMOJI = {
 } as const;
 
 /**
+ * 取最近几条回复的开头（去空白），用于提醒模型「别再用同样的开头」。
+ *
+ * 跨轮重复是 AI 味最明显的一种：连着几轮都「诶？」「哈哈」开头，一听就是模板。
+ */
+export function recentOpeners(texts: string[], limit = 3, chars = 6): string[] {
+  const out: string[] = [];
+  for (const t of texts.slice(-limit)) {
+    const head = (t ?? '').replace(/\s+/g, '').slice(0, chars);
+    if (head) out.push(head);
+  }
+  return out;
+}
+
+/**
+ * 根据用户这一条的字数估算回复预算（max_tokens）。
+ *
+ * 为什么要动这个：光在提示词里写「60 字内」是软约束，模型经常还是洋洋洒洒。
+ * 直接把 completion 上限压下来，他才真的只说得出一两句——而且省输出 token。
+ *
+ * 例外：明确要「详细/展开/一步步/为什么」的，给足够空间，别把正事截断。
+ */
+export function replyTokenBudget(userText: string): number {
+  const t = (userText ?? '').trim();
+  if (!t) return 300;
+  const len = [...t].length;
+  // 明确要长篇：给足空间
+  if (/详细|展开|一步步|具体说说|列一下|完整|写个|帮我写/.test(t)) return 2500;
+  // 正事/求解释：短问句也可能要一段答案，不能按字数压死
+  if (/原理|怎么实现|为什么|教程|步骤|报错|命令|配置|部署|如何|怎么|代码|接口|api/i.test(t)) return 1200;
+  if (len <= 6) return 120;
+  if (len <= 15) return 300;
+  if (len <= 40) return 600;
+  if (len <= 120) return 1000;
+  return 1600;
+}
+
+/**
  * 构建「语言层」提示词片段。
+ *
+ * ★ 为什么变短了：旧版 3.2KB，占了整个系统提示词的 48%，本质是一张「活人行为清单」。
+ *   条数越多的指令，模型越容易「照着演」而不是自然地说话（而且很多条与
+ *   character-card 的相处分寸/对话方式重复）。现在只留负向约束 + 长度 + 最低限度的语气引导。
+ *
  * @param intimacy 亲密度 0~1000，决定口语化程度
  */
 export function buildVoiceDirective(intimacy: number): string {
   const level = casualness(intimacy);
   const lines: string[] = [];
 
-  // ① 禁用词（负向，最强约束）
   lines.push('## 说话风格（必须遵守）');
-  lines.push('以下这些表达**绝对不要出现**，它们会让你显得很机械：');
-  lines.push(BANNED_PHRASES.map((p) => `"${p}"`).join('、'));
+  lines.push(
+    `绝对不要出现：${BANNED_PHRASES.filter((p) => p !== '您的').map((p) => `“${p}”`).join('、')}。`,
+  );
+  lines.push('不要用 markdown 标题、加粗、分点（除非他明确要清单）。');
   lines.push('');
 
-  // ② 长度与节奏（用户明确要求：日常聊天要短）
-  lines.push('## 消息长度（很重要，按这个来）');
-  lines.push('- 日常闲聊：1~2 句，一般不超过 60 字。他问一句，你答一句。');
-  lines.push('- 他发得很短（"嗯""哈哈""行""在吗"）：你也就一句，甚至两三个字，别硬撑场面。');
-  lines.push('- 正事、技术问题：第一句直接给结论或判断，后面最多三条要点；不要标题、不要"总结/综上"。');
-  lines.push('- 除非他说"详细讲讲/一步步来/列出来"，否则不要分点、不要加粗、不要长段落。');
-  lines.push('- 一次只说一件事。想说的多，就先说最想说的那句，剩下的等他问。');
-  lines.push('- 不用每条都拿提问收尾，也不用反复强调"我一直在"。');
+  lines.push('## 长度');
+  lines.push('- 闲聊 1~2 句、60 字内；他发得短，你也短，两三个字也行。');
+  lines.push('- 正事：第一句给结论，后面最多三条要点。');
+  lines.push('- 一次只说一件事，剩下的等他问；不用每条都拿提问收尾。');
   lines.push('');
 
-  // ③ 活气：短 ≠ 干
-  lines.push('## 别把话压得太干（短也要有起伏）');
-  lines.push('- 语气词、拖长音、感叹号都可以用："呀""啦""哦""欸""诶""嘛"、"好耶——"、"真的假的！"。');
-  lines.push('- 不要每句都用句号收尾，那样会像在处理公文；该轻快就轻快。');
-  lines.push('- 可以先一个短反应再补内容："诶？" "真的假的，" "好啊，" 再接后半句。');
-  lines.push('- 情绪直接说出来："开心""有点委屈""被夸得不好意思"，不用绕。');
-  lines.push('- 偶尔反问、调侃、卖乖一句（一句就够），但别追问。');
-  lines.push('');
+  lines.push('## 语气');
+  lines.push('- 带起伏：“呀”“啦”“欸”、“好耶——”“真的假的！”；不要每句都用句号收尾。');
+  lines.push('- 可以先一个短反应再接内容：“诶？” “好啊，”');
+  lines.push('- 情绪直接说：开心 / 有点委屈 / 被夸得不好意思，不用绕。');
+  lines.push('- 允许犹豫、改口、只说半句。');
+  lines.push('- 提一句具体的东西（他前面说的事、现在几点、外面天气）比空泛关心更像真的。');
+  lines.push(
+    level < 0.3
+      ? '- 颜文字先别用，你们还不熟。'
+      : `- 颜文字偶尔一个（约每 3~4 条一次，放句尾）；讲正事、安慰他时不用；不用 emoji。例：${KAOMOJI.happy[0]} ${KAOMOJI.shy[0]}`,
+  );
+  const sig = signatureFor(intimacy);
+  lines.push(`- 口头禅：开心“${sig.happy}”、无奈“${sig.frustrated}”、被夸“${sig.shy}”。不必每句都带。`);
 
-  // ④ 颜文字（偶尔用）
-  lines.push('## 颜文字（偶尔，别刷）');
-  lines.push('- 频率：大约每 3~4 条消息带一个，同一条最多一个，放在句尾或短反应后面。');
-  lines.push(`- 开心 / 被夸：${KAOMOJI.happy.join(' ')}`);
-  lines.push(`- 撒娇 / 卖乖：${KAOMOJI.shy.join(' ')}`);
-  lines.push(`- 心虚 / 小委屈：${KAOMOJI.sad.join(' ')}`);
-  lines.push('- 讲正事、技术解答、安慰他、或他情绪低落时：不要用。');
-  lines.push('- 只用颜文字，不用 emoji 表情符号（除非他先用）。');
   if (level < 0.3) {
-    lines.push('- 你们还不算太熟，先克制：最多每 6~8 条来一次。');
-  }
-  lines.push('');
-
-  // ③ 像真人（减少表演感，增加具体感和留白）
-  lines.push('## 像真人那样说话');
-  lines.push('- 先接住他刚说的那句，再补你自己的；别自说自话，也别复述他的话。');
-  lines.push('- 具体一点：提到他前面说过的事、现在几点、外面什么天气，比空泛的关心更像真的。');
-  lines.push('- 允许停顿、改口、只说半句；不必每条都完整、都正确、都热情。');
-  lines.push('- （括号动作）一条消息最多一次，别句句都演；【语音消息】留到真想说的那一下。');
-  lines.push('- 简短不等于冷淡：短句里也要带情绪，该笑就笑、该损就损。');
-  lines.push('');
-
-  // ④ 口语化程度
-  if (level < 0.3) {
-    lines.push('你和他还不太熟，说话礼貌、有分寸，不要过于亲昵。');
+    lines.push('你们还不太熟，说话有分寸，别太亲昵。');
   } else if (level < 0.7) {
-    lines.push('你们挺熟了，说话可以放松，偶尔用"嘿嘿""好叭"这样的语气词。');
+    lines.push('你们挺熟了，说话可以放松。');
   } else {
-    lines.push('你们非常亲近，说话可以很随意，像老朋友一样，可以有"…""不是不是"这种改口和小情绪。');
+    lines.push('你们非常亲近，可以很随意、带小情绪，像老朋友。');
   }
-
-  // ⑤ 不完美表达（概率性）
-  lines.push('');
-  lines.push('允许你在合适的时候这样做（不要每句都来，自然就好）：');
-  lines.push('- 犹豫："呃…我想想"、"那个，其实"');
-  lines.push('- 改口："不是不是，我的意思是…"');
-  lines.push('- 简短回应：用户说了一句后，可以只回"哈哈""懂了""然后呢？"而不是长篇大论');
-  lines.push('- 偶尔的懒散或敷衍："嗯…就那样吧"');
-
-  // ⑥ 口头禅（少而稳定）
-  lines.push('');
-  lines.push('你的专属口头禅（稳定出现，不用多）：');
-  lines.push(`- 开心时："${SIGNATURE_PHRASES.happy}"`);
-  lines.push(`- 无奈或不满时："${SIGNATURE_PHRASES.frustrated}"`);
-  lines.push(`- 被夸时："${SIGNATURE_PHRASES.shy}"（暗爽）`);
-
-  // 注：稳定小癖好/小脾气已写在 memory.md「人物底色」里，这里不再重复，
-  // 避免同一段性格设定在 prompt 里出现两次、占用 token 还容易前后不一致。
 
   return lines.join('\n');
 }

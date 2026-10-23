@@ -4,13 +4,6 @@
  */
 import type { Env } from './types';
 import { calcCost, pricingForModel, type TokenUsage } from './pricing';
-import {
-  ensureModuleComments,
-  extractImmutableSection,
-  injectImmutableSection,
-  parseRelationValues,
-  setRelationValues,
-} from './memory-maintenance';
 
 export type DistillBackend = 'deepseek' | 'workers-ai';
 
@@ -34,12 +27,13 @@ const DAY_DISTILL_SYSTEM = `你是用户的长期记忆整理助手。你会收�
 
 【写作要求（密度优先）】
 - 用「电报体」：去主语/助词/连词，名词+动词；用「；」分句、用「/」并列；单条尽量 ≤ 50 字。
+- 标点优先半角（逗号、分号、斜杠），少用全角标点；只影响字节占用，不改变事实。
 - 只写「不写进去你就会聊错」的东西。一次性的情绪、事件经过、可推断的事实（天气/日期）都不要写。
-- 保留原话引号、数字、专有名词、内部棗——这些最难重建，别压缩掉。
+- 保留原话引号、数字、专有名词、内部梗——这些最难重建，别压缩掉。
 - 「偏好与习惯」「关于用户」里的稳定事实用「键=值」写法（如「作息=恨熬夜但天天熬」），
   同键的旧条目会被原地覆盖，不会越堆越多。
 - 不编造、不推测。只写对话里确实出现的信息。
-- 每条以 "- [YYYY-MM-DD] 内容" 格式输出。
+- 每条以 "- [YY-MM-DD] 内容" 格式输出（年份后两位，省字节）。
 - 没有对应内容的分区直接省略。
 - 不要输出"人物底色"（固定设定，系统保护）。
 
@@ -58,22 +52,6 @@ const DAY_DISTILL_SYSTEM = `你是用户的长期记忆整理助手。你会收�
 【重要】不要输出「好感度」或「亲密度」：
 它们由系统根据客观互动量（聊天轮次、累计天数）和客观质量信号（感谢、冒犯、冲突）自动计算，
 你只需要把当天发生的事实写清楚，系统会自行结算。`;
-
-const COMPRESS_SYSTEM = `你是记忆压缩助手。请压缩用户的长期记忆：
-- 密度优先：改写成电报体（去虚词、用「；」分句、用「/」并列），单条尽量 ≤ 50 字；
-  目标是在更少字节里塞下同样多的事实，而不是把事实删掉；
-- 保留所有重要事实、偏好和进行中事项，删除重复、过时与低价值内容；
-- 合并同一件事的重复描述（只差标点或措辞的算同一条），日期取较早那一条；
-- 保留原话引号、数字、专有名词（名字、项目名、命令、棗）；
-- 「偏好与习惯」「关于用户」尽量用「键=值」写法（如「作息=恨熬夜但天天熬」），
-  便于系统以后原地覆盖；
-- 保持原有的 "## 分类" 结构，不要新建或改名分类；
-- 每个分类下的 <!-- 注释 --> 行必须原样保留；
-- 「人物底色」永不删改；「雷区与禁忌」内容一点都不能丢；
-- 称呼与关系中的「好感度 / 亲密度 / 心情值」数值行必须原样保留、不得修改；
-- 分区参考预算：人物底色 ≤1.5KB，其余各区 ≤0.9KB，全篇目标 ≤6KB；
-- 条目保持 "- [YYYY-MM-DD] 内容" 的日期前缀；
-- 直接输出压缩后的 markdown，不要任何解释或前后缀。`;
 
 type AiTextOut = { response?: string };
 
@@ -165,21 +143,10 @@ export async function distillDay(
 ${memory || '（暂无）'}
 
 ## 当天对话
-${conversation.slice(0, 20000)}
+${conversation.slice(-60000)}
 
-请对照当前记忆，只输出需要新增或修正的条目（不要重复已有内容），格式 "- [YYYY-MM-DD] 内容"。`;
-  return distillText(env, DAY_DISTILL_SYSTEM, user, 2048, env.DISTILL_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL);
+请对照当前记忆，只输出需要新增或修正的条目（不要重复已有内容），格式 "- [YY-MM-DD] 内容"。`;
+  return distillText(env, DAY_DISTILL_SYSTEM, user, 4096, env.DISTILL_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL);
 }
 
-/** 全量压缩 memory.md（超阈值时用；默认 v4-pro 质量档；失败回退 Workers AI）。
- *  "人物底色"区块不参与压缩；好感度/亲密度数值压缩后强制恢复；并补齐各模块注释。 */
-export async function compressMemory(env: Env, memory: string): Promise<DistillResult> {
-  const relationValues = parseRelationValues(memory);
-  const { body, section } = extractImmutableSection(memory);
-  const result = await distillText(env, COMPRESS_SYSTEM, body, 4096, env.DISTILL_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL);
-  if (!result.text.trim()) return result;
-  let text = section ? injectImmutableSection(result.text, section) : result.text;
-  text = setRelationValues(text, relationValues);
-  text = ensureModuleComments(text);
-  return { ...result, text };
-}
+/** 全量压缩 memory.md 的旧实现已停用；质量优先，超限只走无损分层。 */

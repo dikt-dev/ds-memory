@@ -181,3 +181,56 @@ describe('extractPendingTopics', () => {
     expect(topics.every((t) => t.daysAgo <= 14)).toBe(true);
   });
 });
+
+describe('固定时段（早晚问候）', () => {
+  it('★ 睡前时段即使活跃度为 0 也会发（以前永远凑不够 50 分）', () => {
+    const d = decideProactive(
+      baseInput({
+        env: baseEnv({ hour: 23 }),
+        profile: baseProfile({ hourlyActivity: new Array(24).fill(0) }),
+        slot: 'evening',
+      }),
+    );
+    expect(d.shouldSend).toBe(true);
+    expect(d.reasons.join()).toContain('睡前');
+  });
+
+  it('深夜惩罚不再打掉睡前窗口', () => {
+    const evening = decideProactive(
+      baseInput({ env: baseEnv({ hour: 23 }), slot: 'evening' }),
+    );
+    const random = decideProactive(
+      baseInput({ env: baseEnv({ hour: 23 }), slot: 'random' }),
+    );
+    expect(evening.reasons.join()).not.toContain('深夜时段');
+    expect(random.reasons.join()).toContain('深夜时段');
+    expect(evening.score).toBeGreaterThan(random.score);
+  });
+
+  it('早上时段同理', () => {
+    const d = decideProactive(
+      baseInput({ env: baseEnv({ hour: 8 }), slot: 'morning' }),
+    );
+    expect(d.shouldSend).toBe(true);
+    expect(d.reasons.join()).toContain('早安');
+  });
+
+  it('静默期仍然否决固定问候（刚聊过就不打扰）', () => {
+    const d = decideProactive(
+      baseInput({
+        env: baseEnv({ hour: 23 }),
+        profile: baseProfile({ minutesSinceLastUserMsg: 5 }),
+        slot: 'evening',
+      }),
+    );
+    expect(d.shouldSend).toBe(false);
+    expect(d.reasons.join()).toContain('刚聊过');
+  });
+
+  it('随机消息不受固定时段加成影响', () => {
+    const d = decideProactive(
+      baseInput({ env: baseEnv({ hour: 15 }), slot: 'random' }),
+    );
+    expect(d.shouldSend).toBe(false);
+  });
+});

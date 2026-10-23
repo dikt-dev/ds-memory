@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isMeaninglessResidue, scrubAiFlavor } from './anti-ai-flavor';
+import { createStreamScrubber, isMeaninglessResidue, scrubAiFlavor } from './anti-ai-flavor';
 
 describe('scrubAiFlavor —— AI 味兜底清洗', () => {
   it('删除客服套话', () => {
@@ -87,5 +87,42 @@ describe('isMeaninglessResidue', () => {
     for (const s of ['嗯嗯', '哈哈', '嘿嘿', '好嘞', '懂了', '好哒', '嗯呢', '在呢']) {
       expect(isMeaninglessResidue(s)).toBe(false);
     }
+  });
+});
+describe('createStreamScrubber —— 流式清洗', () => {
+  it('跨 chunk 的套话也能被完整拦下', () => {
+    const s = createStreamScrubber();
+    let out = '';
+    // 「很高兴为您服务」被拆成三段推送
+    out += s.push('你好啊，很高兴');
+    out += s.push('为您服务');
+    out += s.push('，今天过得怎么样');
+    out += s.flush();
+    expect(out).not.toContain('很高兴');
+    expect(out).toContain('你好啊');
+    expect(out).toContain('今天过得怎么样');
+  });
+
+  it('「您」在流里也实时换成「你」', () => {
+    const s = createStreamScrubber();
+    let out = s.push('您今天怎么样呢，要不要聊聊');
+    out += s.flush();
+    expect(out).not.toContain('您');
+    expect(out).toContain('你');
+  });
+
+  it('未命中规则的内容原样输出（不吞字）', () => {
+    const s = createStreamScrubber();
+    const text = '今天深圳二十六度，挺晒的，出门记得带伞哦';
+    let out = '';
+    for (const ch of text) out += s.push(ch);
+    out += s.flush();
+    expect(out).toBe(text);
+  });
+
+  it('markdown 标题/加粗会被清掉', () => {
+    expect(scrubAiFlavor('### 结论\n**这个**可以').text).not.toContain('###');
+    expect(scrubAiFlavor('### 结论\n**这个**可以').text).toContain('结论');
+    expect(scrubAiFlavor('**这个**可以').text).toBe('这个可以');
   });
 });

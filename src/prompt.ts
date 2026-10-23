@@ -13,6 +13,7 @@
  */
 import { isoInBeijing } from './date';
 import { resolveCharacterName } from './identity';
+import { compactMemoryForPrompt } from './memory-maintenance';
 import type { DayContext } from './holidays';
 
 export interface WeatherInfo {
@@ -55,10 +56,16 @@ export interface BasePromptArgs {
   recentMemo?: string | null;
   /** 从记忆档案按话题检索到的往事（无命中则为空） */
   recalled?: string | null;
+  /** 最近发过的文件（已格式化好的 markdown 块） */
+  recentFiles?: string | null;
+  /** 客户端是否支持语音回复（只有它声明了才提示模型可用 [语音]） */
+  voiceReply?: boolean;
   /** 角色名（部署方可用 CHARACTER_NAME 覆盖；缺省为开源默认值） */
   characterName?: string;
   /** 期望对方怎么称呼自己（USER_ADDRESS；缺省则按记忆自然称呼） */
   userAddress?: string | null;
+  /** 最近几条回复的开头（避免连续几轮用同一个开场） */
+  avoidOpeners?: string[] | null;
 }
 
 /**
@@ -79,8 +86,11 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     voice,
     recentMemo,
     recalled,
+    recentFiles,
+    voiceReply,
     characterName,
     userAddress,
+    avoidOpeners,
   } = args;
   const lines: string[] = [];
 
@@ -103,7 +113,13 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   // ── ② 稳定（每天 04:00 才变）：长期记忆 ─────────────────────
   lines.push('');
   lines.push('## 关于用户的长期记忆');
-  lines.push(memory.trim() || '（暂无记忆）');
+  lines.push(compactMemoryForPrompt(memory) || '（暂无记忆）');
+  lines.push('');
+  lines.push('## 记忆使用规则（重要性权重，不是字数占比）');
+  lines.push('- 长期记忆 50%：稳定身份、偏好、关系、雷区；长期有效。用户明确说“现在改了/不再这样”时，以新说法为准。');
+  lines.push('- 中期记忆 20%：最近 24 小时发生了什么；用来衔接跨天。细节和原话服从短期原文，不要拿它当永久事实。');
+  lines.push('- 短期记忆 30%：当前对话原文；当前话题、最新说法优先，但不要逐条复述。');
+  lines.push('冲突处理：稳定事实看长期，最近状态看中期，具体说法看短期。三种记忆都只是背景，不要主动说“根据我的记忆”。');
 
   // ── ③ 半稳定：态度与语言风格（随关系数值缓慢变化）──────────
   if (attitude) {
@@ -121,6 +137,20 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   lines.push('## 当前时间与环境');
   lines.push(`- 现在：${isoInBeijing(now)}（${ctx.date} ${ctx.weekday}）`);
   lines.push(`- 消息来源：${CHANNEL_LABELS[channel]}`);
+  // ★ 聊天软件不渲染 Markdown：只对这类渠道加约束，网页端保持原样
+  if (channel === 'astrobot') {
+    lines.push(
+      '- 排版：对方在 QQ 这类聊天软件里看，不要用 Markdown（**加粗**、# 标题、表格、代码块），用纯文本和换行。',
+    );
+    lines.push(
+      '- 想带点情绪时，可以在句末加 [face:微笑]（可用：微笑、呲牙、调皮、得意、害羞、偷笑、白眼、惊讶、难过、斜眼笑），系统会换成 QQ 表情。一句最多一个，别滥用。',
+    );
+    if (voiceReply) {
+      lines.push(
+        '- 对方能收到语音消息：当你想说的是一句很短、很亲昵的话（比如晚安、想你、别熬夜），可以在整条回复开头写 [语音]，系统会合成语音发出去。语音里不要再写表情标记或 Markdown；长内容、带信息量的话还是用文字。',
+      );
+    }
+  }
   lines.push(`- 节假日：${ctx.holiday_note}`);
   if (weather) {
     lines.push(`- 天气：${weather.city} ${weather.desc}，${weather.temp_c}°C`);
@@ -130,6 +160,15 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   if (characterCard) {
     lines.push('');
     lines.push(characterCard);
+    if (avoidOpeners && avoidOpeners.length > 0) {
+      lines.push(`- 别再用这些开头（你最近刚用过）：${avoidOpeners.map((s) => `“${s}”`).join('、')}`);
+    }
+  }
+
+  // ── ⑥ 易变：最近发过的文件（沉淀，让「上次那个文件」能对上）──
+  if (recentFiles) {
+    lines.push('');
+    lines.push(recentFiles);
   }
 
   // ── ⑥ 易变：最近一天的中期记忆（每 3 小时或 15 条消息滚动刷新）──

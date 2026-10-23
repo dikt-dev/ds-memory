@@ -148,6 +148,20 @@ export async function recentMessages(env: Env, limit = 20): Promise<MessageRow[]
   return (result.results ?? []).reverse();
 }
 
+/**
+ * 把历史消息压成更省 token 的形式（注入提示词用，不改 D1 原数据）：
+ * - `[图片:images/...]` 这种 R2 路径缩成 `[图片]`（模型不需要知道路径）；
+ * - 连续空白折叠成一个空格（B站/网页抓取块常带大量换行）；
+ * - 超过 maxChars 截断（旧消息细节交给中期记忆/今日摘要）。
+ */
+export function compactHistoryMessage(content: string, maxChars = 400): string {
+  const cleaned = content
+    .replace(/\[图片:images\/[^\]]+\]/g, '[图片]')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned.length > maxChars ? `${cleaned.slice(0, maxChars)}…` : cleaned;
+}
+
 /** 增量读取：id 大于 afterId 的消息（升序），用于前端实时刷新。 */
 export async function messagesSince(
   env: Env,

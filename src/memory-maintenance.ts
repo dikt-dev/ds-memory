@@ -11,20 +11,83 @@ import {
  * - mergeMemoryEntry：把提炼结果合并进现有记忆（按 ## 分类、去重、缺日期补日期）；
  * - trimOldestEntries：超限时按日期从最旧整组删除条目（顺带清理空分类）；
  * - 人物底色（IMMUTABLE_HEADER）为不可变区块：不参与合并、压缩、裁剪。
- * 条目格式：- [YYYY-MM-DD] 内容
+ * 条目格式：- [YY-MM-DD] 内容（兼容旧的 YYYY-MM-DD）
  */
 
 export function byteLength(s: string): number {
   return new TextEncoder().encode(s).length;
 }
 
-export const ENTRY_RE = /^-\s*\[(\d{4}-\d{2}-\d{2})\]/;
+/**
+ * 注入提示词前压缩 memory.md 的“非信息”部分（不改 R2 里的原文件）：
+ * - 去掉 <!-- 注释 -->、模板说明的 > 引用行；
+ * - 去掉空行与行尾空白；
+ * - 超过 maxBytes 时，优先把「共同经历 / 近期动态 / 进行中的事项」里最旧的条目
+ *   从本次提示词里拿掉（文件里仍保留，档案层以后还能召回），
+ *   最后才按日期裁最旧条目。受保护分区（底色/称呼/雷区）不动。
+ *
+ * 事实、日期、分区标题全部保留，因此不会改变文件本身。
+ */
+export const MEMORY_PROMPT_MAX_BYTES = 12288;
+
+function stripMemoryForPrompt(text: string): string {
+  const lines = text
+    .replace(/\r\n/g, '\n')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .split('\n');
+  const out: string[] = [];
+  for (const raw of lines) {
+    const line = raw.replace(/[ \t]+$/g, '');
+    if (!line.trim()) continue;
+    if (line.trimStart().startsWith('>')) continue;
+    out.push(line);
+  }
+  return out.join('\n').trim();
+}
+
+export function compactMemoryForPrompt(
+  text: string,
+  maxBytes = MEMORY_PROMPT_MAX_BYTES,
+): string {
+  let out = stripMemoryForPrompt(text);
+  if (!maxBytes || byteLength(out) <= maxBytes) return out;
+
+  // 先牺牲“共同经历/近期动态”，再牺牲进行中的事项；稳定事实最后才动
+  for (const header of ['## 共同经历', '## 近期动态', '## 进行中的事项']) {
+    if (byteLength(out) <= maxBytes) break;
+    out = demoteSectionEntries(out, header, maxBytes).text;
+  }
+  if (byteLength(out) > maxBytes) {
+    out = trimOldestEntries(out, maxBytes).text;
+  }
+  return stripMemoryForPrompt(out);
+}
+
+const DATE_PART = '(?:(?:\\d{4}|\\d{2})-\\d{2}-\\d{2})';
+export const ENTRY_RE = new RegExp(`^-\\s*\\[(${DATE_PART})\\]`);
+export const ENTRY_PREFIX_RE = new RegExp(`^-\\s*\\[${DATE_PART}\\]\\s*`);
+export const DATE_PREFIX_RE = new RegExp(`^\\[${DATE_PART}\\]`);
+
+/** 把 `26-10-23` / `2026-10-23` 统一成 4 位年份，便于日期比较。 */
+export function normalizeDateKey(date: string): string {
+  const [y, m, d] = date.split('-');
+  if (!y || !m || !d) return date;
+  return y.length === 2 ? `20${y}-${m}-${d}` : `${y}-${m}-${d}`;
+}
+
+/** 把 `2026-10-23` 缩成 `26-10-23`（新条目写入用）。 */
+export function compactDateKey(date: string): string {
+  const full = normalizeDateKey(date);
+  return full.length === 10 ? full.slice(2) : full;
+}
 
 /**
  * 覆盖式条目：`- [日期] 键=值`（只认 = / ＝）。
  * 散文里的全角冒号不当键，避免把「沟通：短句」误判成键、把相邻条目覆盖掉。
  */
-export const OVERWRITE_KEY_RE = /^-\s*\[\d{4}-\d{2}-\d{2}\]\s*([^=＝\n]{1,16})[=＝]\s*(.+)$/;
+export const OVERWRITE_KEY_RE = new RegExp(
+  `^-\\s*\\[${DATE_PART}\\]\\s*([^=＝\\n]{1,16})[=＝]\\s*(.+)$`,
+);
 
 /** 会随时间变化、应当「原地覆盖」而非叠加的分区。 */
 export const OVERWRITE_HEADERS: string[] = ['## 偏好与习惯', '## 关于用户'];
@@ -34,7 +97,7 @@ export const OVERWRITE_HEADERS: string[] = ['## 偏好与习惯', '## 关于用�
  * 这些分区不能交给 SECTION_BUDGETS 合并——合并会把不同话题摄成一条，
  * 反而降低档案检索的精度。
  */
-export const DEMOTE_HEADERS: string[] = ['## 共同经历'];
+export const DEMOTE_HEADERS: string[] = ['## 共同经历', '## 进行中的事项', '## 近期动态'];
 
 /** 取条目的覆盖键（归一化后）；不是键值写法则返回 null。 */
 export function overwriteKeyOf(line: string): string | null {
@@ -82,6 +145,12 @@ export const RELATION_MAX = 1000;
 export const AFFINITY_DEFAULT = 500;
 export const INTIMACY_DEFAULT = 300;
 export const MOOD_DEFAULT = 500;
+/** 信任默认值：刚认识有基础信任，但不是全盘托付。 */
+export const TRUST_DEFAULT = 600;
+/** 尊重默认值：默认平等相处。 */
+export const RESPECT_DEFAULT = 650;
+/** 心动默认值：新关系不自带暧昧。 */
+export const ATTRACTION_DEFAULT = 300;
 /** 好感度/亲密度单日变化上限（慢变量）。 */
 export const RELATION_MAX_DAILY_DELTA = 5;
 /** 心情值单日变化上限（快变量）。 */
@@ -90,9 +159,15 @@ export const MOOD_MAX_DAILY_DELTA = 80;
 const AFFINITY_VAL_RE = /好感度[:：]\s*(\d{1,4})/;
 const INTIMACY_VAL_RE = /亲密度[:：]\s*(\d{1,4})/;
 const MOOD_VAL_RE = /心情(?:值)?[:：]\s*(\d{1,4})/;
+const TRUST_VAL_RE = /信任[:：]\s*(\d{1,4})/;
+const RESPECT_VAL_RE = /尊重[:：]\s*(\d{1,4})/;
+const ATTRACTION_VAL_RE = /心动[:：]\s*(\d{1,4})/;
 const AFFINITY_LINE_RE = /^-\s*好感度[:：]/;
 const INTIMACY_LINE_RE = /^-\s*亲密度[:：]/;
 const MOOD_LINE_RE = /^-\s*心情(?:值)?[:：]/;
+const TRUST_LINE_RE = /^-\s*信任[:：]/;
+const RESPECT_LINE_RE = /^-\s*尊重[:：]/;
+const ATTRACTION_LINE_RE = /^-\s*心动[:：]/;
 
 interface Section {
   header: string; // 含 "## " 前缀
@@ -165,7 +240,7 @@ function normalizeBullets(lines: string[], fallbackDate?: string): string[] {
     if (!m) continue;
     let content = m[1].trim();
     if (!content) continue;
-    if (!/^\[\d{4}-\d{2}-\d{2}\]/.test(content) && fallbackDate) {
+    if (!DATE_PREFIX_RE.test(content) && fallbackDate) {
       content = `[${fallbackDate}] ${content}`;
     }
     out.push(`- ${content}`);
@@ -216,10 +291,10 @@ export function mergeMemoryEntry(
           }
         }
         // 归一化去重：忽略标点/空白差异，避免同一条事实被反复追加
-        const key = normalizeForCompare(b.replace(/^-\s*\[\d{4}-\d{2}-\d{2}\]\s*/, ''));
+        const key = normalizeForCompare(b.replace(ENTRY_PREFIX_RE, ''));
         const dup = existing.lines.some((l) => {
           if (!ENTRY_RE.test(l)) return false;
-          return normalizeForCompare(l.replace(/^-\s*\[\d{4}-\d{2}-\d{2}\]\s*/, '')) === key;
+          return normalizeForCompare(l.replace(ENTRY_PREFIX_RE, '')) === key;
         });
         if (!dup) {
           existing.lines.push(b);
@@ -247,14 +322,14 @@ export function mergeMemoryEntry(
  * 受保护分区（人物底色/称呼与关系/雷区与禁忌）不参与自动合并。
  */
 export const SECTION_BUDGETS: Record<string, number> = {
-  '## 人物底色': 1500,
-  '## 称呼与关系': 600,
-  '## 关于用户': 900,
-  '## 偏好与习惯': 900,
-  '## 进行中的事项': 800,
-  '## 共同经历': 1000,
-  '## 雷区与禁忌': 700,
-  '## 近期动态': 600,
+  '## 人物底色': 2000,
+  '## 称呼与关系': 800,
+  '## 关于用户': 2000,
+  '## 偏好与习惯': 1800,
+  '## 进行中的事项': 1500,
+  '## 共同经历': 1800,
+  '## 雷区与禁忌': 1200,
+  '## 近期动态': 800,
 };
 
 export interface SectionBudget {
@@ -396,7 +471,7 @@ export function trimOldestEntries(text: string, maxBytes: number): { text: strin
     if (protectedHeaders.has(sec.header.trim())) continue; // 受保护区块整块跳过
     sec.lines.forEach((line, idx) => {
       const m = line.match(ENTRY_RE);
-      if (m) cands.push({ section: sec, idx, date: m[1] });
+      if (m) cands.push({ section: sec, idx, date: normalizeDateKey(m[1]) });
     });
   }
   if (cands.length === 0) return { text, removed: 0 };
@@ -414,7 +489,7 @@ export function trimOldestEntries(text: string, maxBytes: number): { text: strin
         header: sec.header,
         lines: sec.lines.filter((line) => {
           const m = line.match(ENTRY_RE);
-          return !(m && skip.has(m[1]));
+          return !(m && skip.has(normalizeDateKey(m[1])));
         }),
       };
     });
@@ -438,19 +513,21 @@ export function pruneTransientSections(
   text: string,
   today: string,
   keepDays = TRANSIENT_KEEP_DAYS,
-): { text: string; removed: number } {
+): { text: string; removed: number; removedLines: string[] } {
   const { pre, sections } = parseSections(text);
   const transient = new Set(TRANSIENT_HEADERS.map((h) => h.trim()));
   const cutoff = shiftDate(today, -keepDays);
   let removed = 0;
+  const removedLines: string[] = [];
 
   const next = sections.map((sec) => {
     if (!transient.has(sec.header.trim())) return sec;
     const lines = sec.lines.filter((line) => {
       const m = line.match(ENTRY_RE);
       if (!m) return true; // 注释与空行保留
-      if (m[1] < cutoff) {
+      if (normalizeDateKey(m[1]) < cutoff) {
         removed += 1;
+        removedLines.push(line);
         return false;
       }
       return true;
@@ -458,8 +535,8 @@ export function pruneTransientSections(
     return { header: sec.header, lines };
   });
 
-  if (removed === 0) return { text, removed: 0 };
-  return { text: reassemble(pre, next), removed };
+  if (removed === 0) return { text, removed: 0, removedLines: [] };
+  return { text: reassemble(pre, next), removed, removedLines };
 }
 
 /** 日期加减（YYYY-MM-DD）。 */
@@ -507,8 +584,9 @@ export function archiveCompletedItems(
 
   for (const line of pending.lines) {
     const m = line.match(ENTRY_RE);
+    const date = m ? normalizeDateKey(m[1]) : '';
     // 非条目行、未标完成、或还没过宽限期 → 留在原处
-    if (!m || !DONE_RE.test(line) || m[1] > cutoff) {
+    if (!m || !DONE_RE.test(line) || date > cutoff) {
       remaining.push(line);
       continue;
     }
@@ -520,9 +598,9 @@ export function archiveCompletedItems(
   // 写入「共同经历」：去掉状态标记，换成「已完成」的叙述
   const titles: string[] = [];
   const archived = toMove.map((line) => {
-    const m = line.match(/^-\s*\[(\d{4}-\d{2}-\d{2})\]\s*(.*)$/);
-    const date = m?.[1] ?? today;
-    let content = (m?.[2] ?? line).trim();
+    const m = line.match(ENTRY_RE);
+    const date = m ? compactDateKey(m[1]) : compactDateKey(today);
+    let content = m ? line.replace(ENTRY_PREFIX_RE, '').trim() : line.trim();
     // 去掉 [已完成] 之类的标记
     content = content.replace(DONE_RE, '').trim();
     titles.push(content.slice(0, 20));
@@ -584,6 +662,12 @@ export interface RelationValues {
   affinity: number;
   intimacy: number;
   mood: number;
+  /** 信任：坦白/依赖/守约；爽约或敷衍会掉 */
+  trust: number;
+  /** 尊重：被贬低/被当工具使唤会掉 */
+  respect: number;
+  /** 心动：亲密 + 表白/黏人/深夜深聊 */
+  attraction: number;
 }
 
 function extractValue(text: string, re: RegExp): number | null {
@@ -594,12 +678,15 @@ function extractValue(text: string, re: RegExp): number | null {
   return null;
 }
 
-/** 解析好感度/亲密度/心情值（缺失时取默认值）。 */
+/** 解析好感度/亲密度/心情值/信任/尊重/心动（缺失时取默认值）。 */
 export function parseRelationValues(text: string): RelationValues {
   return {
     affinity: extractValue(text, AFFINITY_VAL_RE) ?? AFFINITY_DEFAULT,
     intimacy: extractValue(text, INTIMACY_VAL_RE) ?? INTIMACY_DEFAULT,
     mood: extractValue(text, MOOD_VAL_RE) ?? MOOD_DEFAULT,
+    trust: extractValue(text, TRUST_VAL_RE) ?? TRUST_DEFAULT,
+    respect: extractValue(text, RESPECT_VAL_RE) ?? RESPECT_DEFAULT,
+    attraction: extractValue(text, ATTRACTION_VAL_RE) ?? ATTRACTION_DEFAULT,
   };
 }
 
@@ -635,6 +722,10 @@ export function setRelationValues(text: string, values: RelationValues): string 
   setValueLine(section, AFFINITY_LINE_RE, '好感度', values.affinity);
   setValueLine(section, INTIMACY_LINE_RE, '亲密度', values.intimacy);
   setValueLine(section, MOOD_LINE_RE, '心情值', values.mood);
+  // 5 轴里另外三轴（缺失时补默认值，旧记忆平滑迁移）
+  setValueLine(section, TRUST_LINE_RE, '信任', values.trust ?? TRUST_DEFAULT);
+  setValueLine(section, RESPECT_LINE_RE, '尊重', values.respect ?? RESPECT_DEFAULT);
+  setValueLine(section, ATTRACTION_LINE_RE, '心动', values.attraction ?? ATTRACTION_DEFAULT);
   return reassemble(parsed.pre, parsed.sections);
 }
 
@@ -722,6 +813,9 @@ export function applyRelationDecay(
     affinity: vals.affinity, // 保持不动
     intimacy: inti.next,
     mood: vals.mood,
+    trust: vals.trust,
+    respect: vals.respect,
+    attraction: vals.attraction,
   });
   return {
     text: updated,

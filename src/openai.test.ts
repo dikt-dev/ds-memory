@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   cleanUserText,
+  normalizeAssistantText,
   extractText,
   isProactiveRequest,
   parseContentParts,
@@ -208,5 +209,33 @@ describe('cleanUserText', () => {
     // 普通图片不带提示语
     const plain = buildLastUserContent('看图', '普通消息', images) as Array<{ type: string; text?: string }>;
     expect(plain[0].text).toBe('看图');
+  });
+});
+
+describe('normalizeAssistantText（落库前归一化）', () => {
+  it('语音标记换成可读的「（语音）」', () => {
+    expect(normalizeAssistantText('[语音]晚安，早点睡')).toBe('（语音）晚安，早点睡');
+  });
+
+  it('英文标记同样处理，且吃掉前导空白', () => {
+    expect(normalizeAssistantText('  [voice] hi')).toBe('（语音）hi');
+  });
+
+  it('表情标记直接去掉', () => {
+    expect(normalizeAssistantText('晚安[face:害羞]')).toBe('晚安');
+    expect(normalizeAssistantText('好耶[face：偷笑][face:微笑]')).toBe('好耶');
+  });
+
+  it('语音 + 表情一起出现也干净', () => {
+    expect(normalizeAssistantText('[语音]晚安[face:害羞]')).toBe('（语音）晚安');
+  });
+
+  it('普通文本原样保留（不会误伤 [ ] 内容）', () => {
+    const text = '笔记[重要] 别忘了 [face:微笑] 这个不是表情？';
+    expect(normalizeAssistantText(text)).toContain('笔记[重要]');
+  });
+
+  it('只有标记时剩下「（语音）」', () => {
+    expect(normalizeAssistantText('[语音]')).toBe('（语音）');
   });
 });

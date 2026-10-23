@@ -13,21 +13,21 @@ import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
 import { attachWeather, getOrCreateDayContext } from './context';
 import { getMemory } from './memory';
 import { fetchWeather } from './weather';
-import { insertUserMessage, insertAssistantReply, latestMessage } from './db';
+import { insertUserMessage, insertAssistantReply, latestMessage, recentMessages, compactHistoryMessage } from './db';
 import { calcCost, loadPricing, type TokenUsage } from './pricing';
 import { completeDeepSeek, streamDeepSeek, type DeepSeekMessage } from './deepseek';
 import { getTodaySummary, maybeSummarizeToday } from './summary';
-import { describeAttitude } from './attitude';
 import { loadImageDataUrl, saveImageFromSource } from './media';
 import { parseRelationValues } from './memory-maintenance';
 import { markProfileDirty } from './profile-cache';
-import { computeMoodDrift } from './mood-env';
-import { buildCharacterCard } from './character-card';
 import { readSessionFacts } from './session-facts';
-import { buildVoiceDirective } from './voice';
-import { getSessionMood, inferTag, sessionMoodNote, updateSessionMood } from './session-state';
+import { buildCharacterCard } from './character-card';
+import { facetsOf, processEmotionTurn } from './emotion-context';
+import { moodFromVector } from './emotion-vector';
+import { buildVoiceDirective, recentOpeners, replyTokenBudget } from './voice';
 import { formatRecentMemoBlock, getRecentMemo, maybeRefreshRecentMemo } from './recent-memory';
 import { recallForQuery } from './memory-archive';
+import { recordFiles, recentFilesBlock } from './recent-files';
 
 type AppEnv = { Bindings: Env };
 export const openaiApp = new Hono<AppEnv>();
@@ -200,6 +200,24 @@ export function buildLastUserContent(
   return text ? [{ type: 'text', text }, ...images] : images;
 }
 
+/**
+ * 落库前归一化助手的回复文本。
+ *
+ * 客户端靠 `[语音]` / `[face:名字]` 这些纯文本标记决定「发语音 / 发表情」，
+ * 但它们是给机器看的协议，原样入库会：
+ *   1. 在网页聊天记录里显示成 `[语音]晚安…`；
+ *   2. 被每日归档 / 记忆提炼当成正文读进 memory.md。
+ * 所以入库时把语音换成可读的「（语音）」，表情标记直接去掉。
+ * （实时回复仍然带标记，客户端要拿它去合成语音。）
+ */
+export function normalizeAssistantText(text: string): string {
+  return text
+    .replace(/^\s*\[(?:语音|voice)\]\s*/i, '（语音）')
+    .replace(/\[face[:：][^\]]{1,12}\]/g, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
 /** 是否为主动/定时任务触发的请求（这类消息不进入聊天历史与记忆，只用于生成回复）。 */
 export function isProactiveRequest(content: string): boolean {
   return (
@@ -238,6 +256,10 @@ openaiApp.post('/chat/completions', async (c) => {
     stream?: unknown;
     max_tokens?: unknown;
     tools?: unknown;
+    inject_history?: unknown;
+    files?: unknown;
+    /** false = 这轮不要写进聊天记录（指令类消息） */
+    record?: unknown;
   } | null;
   const rawMessages = body?.messages;
   if (!Array.isArray(rawMessages) || rawMessages.length === 0) {
@@ -274,7 +296,10 @@ openaiApp.post('/chat/completions', async (c) => {
   const lastUserText = lastUser ? contentToText(lastUser.content) : '';
   const lastUserHasImage = lastUser ? contentHasImage(lastUser.content) : false;
   const lastUserCleaned = cleanUserText(lastUserText);
-  const skipRecording = (!lastUserCleaned && !lastUserHasImage) || isProactiveRequest(lastUserCleaned);
+  // ★ 客户端对 /指令 类消息传 record=false：只回答，不写库（否则指令和它的回复会污染记忆）
+  const noRecord = body?.record === false;
+  const skipRecording =
+    noRecord || (!lastUserCleaned && !lastUserHasImage) || isProactiveRequest(lastUserCleaned);
 
   // 把清洗结果写回上游消息（保留图片部分）
   if (lastUser) {
@@ -306,19 +331,38 @@ openaiApp.post('/chat/completions', async (c) => {
     holiday_note: dayCtx.holiday_note,
   };
   const recentMemo = formatRecentMemoBlock(await getRecentMemo(c.env));
+  // 文件沉淀：先记账再读，本轮发的文件立刻能出现在提示词里
+  await recordFiles(c.env, body?.files);
+  const recentFiles = await recentFilesBlock(c.env, now);
   // 中期记忆存在时跳过今日摘要，避免重复注入同一段时间的事
   const todaySummary = recentMemo ? null : await getTodaySummary(c.env, dateKey);
   const relation = parseRelationValues(memory);
-  // 实时叠加环境心情漂移（只影响本次语气，不写回）
+  // ★ 先取会话事实：环境漂移要按「距上次多久」折算，不能每轮全额叠加
+  const facts = await readSessionFacts(c.env, now, dateKey);
   const envHour = beijingHour(now);
   const envMonth = beijingMonth(now);
-  const drift = computeMoodDrift({ hour: envHour, isRestDay: dayCtx.is_holiday, weather, month: envMonth });
-  const sessionMood = await getSessionMood(c.env, now.getTime());
-  const effectiveMood = Math.min(1000, Math.max(0, relation.mood + drift.delta + sessionMood.offset));
   // AstrBot 侧默认渠道为 AstrBot；未来其它客户端调用 /v1 可用 X-Client-Channel 声明
   const channel = normalizeChannel(c.req.header('x-client-channel'), 'astrobot');
+  // 客户端声明了支持语音，才告诉模型可以发 [语音]（没装 TTS 的客户端不会收到这句提示）
+  const voiceReply = c.req.header('x-client-voice') === '1';
+
+  // ★ 情感系统：事件 → 情绪向量 → 5 轴微增量 → 情绪快照（先算，心情由它派生）
+  const emotion = await processEmotionTurn({
+    env: c.env,
+    now: now.getTime(),
+    base: facetsOf(relation),
+    userText: lastUserCleaned,
+    environment: {
+      hour: envHour,
+      isRestDay: dayCtx.is_holiday,
+      weather,
+      month: envMonth,
+    },
+    wasIgnored: facts.wasIgnored,
+  });
+  // ★ 心情值不再单独维护：由情绪向量派生，保证只有一份真相
+  const effectiveMood = moodFromVector(emotion.state.vector);
   // ★ 活人感：状态卡 + 口语化（AstrBot 落库在 send 之前，故此处查询的是落库前的状态）
-  const facts = await readSessionFacts(c.env, now, dateKey);
   const charCard = buildCharacterCard({
     hour: envHour,
     hoursSinceLastContact: facts.hoursSinceLastContact,
@@ -331,8 +375,7 @@ openaiApp.post('/chat/completions', async (c) => {
     ignoredMessage: facts.ignoredMessage,
     characterName: c.env.CHARACTER_NAME,
   });
-  const moodNote = sessionMoodNote(sessionMood);
-  const cardTextWithMood = moodNote ? `${charCard.cardText}\n- 情绪残留：${moodNote}` : charCard.cardText;
+  const cardTextWithMood = charCard.cardText;
   // ★ 按需检索：用本轮用户消息 + 前面几条用户消息去档案里找相关往事
   const recallQuery = [
     lastUserCleaned,
@@ -343,6 +386,10 @@ openaiApp.post('/chat/completions', async (c) => {
   ].join(' ');
   const recalled = await recallForQuery(c.env, recallQuery);
   const astrbotSystems = textMessages.filter((m) => m.role === 'system').map((m) => m.content);
+  // 最近几条回复的开头：避免连续几轮用同一句开场白
+  const avoidOpeners = recentOpeners(
+    textMessages.filter((m) => m.role === 'assistant').map((m) => contentToText(m.content)),
+  );
   const mergedSystem = [
     ...astrbotSystems,
     buildBaseSystemPrompt({
@@ -353,38 +400,98 @@ openaiApp.post('/chat/completions', async (c) => {
       todaySummary,
       recentMemo,
       recalled,
+      recentFiles,
+      voiceReply,
       channel,
       characterCard: cardTextWithMood,
       voice: buildVoiceDirective(relation.intimacy),
-      attitude: describeAttitude(relation.affinity, relation.intimacy, effectiveMood),
+      avoidOpeners,
+      attitude: emotion.snapshot,
       characterName: c.env.CHARACTER_NAME,
       userAddress: c.env.USER_ADDRESS,
     }),
   ].join('\n\n');
+  // QQ 客户端只发当前一条；inject_history=true 时从 D1 补最近 8 条短期原文。
+  // 当前消息尚未落库，所以不会重复；若历史末尾与当前文本相同，再主动去重一次。
+  let historyMessages: DeepSeekMessage[] = [];
+  if (body?.inject_history === true && !skipRecording) {
+    const rows = await recentMessages(c.env, 8);
+    historyMessages = rows
+      .filter(
+        (m, i) =>
+          !(i === rows.length - 1 && m.role === 'user' && m.content === lastUserCleaned),
+      )
+      .filter((m) => m.content.trim())
+      .map((m, i, arr) => ({
+        role: m.role === 'assistant' ? 'assistant' : 'user',
+        // 最近 4 条保留原文，更早的压缩到 400 字内省 token
+        // ★ 带文件的消息放宽到 3000 字：压缩到 400 字后「那个表第三行」就对不上了。
+        content:
+          i >= arr.length - 4
+            ? m.content
+            : m.content.includes('【文件：')
+              ? compactHistoryMessage(m.content, 3000)
+              : compactHistoryMessage(m.content),
+      }));
+  }
   const upstream: DeepSeekMessage[] = [
     { role: 'system', content: mergedSystem },
+    ...historyMessages,
     ...textMessages.filter((m) => m.role !== 'system'),
   ];
 
-  // 3) 图片：AstrBot 传来的图片先压缩存 R2，再把 R2 里的图片发给 DeepSeek；D1 记录 R2 路径。
+  // 3) 图片：普通图片先压缩存 R2；带 #__transient 的（视频帧/拼图）只给模型看，不落 R2。
+  //    带 #__store_only 的（GIF 原图）存 R2 后从模型请求里移除。
   const imageKeys: string[] = [];
+  let transientImages = 0;
   if (!skipRecording && lastUser && Array.isArray(lastUser.content)) {
     for (const part of lastUser.content) {
       if (part.type !== 'image_url') continue;
-      const saved = await saveImageFromSource(c.env, part.image_url.url, dateKey, now);
+      const rawUrl = part.image_url.url;
+      if (rawUrl.endsWith('#__store_only')) {
+        const saved = await saveImageFromSource(
+          c.env,
+          rawUrl.slice(0, -'#__store_only'.length),
+          dateKey,
+          now,
+        );
+        if (saved) imageKeys.push(saved.key);
+        part.image_url.url = '';
+        continue;
+      }
+      if (rawUrl.endsWith('#__transient')) {
+        part.image_url.url = rawUrl.slice(0, -'#__transient'.length);
+        transientImages += 1;
+        continue;
+      }
+      const saved = await saveImageFromSource(c.env, rawUrl, dateKey, now);
       if (!saved) continue;
       const loaded = await loadImageDataUrl(c.env, saved.key);
       if (loaded) part.image_url.url = loaded.dataUrl; // DeepSeek 收到的是 R2 中的压缩图
       imageKeys.push(saved.key);
+    }
+
+    // 移除只存档的图片，避免把空 URL 发给模型
+    const kept = lastUser.content.filter(
+      (p) => !(p.type === 'image_url' && !p.image_url.url),
+    );
+    if (kept.length === 0) {
+      lastUser.content = '';
+    } else if (kept.length === 1 && kept[0].type === 'text') {
+      lastUser.content = kept[0].text;
+    } else {
+      lastUser.content = kept;
     }
   }
   const recordContent = [
     lastUserCleaned,
     ...(imageKeys.length > 0
       ? imageKeys.map((k) => `[图片:${k}]`)
-      : lastUserHasImage
-        ? ['[图片]']
-        : []),
+      : transientImages > 0
+        ? ['[视频帧]']
+        : lastUserHasImage
+          ? ['[图片]']
+          : []),
   ]
     .filter(Boolean)
     .join('\n');
@@ -401,25 +508,12 @@ openaiApp.post('/chat/completions', async (c) => {
     }
   }
 
-  /**
-   * 会话情绪残留：用本轮用户消息 + 回复推断情绪，写进 KV（下一轮生效）。
-   * 流式与非流式都调它——之前只有流式会写，非流式（部分客户端）情绪永远不更新。
-   */
-  const recordSessionMood = async (replyText: string) => {
-    if (skipRecording) return;
-    try {
-      const tag = inferTag(lastUserCleaned, replyText);
-      await updateSessionMood(c.env, now.getTime(), tag);
-    } catch {
-      /* 忽略 */
-    }
-  };
-
   const onFinish = async (text: string, usage: TokenUsage | null) => {
     let cost = 0;
-    if (!skipRecording && text.trim() && userMessageId) {
+    const stored = normalizeAssistantText(text);
+    if (!skipRecording && stored && userMessageId) {
       // 费用与 token 随 INSERT 一次写入（少一条 UPDATE）
-      const saved = await insertAssistantReply(c.env, text, userMessageId, now, {
+      const saved = await insertAssistantReply(c.env, stored, userMessageId, now, {
         channel,
         cost: usage ? calcCost(usage, loadPricing(c.env), now) : 0,
         promptTokens: usage
@@ -429,8 +523,6 @@ openaiApp.post('/chat/completions', async (c) => {
       });
       cost = saved.cost_rmb;
     }
-    // ★ 会话情绪残留：用本轮用户消息推断情绪并写入 KV（下一轮生效）
-    await recordSessionMood(text);
     return cost;
   };
 
@@ -439,19 +531,22 @@ openaiApp.post('/chat/completions', async (c) => {
     return streamDeepSeek(c.env, upstream, { appendUsageEvent: false, onFinish });
   }
 
-  const maxTokens = typeof body?.max_tokens === 'number' && body.max_tokens > 0 ? Math.floor(body.max_tokens) : 4096;
+  // ★ 客户端只能压低、不能抬高预算：如果客户端写死 4096，会把「按长度自适应」盖掉
+  const budget = replyTokenBudget(lastUserCleaned);
+  const requested =
+    typeof body?.max_tokens === 'number' && body.max_tokens > 0 ? Math.floor(body.max_tokens) : null;
+  const maxTokens = requested ? Math.min(requested, budget) : budget;
   const result = await completeDeepSeek(c.env, upstream, now, maxTokens);
   if ('error' in result) return openaiError(c, result.status, result.error);
-  if (!skipRecording && result.text.trim() && userMessageId) {
-    await insertAssistantReply(c.env, result.text, userMessageId, now, {
+  if (!skipRecording && normalizeAssistantText(result.text) && userMessageId) {
+    await insertAssistantReply(c.env, normalizeAssistantText(result.text), userMessageId, now, {
       channel,
       cost: result.cost,
       promptTokens: (result.usage?.prompt_cache_hit_tokens ?? 0) + (result.usage?.prompt_cache_miss_tokens ?? 0),
       completionTokens: result.usage?.completion_tokens ?? 0,
     });
   }
-  // ★ 非流式也要更新会话情绪残留（与流式保持一致）
-  await recordSessionMood(result.text);
+  // 非流式回复也已经过 completeDeepSeek 的 AI 味清洗
   const promptTokens = (result.usage?.prompt_cache_hit_tokens ?? 0) + (result.usage?.prompt_cache_miss_tokens ?? 0);
   return c.json({
     id: result.id,

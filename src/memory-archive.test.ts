@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ARCHIVE_KEEP_LINES,
   autoTags,
   bigrams,
   countNewLines,
@@ -35,26 +34,26 @@ describe('档案序列化', () => {
 });
 
 describe('mergeArchiveLines', () => {
-  it('按内容去重（忽略日期与标点差异）', () => {
+  it('同一内容不同日期保留两条（完整记录每次发生）', () => {
     const merged = mergeArchiveLines(
       ['- [2026-10-21] 第一次聊天'],
       ['- [2026-10-25] 第一次聊天。', '- [2026-10-22] 新的往事'],
     );
-    expect(merged).toHaveLength(2);
-    expect(merged[1]).toContain('新的往事');
+    expect(merged).toHaveLength(3);
+    expect(merged.some((l) => l.includes('新的往事'))).toBe(true);
   });
 
-  it('带标签与不带标签的同一条目视为重复', () => {
-    const merged = mergeArchiveLines(['- [2026-10-21] 通宵到三点 #作息'], ['- [2026-10-22] 通宵到三点']);
+  it('同一日期、带标签与不带标签的条目视为重复', () => {
+    const merged = mergeArchiveLines(['- [2026-10-21] 通宵到三点 #作息'], ['- [2026-10-21] 通宵到三点']);
     expect(merged).toHaveLength(1);
   });
 
-  it('超过上限时丢最旧的', () => {
-    const existing = Array.from({ length: ARCHIVE_KEEP_LINES }, (_, i) => `- [2026-10-01] 旧事${i}`);
+  it('不再丢最旧条目，档案完整保留', () => {
+    const existing = Array.from({ length: 5000 }, (_, i) => `- [2026-10-01] 旧事${i}`);
     const merged = mergeArchiveLines(existing, ['- [2026-10-22] 最新的一条']);
-    expect(merged).toHaveLength(ARCHIVE_KEEP_LINES);
+    expect(merged).toHaveLength(5001);
     expect(merged.at(-1)).toContain('最新的一条');
-    expect(merged[0]).not.toContain('旧事0');
+    expect(merged[0]).toContain('旧事0');
   });
 });
 
@@ -65,8 +64,8 @@ describe('countNewLines', () => {
     ).toBe(1);
   });
 
-  it('档案满上限丢旧条目时，新增计数仍然正确（旧实现会算成 0）', () => {
-    const existing = Array.from({ length: ARCHIVE_KEEP_LINES }, (_, i) => `- [2026-10-01] 旧事${i}`);
+  it('档案不再因上限丢旧条目，新增计数仍然正确', () => {
+    const existing = Array.from({ length: 5000 }, (_, i) => `- [2026-10-01] 旧事${i}`);
     expect(countNewLines(existing, ['- [2026-10-22] 全新的一条'])).toBe(1);
   });
 });

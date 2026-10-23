@@ -75,7 +75,6 @@ node scripts/try-chat.mjs "在干嘛"   # 命令行试聊，输出字数/行数/
 |---|---|
 | `CITY` / `LATITUDE` / `LONGITUDE` | 天气定位（Open-Meteo，无需 Key） |
 | `DEEPSEEK_MODEL` | 对话模型，默认 `deepseek-flash` |
-| `MEMORY_REFRESH_BYTES` / `MEMORY_TRIM_BYTES` | 记忆压缩 / 裁剪阈值（默认 12KB / 15KB） |
 | `DISTILL_DEEPSEEK_MODEL` / `SUMMARY_DEEPSEEK_MODEL` | 提炼 / 摘要模型 |
 | `DISTILL_MODEL` | Workers AI 兜底模型（DeepSeek 失败时用），默认 `@cf/meta/llama-3.2-3b-instruct` |
 | `PRICE_*` | 计费单价（元/百万 tokens，高峰价；闲时自动减半） |
@@ -129,7 +128,7 @@ USER_ADDRESS   = "主人"     # 它怎么称呼你（可删，改用记忆里的
 
 - 早晚两个时段（北京时间 07:45–08:15 / 22:45–23:15）+ 白天 09:00–22:30 随机 0~2 条
 - **打分决策**：待跟进事项、天气变化、特殊日期、互动缺口、活跃时段；静默期与冷却期是否决项
-- 投递两种模式：队列（AstrBot 插件轮询，无需公网入口，推荐）或直连 AstrBot HTTP API
+- 投递两种模式：队列（客户端轮询 `proactive_queue`，无需公网入口，推荐）或直连 AstrBot HTTP API
 
 ## AstrBot 接入
 
@@ -143,7 +142,7 @@ Worker 提供 OpenAI 兼容端点，AstrBot 作为「OpenAI Compatible」服务�
 
 - 完整对话记录自动落 D1，参与每日归档与记忆提炼
 - 平台包装（`<system_reminder>`、`<attachment>` 文件附件、图片占位）在落库前自动清洗
-- 主动消息可选配 `astrbot-plugin/`（队列轮询）或 `astrbot-plugin-file/`（文件读取）
+- 主动消息由客户端（如 [ds-qq-client](../ds-qq-client)）轮询队列投递；文件解析也在客户端侧完成
 
 ## API
 
@@ -157,7 +156,10 @@ Worker 提供 OpenAI 兼容端点，AstrBot 作为「OpenAI Compatible」服务�
 | GET | `/api/usage` | Cookie | 计费统计（含提炼费用） |
 | GET/POST | `/v1/models`、`/v1/chat/completions` | Bearer | OpenAI 兼容端点 |
 | GET/POST | `/api/proactive/pending`、`/ack` | Bearer | 主动消息队列 |
-| POST | `/api/admin/*` | Cookie | 手动归档 / 合并 / 触发主动消息 |
+| POST | `/api/admin/*` | Cookie | 手动归档 / 合并 / 触发主动消息 / 刷新 memory 缓存 |
+| POST | `/api/admin/memory/refresh` | Cookie | 手动改完 R2 memory.md 后强制刷新 KV 缓存 |
+| GET | `/api/admin/relation` | Cookie | 情感全貌（5 轴关系 / 8 维情绪 / 芥蒂） |
+| POST | `/api/admin/emotion/simulate` | Cookie | 预览一段对话会生成的情绪快照 |
 
 ## 目录结构
 

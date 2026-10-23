@@ -158,6 +158,24 @@ export async function saveMoodDriftUsage(kv: KVNamespace, usage: MoodDriftUsage)
 }
 
 /**
+ * 按「距上次聊天多久」折算环境漂移量。
+ *
+ * ★ 为什么需要：chat/openai/webproactive 三个通道原来每轮都把 drift.delta **全量**
+ *   加到心情上，而 jobs 里同一份漂移是受 80/天累计额度约束的。
+ *   于是深夜连聊几十轮会被反复 -25，等于聊天通道绕过了额度。
+ *   这里按间隔线性折算（3 小时以上才给满额，最少 15%），一次短对话不会反复全额叠加。
+ */
+export function scaleDriftByInterval(
+  drift: MoodDrift,
+  hoursSinceLastContact: number | null,
+): MoodDrift {
+  if (drift.delta === 0) return drift;
+  const factor =
+    hoursSinceLastContact === null ? 1 : Math.min(1, Math.max(0.15, hoursSinceLastContact / 3));
+  return { delta: Math.round(drift.delta * factor), reasons: drift.reasons };
+}
+
+/**
  * 按「单日累计额度」应用环境漂移。
  *
  * 例：当日额度 80，第一次漂移 +50 → 已用 50；第二次漂移 +50 时只能再给 30。

@@ -18,12 +18,23 @@ import { attachDistillation, attachRelation, attachWeather, getOrCreateDayContex
 import { fetchWeather } from './weather';
 import { getMemory, putMemory } from './memory';
 import { buildRelationStatus } from './attitude';
-import { compressMemory, distillDay } from './distill';
-import { archiveCompletedItems, byteLength, DEMOTE_HEADERS, demoteSectionEntries, enforceSectionBudgets, mergeMemoryEntry, parseRelationValues, pruneTransientSections, setRelationValues, trimOldestEntries } from './memory-maintenance';
+import { distillDay } from './distill';
+import { archiveCompletedItems, byteLength, DEMOTE_HEADERS, demoteSectionEntries, mergeMemoryEntry, parseRelationValues, pruneTransientSections, setRelationValues } from './memory-maintenance';
 import { accumulateCandidates, formatAversionEntry, loadCandidates, mergeAversionEntries, saveCandidates, scanAversions } from './aversion';
 import { applyMoodDriftAccumulated, computeMoodDrift, getMoodDriftUsage, saveMoodDriftUsage } from './mood-env';
 import { computeStreak, daysSinceLastUserMessage, countMemoryEntries } from './milestone';
 import { collectDayRelationStats } from './relation-stats';
+import {
+  commitEmotionSettle,
+  facetsOf,
+  loadEmotionState,
+  reviewDayEvents,
+  settleEmotionDaily,
+  type FacetAccum,
+} from './emotion-context';
+import { applyEventsToVector, sumFacetDelta } from './emotion-events';
+import { moodFromVector } from './emotion-vector';
+import { FACET_KEYS } from './relation-facets';
 import { applyRelationDecay } from './memory-maintenance';
 import { getDaySummaryRaw, summaryKey } from './summary';
 import { checkStorageCapacity, cleanupStaleObjects, deleteObject, getObject, listKeys, putObject } from './storage';
@@ -31,7 +42,7 @@ import { messagesByDate, type MessageRow } from './db';
 import { backfillFeedback } from './feedback';
 import { cleanupQueue } from './queue';
 import { addLlmCost } from './llm-cost';
-import { CORE_TARGET_BYTES, appendArchiveLines } from './memory-archive';
+import { CORE_TARGET_BYTES, appendArchiveLines, archiveHasLine, getArchiveLines } from './memory-archive';
 
 export interface DailyArchiveResult {
   target: string;
@@ -198,12 +209,76 @@ async function archiveOneDay(env: Env, target: string, now: Date): Promise<Daily
       }
     }
 
-    // 5) 短期区块清理：「近期动态」超过 7 天的条目自动过期
+    // 4.5) 情感系统天级结算：5 轴增量取整写回 + 芥蒂退 20% + Workers AI 事件回填
+    try {
+      const emotionState = await loadEmotionState(env, now.getTime());
+      // Workers AI 只复核当天「有歧义」的消息（单日最多 8 条），补词典漏检
+      const dayUserTexts = rows.filter((r) => r.role === 'user').map((r) => r.content);
+      const extraEvents = await reviewDayEvents(env, dayUserTexts, now.getTime());
+
+      let vector = emotionState.vector;
+      const facetAccum: FacetAccum = { ...emotionState.facetDelta };
+      if (extraEvents.length > 0) {
+        vector = applyEventsToVector(vector, extraEvents);
+        const d = sumFacetDelta(extraEvents);
+        const deltaMap: Array<[keyof typeof d, number]> = [
+          ['affection', d.affection],
+          ['trust', d.trust],
+          ['respect', d.respect],
+          ['attraction', d.attraction],
+        ];
+        for (const [k, v] of deltaMap) {
+          if (v) facetAccum[k] = (facetAccum[k] ?? 0) + v;
+        }
+      }
+      // 事件驱动的「喜欢」只做微调（±2）：主仍是互动质量驱动，避免双重计数
+      if (facetAccum.affection) {
+        facetAccum.affection = Math.min(Math.max(facetAccum.affection, -2), 2);
+      }
+
+      const working = {
+        ...emotionState,
+        vector,
+        events: [...emotionState.events, ...extraEvents].slice(-30),
+        facetDelta: facetAccum,
+      };
+      const baseVals = parseRelationValues(memory);
+      const settled = settleEmotionDaily(working, facetsOf(baseVals));
+      // ★ 心情值是情绪向量的投影：结算时同步回写，保证 memory.md 与向量不脱节
+      const nextMood = moodFromVector(vector);
+      if (settled.changed || nextMood !== baseVals.mood) {
+        memory = setRelationValues(memory, {
+          affinity: settled.facets.affection,
+          intimacy: baseVals.intimacy,
+          mood: nextMood,
+          trust: settled.facets.trust,
+          respect: settled.facets.respect,
+          attraction: settled.facets.attraction,
+        });
+        distilled = true;
+        console.log(`[daily] emotion settle — ${JSON.stringify(settled.applied)}`);
+      }
+      await commitEmotionSettle(env, working);
+      if (settled.changed || nextMood !== baseVals.mood) {
+        console.log(`[daily] emotion settle — ${JSON.stringify(settled.applied)} mood=${nextMood}`);
+      }
+    } catch (e) {
+      console.error('[daily] emotion settle failed:', e);
+    }
+
+    // 5) 短期区块到期：先把「近期动态」超过 7 天的条目无损搬进档案，再清理
     try {
       const pruned = pruneTransientSections(memory, target);
       if (pruned.removed > 0) {
-        memory = pruned.text;
-        console.log(`[daily] 近期动态 清理 ${pruned.removed} 条过期条目`);
+        await appendArchiveLines(env, pruned.removedLines);
+        const archive = await getArchiveLines(env);
+        const preserved = pruned.removedLines.every((line) => archiveHasLine(archive, line));
+        if (preserved) {
+          memory = pruned.text;
+          console.log(`[daily] 近期动态 ${pruned.removed} 条过期条目搬进档案`);
+        } else {
+          console.error('[daily] 近期动态清理中止：档案未确认写入，保留核心层');
+        }
       }
     } catch (e) {
       console.error('[daily] prune transient failed:', e);
@@ -240,51 +315,39 @@ async function archiveOneDay(env: Env, target: string, now: Date): Promise<Daily
       console.error('[daily] aversion learn failed:', e);
     }
 
-    // 5.7) 分区配额：单个分区超预算时先合并同类项（只合并、不删信息），
-    //      避免「共同经历」越长越肥，把「偏好与习惯」挤出去
-    try {
-      const budget = enforceSectionBudgets(memory);
-      if (budget.changed) {
-        memory = budget.text;
-        console.log(`[daily] 分区配额：合并 ${budget.merged} 组同类条目`);
-      }
-    } catch (e) {
-      console.error('[daily] section budget failed:', e);
-    }
+    // 5.7) 质量优先：不再做「合并同类项」。旧实现会把同一分区最旧的两条强行并成一条，
+    //      哪怕内容毫无关系，会破坏条目边界和档案检索精度。超限统一走下面的无损分层。
 
-    // 5.8) 分层：核心层超预算时，把「共同经历」最旧的条目沉到 R2 档案（按需检索注入）
+    // 5.8) 分层：核心层超 12KB 时，按「共同经历 → 进行中的事项 → 近期动态」把最旧条目
+    //      无损搬进 R2 档案。必须先确认档案里已经有这条，才从 memory 删除；写失败就不动。
+    let demotedCount = 0;
     try {
-      const demoted = demoteSectionEntries(memory, DEMOTE_HEADERS[0], CORE_TARGET_BYTES);
-      if (demoted.removed.length > 0) {
-        const added = await appendArchiveLines(env, demoted.removed);
+      for (const header of DEMOTE_HEADERS) {
+        if (byteLength(memory) <= CORE_TARGET_BYTES) break;
+        const demoted = demoteSectionEntries(memory, header, CORE_TARGET_BYTES);
+        if (demoted.removed.length === 0) continue;
+        await appendArchiveLines(env, demoted.removed);
+        const archive = await getArchiveLines(env);
+        const preserved = demoted.removed.every((line) => archiveHasLine(archive, line));
+        if (!preserved) {
+          console.error(`[daily] 分层中止：${header} 有 ${demoted.removed.length} 条未确认写入档案，保留核心层`);
+          break;
+        }
         memory = demoted.text;
-        console.log(`[daily] 分层：${added} 条往事搬进记忆档案`);
+        demotedCount += demoted.removed.length;
+        console.log(`[daily] 分层：${demoted.removed.length} 条从 ${header} 搬进记忆档案`);
+      }
+      if (demotedCount > 0) console.log(`[daily] 分层完成：共 ${demotedCount} 条`);
+      if (byteLength(memory) > CORE_TARGET_BYTES) {
+        console.warn(`[daily] 核心记忆仍 ${byteLength(memory)}B > ${CORE_TARGET_BYTES}B；已停止压缩/删除，交给注入上限裁剪`);
       }
     } catch (e) {
       console.error('[daily] demote to archive failed:', e);
     }
 
-    // 6) 大小维护：>12KB 全量压缩；仍 >15KB 删最旧（保护核心区块）
-    const refresh = Number(env.MEMORY_REFRESH_BYTES) || 12288;
-    const trim = Number(env.MEMORY_TRIM_BYTES) || 15360;
-    if (byteLength(memory) > refresh) {
-      try {
-        const compressed = await compressMemory(env, memory);
-        if (compressed.text.trim()) memory = compressed.text;
-        distillCost += compressed.cost;
-        if (compressed.backend === 'workers-ai') usedFallback = true;
-      } catch (e) {
-        console.error('[daily] compress failed:', e);
-      }
-    }
-    let trimmed = false;
-    if (byteLength(memory) > trim) {
-      const r = trimOldestEntries(memory, trim);
-      if (r.removed > 0) {
-        memory = r.text;
-        trimmed = true;
-      }
-    }
+    // 6) 质量优先：不再做 LLM 压缩，也不直接删除最旧条目。
+    //    超过 12KB 只通过“搬档案”降体积；搬不动就保留，注入时再按上限筛选。
+    const trimmed = false;
 
     // 7) 长期不联系时关系缓慢衰减
     try {
@@ -502,8 +565,8 @@ export async function runMonthlyMerge(env: Env, now: Date): Promise<MonthlyMerge
 /**
  * 每 8 小时刷新当天上下文：
  * 1. 更新天气
- * 2. 根据环境（时间/天气/季节/节假日）漂移心情值，并写回 memory.md
- * 3. 刷新关系快照（含三维）
+ * 2. 把情绪向量的投影（心情值）同步回 memory.md
+ * 3. 刷新关系快照
  */
 export async function runContextRefresh(env: Env, now: Date): Promise<void> {
   const dateKey = dateKeyInBeijing(now);
@@ -514,39 +577,22 @@ export async function runContextRefresh(env: Env, now: Date): Promise<void> {
     const memory = await getMemory(env);
     const relation = parseRelationValues(memory);
 
-    // ★ 环境漂移心情
-    const hour = Number(
-      new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', hour: '2-digit', hour12: false }).format(now),
-    ) % 24;
-    const month = Number(
-      new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', month: '2-digit' }).format(now),
-    );
-    const dayCtx = await getOrCreateDayContext(env, dateKey);
-    const drift = computeMoodDrift({
-      hour,
-      isRestDay: dayCtx.is_holiday,
-      weather,
-      month,
-    });
-
+    // ★ 环境不再直接改 memory.md 的心情值：它作用于情绪向量（见 processEmotionTurn），
+    //   这里只把向量的投影同步回来，避免两条链路各推各的。
+    const state = await loadEmotionState(env, now.getTime());
+    const mood = moodFromVector(state.vector);
     let updatedMemory = memory;
-    if (drift.delta !== 0) {
-      // ★ 受「单日累计额度」约束：每天多次刷新 & 每次聊天不能各自推满 80
-      const usage = await getMoodDriftUsage(env.KV, dateKey);
-      const result = applyMoodDriftAccumulated(relation.mood, drift, usage);
-      if (result.applied !== 0) {
-        updatedMemory = setRelationValues(memory, {
-          affinity: relation.affinity,
-          intimacy: relation.intimacy,
-          mood: result.mood,
-        });
-        await putMemory(env, updatedMemory);
-        await saveMoodDriftUsage(env.KV, result.usage);
-        console.log(
-          `[context] mood drift ${result.applied > 0 ? '+' : ''}${result.applied} → ${result.mood}` +
-            `（当日已用 ${result.usage.used}/${80}；${drift.reasons.join('；')}）`,
-        );
-      }
+    if (mood !== relation.mood) {
+      updatedMemory = setRelationValues(memory, {
+        affinity: relation.affinity,
+        intimacy: relation.intimacy,
+        mood,
+        trust: relation.trust,
+        respect: relation.respect,
+        attraction: relation.attraction,
+      });
+      await putMemory(env, updatedMemory);
+      console.log(`[context] 心情同步 ${relation.mood} → ${mood}（由情绪向量派生）`);
     }
 
     const finalRelation = parseRelationValues(updatedMemory);

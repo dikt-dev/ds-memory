@@ -11,6 +11,7 @@
 /** 需要整体抹掉的短语（命中即删除，不替换成别的）。 */
 const STRIP_PHRASES: Array<{ re: RegExp; why: string }> = [
   { re: /很高兴(能够)?帮助[您你]?/g, why: '客服套话' },
+  { re: /(?:很|非常)?高兴(?:能|可以)?(?:为|帮)[您你](?:服务|解答问题|回答|提供帮助)/g, why: '客服套话' },
   { re: /请问还有什么(需要|可以帮[您你]?)/g, why: '客服追问' },
   { re: /(还)?有什么(其他)?需要(帮[您你]|我帮[您你])?的(吗|呢)?/g, why: '客服追问' },
   { re: /如需(进一步)?帮助/g, why: '客服套话' },
@@ -57,15 +58,18 @@ export function isMeaninglessResidue(text: string): boolean {
   return false;
 }
 
-/**
- * 清洗 AI 味（幂等，可单测）。
- * 返回 { text, cleaned }：cleaned 表示是否真的动过内容。
- *
- * ★ 若清洗后只剩标点/空白，text 会被置为空串——
- *   调用方（chat.ts / openai.ts）的 `if (text.trim())` 就会跳过落库，
- *   避免「？」单独成为一条消息。
- */
-export function scrubAiFlavor(raw: string): { text: string; cleaned: boolean } {
+/** 清理文字层面的排版垃圾（聊天里出现 markdown 会很出戏）。 */
+function stripMarkdown(text: string): { text: string; cleaned: boolean } {
+  let out = text
+    .replace(/^#{1,6}\s+/gm, '') // 标题符号
+    .replace(/^>\s+/gm, '') // 引用
+    .replace(/\*\*([^*\n]+)\*\*/g, '$1'); // 加粗
+  const cleaned = out !== text;
+  return { text: out, cleaned };
+}
+
+/** 应用全部确定性清洗（不含 trim 与空壳判定，流式与整段共用）。 */
+function applyRules(raw: string): { text: string; cleaned: boolean } {
   let text = raw;
   let cleaned = false;
 
@@ -77,30 +81,80 @@ export function scrubAiFlavor(raw: string): { text: string; cleaned: boolean } {
     }
   }
 
-  // 换成"你"
+  const noMarkdown = stripMarkdown(text);
+  if (noMarkdown.cleaned) {
+    text = noMarkdown.text;
+    cleaned = true;
+  }
+
   const next = replaceNin(text);
   if (next !== text) {
     text = next;
     cleaned = true;
   }
 
-  // 清理因删除产生的多余空白/逗号残留
   const tightened = text
-    .replace(/[，,]\s*[，,]+/g, '，')     // 连续逗号
-    .replace(/^[，,\s]+/, '')              // 开头逗号
-    .replace(/\s{2,}/g, ' ')               // 连续空格
+    .replace(/[，,]\s*[，,]+/g, '，') // 连续逗号
+    .replace(/^[，,\s]+/, '') // 开头逗号
+    .replace(/\s{2,}/g, ' ') // 连续空格
     .replace(/[。！？!?]\s*[。！？!?]+/, (m) => m[0]); // 连续标点
   if (tightened !== text) {
     text = tightened;
     cleaned = true;
   }
 
-  const finalText = text.trim();
+  return { text, cleaned };
+}
+
+/**
+ * 清洗 AI 味（幂等，可单测）。
+ * 返回 { text, cleaned }：cleaned 表示是否真的动过内容。
+ *
+ * ★ 若清洗后只剩标点/空白，text 会被置为空串——
+ *   调用方（chat.ts / openai.ts）的 `if (text.trim())` 就会跳过落库，
+ *   避免「？」单独成为一条消息。
+ */
+export function scrubAiFlavor(raw: string): { text: string; cleaned: boolean } {
+  const applied = applyRules(raw);
+  const finalText = applied.text.trim();
 
   // ★ 只剩标点的空壳一律归空：否则「？」「！」会成为一条真实消息
   if (finalText && isMeaninglessResidue(finalText)) {
     return { text: '', cleaned: true };
   }
 
-  return { text: finalText, cleaned };
+  return { text: finalText, cleaned: applied.cleaned };
+}
+
+export interface StreamScrubber {
+  push(delta: string): string;
+  flush(): string;
+}
+
+/**
+ * 流式清洗器：扣住尾部一小段，保证跨 chunk 的套话能被完整匹配。
+ *
+ * ★ 为什么需要：原来只在流结束、落库前清洗，但 SSE 已经把原文推给用户了——
+ *   库里是干净的，用户看到的是「您」「很高兴为您服务」。这里是用户实际可见的那一层。
+ *
+ * hold 必须 ≥ 最长匹配串长度，否则短语会被切断、漏扫。
+ * 代价是首字晚 hold 个字（默认 18，约半句话）。
+ */
+export function createStreamScrubber(hold = 18): StreamScrubber {
+  let buf = '';
+  return {
+    push(delta: string): string {
+      buf += delta;
+      if (buf.length <= hold) return '';
+      const cut = buf.length - hold;
+      const out = applyRules(buf.slice(0, cut)).text;
+      buf = buf.slice(cut);
+      return out;
+    },
+    flush(): string {
+      const out = applyRules(buf).text;
+      buf = '';
+      return out;
+    },
+  };
 }

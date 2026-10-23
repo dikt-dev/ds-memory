@@ -15,10 +15,8 @@ export interface Env {
   LONGITUDE: string;
   DEEPSEEK_MODEL: string;
   DISTILL_MODEL: string;
-  DISTILL_DEEPSEEK_MODEL: string; // 每日提炼/压缩使用的 DeepSeek 模型（默认 v4-pro，质量优先）
+  DISTILL_DEEPSEEK_MODEL: string; // 每日提炼使用的 DeepSeek 模型（默认 v4-pro，质量优先）
   SUMMARY_DEEPSEEK_MODEL: string; // 滚动摘要使用的 DeepSeek 模型（默认 flash，成本优先）
-  MEMORY_REFRESH_BYTES: string; // 字符串，使用处 Number() 解析
-  MEMORY_TRIM_BYTES: string;
   // DeepSeek 计费单价（高峰时段，元/百万 tokens；闲时自动减半）
   PRICE_INPUT_HIT_PEAK: string;
   PRICE_INPUT_MISS_PEAK: string;

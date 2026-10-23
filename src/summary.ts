@@ -95,7 +95,7 @@ export async function maybeSummarizeToday(env: Env, dateKey: string): Promise<vo
 
       const conversation = msgs.map((m) => `${m.role === 'user' ? '用户' : '助手'}：${m.content}`).join('\n');
       const input = `${fresh?.text ? `此前今日摘要：${fresh.text}\n\n` : ''}${conversation}`;
-      const text = await summarizeToday(env, input, dateKey);
+      const text = await summarizeToday(env, input.slice(-30000), dateKey);
       if (!text) return;
 
       await env.KV.put(

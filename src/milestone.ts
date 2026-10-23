@@ -117,7 +117,7 @@ export async function daysSinceLastUserMessage(env: Env, now: Date): Promise<num
   return Math.floor((now.getTime() - row.created_ms) / 86400000);
 }
 
-/** 统计 memory.md 里的记忆条目数（以 "- [日期]" 开头的行）。 */
+/** 统计 memory.md 里的记忆条目数（兼容 `[YYYY-MM-DD]` 与 `[YY-MM-DD]`）。 */
 export function countMemoryEntries(memory: string): number {
-  return (memory.match(/^-\s*\[\d{4}-\d{2}-\d{2}\]/gm) ?? []).length;
+  return (memory.match(/^-\s*\[(?:\d{4}|\d{2})-\d{2}-\d{2}\]/gm) ?? []).length;
 }

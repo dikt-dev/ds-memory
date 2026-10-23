@@ -5,6 +5,7 @@
 import type { Env } from './types';
 import { calcCost, loadPricing, type TokenUsage } from './pricing';
 import { scrubAiFlavor } from './anti-ai-flavor';
+import { createSseRewriter } from './sse-scrub';
 
 export type MessageContentPart =
   | { type: 'text'; text: string }
@@ -33,7 +34,7 @@ const encoder = new TextEncoder();
 export type FinishResult = number | { cost: number; ids?: { user?: number; assistant?: number } };
 
 /**
- * 流式调用 DeepSeek，原样透传 SSE。
+ * 流式调用 DeepSeek，透传 SSE（增量内容先过 AI 味清洗再推给客户端）。
  * onFinish：流结束后回调（落库/计费），返回费用或 {cost, ids}。
  * appendUsageEvent：网页端为 true，会在流末尾追加 usage 事件。
  */
@@ -42,6 +43,8 @@ export async function streamDeepSeek(
   messages: DeepSeekMessage[],
   opts: {
     appendUsageEvent: boolean;
+    /** 回复预算（max_tokens）；不传则用上游默认 */
+    maxTokens?: number;
     onFinish: (text: string, usage: TokenUsage | null) => Promise<FinishResult>;
   },
 ): Promise<Response> {
@@ -60,6 +63,11 @@ export async function streamDeepSeek(
         messages,
         stream: true,
         stream_options: { include_usage: true },
+        ...(opts.maxTokens ? { max_tokens: opts.maxTokens } : {}),
+        // 活人感：稍高的温度 + 轻微重复惩罚，避免每轮用同一套句式
+        temperature: 1.2,
+        frequency_penalty: 0.3,
+        presence_penalty: 0.2,
         // deepseek-flash/v4-pro 默认开启思考模式（effort=high），这里关闭：回复更快、成本可预期
         thinking: { type: 'disabled' },
       }),
@@ -77,44 +85,33 @@ export async function streamDeepSeek(
     return Response.json({ error: { message: 'DeepSeek 返回空流', type: 'server_error' } }, { status: 502 });
   }
 
-  let assistantText = '';
-  let usage: TokenUsage | null = null;
   let carry = '';
   const decoder = new TextDecoder();
-
-  const handleLine = (line: string) => {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith('data:')) return;
-    const payload = trimmed.slice(5).trim();
-    if (!payload || payload === '[DONE]') return;
-    try {
-      const parsed = JSON.parse(payload) as {
-        choices?: { delta?: { content?: unknown } }[];
-        usage?: { prompt_cache_hit_tokens?: number; prompt_cache_miss_tokens?: number; completion_tokens?: number };
-      };
-      const delta = parsed.choices?.[0]?.delta?.content;
-      if (typeof delta === 'string') assistantText += delta;
-      if (parsed.usage) usage = normalizeUsage(parsed.usage);
-    } catch {
-      // 忽略无法解析的行（如注释行/心跳）
-    }
-  };
+  const encoder = new TextEncoder();
+  // ★ 流式清洗：用户看到的这一层也要干净（以前只清洗了落库文本）
+  const rewriter = createSseRewriter();
 
   const transform = new TransformStream<Uint8Array, Uint8Array>({
     transform(chunk, controller) {
-      controller.enqueue(chunk); // 原样透传
       carry += decoder.decode(chunk, { stream: true });
       const lines = carry.split('\n');
       carry = lines.pop() ?? ''; // 最后一段可能是不完整的行，留到下一块
-      for (const line of lines) handleLine(line);
+      for (const line of lines) {
+        for (const out of rewriter.rewrite(line)) controller.enqueue(encoder.encode(`${out}\n`));
+      }
     },
     async flush(controller) {
-      if (carry) handleLine(carry);
+      if (carry) {
+        for (const out of rewriter.rewrite(carry)) controller.enqueue(encoder.encode(`${out}\n`));
+      }
+      // 流没有 [DONE] 就结束了：把扣住的尾巴补出去，用户才能看到结尾
+      for (const out of rewriter.flush()) controller.enqueue(encoder.encode(`${out}\n`));
       let cost = 0;
       let ids: { user?: number; assistant?: number } | undefined;
+      const usage = rewriter.usage() ? normalizeUsage(rewriter.usage()!) : null;
       try {
-        // ★ 落库前清洗 AI 味（流式已推出的原样，但落库/记忆/历史回放用干净版）
-        const cleaned = scrubAiFlavor(assistantText);
+        // ★ 落库前再洗一次（幂等）：保证库里和用户看到的是同一份文本
+        const cleaned = scrubAiFlavor(rewriter.text());
         const r = await opts.onFinish(cleaned.text, usage);
         if (typeof r === 'number') {
           cost = r;
@@ -172,6 +169,9 @@ export async function completeDeepSeek(
         model: env.DEEPSEEK_MODEL,
         messages,
         max_tokens: maxTokens,
+        temperature: 1.2,
+        frequency_penalty: 0.3,
+        presence_penalty: 0.2,
         // 关闭思考模式（默认开启 effort=high，会额外消耗按输出计费的 reasoning tokens）
         thinking: { type: 'disabled' },
       }),

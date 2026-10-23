@@ -477,6 +477,8 @@ function inline(s) {
 }
 function renderMarkdown(src) {
   const blocks = [];
+  // 归档时语音被记成「（语音）…」，网页上换成一个话筒图标更好读
+  src = String(src || '').replace(/^（语音）/, '🎤 ');
   let s = escapeHtml(src);
   s = s.replace(/```([\s\S]*?)```/g, (_, code) => {
     blocks.push('<pre><code>' + code.trim() + '</code></pre>');

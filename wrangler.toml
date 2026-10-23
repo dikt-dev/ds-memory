@@ -25,10 +25,6 @@ LONGITUDE = "116.4074"
 # 对话模型
 DEEPSEEK_MODEL = "deepseek-flash"
 
-# memory.md 维护阈值（字节）：>12KB 触发全量提炼，仍 >15KB 删最旧
-MEMORY_REFRESH_BYTES = "12288"
-MEMORY_TRIM_BYTES = "15360"
-
 # Workers AI 兜底模型（提炼失败/情绪复核使用）
 DISTILL_MODEL = "@cf/meta/llama-3.2-3b-instruct"
 # 提炼模型分工：每日提炼与压缩用 v4-pro（质量），滚动摘要用 flash（成本）

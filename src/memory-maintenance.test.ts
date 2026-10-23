@@ -195,8 +195,10 @@ describe('关系变量（好感度/亲密度）', () => {
 `;
 
   it('解析当前值，缺失时用默认值', () => {
-    expect(parseRelationValues(WITH_RELATION)).toEqual({ affinity: 500, intimacy: 300, mood: 500 });
-    expect(parseRelationValues('# 长期记忆')).toEqual({ affinity: 500, intimacy: 300, mood: 500 });
+    // 5 轴：好感度/亲密度沿用旧默认，信任/尊重/心动缺失时补各自默认值
+    const expected = { affinity: 500, intimacy: 300, mood: 500, trust: 600, respect: 650, attraction: 300 };
+    expect(parseRelationValues(WITH_RELATION)).toEqual(expected);
+    expect(parseRelationValues('# 长期记忆')).toEqual(expected);
   });
 
   it('applyRelationDelta：单日 ±5 截断与 0~1000 边界', () => {
@@ -316,8 +318,8 @@ describe('分区配额 enforceSectionBudgets', () => {
 ## 人物底色
 - 这是固定设定，一个字都不能动。
 
-## 进行中的事项
-${big(20)}
+## 偏好与习惯
+${big(40)}
 `;
 
   it('超预算的分区把最旧两条合并，字节下降但内容不丢', () => {
@@ -329,7 +331,7 @@ ${big(20)}
     expect(byteLength(res.text)).toBeLessThan(byteLength(before));
 
     // 每一条的内容都还在（只是合并掉了重复的日期前缀）
-    for (let i = 1; i <= 20; i++) {
+    for (let i = 1; i <= 40; i++) {
       expect(res.text).toContain(`事件${i}：`);
     }
   });
@@ -349,7 +351,7 @@ ${big(20)}
 
   it('reportSectionBudgets 能报出超预算的分区', () => {
     const report = reportSectionBudgets(build());
-    const shared = report.find((r) => r.header === '## 进行中的事项');
+    const shared = report.find((r) => r.header === '## 偏好与习惯');
     expect(shared?.over).toBe(true);
     expect(shared?.bytes).toBeGreaterThan(shared?.budget ?? 0);
   });
@@ -428,5 +430,16 @@ describe('键=值 覆盖式更新', () => {
     const after = mergeMemoryEntry(before, `## 偏好与习惯\n- [2026-10-22] 沟通：喜欢长文\n`);
     expect(after).toContain('沟通：喜欢短句');
     expect(after).toContain('沟通：喜欢长文');
+  });
+
+  it('兼容短日期 YY-MM-DD，并保留新条目短格式', () => {
+    const before = `# 长期记忆
+
+## 关于用户
+- [26-10-20] 旧事实
+`;
+    const after = mergeMemoryEntry(before, `## 关于用户\n- [26-10-23] 新事实\n`, '2026-10-23');
+    expect(after).toContain('- [26-10-20] 旧事实');
+    expect(after).toContain('- [26-10-23] 新事实');
   });
 });

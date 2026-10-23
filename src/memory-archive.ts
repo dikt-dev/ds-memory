@@ -2,7 +2,7 @@
  * 记忆档案层（分层记忆的第二层）。
  *
  * 分层思路：
- *   核心层 = memory.md（常驻注入，目标 ≤6.5KB）
+ *   核心层 = memory.md（常驻注入，目标 ≤12KB，质量优先不压缩）
  *   档案层 = R2 memory/archive.md（不设上限，按时间累积的往事）
  *   检索   = 聊天时按当前话题召回，只把命中的几条注入（~150~300B）
  *
@@ -15,17 +15,14 @@
  */
 import type { Env } from './types';
 import { getObject, putObject } from './storage';
+import { ENTRY_RE, ENTRY_PREFIX_RE, normalizeDateKey } from './memory-maintenance';
 
 export const ARCHIVE_R2_KEY = 'memory/archive.md';
 const ARCHIVE_KV_KEY = 'archive:cache';
 const ARCHIVE_CACHE_TTL = 300;
 
-/** 核心层（memory.md）的目标体积：超过就把「共同经历」最旧的沉进档案 */
-export const CORE_TARGET_BYTES = 6500;
-/** 单次读取最多解析多少行（档案再大，也只需要检索近期部分） */
-export const ARCHIVE_MAX_LINES = 2000;
-/** 档案层保留的最大行数（超出丢最旧的，说明确实该清理了） */
-export const ARCHIVE_KEEP_LINES = 4000;
+/** 核心层（memory.md）的目标体积：12KB，质量优先，超出的往事无损沉进档案 */
+export const CORE_TARGET_BYTES = 12000;
 /** 一次注入最多带几条往事 */
 export const RECALL_LIMIT = 4;
 /** 命中分数下限（低于它视为噪声，宁缺毋滥） */
@@ -139,15 +136,18 @@ export function serializeArchiveLines(lines: string[]): string {
   return `# 记忆档案\n\n> 由系统从长期记忆里分层下来的往事，按需检索注入，不常驻上下文。\n\n${body}\n`;
 }
 
-/** 归一化（去日期、去标签、去标点）用于去重比较。 */
+/** 归一化（日期 + 去标签 + 去标点）用于去重比较；同一内容不同日期算两条。 */
 function normalizeLine(line: string): string {
-  return stripTags(line)
-    .replace(/^-\s*\[\d{4}-\d{2}-\d{2}\]\s*/, '')
+  const m = line.match(ENTRY_RE);
+  const date = m ? normalizeDateKey(m[1]) : '';
+  const body = stripTags(line)
+    .replace(ENTRY_PREFIX_RE, '')
     .replace(/[\s\u3000，。、；：！？,.;:!?"'“”‘’（）()【】\[\]]/g, '')
     .toLowerCase();
+  return `${date}|${body}`;
 }
 
-/** 合并新旧条目（按内容去重，保持时间顺序）。 */
+/** 合并新旧条目（按内容去重，保持时间顺序；不设上限，完整保留）。 */
 export function mergeArchiveLines(existing: string[], incoming: string[]): string[] {
   const seen = new Set(existing.map(normalizeLine));
   const merged = [...existing];
@@ -157,8 +157,14 @@ export function mergeArchiveLines(existing: string[], incoming: string[]): strin
     seen.add(key);
     merged.push(line);
   }
-  // 超过上限时丢最旧的（数组前面的是旧的）
-  return merged.length > ARCHIVE_KEEP_LINES ? merged.slice(-ARCHIVE_KEEP_LINES) : merged;
+  return merged;
+}
+
+/** 判断某条记忆是否已经在档案里（确认搬走后才能从核心层删除）。 */
+export function archiveHasLine(lines: string[], line: string): boolean {
+  const key = normalizeLine(line);
+  if (!key) return false;
+  return lines.some((l) => normalizeLine(l) === key);
 }
 
 /** 统计真正新增的条数（忽略已存在与重复的）。 */
@@ -285,7 +291,17 @@ export function pickRelevant(
     .filter((x) => x.score >= minScore)
     .sort((a, b) => b.score - a.score || b.idx - a.idx);
 
-  return scored.slice(0, limit).map((x) => stripTags(x.line));
+  // 档案保留同事实的不同日期；注入时同一内容只取一次，避免重复占召回名额。
+  const picked: string[] = [];
+  const seenContent = new Set<string>();
+  for (const x of scored) {
+    const contentKey = normalizeLine(x.line).replace(/^\d{4}-\d{2}-\d{2}\|/, '');
+    if (seenContent.has(contentKey)) continue;
+    seenContent.add(contentKey);
+    picked.push(stripTags(x.line));
+    if (picked.length >= limit) break;
+  }
+  return picked;
 }
 
 /** 渲染成提示词里的一块；没有命中返回空串。 */
@@ -323,16 +339,19 @@ export async function getArchiveLines(env: Env): Promise<string[]> {
   }
 }
 
-/** 追加条目到档案（自动打标签、已存在的跳过）。返回实际新增条数。
+/**
+ * 追加条目到档案（自动打标签、已存在的跳过）。返回实际新增条数。
  *
- * ★ 新增数必须按「内容是否已存在」算，不能用 merged.length - existing.length：
- *   档案达到上限后会丢最旧的，长度差会算成 0，把新条目整个丢掉。
+ * ★ 直接从 R2 读当前档案再合并写回；读取失败就返回 0，**绝不**用新条目覆盖旧档案。
+ * ★ 新增数按「内容是否已存在」算，不能用 merged.length - existing.length。
  */
 export async function appendArchiveLines(env: Env, incoming: string[]): Promise<number> {
   if (incoming.length === 0) return 0;
   try {
     const tagged = incoming.map(withAutoTags);
-    const existing = await getArchiveLines(env);
+    // 读 R2 原文（不走 KV 缓存），保证合并基础是最新且完整的
+    const obj = await getObject(env, ARCHIVE_R2_KEY);
+    const existing = obj ? parseArchiveLines(await obj.text()) : [];
     const added = countNewLines(existing, tagged);
     if (added === 0) return 0;
     const merged = mergeArchiveLines(existing, tagged);
@@ -349,10 +368,12 @@ export async function appendArchiveLines(env: Env, incoming: string[]): Promise<
 export async function recallForQuery(env: Env, query: string): Promise<string> {
   if (!query.trim()) return '';
   try {
-    // 检索只看最近的 N 条，避免把整个档案拉进内存打分
-    const lines = (await getArchiveLines(env)).slice(-ARCHIVE_MAX_LINES);
+    // 档案完整保留，检索不再截断；索引本身有 preparedCache。
+    // 查询只取最后 2000 字：太长的抓取正文会产生大量噪声 bigram，稀释权重。
+    const q = query.slice(-2000);
+    const lines = await getArchiveLines(env);
     if (lines.length === 0) return '';
-    return formatRecalledBlock(pickRelevant(lines, query));
+    return formatRecalledBlock(pickRelevant(lines, q));
   } catch {
     return '';
   }

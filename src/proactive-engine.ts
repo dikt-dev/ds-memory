@@ -61,6 +61,8 @@ export interface DecisionInput {
   milestones?: Array<{ topic: string; weight: number }>;
   /** 历史反馈调整系数（来自 feedback 模块，>1 表示应降低频率） */
   feedbackMultiplier?: number;
+  /** 触发来源：早晚固定问候 / 白天随机；固定时段的「时间本身」就是事由 */
+  slot?: 'morning' | 'evening' | 'random';
 }
 
 export interface Decision {
@@ -99,7 +101,8 @@ export function hourActivityWeight(hourlyActivity: number[], hour: number): numb
 
 /** 主决策函数。 */
 export function decideProactive(input: DecisionInput): Decision {
-  const { profile, env, pendingTopics, level, mood, milestones, feedbackMultiplier } = input;
+  const { profile, env, pendingTopics, level, mood, milestones, feedbackMultiplier, slot } = input;
+  const fixedSlot = slot === 'morning' || slot === 'evening';
   const cfg = LEVEL_CONFIG[level];
   const reasons: string[] = [];
   const topics: string[] = [];
@@ -133,7 +136,16 @@ export function decideProactive(input: DecisionInput): Decision {
   }
 
   // ---------- 加分项 ----------
-  // 0) 情绪信号（可能加分或否决）
+  // 0) 固定时段：用户约好的早安/睡前问候，时间本身就是事由
+  //    （以前只有随机消息，固定时段也要凑够 50 分，等于永远不发）
+  //    分值取 55：高于 normal 阈值（50），保证「约好的问候」不会被活跃度之类的
+  //    细项卡死；仍然受静默期/冷却/情绪否决约束，一天最多早晚各一条。
+  if (fixedSlot) {
+    score += 55;
+    reasons.push(slot === 'morning' ? '到了早安问候时间' : '到了睡前问候时间');
+  }
+
+  // 1) 情绪信号（可能加分或否决）
   if (mood) {
     const adj = moodScoreAdjust(mood);
     if (adj.delta < 0) {
@@ -208,8 +220,9 @@ export function decideProactive(input: DecisionInput): Decision {
     reasons.push('休息日早晨，降低打扰概率');
   }
 
-  // 深夜强降权
-  if (env.hour >= 23 || env.hour < 7) {
+  // 深夜强降权（睡前的固定问候窗口除外：22:45-23:15 本来就是它该发的时间）
+  const isEveningSlot = slot === 'evening' && (env.hour === 22 || env.hour === 23);
+  if ((env.hour >= 23 || env.hour < 7) && !isEveningSlot) {
     score -= 40;
     reasons.push('深夜时段');
   }

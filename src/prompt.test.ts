@@ -55,6 +55,79 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('消息来源：AstrBot');
   });
 
+  it('★ AstrBot 渠道附加「不要用 Markdown」约束（QQ 不渲染）', () => {
+    const prompt = buildSystemPrompt({
+      now: new Date('2026-10-21T01:00:00Z'),
+      ctx,
+      memory: 'x',
+      channel: 'astrobot',
+    });
+    expect(prompt).toContain('不要用 Markdown');
+    expect(prompt).toContain('[face:微笑]');
+  });
+
+  it('注入「最近发过的文件」块', () => {
+    const prompt = buildSystemPrompt({
+      now: new Date('2026-10-21T01:00:00Z'),
+      ctx,
+      memory: 'x',
+      channel: 'web',
+      recentFiles: '## 最近发过的文件\n- 季度报表.xlsx（约 1200 字）',
+    });
+    expect(prompt).toContain('最近发过的文件');
+    expect(prompt).toContain('季度报表.xlsx');
+  });
+
+  it('没有文件块时不出现该标题', () => {
+    const prompt = buildSystemPrompt({
+      now: new Date('2026-10-21T01:00:00Z'),
+      ctx,
+      memory: 'x',
+      channel: 'web',
+    });
+    expect(prompt).not.toContain('最近发过的文件');
+  });
+
+  it('客户端声明语音时才提示可以发 [语音]', () => {
+    const withVoice = buildSystemPrompt({
+      now: new Date('2026-10-21T01:00:00Z'),
+      ctx,
+      memory: 'x',
+      channel: 'astrobot',
+      voiceReply: true,
+    });
+    expect(withVoice).toContain('[语音]');
+
+    const withoutVoice = buildSystemPrompt({
+      now: new Date('2026-10-21T01:00:00Z'),
+      ctx,
+      memory: 'x',
+      channel: 'astrobot',
+    });
+    expect(withoutVoice).not.toContain('[语音]');
+  });
+
+  it('网页渠道不会提示语音', () => {
+    const prompt = buildSystemPrompt({
+      now: new Date('2026-10-21T01:00:00Z'),
+      ctx,
+      memory: 'x',
+      channel: 'web',
+      voiceReply: true,
+    });
+    expect(prompt).not.toContain('[语音]');
+  });
+
+  it('网页渠道不加 Markdown 约束', () => {
+    const prompt = buildSystemPrompt({
+      now: new Date('2026-10-21T01:00:00Z'),
+      ctx,
+      memory: 'x',
+      channel: 'web',
+    });
+    expect(prompt).not.toContain('不要用 Markdown');
+  });
+
   it('无记忆时给出占位，不报错', () => {
     const prompt = buildSystemPrompt({
       now: new Date('2026-10-21T01:00:00Z'),

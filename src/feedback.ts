@@ -34,7 +34,9 @@ export async function backfillFeedback(env: Env, now: Date): Promise<number> {
   // 取最近 7 天、未回填反馈、且已超过 2 小时的消息
   const cutoffMs = now.getTime() - 2 * 60 * 60 * 1000;
   const rows = await env.DB.prepare(
-    `SELECT m.id, m.created_ms, m.proactive_kind, m.date_key
+    `SELECT m.id, m.created_ms, m.proactive_kind, m.date_key,
+            (SELECT COUNT(*) FROM proactive_queue q WHERE q.message_id = m.id) AS queued,
+            (SELECT COUNT(*) FROM proactive_queue q WHERE q.message_id = m.id AND q.sent_at IS NOT NULL) AS delivered
      FROM messages m
      LEFT JOIN proactive_feedback f ON f.message_id = m.id
      WHERE m.turn_type = 'proactive'
@@ -45,10 +47,20 @@ export async function backfillFeedback(env: Env, now: Date): Promise<number> {
      LIMIT 50`,
   )
     .bind(cutoffMs, now.getTime() - 7 * 86400000)
-    .all<{ id: number; created_ms: number; proactive_kind: string | null; date_key: string }>();
+    .all<{
+      id: number;
+      created_ms: number;
+      proactive_kind: string | null;
+      date_key: string;
+      queued: number | null;
+      delivered: number | null;
+    }>();
 
   let filled = 0;
   for (const row of rows.results ?? []) {
+    // ★ 队列模式却没送达的不能算「用户没回」：那条消息用户根本没看到。
+    //   先跳过，等真送达了再评估（超过 7 天自然滑出窗口）。
+    if ((row.queued ?? 0) > 0 && (row.delivered ?? 0) === 0) continue;
     // 该消息之后 2 小时内，用户有没有发消息
     const next = await env.DB.prepare(
       `SELECT created_ms FROM messages

@@ -64,3 +64,10 @@ describe('队列取消息的时间阈值计算', () => {
     expect(cutoff < isoInBeijing(now)).toBe(true);
   });
 });
+
+describe('dropMessages（积压保护）', () => {
+  it('空 ids 直接返回 0，不碰数据库', async () => {
+    const { dropMessages } = await import('./queue');
+    expect(await dropMessages({} as never, [])).toBe(0);
+  });
+});

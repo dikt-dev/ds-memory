@@ -4,7 +4,7 @@
  * 说明：主动消息的「决策与生成」统一在 webproactive.ts（打分 + 事由驱动），
  * 本模块只负责：
  * - 时间窗口与随机目标时间（纯函数，供 Web 端决策前判断）；
- * - 投递通道 deliverProactive（直连 AstrBot / 入队供插件轮询）。
+ * - 投递通道 deliverProactive（直连 AstrBot / 入队供客户端轮询）。
  */
 
 import type { Env } from './types';
@@ -126,7 +126,7 @@ export interface DeliveryResult {
 /**
  * 投递主动消息：两种模式
  * - 直连模式（已配置 ASTRBOT_BASE_URL）：Worker 直接调 AstrBot HTTP API
- * - 队列模式（未配置）：消息入队，由 AstrBot 插件轮询拉取后本地发送（无需公网入口）
+ * - 队列模式（未配置）：消息入队，由客户端（如 ds-qq-client）轮询拉取后本地发送（无需公网入口）
  *
  * ★ 语义提醒：队列模式下「入队成功」≠「用户收到」。
  *   真正的送达要等插件 ack。因此返回值区分 `queued` 与 `sent`，

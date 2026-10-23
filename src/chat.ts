@@ -9,19 +9,18 @@ import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
 import { attachWeather, getOrCreateDayContext } from './context';
 import { getMemory } from './memory';
 import { fetchWeather } from './weather';
-import { insertUserMessage, insertAssistantReply, recentMessages } from './db';
+import { insertUserMessage, insertAssistantReply, recentMessages, compactHistoryMessage } from './db';
 import { calcCost, loadPricing } from './pricing';
 import { streamDeepSeek, type DeepSeekMessage } from './deepseek';
 import { getTodaySummary } from './summary';
-import { describeAttitude } from './attitude';
 import { loadImageDataUrl } from './media';
 import { parseRelationValues } from './memory-maintenance';
 import { markProfileDirty } from './profile-cache';
-import { computeMoodDrift } from './mood-env';
 import { buildCharacterCard } from './character-card';
+import { facetsOf, processEmotionTurn } from './emotion-context';
+import { moodFromVector } from './emotion-vector';
 import { readSessionFacts } from './session-facts';
-import { buildVoiceDirective } from './voice';
-import { getSessionMood, inferTag, sessionMoodNote, updateSessionMood } from './session-state';
+import { buildVoiceDirective, recentOpeners, replyTokenBudget } from './voice';
 import { formatRecentMemoBlock, getRecentMemo } from './recent-memory';
 import { recallForQuery } from './memory-archive';
 
@@ -53,6 +52,8 @@ export async function streamChat(
     holiday_note: dayCtxFile.holiday_note,
   };
   const history = await recentMessages(env, 20);
+  // 最近几条回复的开头：避免连续几轮用同一句开场白
+  const avoidOpeners = recentOpeners(history.filter((m) => m.role === 'assistant').map((m) => m.content));
   // ★ 中期记忆（最近 24 小时）优先：它存在时就不再注入今日摘要，避免同一段内容发两遍
   const recentMemo = formatRecentMemoBlock(await getRecentMemo(env));
   const todaySummary = recentMemo ? null : await getTodaySummary(env, dateKey);
@@ -71,16 +72,24 @@ export async function streamChat(
   const relationVals = parseRelationValues(memory);
   const facts = await readSessionFacts(env, now, dateKey);
   const hourForCard = beijingHour(now);
-  const envDriftForMood = computeMoodDrift({
-    hour: hourForCard,
-    isRestDay: dayCtxFile.is_holiday,
-    weather,
-    month: beijingMonth(now),
+
+  // ★ 情感系统：事件 → 情绪向量 → 5 轴微增量 → 情绪快照（先算，后面的状态卡要用它派生心情）
+  const emotion = await processEmotionTurn({
+    env,
+    now: now.getTime(),
+    base: facetsOf(relationVals),
+    userText: content,
+    environment: {
+      hour: hourForCard,
+      isRestDay: dayCtxFile.is_holiday,
+      weather,
+      month: beijingMonth(now),
+    },
+    wasIgnored: facts.wasIgnored,
   });
-  // ★ 会话级情绪残留（最近几轮的轻快/低落还会"漏"到这一轮）
-  const sessionMood = await getSessionMood(env, now.getTime());
-  const effectiveMood = Math.min(1000, Math.max(0, relationVals.mood + envDriftForMood.delta + sessionMood.offset));
-  const moodNote = sessionMoodNote(sessionMood);
+
+  // ★ 心情值不再单独维护：由情绪向量派生，保证只有一份真相
+  const effectiveMood = moodFromVector(emotion.state.vector);
   const charCard = buildCharacterCard({
     hour: hourForCard,
     hoursSinceLastContact: facts.hoursSinceLastContact,
@@ -93,8 +102,7 @@ export async function streamChat(
     ignoredMessage: facts.ignoredMessage,
     characterName: env.CHARACTER_NAME,
   });
-  // 情绪残留单独注一句（附在状态卡后面）
-  const cardTextWithMood = moodNote ? `${charCard.cardText}\n- 情绪残留：${moodNote}` : charCard.cardText;
+  const cardTextWithMood = charCard.cardText;
 
   // 2) 落用户消息（D1 只存文本，图片记 R2 路径）
   const recordContent = image ? [content, `[图片:${image.key}]`].filter(Boolean).join('\n') : content;
@@ -126,18 +134,25 @@ export async function streamChat(
         channel,
         characterCard: cardTextWithMood,
         voice: buildVoiceDirective(relationVals.intimacy),
-        attitude: describeAttitude(relationVals.affinity, relationVals.intimacy, effectiveMood),
+        avoidOpeners,
+        attitude: emotion.snapshot,
         characterName: env.CHARACTER_NAME,
         userAddress: env.USER_ADDRESS,
       }),
     },
-    ...history.map((m) => ({ role: m.role, content: m.content })),
+    // 最近 4 条保留原文（保证接得住当前话题），更早的压缩到 400 字内省 token
+    ...history.map((m, i) => ({
+      role: m.role,
+      content: i >= history.length - 4 ? m.content : compactHistoryMessage(m.content),
+    })),
     { role: 'user', content: userContent },
   ];
 
   // 4) 流式转发；流结束落库 + 计费
+  // ★ 回复预算按他这条的长度定：短消息就只给短额度，从硬约束上防「话太多」
   return streamDeepSeek(env, messages, {
     appendUsageEvent: true,
+    maxTokens: replyTokenBudget(content),
     onFinish: async (text, usage) => {
       let cost = 0;
       let assistantId: number | undefined;
@@ -154,11 +169,6 @@ export async function streamChat(
         cost = saved.cost_rmb;
         assistantId = saved.id;
       }
-      // ★ 会话情绪残留：用本轮用户消息推断情绪并写入 KV（下一轮生效）
-      try {
-        const tag = inferTag(content, text);
-        await updateSessionMood(env, now.getTime(), tag);
-      } catch { /* 忽略 */ }
       // 把 id 一并返回：前端用它推进轮询游标，避免重复渲染同一轮
       return { cost, ids: { user: userRow.id, assistant: assistantId } };
     },

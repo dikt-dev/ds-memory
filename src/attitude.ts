@@ -39,7 +39,6 @@ export const INTIMACY_STAGES: Stage[] = [
 /** 心情阶段 */
 export const MOOD_STAGES: Stage[] = [
   { min: 0, label: '低落' },
-  { min: 200, label: '低落' },
   { min: 350, label: '平静' },
   { min: 550, label: '轻快' },
   { min: 750, label: '愉快' },

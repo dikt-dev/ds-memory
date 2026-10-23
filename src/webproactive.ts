@@ -21,7 +21,6 @@ import { getOrCreateDayContext, type DayContextFile } from './context';
 import { getTodaySummary } from './summary';
 import { recentMessages, recentProactiveMessages, insertProactiveMessage, updateMessageUsage } from './db';
 import { parseRelationValues } from './memory-maintenance';
-import { describeAttitude } from './attitude';
 import { completeDeepSeek } from './deepseek';
 import {
   decideProactive,
@@ -47,11 +46,11 @@ import {
 } from './proactive';
 import { buildCharacterCard } from './character-card';
 import { buildVoiceDirective } from './voice';
-import { getSessionMood, sessionMoodNote } from './session-state';
 import { formatRecentMemoBlock, getRecentMemo } from './recent-memory';
 import { recallForQuery } from './memory-archive';
-import { computeMoodDrift } from './mood-env';
 import { readSessionFacts } from './session-facts';
+import { facetsOf, processEmotionTurn } from './emotion-context';
+import { moodFromVector } from './emotion-vector';
 
 export interface ProactiveResult {
   skipped?: string;
@@ -190,15 +189,21 @@ async function generateProactive(
   const hourNow = Number(
     new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', hour: '2-digit', hour12: false }).format(now),
   ) % 24;
-  const envDrift = computeMoodDrift({
-    hour: hourNow,
-    isRestDay: dayCtx.is_holiday,
-    weather,
-    month: Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', month: '2-digit' }).format(now)),
-  });
-  const sessionMood = await getSessionMood(env, now.getTime());
-  const effectiveMood = Math.min(1000, Math.max(0, relation.mood + envDrift.delta + sessionMood.offset));
   const facts = await readSessionFacts(env, now, dateKey);
+  const envMonthNow = Number(
+    new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', month: '2-digit' }).format(now),
+  );
+
+  // ★ 情感系统：主动开口也要带上「它此刻的情绪」（环境非对话驱动）；先算，心情由它派生
+  const emotion = await processEmotionTurn({
+    env,
+    now: now.getTime(),
+    base: facetsOf(relation),
+    userText: '',
+    environment: { hour: hourNow, isRestDay: dayCtx.is_holiday, weather, month: envMonthNow },
+    wasIgnored: facts.wasIgnored,
+  });
+  const effectiveMood = moodFromVector(emotion.state.vector);
   const charCard = buildCharacterCard({
     hour: hourNow,
     hoursSinceLastContact: facts.hoursSinceLastContact,
@@ -210,8 +215,7 @@ async function generateProactive(
     wasIgnored: facts.wasIgnored,
     ignoredMessage: facts.ignoredMessage,
   });
-  const moodNote = sessionMoodNote(sessionMood);
-  const cardText = moodNote ? `${charCard.cardText}\n- 情绪残留：${moodNote}` : charCard.cardText;
+  const cardText = charCard.cardText;
   // 主动消息也带上相关往事：用最近几条对话当检索词
   const recalled = await recallForQuery(
     env,
@@ -232,7 +236,7 @@ async function generateProactive(
     channel: 'web',
     characterCard: cardText,
     voice: buildVoiceDirective(relation.intimacy),
-    attitude: describeAttitude(relation.affinity, relation.intimacy, effectiveMood),
+    attitude: emotion.snapshot,
   });
 
   const historyText =
@@ -382,6 +386,7 @@ async function emit(
     mood,
     milestones,
     feedbackMultiplier,
+    slot: kind === 'morning' || kind === 'evening' ? kind : 'random',
   });
   if (!decision.shouldSend) {
     await releaseSlot(env, dateKey, slotKey);
@@ -407,7 +412,7 @@ async function emit(
       completionTokens: generated.completionTokens,
     });
   }
-  // ★ 推送到 QQ：直连 AstrBot 或入队供插件轮询（携带 message_id 便于追踪）
+  // ★ 推送到 QQ：直连 AstrBot 或入队供客户端轮询（携带 message_id 便于追踪）
   const delivery = await deliverProactive(env, generated.text, now, saved.id);
   await finishSlot(env, dateKey, slotKey, {
     messageId: saved.id,
@@ -425,7 +430,121 @@ async function emit(
 }
 
 /** 早晚固定时段（morning / evening）。 */
+/** 用户 /退订 后写入的暂停截止时间。 */
+const PAUSE_KEY = 'proactive:paused_until';
+
+export async function isPaused(env: Env, now: Date): Promise<boolean> {
+  const raw = await env.KV.get(PAUSE_KEY).catch(() => null);
+  if (!raw) return false;
+  const until = Date.parse(raw);
+  return Number.isFinite(until) && now.getTime() < until;
+}
+
+/**
+ * 诊断：跑一遍决策，但不发送、不写 proactive_log。
+ *
+ * 主动消息「没发」时最需要知道的就是这句 skipped 的 reason，
+ * 而正常路径把结果丢在 waitUntil 里，日志里看不到。
+ */
+export interface ProactiveDiagnosis {
+  dateKey: string;
+  minutes: number;
+  inWindow: string | null;
+  windowTargets: { morning: number; evening: number };
+  paused: boolean;
+  level: string;
+  mood: { mood: string; intensity: number; suggestContact: boolean; signals: string[] };
+  feedbackMultiplier: number;
+  profile: {
+    minutesSinceLastUserMsg: number | null;
+    minutesSinceLastProactive: number | null;
+    repliesAfterLastProactive: number | null;
+    hourlyActivity: number[];
+  };
+  decision: Decision;
+  claimedToday: string[];
+}
+
+export async function diagnoseProactive(env: Env, now: Date): Promise<ProactiveDiagnosis> {
+  const dateKey = dateKeyInBeijing(now);
+  const minutes = beijingMinutes(now);
+  const slot = currentSlot(minutes);
+
+  const claimed = await env.DB.prepare('SELECT slot_key FROM proactive_log WHERE date_key = ?')
+    .bind(dateKey)
+    .all<{ slot_key: string }>()
+    .catch(() => ({ results: [] as { slot_key: string }[] }));
+
+  const [profile, dayCtx, memory] = await Promise.all([
+    collectUserProfile(env, now),
+    getOrCreateDayContext(env, dateKey),
+    getMemory(env),
+  ]);
+  const environment = await collectEnvironment(env, now, dayCtx);
+  const pendingTopics = extractPendingTopics(memory, now);
+  const level = (env.PROACTIVE_LEVEL as 'quiet' | 'normal' | 'active') || 'normal';
+
+  const recentUserMsgs = await env.DB.prepare(
+    `SELECT content FROM messages WHERE role = 'user' ORDER BY id DESC LIMIT 6`,
+  ).all<{ content: string }>();
+  const moodText = (recentUserMsgs.results ?? []).map((r) => r.content).join('\n');
+  const mood = await analyzeMoodSmart(env, moodText).catch(() => analyzeMood(moodText));
+
+  const [firstChatDate, streakDays] = await Promise.all([
+    getFirstChatDate(env),
+    computeStreak(env, dateKey),
+  ]);
+  const milestones = detectMilestones({
+    firstChatDate,
+    today: dateKey,
+    streakDays,
+    memoryEntryCount: countMemoryEntries(memory),
+  });
+
+  const fbStats = await getFeedbackStats(env, 30).catch(() => null);
+  const feedbackMultiplier = fbStats ? feedbackCooldownMultiplier(fbStats) : 1;
+
+  const decision = decideProactive({
+    profile,
+    env: environment,
+    pendingTopics,
+    level,
+    mood,
+    milestones,
+    feedbackMultiplier,
+    slot: slot ?? 'random',
+  });
+
+  return {
+    dateKey,
+    minutes,
+    inWindow: slot,
+    windowTargets: {
+      morning: targetMinutesFor(dateKey, 'morning'),
+      evening: targetMinutesFor(dateKey, 'evening'),
+    },
+    paused: await isPaused(env, now),
+    level,
+    mood: {
+      mood: mood.mood,
+      intensity: mood.intensity,
+      suggestContact: mood.suggestContact,
+      signals: mood.signals,
+    },
+    feedbackMultiplier,
+    profile: {
+      minutesSinceLastUserMsg: profile.minutesSinceLastUserMsg,
+      minutesSinceLastProactive: profile.minutesSinceLastProactive,
+      repliesAfterLastProactive: profile.repliesAfterLastProactive,
+      hourlyActivity: profile.hourlyActivity ?? [],
+    },
+    decision,
+    claimedToday: (claimed.results ?? []).map((r) => r.slot_key),
+  };
+}
+
 export async function runWebProactiveSlot(env: Env, now: Date): Promise<ProactiveResult> {
+  if (await isPaused(env, now)) return { skipped: '用户已暂停主动消息' };
   const dateKey = dateKeyInBeijing(now);
   const minutes = beijingMinutes(now);
   const slot = currentSlot(minutes);
@@ -437,8 +556,19 @@ export async function runWebProactiveSlot(env: Env, now: Date): Promise<Proactiv
   return emit(env, now, dateKey, slot, slot, PROACTIVE_WINDOWS[slot].name);
 }
 
+/** 手动触发一次固定时段主动消息（调试 / 补偿用，不检查时间窗口）。 */
+export async function runProactiveNow(
+  env: Env,
+  now: Date,
+  kind: 'morning' | 'evening' = 'evening',
+): Promise<ProactiveResult> {
+  const dateKey = dateKeyInBeijing(now);
+  return emit(env, now, dateKey, kind, kind, kind === 'evening' ? '睡前' : '早安');
+}
+
 /** 白天随机主动消息（0~2 条，仍受打分约束）。 */
 export async function runWebProactiveRandom(env: Env, now: Date): Promise<ProactiveResult> {
+  if (await isPaused(env, now)) return { skipped: '用户已暂停主动消息' };
   const dateKey = dateKeyInBeijing(now);
   const minutes = beijingMinutes(now);
   if (minutes < RANDOM_WINDOW.start || minutes >= RANDOM_WINDOW.end) {

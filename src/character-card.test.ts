@@ -212,7 +212,7 @@ describe('voice —— 语言层', () => {
     const v = buildVoiceDirective(700);
     expect(v).toContain('绝对不要出现');
     expect(v).toContain('嘿嘿');
-    expect(v).toContain('不是不是');
+    expect(v).toContain('改口');
   });
 
   // 注意：小癖好/小脾气已移到 memory.md「人物底色」，voice 不再重复，

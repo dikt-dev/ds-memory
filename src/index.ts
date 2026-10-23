@@ -11,7 +11,7 @@ import { addDays, dateKeyInBeijing, isoInBeijing } from './date';
 import { randomHex, verifyPassword } from './auth';
 import { streamChat } from './chat';
 import { messagesPage, usageByDay } from './db';
-import { getMemory } from './memory';
+import { getMemory, MEMORY_KV_KEY } from './memory';
 import { messagesSince } from './db';
 import { byteLength } from './memory-maintenance';
 import { getCityConfig, setCity } from './settings';
@@ -23,20 +23,42 @@ import { getOrCreateDayContext } from './context';
 import { parseRelationValues, reportSectionBudgets } from './memory-maintenance';
 import { analyzeMood } from './mood';
 import { mergeMood, needsAiVerification, verifyMoodWithAI } from './mood-ai';
-import { runWebProactiveRandom, runWebProactiveSlot } from './webproactive';
-import { ackSent, markAttempt, queueStats, takePending } from './queue';
+import {
+  diagnoseProactive,
+  runProactiveNow,
+  runWebProactiveRandom,
+  runWebProactiveSlot,
+} from './webproactive';
+import { ackSent, dropMessages, markAttempt, queueStats, takePending } from './queue';
 import { openaiApp, stripAttachmentWrapper } from './openai';
 import { getLlmCost } from './llm-cost';
 import { getRecentMemo } from './recent-memory';
 import { CORE_TARGET_BYTES, getArchiveLines } from './memory-archive';
 import { maybeSummarizeToday } from './summary';
 import { maybeRefreshRecentMemo } from './recent-memory';import { normalizeChannel } from './prompt';
+import {
+  currentArchetype,
+  effectiveFacets,
+  facetsOf,
+  listOpenGrievances,
+  loadEmotionState,
+  simulateEmotion,
+} from './emotion-context';
+import { applyEventsToVector, extractEmotionEvents, reconcileWithApology, type EmotionEvent } from './emotion-events';
+import { buildEmotionSnapshot, describeEmotionState } from './emotion-snapshot';
+import { decayEmotion, emptyEmotionVector, type EmotionVector } from './emotion-vector';
 
 type AppEnv = { Bindings: Env };
 const app = new Hono<AppEnv>();
 
 const AUTH_KV_PREFIX = 'auth:';
 const AUTH_TTL_SECONDS = 7 * 24 * 60 * 60;
+
+/** QQ 客户端心跳（存在 KV，用于判断通道是否还活着）。 */
+const HEARTBEAT_KV_KEY = 'proactive:heartbeat';
+const HEARTBEAT_TTL_SECONDS = 7 * 24 * 60 * 60;
+/** 超过这么久没心跳就算离线（客户端 5 分钟一次）。 */
+const HEARTBEAT_ONLINE_SECONDS = 15 * 60;
 
 /** 登录校验：Cookie 中的 token 必须在 KV 中存在。 */
 async function requireAuth(c: Context<AppEnv>, next: Next) {
@@ -280,6 +302,13 @@ app.get('/api/usage', requireAuth, async (c) => {
 });
 
 // —— 阶段 2/3：手动触发与统计 ——
+app.post('/api/admin/memory/refresh', requireAuth, async (c) => {
+  // 手动改完 R2 的 memory.md 后，强制丢弃 24h KV 缓存并立即回源重建
+  await c.env.KV.delete(MEMORY_KV_KEY).catch(() => {});
+  const memory = await getMemory(c.env);
+  const entries = (memory.match(/^-\s*\[(?:\d{4}|\d{2})-\d{2}-\d{2}\]/gm) ?? []).length;
+  return c.json({ ok: true, bytes: byteLength(memory), entries, empty: !memory.trim() });
+});
 app.post('/api/admin/run-daily', requireAuth, async (c) => {
   const result = await runDailyArchive(c.env, new Date());
   return c.json({ ok: true, ...result });
@@ -330,6 +359,50 @@ app.post('/api/admin/test-mood', requireAuth, async (c) => {
     model: c.env.DISTILL_MODEL,
     final: merged,
   });
+});
+
+/** 调试：查看当前情感系统全貌（5 轴关系 + 8 维情绪 + 未化解芥蒂）。
+ * 数值只在这里展示，不进提示词。
+ */
+app.get('/api/admin/relation', requireAuth, async (c) => {
+  const now = Date.now();
+  const memory = await getMemory(c.env);
+  const baseVals = parseRelationValues(memory);
+  const state = await loadEmotionState(c.env, now);
+  const facets = effectiveFacets(facetsOf(baseVals), state.facetDelta);
+  const detail = describeEmotionState({ facets, vector: state.vector, events: state.events, now });
+  return c.json({
+    ok: true,
+    memory_values: baseVals,
+    facets,
+    archetype: currentArchetype(facets, state.vector).label,
+    emotion: detail,
+    pending_facet_delta: state.facetDelta,
+    open_grievances: listOpenGrievances(state, now).map((e) => ({
+      type: e.type,
+      intensity: e.intensity,
+      evidence: e.evidence,
+      at: e.at,
+    })),
+    snapshot: buildEmotionSnapshot({ facets, vector: state.vector, events: state.events, now }),
+  });
+});
+
+/** 调试：喂一段对话，看会生成什么情绪快照（不写入 KV，不影响线上状态）。 */
+app.post('/api/admin/emotion/simulate', requireAuth, async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const texts: string[] = Array.isArray(body?.texts)
+    ? body.texts.filter((t: unknown): t is string => typeof t === 'string')
+    : typeof body?.text === 'string'
+      ? [body.text]
+      : [];
+  if (texts.length === 0) return c.json({ error: 'missing texts' }, 400);
+
+  const now = Date.now();
+  const memory = await getMemory(c.env);
+  const facets = facetsOf(parseRelationValues(memory));
+  const result = simulateEmotion(texts, facets, now);
+  return c.json({ ok: true, ...result });
 });
 
 /** 手动触发上下文刷新（天气 + 心情环境漂移 + 关系快照），用于调试环境心情。 */
@@ -385,7 +458,7 @@ app.get('/api/admin/stats', requireAuth, async (c) => {
 // —— OpenAI 兼容端点（AstrBot 等第三方接入）——
 app.route('/v1', openaiApp);
 
-/* ---------- 主动消息队列（反向轮询：AstrBot 插件拉取） ---------- */
+/* ---------- 主动消息队列（反向轮询：客户端拉取） ---------- */
 
 /** Bearer 鉴权（复用 ASTROBOT_API_KEY）。 */
 async function checkQueueAuth(c: Context<AppEnv>): Promise<boolean> {
@@ -427,7 +500,85 @@ app.post('/api/proactive/ack', async (c) => {
 
 /** 队列状态（供调试）。 */
 app.get('/api/proactive/stats', requireAuth, async (c) => {
-  return c.json(await queueStats(c.env));
+  const stats = await queueStats(c.env);
+  const hb = (await c.env.KV.get(HEARTBEAT_KV_KEY, 'json').catch(() => null)) as {
+    at?: string;
+    connected?: boolean;
+    queue_depth?: number | null;
+    version?: string | null;
+    last_error?: string | null;
+  } | null;
+  const ageSeconds = hb?.at ? (Date.now() - Date.parse(hb.at)) / 1000 : null;
+  return c.json({
+    ...stats,
+    // ★ QQ 通道可见性：手机杀后台后客户端会静默消失，只能靠心跳判断
+    heartbeat: hb,
+    heartbeat_age_seconds: ageSeconds,
+    paused_until: await c.env.KV.get('proactive:paused_until').catch(() => null),
+    channel_online: ageSeconds !== null && ageSeconds < HEARTBEAT_ONLINE_SECONDS,
+  });
+});
+
+/** 积压保护：主动丢弃过期消息（不算送达）。 */
+app.post('/api/proactive/drop', async (c) => {
+  if (!(await checkQueueAuth(c))) return c.json({ error: 'unauthorized' }, 401);
+  const body = await c.req.json().catch(() => null);
+  const ids = body && Array.isArray(body.ids) ? body.ids.filter((x: unknown) => typeof x === 'number') : [];
+  const dropped = await dropMessages(c.env, ids);
+  return c.json({ ok: true, dropped });
+});
+
+/** 手动补发一条固定时段主动消息（Bearer 鉴权，调试/补偿用）。 */
+app.post('/api/admin/proactive-send-now', async (c) => {
+  if (!(await checkQueueAuth(c))) return c.json({ error: 'unauthorized' }, 401);
+  const body = (await c.req.json().catch(() => null)) as { kind?: unknown } | null;
+  const kind = body?.kind === 'morning' ? 'morning' : 'evening';
+  return c.json(await runProactiveNow(c.env, new Date(), kind));
+});
+
+/** 诊断：为什么现在（没）会发主动消息。只读，不发送、不写库。 */
+app.post('/api/admin/proactive-diagnose', async (c) => {
+  if (!(await checkQueueAuth(c))) return c.json({ error: 'unauthorized' }, 401);
+  const now = new Date();
+  return c.json(await diagnoseProactive(c.env, now));
+});
+
+/** 暂停主动消息（/退订）：days=0 表示恢复。 */
+app.post('/api/proactive/pause', async (c) => {
+  if (!(await checkQueueAuth(c))) return c.json({ error: 'unauthorized' }, 401);
+  const body = (await c.req.json().catch(() => null)) as { days?: unknown } | null;
+  const days = Math.min(30, Math.max(0, Number(body?.days ?? 7) || 0));
+  if (days === 0) {
+    await c.env.KV.delete('proactive:paused_until').catch(() => {});
+    return c.json({ ok: true, paused_until: null });
+  }
+  const until = new Date(Date.now() + days * 86400000).toISOString();
+  await c.env.KV.put('proactive:paused_until', until, {
+    expirationTtl: days * 86400 + 3600,
+  });
+  return c.json({ ok: true, paused_until: until });
+});
+
+/** 客户端心跳：让 Worker 知道 QQ 通道还在。 */
+app.post('/api/proactive/heartbeat', async (c) => {
+  if (!(await checkQueueAuth(c))) return c.json({ error: 'unauthorized' }, 401);
+  const body = (await c.req.json().catch(() => null)) as {
+    connected?: unknown;
+    queue_depth?: unknown;
+    version?: unknown;
+    last_error?: unknown;
+  } | null;
+  const payload = {
+    at: new Date().toISOString(),
+    connected: body?.connected === true,
+    queue_depth: typeof body?.queue_depth === 'number' ? body.queue_depth : null,
+    version: typeof body?.version === 'string' ? body.version.slice(0, 40) : null,
+    last_error: typeof body?.last_error === 'string' ? body.last_error.slice(0, 200) : null,
+  };
+  await c.env.KV.put(HEARTBEAT_KV_KEY, JSON.stringify(payload), {
+    expirationTtl: HEARTBEAT_TTL_SECONDS,
+  });
+  return c.json({ ok: true });
 });
 
 /** 手动触发一次网页端主动消息（测试用）。 */
@@ -505,13 +656,17 @@ export default {
     const cron = controller.cron;
 
     if (cron === '0 20 * * *') {
-      // 每天 04:00 归档前一天
-      ctx.waitUntil(runDailyArchive(env, now));
-      // 每月 1 日：04:00 归档之后紧接着做上月合并（延迟 5 分钟语义由归档幂等保证）
-      const dayOfMonth = Number(
-        new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', day: '2-digit' }).format(now),
+      // 每天 04:00 归档前一天；每月 1 日必须等归档完成后再做上月合并，
+      // 否则月度任务可能在最后一天 .log 写入前启动，触发重复补归档。
+      ctx.waitUntil(
+        (async () => {
+          await runDailyArchive(env, now);
+          const dayOfMonth = Number(
+            new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', day: '2-digit' }).format(now),
+          );
+          if (dayOfMonth === 1) await runMonthlyMerge(env, now);
+        })(),
       );
-      if (dayOfMonth === 1) ctx.waitUntil(runMonthlyMerge(env, now));
       return;
     }
 
