@@ -77,8 +77,11 @@ node scripts/try-chat.mjs "在干嘛"   # 命令行试聊，输出字数/行数/
 | `DEEPSEEK_MODEL` | 对话模型，默认 `deepseek-flash` |
 | `MEMORY_REFRESH_BYTES` / `MEMORY_TRIM_BYTES` | 记忆压缩 / 裁剪阈值（默认 12KB / 15KB） |
 | `DISTILL_DEEPSEEK_MODEL` / `SUMMARY_DEEPSEEK_MODEL` | 提炼 / 摘要模型 |
+| `DISTILL_MODEL` | Workers AI 兜底模型（DeepSeek 失败时用），默认 `@cf/meta/llama-3.2-3b-instruct` |
 | `PRICE_*` | 计费单价（元/百万 tokens，高峰价；闲时自动减半） |
 | `PROACTIVE_LEVEL` | 主动消息强度：`quiet` / `normal` / `active` |
+| `STORAGE_THRESHOLD_BYTES` | 主账号 R2 容量阈值，超过后新写入切小号（默认 8.5GB） |
+| `ASTRBOT_BASE_URL` / `ASTRBOT_UMO` | AstrBot 直连推送地址与会话 UMO；留空则走队列模式 |
 | `CHARACTER_NAME` | 角色自称，缺省「小忆」；同时作用于系统提示词、状态卡和网页标题 |
 | `USER_ADDRESS` | 角色怎么称呼你，缺省按记忆自然称呼；填了就会固定用它 |
 
@@ -175,6 +178,10 @@ src/
 ├── jobs.ts             # 每日归档 / 月度合并 / context 刷新
 ├── proactive*.ts       # 主动消息：时间规则、打分决策、队列
 ├── attitude.ts / relation-*.ts  # 关系数值与态度矩阵
+├── identity.ts         # 角色名/称呼解析（CHARACTER_NAME / USER_ADDRESS）
+├── relation-store.ts   # 累计聊天天数持久化（防 D1 清理导致亲密度上限倒退）
+├── session-state.ts    # 会话级情绪残留
+├── anti-ai-flavor.ts   # AI 套话确定性清洗（含空壳拦截）
 └── media.ts / storage.ts / weather.ts / holidays.ts …
 ```
 
@@ -182,7 +189,7 @@ src/
 
 ```bash
 pnpm build   # tsc --noEmit
-pnpm test    # vitest（400+ 用例）
+pnpm test    # vitest（32 个测试文件，463 个用例）
 ```
 
 ## 隐私与免责

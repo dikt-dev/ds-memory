@@ -3,6 +3,22 @@
 > 版本 v1.1 ｜ 日期 2026-10-21 ｜ 状态：已确认，进入实施
 > 部署平台：Cloudflare（Worker + D1 + R2 + KV + Workers AI）
 
+> ⚠️ **本文件是 2026-10-21 的初始规划档案，保留原貌作为设计决策记录。**
+> 部分内容已被后续实现取代，以代码与 `docs/architecture.md` 为准：
+>
+> | 本文档写法 | 实际实现 |
+> |---|---|
+> | `/__cron/daily`、`/__cron/monthly` 路由（校验触发头） | Cloudflare Cron Triggers 的 `scheduled()` 入口，无 HTTP 路由 |
+> | cron `5 20 1 * *`（每月单独一条） | 合并进 `0 20 * * *`，代码内判断每月 1 日再跑月度合并（免费版限 3 个 cron） |
+> | Workers AI `@cf/llama/llama-3.1-8b-instruct` | `@cf/meta/llama-3.2-3b-instruct`（旧的已下架） |
+> | 对话模型 `deepseek-chat` | `deepseek-flash`（提炼用 `deepseek-v4-pro`） |
+> | `messages` 表 5 个字段 | 已重构为 `turn_id` / `turn_type` / `reply_to_id` / `channel` / `proactive_kind` / `cost_rmb` / `prompt_tokens` / `completion_tokens` / `created_ms` 等（见 `schema.sql`） |
+> | 「本期不做图片功能，仅预留目录」 | 已实现图片上传、压缩存 R2、base64 传 DeepSeek |
+> | 只注入最近 10 轮历史 | 最近 20 条，另加四层记忆（长期核心/档案/中期/短期） |
+>
+> 新增能力（分层记忆、活人感、主动消息引擎、关系三维驱动等）不在本文件范围内，
+> 请看 `docs/architecture.md` 与 `docs/liveliness-plan.md`。
+
 ---
 
 ## 一、项目总览

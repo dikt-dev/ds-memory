@@ -1,4 +1,4 @@
-# 小忆 · 项目结构与流程总结
+# 角色名由 CHARACTER_NAME 环境变量决定（缺省「小忆」）· 项目结构与流程总结
 
 > 版本 v3.0（messages 表重构后）｜2026-10-22
 > 线上：https://your-worker.example.com ｜ 仓库：https://github.com/dikt-dev/ds-memory
@@ -113,7 +113,9 @@ message_id INTEGER   -- 关联 messages.id
 
 ```
 R2 根目录/
-├── memory.md                    # 长期记忆（≤12KB 稳态）
+├── memory.md                    # 长期记忆核心（≤12KB 稳态，超 6.5KB 开始分层）
+├── memory/
+│   └── archive.md               # 长期档案：核心层溢出的旧条目（只搬不删，按需检索）
 ├── context/
 │   └── 2026-10-22.json          # 当天上下文（日期/节假日/天气/关系状态/提炼摘要）
 ├── chat_logs/
@@ -124,6 +126,9 @@ R2 根目录/
         └── 1792630016123.jpg    # 聊天图片（时间戳命名）
 ```
 
+> 归档清理：`cleanupStaleObjects` 定期清理过期的 context / images，
+> 但 `chat_logs/`、`memory.md`、`memory/archive.md` 永不清除。
+
 ### KV
 
 | 键 | TTL | 用途 |
@@ -131,11 +136,22 @@ R2 根目录/
 | `memory:cache` | 24h | memory.md 缓存（归档后强制刷新） |
 | `summary:日期` | 36h | 当日滚动摘要（每 20 条或 2 小时更新） |
 | `summary:lock:日期` | 2min | 摘要生成锁 |
+| `memo:24h` | 48h | 中期记忆：最近 24 小时纪要 |
+| `memo:lock` | 2min | 中期纪要生成锁 |
 | `weather:城市` | 30min | 天气缓存 |
 | `config:city` | 永久 | 城市配置 |
 | `auth:token` | 7天 | 登录会话 |
+| `login:fail:IP` | 10min | 登录失败限流计数 |
 | `storage:mode` | 永久 | main / secondary（存储切换） |
-| `memo:24h` | 27h | 中期记忆：最近 24 小时纪要 |
+| `storage:usage` | 短期 | 主账号 R2 用量估算 |
+| `relation:active_days` | **永久** | 累计有效聊天天数（决定亲密度上限，不能丢） |
+| `session:mood` | 2h | 会话级情绪残留（约 12 分钟指数衰减） |
+| `mood:drift:日期` | 2天 | 当日已用掉的环境心情漂移额度 |
+| `mood:ai:文本` | 6h | 情绪 AI 复核结果缓存 |
+| `profile:user` | 6h | 用户活跃画像缓存 |
+| `profile:dirty` | 24h | 用户画像待重算标记 |
+| `aversion:candidates` | 30天 | 雷区候选池（累计到阈值后提升入 memory.md） |
+| `archive:cache` | 短期 | 记忆档案检索缓存 |
 
 > 主动消息的幂等**不再依赖 KV**：KV 是最终一致的，写入后各边缘节点有延迟，
 > 可能导致同一时段重复发送。现在改用 D1 `proactive_log` 的 `UNIQUE(date_key, slot_key)`，
@@ -258,7 +274,14 @@ cron "0 20 * * *"
 
 **保护机制**：
 - 人物底色：提炼时忽略、压缩时取出放回、裁剪时跳过（三重保护）
-- 好感度/亲密度：单日变化 ±5 上限、0~1000 边界、替换不追加
+- 好感度/亲密度：0~1000 边界、替换（不追加）而非叠加
+  - 好感度：由互动「质量」驱动（温暖/感谢/冒犯/冲突），单日升降均 ≤5
+  - 亲密度：由互动「量」驱动（轮次/连续天数/新增记忆），
+    单日涨幅 ≤4，并受「累计有效聊天天数」硬上限约束：`300 + 天数 × 2`（封顶 1000）
+    已到上限后仍给 +1/天的「宽恕增长」，不会彻底卡死
+  - 心情值：由 AI 提议 + 环境漂移驱动，两者各自受 ±80 约束
+- **天数不会倒退**：累计聊天天数持久化在 KV（`relation:active_days`）并与 D1 取较大值，
+  因此月度归档清理 D1 不会导致亲密度上限回落（历史 D1 全表统计会有此问题）
 
 ---
 
@@ -371,6 +394,7 @@ ds_memory/
 │   │
 │   ├── attitude.ts         # 好感度/亲密度阶段与态度矩阵
 │   ├── relation-drivers.ts # 好感度/亲密度驱动信号
+│   ├── relation-store.ts   # 累计聊天天数持久化（KV，防 D1 清理导致上限倒退）
 │   ├── relation-growth.ts  # 渐进增长模型
 │   ├── relation-stats.ts   # 当日关系统计（从 D1 汇总）
 │   ├── mood.ts             # 情绪感知（关键词）
@@ -382,11 +406,12 @@ ds_memory/
 │   ├── anti-ai-flavor.ts   # 活人感：AI 味兜底清洗
 │   ├── session-state.ts    # 活人感：会话级情绪残留
 │   ├── session-facts.ts    # 活人感：状态数据采集
+│   ├── identity.ts         # 角色名/称呼解析（CHARACTER_NAME / USER_ADDRESS）
 │   ├── vendor.d.ts         # 第三方模块类型声明
-│   └── *.test.ts           # 单元测试（30 个，与模块同名）
+│   └── *.test.ts           # 单元测试（32 个，与模块同名）
 ├── public/
 │   ├── index.html          # 聊天页面
-│   ├── avatar.png          # 小忆头像
+│   ├── avatar.png          # 助手头像
 │   └── user-avatar.png     # 用户头像
 ├── astrbot-plugin/         # AstrBot 反向轮询插件（主动消息推送）
 ├── astrbot-plugin-file/    # AstrBot 文件读取插件
