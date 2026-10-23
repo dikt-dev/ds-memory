@@ -47,7 +47,7 @@ import {
 import { buildCharacterCard } from './character-card';
 import { buildVoiceDirective } from './voice';
 import { formatRecentMemoBlock, getRecentMemo } from './recent-memory';
-import { recallForQuery } from './memory-archive';
+import { extractCoreMemory, recallMemoryForChat } from './memory-index';
 import { readSessionFacts } from './session-facts';
 import { facetsOf, processEmotionTurn } from './emotion-context';
 import { moodFromVector } from './emotion-vector';
@@ -217,7 +217,7 @@ async function generateProactive(
   });
   const cardText = charCard.cardText;
   // 主动消息也带上相关往事：用最近几条对话当检索词
-  const recalled = await recallForQuery(
+  const recalled = await recallMemoryForChat(
     env,
     history
       .slice(-4)
@@ -228,7 +228,7 @@ async function generateProactive(
   const systemPrompt = buildBaseSystemPrompt({
     now,
     ctx,
-    memory,
+    memory: extractCoreMemory(memory),
     weather,
     todaySummary,
     recentMemo,

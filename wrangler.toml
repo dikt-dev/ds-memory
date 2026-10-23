@@ -27,6 +27,8 @@ DEEPSEEK_MODEL = "deepseek-flash"
 
 # Workers AI 兜底模型（提炼失败/情绪复核使用）
 DISTILL_MODEL = "@cf/meta/llama-3.2-3b-instruct"
+# 记忆检索语义向量模型（缺失/失败自动降级关键词召回）
+EMBEDDING_MODEL = "@cf/baai/bge-m3"
 # 提炼模型分工：每日提炼与压缩用 v4-pro（质量），滚动摘要用 flash（成本）
 DISTILL_DEEPSEEK_MODEL = "deepseek-v4-pro"
 SUMMARY_DEEPSEEK_MODEL = "deepseek-flash"

@@ -17,6 +17,7 @@ export interface Env {
   DISTILL_MODEL: string;
   DISTILL_DEEPSEEK_MODEL: string; // 每日提炼使用的 DeepSeek 模型（默认 v4-pro，质量优先）
   SUMMARY_DEEPSEEK_MODEL: string; // 滚动摘要使用的 DeepSeek 模型（默认 flash，成本优先）
+  EMBEDDING_MODEL?: string; // 记忆检索语义向量模型（默认 @cf/baai/bge-m3；缺失/失败自动降级关键词召回）
   // DeepSeek 计费单价（高峰时段，元/百万 tokens；闲时自动减半）
   PRICE_INPUT_HIT_PEAK: string;
   PRICE_INPUT_MISS_PEAK: string;

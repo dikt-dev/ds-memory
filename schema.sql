@@ -100,3 +100,21 @@ CREATE TABLE IF NOT EXISTS proactive_queue (
 
 CREATE INDEX IF NOT EXISTS idx_proactive_pending ON proactive_queue(sent_at, id);
 CREATE INDEX IF NOT EXISTS idx_proactive_queue_msg ON proactive_queue(message_id);
+
+-- ---------- 记忆条目索引（可重建，memory.md/archive.md 是本体） ----------
+CREATE TABLE IF NOT EXISTS memory_entries (
+  id          TEXT PRIMARY KEY,
+  section     TEXT NOT NULL,
+  content     TEXT NOT NULL,
+  date        TEXT,
+  importance  INTEGER NOT NULL DEFAULT 2,
+  tags        TEXT NOT NULL DEFAULT '[]',
+  keywords    TEXT NOT NULL DEFAULT '[]',
+  vec         TEXT,                     -- JSON number[]（embedding，可为 NULL → 关键词召回）
+  source      TEXT NOT NULL DEFAULT 'memory',  -- memory | archive
+  created_at  INTEGER NOT NULL,
+  updated_at  INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_memory_entries_section ON memory_entries(section);
+CREATE INDEX IF NOT EXISTS idx_memory_entries_date ON memory_entries(date);

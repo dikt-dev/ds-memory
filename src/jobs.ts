@@ -17,9 +17,10 @@ import {
 import { attachDistillation, attachRelation, attachWeather, getOrCreateDayContext } from './context';
 import { fetchWeather } from './weather';
 import { getMemory, putMemory } from './memory';
+import { reindexMemory } from './memory-index';
 import { buildRelationStatus } from './attitude';
 import { distillDay } from './distill';
-import { archiveCompletedItems, byteLength, DEMOTE_HEADERS, demoteSectionEntries, mergeMemoryEntry, parseRelationValues, pruneTransientSections, setRelationValues } from './memory-maintenance';
+import { archiveCompletedItems, byteLength, mergeMemoryEntry, parseRelationValues, pruneTransientSections, setRelationValues } from './memory-maintenance';
 import { accumulateCandidates, formatAversionEntry, loadCandidates, mergeAversionEntries, saveCandidates, scanAversions } from './aversion';
 import { computeStreak, daysSinceLastUserMessage, countMemoryEntries } from './milestone';
 import { collectDayRelationStats } from './relation-stats';
@@ -41,7 +42,7 @@ import { messagesByDate, type MessageRow } from './db';
 import { backfillFeedback } from './feedback';
 import { cleanupQueue } from './queue';
 import { addLlmCost } from './llm-cost';
-import { CORE_TARGET_BYTES, appendArchiveLines, archiveHasLine, getArchiveLines } from './memory-archive';
+import { appendArchiveLines, archiveHasLine, getArchiveLines } from './memory-archive';
 
 export interface DailyArchiveResult {
   target: string;
@@ -314,38 +315,8 @@ async function archiveOneDay(env: Env, target: string, now: Date): Promise<Daily
       console.error('[daily] aversion learn failed:', e);
     }
 
-    // 5.7) 质量优先：不再做「合并同类项」。旧实现会把同一分区最旧的两条强行并成一条，
-    //      哪怕内容毫无关系，会破坏条目边界和档案检索精度。超限统一走下面的无损分层。
-
-    // 5.8) 分层：核心层超 12KB 时，按「共同经历 → 进行中的事项 → 近期动态」把最旧条目
-    //      无损搬进 R2 档案。必须先确认档案里已经有这条，才从 memory 删除；写失败就不动。
-    let demotedCount = 0;
-    try {
-      for (const header of DEMOTE_HEADERS) {
-        if (byteLength(memory) <= CORE_TARGET_BYTES) break;
-        const demoted = demoteSectionEntries(memory, header, CORE_TARGET_BYTES);
-        if (demoted.removed.length === 0) continue;
-        await appendArchiveLines(env, demoted.removed);
-        const archive = await getArchiveLines(env);
-        const preserved = demoted.removed.every((line) => archiveHasLine(archive, line));
-        if (!preserved) {
-          console.error(`[daily] 分层中止：${header} 有 ${demoted.removed.length} 条未确认写入档案，保留核心层`);
-          break;
-        }
-        memory = demoted.text;
-        demotedCount += demoted.removed.length;
-        console.log(`[daily] 分层：${demoted.removed.length} 条从 ${header} 搬进记忆档案`);
-      }
-      if (demotedCount > 0) console.log(`[daily] 分层完成：共 ${demotedCount} 条`);
-      if (byteLength(memory) > CORE_TARGET_BYTES) {
-        console.warn(`[daily] 核心记忆仍 ${byteLength(memory)}B > ${CORE_TARGET_BYTES}B；已停止压缩/删除，交给注入上限裁剪`);
-      }
-    } catch (e) {
-      console.error('[daily] demote to archive failed:', e);
-    }
-
-    // 6) 质量优先：不再做 LLM 压缩，也不直接删除最旧条目。
-    //    超过 12KB 只通过“搬档案”降体积；搬不动就保留，注入时再按上限筛选。
+    // 5.7/5.8) 记忆质量优先：memory.md 不限大小、不压缩、不删除、不搬档。
+    //      「近期动态」仍按 7 天过期规则归档进 R2 档案（前面 5 已做写后验证，本体不丢）。
     const trimmed = false;
 
     // 7) 长期不联系时关系缓慢衰减
@@ -362,6 +333,14 @@ async function archiveOneDay(env: Env, target: string, now: Date): Promise<Daily
 
     // 7) 写回 R2 + 强制刷新 KV 缓存（24h TTL）
     await putMemory(env, memory);
+    // 重建 D1 记忆检索索引（幂等；失败不影响归档，下次可手动 /api/admin/memory/reindex）
+    try {
+      const idx = await reindexMemory(env);
+      if (idx.errors) console.error('[daily] memory reindex failed:', idx.errors);
+      else console.log(`[daily] 记忆索引重建：${idx.entries} 条，含向量 ${idx.withVec} 条`);
+    } catch (e) {
+      console.error('[daily] memory reindex error:', e);
+    }
     // 当天已归档，清理滚动摘要（新的一天用新键）
     await env.KV.delete(summaryKey(target)).catch(() => {});
     // 关系状态写入当天上下文（好感度/亲密度 + 综合态度）

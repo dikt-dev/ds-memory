@@ -26,7 +26,7 @@ import { facetsOf, processEmotionTurn } from './emotion-context';
 import { moodFromVector } from './emotion-vector';
 import { buildVoiceDirective, recentOpeners, replyTokenBudget } from './voice';
 import { formatRecentMemoBlock, getRecentMemo, maybeRefreshRecentMemo } from './recent-memory';
-import { recallForQuery } from './memory-archive';
+import { extractCoreMemory, recallMemoryForChat } from './memory-index';
 import { recordFiles, recentFilesBlock } from './recent-files';
 
 type AppEnv = { Bindings: Env };
@@ -384,7 +384,7 @@ openaiApp.post('/chat/completions', async (c) => {
       .slice(-3, -1)
       .map((m) => contentToText(m.content)),
   ].join(' ');
-  const recalled = await recallForQuery(c.env, recallQuery);
+  const recalled = await recallMemoryForChat(c.env, recallQuery);
   const astrbotSystems = textMessages.filter((m) => m.role === 'system').map((m) => m.content);
   // 最近几条回复的开头：避免连续几轮用同一句开场白
   const avoidOpeners = recentOpeners(
@@ -395,7 +395,7 @@ openaiApp.post('/chat/completions', async (c) => {
     buildBaseSystemPrompt({
       now,
       ctx,
-      memory,
+      memory: extractCoreMemory(memory),
       weather,
       todaySummary,
       recentMemo,

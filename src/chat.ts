@@ -22,7 +22,7 @@ import { moodFromVector } from './emotion-vector';
 import { readSessionFacts } from './session-facts';
 import { buildVoiceDirective, recentOpeners, replyTokenBudget } from './voice';
 import { formatRecentMemoBlock, getRecentMemo } from './recent-memory';
-import { recallForQuery } from './memory-archive';
+import { extractCoreMemory, recallMemoryForChat } from './memory-index';
 
 export interface ChatImage {
   key: string; // R2 对象键（images/日期/时间戳.jpg）
@@ -66,7 +66,7 @@ export async function streamChat(
       .slice(-3)
       .map((m) => m.content),
   ].join(' ');
-  const recalled = await recallForQuery(env, recallQuery);
+  const recalled = await recallMemoryForChat(env, recallQuery);
 
   // ★ 活人感：在落库本条前采集「距上次聊天间隔 + 今日轮数」
   const relationVals = parseRelationValues(memory);
@@ -126,7 +126,7 @@ export async function streamChat(
       content: buildSystemPrompt({
         now,
         ctx,
-        memory,
+        memory: extractCoreMemory(memory),
         weather,
         todaySummary,
         recentMemo,

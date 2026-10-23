@@ -19,6 +19,7 @@ import { fetchWeather } from './weather';
 import { saveImage } from './media';
 import { deleteObject, getObject, getStorageMode, listKeys, secondaryEnabled } from './storage';
 import { runDailyArchive, runContextRefresh, runMonthlyMerge } from './jobs';
+import { reindexMemory } from './memory-index';
 import { getOrCreateDayContext } from './context';
 import { parseRelationValues, reportSectionBudgets } from './memory-maintenance';
 import { analyzeMood } from './mood';
@@ -309,9 +310,14 @@ app.post('/api/admin/memory/refresh', requireAuth, async (c) => {
   const entries = (memory.match(/^-\s*\[(?:\d{4}|\d{2})-\d{2}-\d{2}\]/gm) ?? []).length;
   return c.json({ ok: true, bytes: byteLength(memory), entries, empty: !memory.trim() });
 });
+/** 从 R2 的 memory.md + archive.md 重建 D1 记忆检索索引（幂等）。 */
+app.post('/api/admin/memory/reindex', requireAuth, async (c) => {
+  const result = await reindexMemory(c.env);
+  return c.json({ ok: true, ...result });
+});
 /** 危险操作：清空 D1 全部业务表 + R2 全部对象（主/小号）+ 记忆相关 KV，仅测试期使用。 */
 app.post('/api/admin/wipe-data', requireAuth, async (c) => {
-  const tables = ['messages', 'proactive_feedback', 'proactive_log', 'proactive_queue', 'cron_runs'];
+  const tables = ['messages', 'proactive_feedback', 'proactive_log', 'proactive_queue', 'cron_runs', 'memory_entries'];
   const d1 = { tables: 0, rows: 0 };
   for (const t of tables) {
     const r = await c.env.DB.prepare(`DELETE FROM ${t}`).run();
@@ -329,6 +335,7 @@ app.post('/api/admin/wipe-data', requireAuth, async (c) => {
     'profile:user', 'profile:dirty', 'proactive:heartbeat',
     'summary:2026-10-23', 'summary:2026-10-24',
     'mood:usage:2026-10-23', 'mood:usage:2026-10-24',
+    'memory:index',
   ];
   for (const k of kvKeys) await c.env.KV.delete(k).catch(() => {});
   return c.json({ ok: true, d1, r2_deleted: r2, kv_cleared: kvKeys.length });
