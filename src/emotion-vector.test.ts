@@ -104,6 +104,43 @@ describe('applyEnvironmentToEmotion —— 情绪自己的来源', () => {
   });
 });
 
+describe('天气与节假日对情绪的影响', () => {
+  const sunny = { city: '深圳', temp_c: 26, desc: '晴' };
+  const storm = { city: '深圳', temp_c: 26, desc: '雷阵雨' };
+
+  it('同一时段同一天气：节假日白天比工作日更轻快', () => {
+    const work = applyEnvironmentToEmotion(emptyEmotionVector(), {
+      hour: 14,
+      isRestDay: false,
+      weather: sunny,
+      month: 10,
+    });
+    const rest = applyEnvironmentToEmotion(emptyEmotionVector(), {
+      hour: 14,
+      isRestDay: true,
+      weather: sunny,
+      month: 10,
+    });
+    expect(rest.valence).toBeGreaterThan(work.valence);
+  });
+
+  it('同一时段同一日期：雷雨天的情绪明显低于晴天', () => {
+    const clear = applyEnvironmentToEmotion(emptyEmotionVector(), {
+      hour: 14,
+      isRestDay: false,
+      weather: sunny,
+      month: 10,
+    });
+    const rainy = applyEnvironmentToEmotion(emptyEmotionVector(), {
+      hour: 14,
+      isRestDay: false,
+      weather: storm,
+      month: 10,
+    });
+    expect(rainy.valence).toBeLessThan(clear.valence);
+  });
+});
+
 describe('parseEmotionVector', () => {
   it('脏数据回退为中性', () => {
     expect(parseEmotionVector(null)).toEqual(emptyEmotionVector());

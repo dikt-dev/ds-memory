@@ -21,7 +21,6 @@ import { buildRelationStatus } from './attitude';
 import { distillDay } from './distill';
 import { archiveCompletedItems, byteLength, DEMOTE_HEADERS, demoteSectionEntries, mergeMemoryEntry, parseRelationValues, pruneTransientSections, setRelationValues } from './memory-maintenance';
 import { accumulateCandidates, formatAversionEntry, loadCandidates, mergeAversionEntries, saveCandidates, scanAversions } from './aversion';
-import { applyMoodDriftAccumulated, computeMoodDrift, getMoodDriftUsage, saveMoodDriftUsage } from './mood-env';
 import { computeStreak, daysSinceLastUserMessage, countMemoryEntries } from './milestone';
 import { collectDayRelationStats } from './relation-stats';
 import {
