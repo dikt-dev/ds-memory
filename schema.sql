@@ -239,6 +239,24 @@ CREATE TABLE IF NOT EXISTS attitude_snapshots (
 
 CREATE INDEX IF NOT EXISTS idx_attitude_snapshots_time ON attitude_snapshots(created_at);
 
+-- Phase 5 观察：按天聚合 shadow/next 指标（不记录正文）
+CREATE TABLE IF NOT EXISTS engine_metrics (
+  day_key    TEXT NOT NULL,
+  channel    TEXT NOT NULL,
+  kind       TEXT NOT NULL CHECK (kind IN ('memory','affect')),
+  mode       TEXT NOT NULL,
+  requests   INTEGER NOT NULL DEFAULT 0,
+  old_items  INTEGER NOT NULL DEFAULT 0,
+  new_items  INTEGER NOT NULL DEFAULT 0,
+  old_bytes  INTEGER NOT NULL DEFAULT 0,
+  new_bytes  INTEGER NOT NULL DEFAULT 0,
+  ms_sum     INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (day_key, channel, kind, mode)
+);
+
+CREATE INDEX IF NOT EXISTS idx_engine_metrics_day ON engine_metrics(day_key);
+
 -- ---------- 记忆条目索引（可重建，memory.md/archive.md 是本体） ----------
 CREATE TABLE IF NOT EXISTS memory_entries (
   id          TEXT PRIMARY KEY,

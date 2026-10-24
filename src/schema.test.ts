@@ -22,6 +22,10 @@ describe('schema.sql 与索引代码保持一致', () => {
     expect(schemaSql).toContain('CREATE TABLE IF NOT EXISTS attitude_snapshots');
   });
 
+  it('包含 Phase 5 的 engine_metrics 表', () => {
+    expect(schemaSql).toContain('CREATE TABLE IF NOT EXISTS engine_metrics');
+  });
+
   it('包含 Phase 2 的 Memory Context 表', () => {
     expect(schemaSql).toContain('CREATE TABLE IF NOT EXISTS memory_facts');
     expect(schemaSql).toContain('CREATE TABLE IF NOT EXISTS memory_events');

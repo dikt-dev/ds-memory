@@ -27,7 +27,7 @@
 
 新增 `GET /api/admin/readiness`（requireAuth）：
 
-- 检查 9 张新表是否存在；
+- 检查 10 张新表是否存在；
 - 检查 `AUTH_SECRET`/migration/engine flags；
 - 返回 memory bytes、context 统计、job 统计、warnings；
 - 全绿返回 200，缺表返回 503；
@@ -70,7 +70,7 @@ runtime_state / auth_revocations / memory_* / memory_jobs / affect_* / attitude_
 
 ```text
 tsc --noEmit     ✅
-vitest run       56 files / 687 tests ✅
+vitest run       57 files / 690 tests ✅
 scripts/verify.sh ✅ exit 0
 ```
 
@@ -101,6 +101,13 @@ test_record_flag.py      5 passed
 ```
 
 结论：契约未变；当前卡在手机客户端运行状态/TLS 上传，不是 Worker 协议变更。
+
+### 1.65 指标聚合（新增）
+
+- `engine_metrics`（迁移 007）；
+- `recordEngineMetric`：只记录 shadow/next 的 requests/old/new/bytes/ms；
+- `GET /api/admin/engine-metrics?days=7`；
+- 不记录 query/回复正文；legacy 不写。
 
 ### 1.6 生产打包预检
 

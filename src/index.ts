@@ -77,6 +77,7 @@ import {
 } from './emotion-context';
 import { explainAttitude } from './attitude-policy';
 import { listAffectTimeline, recordAttitudeSnapshot } from './affect-store';
+import { readEngineMetrics } from './engine-metrics';
 import { applyEventsToVector, extractEmotionEvents, reconcileWithApology, type EmotionEvent } from './emotion-events';
 import { buildEmotionSnapshot, describeEmotionState } from './emotion-snapshot';
 import { decayEmotion, emptyEmotionVector, type EmotionVector } from './emotion-vector';
@@ -405,6 +406,13 @@ app.post('/api/admin/memory/reindex', requireAuth, async (c) => {
 app.get('/api/admin/memory/context-stats', requireAuth, async (c) => {
   return c.json({ ok: true, ...(await memoryContextStats(c.env)) });
 });
+/** Phase 5 观察：按天读取 shadow/next 指标（不记录正文）。 */
+app.get('/api/admin/engine-metrics', requireAuth, async (c) => {
+  const days = Math.min(30, Math.max(1, Number(c.req.query('days') ?? 7) || 7));
+  const rows = await readEngineMetrics(c.env, days);
+  return c.json({ ok: true, days, rows });
+});
+
 /** Phase 5 预检：只读检查迁移/开关/密钥，不做任何写入。 */
 app.get('/api/admin/readiness', requireAuth, async (c) => {
   const tables = [
@@ -417,6 +425,7 @@ app.get('/api/admin/readiness', requireAuth, async (c) => {
     'memory_jobs',
     'affect_events',
     'attitude_snapshots',
+    'engine_metrics',
   ];
   const checks: Record<string, string> = {};
   for (const table of tables) {

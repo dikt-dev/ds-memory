@@ -10,7 +10,7 @@
 2026-10-24 对远程 D1 执行只读 `sqlite_master` 查询：
 
 ```text
-runtime_state / auth_revocations / memory_* / affect_* / attitude_snapshots
+runtime_state / auth_revocations / memory_* / affect_* / attitude_snapshots / engine_metrics
 → 0 张存在
 ```
 
@@ -41,6 +41,8 @@ wrangler d1 execute ds-memory-db --remote --config wrangler.local.toml \
   --file=./migrations/005-memory-jobs.sql
 wrangler d1 execute ds-memory-db --remote --config wrangler.local.toml \
   --file=./migrations/006-affect-context.sql
+wrangler d1 execute ds-memory-db --remote --config wrangler.local.toml \
+  --file=./migrations/007-engine-metrics.sql
 ```
 
 全部是加法表；不删旧表。执行后用只读 SQL 检查：
@@ -49,7 +51,8 @@ wrangler d1 execute ds-memory-db --remote --config wrangler.local.toml \
 SELECT name FROM sqlite_master WHERE type='table'
 AND name IN ('runtime_state','auth_revocations','memory_facts',
              'memory_events','memory_summaries','memory_chunks',
-             'memory_jobs','affect_events','attitude_snapshots');
+             'memory_jobs','affect_events','attitude_snapshots',
+             'engine_metrics');
 ```
 
 ---
@@ -99,7 +102,8 @@ AFFECT_ENGINE_QQ = "shadow"
 - `[trace] memory.engine`：`oldItems/nextItems/oldBytes/nextBytes/hasVector/shadowMs`；
 - `[trace] affect.policy`：archetype/tone/directives/policyMs；
 - QQ 回复内容不变（shadow 不用新结果）；
-- 错误率、首字延迟、DeepSeek 费用不升。
+- 错误率、首字延迟、DeepSeek 费用不升；
+- `GET /api/admin/engine-metrics?days=7`：按天聚合 requests/old/new bytes/avg_ms。
 
 建议至少 7 天；无 P0 才进入 next。
 

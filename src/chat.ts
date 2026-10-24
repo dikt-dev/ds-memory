@@ -39,6 +39,7 @@ import { formatMemoryChunks, rankMemoryChunks } from './memory-domain';
 import { buildAttitudePolicy } from './attitude-policy';
 import { packMemoryChunks } from './context-packer';
 import { affectEngineFor, memoryEngineFor } from './engine-flags';
+import { recordEngineMetric } from './engine-metrics';
 import { logTrace } from './trace';
 
 export interface ChatImage {
@@ -124,16 +125,29 @@ export async function streamChat(
       );
       const packed = packMemoryChunks(picked);
       const nextRaw = formatMemoryChunks(packed.chunks);
+      const shadowMs = Math.round(performance.now() - startedAt);
+      const oldItems = recalledRaw.split('\n').filter((line) => line.startsWith('- ')).length;
       logTrace('memory.engine', {
         requestId: requestId ?? 'none',
         engine: memoryEngine,
-        oldItems: recalledRaw.split('\n').filter((line) => line.startsWith('- ')).length,
+        oldItems,
         nextItems: packed.chunks.length,
         oldBytes,
         nextBytes: byteLength(nextRaw),
         packedDropped: packed.dropped,
         hasVector: Boolean(queryVec),
-        shadowMs: Math.round(performance.now() - startedAt),
+        shadowMs,
+      });
+      await recordEngineMetric(env, {
+        channel,
+        kind: 'memory',
+        mode: memoryEngine,
+        oldItems,
+        newItems: packed.chunks.length,
+        oldBytes,
+        newBytes: byteLength(nextRaw),
+        ms: shadowMs,
+        now: now.getTime(),
       });
       if (memoryEngine === 'next' && nextRaw) recalledRaw = nextRaw;
     } catch (e) {
@@ -196,13 +210,25 @@ export async function streamChat(
       now: now.getTime(),
       wasIgnored: facts.wasIgnored,
     });
+    const policyMs = Math.round(performance.now() - startedAt);
     logTrace('affect.policy', {
       requestId: requestId ?? 'none',
       engine: affectEngine,
       archetype: policy.archetype,
       tone: policy.tone,
       directives: policy.directives.length,
-      policyMs: Math.round(performance.now() - startedAt),
+      policyMs,
+    });
+    await recordEngineMetric(env, {
+      channel,
+      kind: 'affect',
+      mode: affectEngine,
+      oldItems: 0,
+      newItems: policy.directives.length,
+      oldBytes: 0,
+      newBytes: byteLength(policy.text),
+      ms: policyMs,
+      now: now.getTime(),
     });
     if (affectEngine === 'next') attitude = policy.text;
   }
