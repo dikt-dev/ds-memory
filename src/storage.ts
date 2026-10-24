@@ -87,13 +87,17 @@ export async function putObject(
   opts?: { contentType?: string },
 ): Promise<void> {
   if ((await getStorageMode(env)) === 'secondary' && secondaryEnabled(env)) {
-    const res = await s3Client(env).fetch(s3Url(env, key), {
-      method: 'PUT',
-      headers: opts?.contentType ? { 'content-type': opts.contentType } : undefined,
-      body,
-    });
-    if (!res.ok) throw new Error(`secondary R2 put failed: ${res.status}`);
-    return;
+    try {
+      const res = await s3Client(env).fetch(s3Url(env, key), {
+        method: 'PUT',
+        headers: opts?.contentType ? { 'content-type': opts.contentType } : undefined,
+        body,
+      });
+      if (res.ok) return;
+      console.error(`[storage] secondary R2 put failed: ${res.status}，回退主账号`);
+    } catch (e) {
+      console.error('[storage] secondary R2 put error，回退主账号:', e);
+    }
   }
   await env.R2.put(key, body, opts?.contentType ? { httpMetadata: { contentType: opts.contentType } } : undefined);
 }
