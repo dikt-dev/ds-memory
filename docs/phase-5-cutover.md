@@ -158,7 +158,7 @@ AFFECT_ENGINE_QQ = "next"
 - [ ] QQ next ≥ 7 天，错误率/延迟/费用在预算内；
 - [ ] 网页 next 稳定；
 - [ ] readiness 全绿；
-- [ ] 回滚演练通过；
+- [x] 回滚演练通过（2026-10-24：QQ legacy/shadow 双向切换 + record=false 200）；
 - [ ] KV/D1 用量在免费额度内；
 - [ ] README/architecture/runbook 更新。
 

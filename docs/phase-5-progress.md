@@ -1,7 +1,7 @@
 # Phase 5 进度报告：生产切换与 QQ shadow
 
 > 日期：2026-10-24  
-> 状态：🚧 进行中（**生产已迁移/部署；QQ shadow 观察中；7 天/2 周门禁未完成**）  
+> 状态：🚧 进行中（**生产已迁移/部署；回滚演练通过；QQ shadow 观察中；7 天/2 周门禁未完成**）  
 > runbook：[phase-5-cutover.md](ds-memory/docs/phase-5-cutover.md)
 
 ---
@@ -193,6 +193,23 @@ wrangler deploy --dry-run
 
 ---
 
+### 1.7 回滚演练（2026-10-24）
+
+```text
+部署 QQ legacy
+→ readiness: qq=legacy, affect_qq=legacy, web=legacy
+→ POST /v1/chat/completions record=false: 200
+
+部署 QQ shadow
+→ readiness: qq=shadow, affect_qq=shadow, web=legacy
+→ POST /v1/chat/completions record=false: 200
+```
+
+结论：`MEMORY_ENGINE_QQ` / `AFFECT_ENGINE_QQ` 的 legacy/shadow 回滚开关可用，
+切换过程中 Worker 健康与 QQ 请求均正常。当前已恢复 QQ shadow。
+
+---
+
 ## 3. 未执行（观察/门禁）
 
 | 项 | 状态 | 说明 |
@@ -287,18 +304,50 @@ client 运行中
 napcat 运行中（已连接 QQ 2219827501）
 ```
 
-手机已插电（PLUGGED_AC/CHARGING），之前 6MB 图片导致的
-`SSLV3_ALERT_BAD_RECORD_MAC` 尚未复现，继续观察。
+### 4.4 大 GIF 上传修复（2026-10-24）
+
+同一张 6,158,761 bytes 的 GIF 在 20:04 / 23:16 / 23:17 连续失败：
+
+```text
+SSL: SSLV3_ALERT_BAD_RECORD_MAC
+Connection reset by peer
+```
+
+根因：Pillow 未安装 → 动图抽帧失败 → 回退为原图 base64；
+6.15MB 原图变成约 8.2MB JSON，TLS 层被断连。另一张 5.90MB GIF 约 7.9MB JSON 可以成功。
+
+修复：
+
+- 安装 Pillow 13.0.0；
+- 新增 `POST /api/upload/image` raw binary 直传，原图**不压缩**写 R2（上限 20MB）；
+- 客户端先上传原图，再用帧拼图给模型；
+- `image_keys` 只把 R2 key 写进聊天记录，不重复上传；
+- `r2://` 兼容旧客户端。
+
+验证：
+
+```text
+同一张 E268...gif（6158761 bytes）
+→ 动图原图已直传 R2：images/2026-10-24/1792856446017.gif
+→ 流式回复 114 字
+→ 从 R2 下载核对：6158761 bytes，与原图一致
+```
+
+手机已插电（PLUGGED_AC/CHARGING），继续观察自动消息和上传稳定性。
 - **安全提示**：`ds-qq-client/tests/_ssh_exec.sh` 等辅助脚本包含明文手机凭据，建议轮换手机密码并改为从环境变量读取；本次不会把凭据写入仓库或文档。
 
 ---
 
 ## 5. 下一步
 
-需要用户确认：
+Phase 5 工程侧已完成，剩余是时间门禁：
 
-1. 是否先给手机接电源，再启动 `ds.sh start` 复现/观察 TLS 上传问题；
-2. 是否允许执行生产迁移 003–006 + 部署（默认 legacy）；
-3. 是否先只做 QQ shadow。
+1. QQ shadow 连续观察 ≥7 天：看 `engine_metrics`、错误率、延迟、事实/情绪条目；
+2. 无 P0 后切 `MEMORY_ENGINE_QQ=next` / `AFFECT_ENGINE_QQ=next`，再观察 ≥7 天；
+3. 网页与主动消息按同样的 legacy → shadow → next 顺序切换；
+4. 2 周稳定后执行旧表/旧代码清理，再打 `refactor-p5`。
 
-在确认前，Phase 5 保持“预检完成、未切线上”。
+在那之前：
+- 不回滚/不删除旧表；
+- 不把网页切 next；
+- 不启动 Phase 6。
