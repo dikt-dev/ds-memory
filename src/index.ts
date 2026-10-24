@@ -24,7 +24,7 @@ import { messagesSince } from './db';
 import { byteLength, memoryDensity } from './memory-maintenance';
 import { getCityConfig, setCity } from './settings';
 import { fetchWeather } from './weather';
-import { saveImage } from './media';
+import { buildImageKey, saveImage } from './media';
 import { deleteObject, getObject, getStorageMode, listKeys, putObject, secondaryEnabled } from './storage';
 import { runDailyArchive, runContextRefresh, runMonthlyMerge, archiveOneDay } from './jobs';
 import {
@@ -328,6 +328,32 @@ app.post('/api/chat', requireAuth, async (c) => {
     image = { key: saved.key };
   }
   return streamChat(c.env, content, now, image, channel, c.get('requestId'));
+});
+
+/**
+ * 原图直传（QQ 大 GIF 用）：Bearer 鉴权，raw binary → R2，不压缩。
+ * 避免把 6MB 图片 base64 塞进 8MB JSON 后在 TLS 层断连。
+ */
+app.post('/api/upload/image', async (c) => {
+  if (!(await checkQueueAuth(c))) return c.json({ error: 'unauthorized' }, 401);
+  const mime = (c.req.header('content-type') ?? '').split(';')[0].trim().toLowerCase();
+  if (!/^image\/(gif|png|jpe?g|webp)$/.test(mime)) {
+    return c.json({ error: 'unsupported image type' }, 415);
+  }
+  const maxBytes = 20 * 1024 * 1024;
+  const declared = Number(c.req.header('content-length') ?? '0');
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    return c.json({ error: 'image too large' }, 413);
+  }
+  const buf = new Uint8Array(await c.req.arrayBuffer());
+  if (buf.length === 0 || buf.length > maxBytes) {
+    return c.json({ error: 'image too large' }, 413);
+  }
+  const ext = mime === 'image/jpeg' ? 'jpg' : mime.split('/')[1];
+  const dateKey = dateKeyInBeijing(new Date());
+  const key = buildImageKey(dateKey, Date.now(), ext);
+  await putObject(c.env, key, buf, { contentType: mime });
+  return c.json({ ok: true, key, mime, bytes: buf.length });
 });
 
 /** 聊天图片回放（需登录；图片存在 R2 images/ 下，主账号优先、小号兜底）。 */

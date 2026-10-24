@@ -638,6 +638,13 @@ openaiApp.post('/chat/completions', async (c) => {
     for (const part of lastUser.content) {
       if (part.type !== 'image_url') continue;
       const rawUrl = part.image_url.url;
+      if (rawUrl.startsWith('r2://')) {
+        // 客户端已直传原图：只记 R2 key，不再二次下载/压缩/上传。
+        const key = rawUrl.slice('r2://'.length);
+        if (key.startsWith('images/')) imageKeys.push(key);
+        part.image_url.url = '';
+        continue;
+      }
       if (rawUrl.endsWith('#__store_only')) {
         const saved = await saveImageFromSource(
           c.env,
