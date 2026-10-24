@@ -149,9 +149,10 @@ export async function archiveOneDay(env: Env, target: string, now: Date): Promis
     if (weather && !ctx.weather) await attachWeather(env, target, weather);
 
     // 3) 写存储：chat_logs/YYYY-MM-DD.log（后缀 .log，内容为 JSON）
+    const archiveKey = `chat_logs/${target}.log`;
     await putObject(
       env,
-      `chat_logs/${target}.log`,
+      archiveKey,
       JSON.stringify(
         {
           date: target,
@@ -169,19 +170,33 @@ export async function archiveOneDay(env: Env, target: string, now: Date): Promis
       ),
     );
 
+    // ★ 提炼的输入 = 刚写好的当天归档文件里的聊天记录（含跨天补全的 AI 回复）
+    let distilledRows = rows;
+    try {
+      const archived = await getObject(env, archiveKey);
+      if (archived) {
+        const parsed = JSON.parse(await archived.text()) as { messages?: MessageRow[] };
+        if (Array.isArray(parsed.messages) && parsed.messages.length > 0) {
+          distilledRows = parsed.messages;
+        }
+      }
+    } catch (e) {
+      console.error('[daily] read back archive for distill failed, use in-memory rows:', e);
+    }
+
     // 4) AI 提炼当天对话 → 合并进 memory.md（失败不阻断归档）
     let memory = await getMemory(env);
     const before = byteLength(memory);
     let distilled = false;
     let distillCost = 0;
     let usedFallback = false;
-    // ★ 提炼只喂当天 date_key 的消息；跨天补上的 AI 回复只进归档日志，不参与当天提炼
-    if (dayRows.length > 0) {
+    // ★ 提炼只读当天归档文件（上面刚回读的 distilledRows），不碰其他日期
+    if (distilledRows.length > 0) {
       try {
         const daySummary = await getDaySummaryRaw(env, target).catch(() => null);
         // 主动消息（turn_type='proactive'）标注出来，避免提炼时误当成用户说过的话
         const conversation =
-          dayRows
+          distilledRows
             .map((m) => {
               if (m.role === 'user') return `用户：${m.content}`;
               return m.turn_type === 'proactive'
