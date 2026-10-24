@@ -21,7 +21,17 @@ import { reindexMemory } from './memory-index';
 import { maybeGenerateRollups } from './memory-rollups';
 import { buildRelationStatus } from './attitude';
 import { distillDay } from './distill';
-import { archiveCompletedItems, byteLength, mergeMemoryEntry, parseRelationValues, pruneTransientSections, setRelationValues } from './memory-maintenance';
+import {
+  archiveCompletedItems,
+  byteLength,
+  compactMemoryEntries,
+  demoteSectionEntries,
+  memoryDensity,
+  mergeMemoryEntry,
+  parseRelationValues,
+  pruneTransientSections,
+  setRelationValues,
+} from './memory-maintenance';
 import { accumulateCandidates, formatAversionEntry, loadCandidates, mergeAversionEntries, saveCandidates, scanAversions } from './aversion';
 import { computeStreak, daysSinceLastUserMessage, countMemoryEntries } from './milestone';
 import { collectDayRelationStats } from './relation-stats';
@@ -44,7 +54,7 @@ import { messagesByDate, assistantReplyTo, type MessageRow } from './db';
 import { backfillFeedback } from './feedback';
 import { cleanupQueue } from './queue';
 import { addLlmCost } from './llm-cost';
-import { appendArchiveLines, archiveHasLine, getArchiveLines } from './memory-archive';
+import { appendArchiveLines, archiveHasLine, CORE_TARGET_BYTES, getArchiveLines } from './memory-archive';
 
 export interface DailyArchiveResult {
   target: string;
@@ -55,6 +65,13 @@ export interface DailyArchiveResult {
   trimmed: boolean;
   catchup_days: string[];
   note?: string;
+  /** 提炼失败原因（非空时任务标记 failed，下次自动补提炼）。 */
+  distill_error?: string;
+}
+
+export interface ArchiveOptions {
+  /** false = 只重建 R2 日志/上下文，不改 memory.md、不跑情绪/关系结算。 */
+  memory?: boolean;
 }
 
 export interface MonthlyMergeResult {
@@ -113,7 +130,12 @@ async function finishJob(env: Env, jobType: string, target: string, detail: stri
 }
 
 /** 归档单个自然日：消息 → 上下文+天气 → R2 .log → AI 提炼 → 大小维护 → 刷新记忆缓存。 */
-export async function archiveOneDay(env: Env, target: string, now: Date): Promise<DailyArchiveResult> {
+export async function archiveOneDay(
+  env: Env,
+  target: string,
+  now: Date,
+  opts: ArchiveOptions = {},
+): Promise<DailyArchiveResult> {
   const base: DailyArchiveResult = {
     target,
     messages: 0,
@@ -130,15 +152,37 @@ export async function archiveOneDay(env: Env, target: string, now: Date): Promis
   try {
     // 1) 当天的全部消息（按自然日 date_key 查询）
     const dayRows = await messagesByDate(env, target);
-    // 跨天补全：最后一条是用户消息时，把落在下一天的 AI 回复补进当天日志
     let rows = dayRows;
-    const lastRow = dayRows[dayRows.length - 1];
-    if (lastRow && lastRow.role === 'user') {
-      const reply = await assistantReplyTo(env, lastRow.id).catch(() => null);
-      const completed = completeConversationRows(dayRows, reply);
-      if (completed !== dayRows) {
-        rows = completed;
-        console.log(`[daily] ${target} 补上跨天 AI 回复 #${reply?.id}，保证以 AI 收尾`);
+    let recoveredFromArchive = false;
+
+    // D1 已被清理、但 R2 已有归档时（例如上次提炼失败后补跑），先从归档恢复消息，
+    // 否则会用空数组覆盖掉好日志，导致原始对话永久丢失。
+    if (rows.length === 0) {
+      const existing = await getObject(env, `chat_logs/${target}.log`).catch(() => null);
+      if (existing) {
+        try {
+          const parsed = JSON.parse(await existing.text()) as { messages?: MessageRow[] };
+          if (Array.isArray(parsed.messages) && parsed.messages.length > 0) {
+            rows = parsed.messages;
+            recoveredFromArchive = true;
+            console.warn(`[daily] ${target} D1 已清理，从已有归档恢复 ${rows.length} 条消息`);
+          }
+        } catch (e) {
+          console.error(`[daily] ${target} 已有归档解析失败:`, e);
+        }
+      }
+    }
+
+    // 跨天补全：最后一条是用户消息时，把落在下一天的 AI 回复补进当天日志
+    if (!recoveredFromArchive) {
+      const lastRow = rows[rows.length - 1];
+      if (lastRow && lastRow.role === 'user') {
+        const reply = await assistantReplyTo(env, lastRow.id).catch(() => null);
+        const completed = completeConversationRows(dayRows, reply);
+        if (completed !== dayRows) {
+          rows = completed;
+          console.log(`[daily] ${target} 补上跨天 AI 回复 #${reply?.id}，保证以 AI 收尾`);
+        }
       }
     }
 
@@ -170,6 +214,21 @@ export async function archiveOneDay(env: Env, target: string, now: Date): Promis
       ),
     );
 
+    // 只重建日志模式：写完 R2 就返回，不触碰记忆/关系/索引。
+    // 给 /api/admin/rearchive-logs 用，避免重复提炼把旧事实又追加一遍。
+    if (opts.memory === false) {
+      const bytes = byteLength(await getMemory(env));
+      const detail = `仅重建归档日志：${rows.length} 条消息；记忆未改（${bytes} 字节）`;
+      await finishJob(env, 'daily_archive', target, detail, true);
+      return {
+        ...base,
+        messages: rows.length,
+        memory_bytes_before: bytes,
+        memory_bytes_after: bytes,
+        note: '仅重建日志，未改记忆',
+      };
+    }
+
     // ★ 提炼的输入 = 刚写好的当天归档文件里的聊天记录（含跨天补全的 AI 回复）
     let distilledRows = rows;
     try {
@@ -190,6 +249,7 @@ export async function archiveOneDay(env: Env, target: string, now: Date): Promis
     let distilled = false;
     let distillCost = 0;
     let usedFallback = false;
+    let distillError: string | null = null;
     // ★ 提炼只读当天归档文件（上面刚回读的 distilledRows），不碰其他日期
     if (distilledRows.length > 0) {
       try {
@@ -206,6 +266,10 @@ export async function archiveOneDay(env: Env, target: string, now: Date): Promis
             .join('\n\n') +
           (daySummary?.text ? `\n\n今日摘要（滚动提炼）：${daySummary.text}` : '');
         const summary = await distillDay(env, target, conversation, memory);
+        if (!summary.text.trim() && summary.backend === 'workers-ai') {
+          // 兜底模型返回空内容 → 视为失败，任务标 failed，下次补提炼
+          distillError = 'Workers AI 兜底返回空内容';
+        }
         // 收集关系驱动统计（量 → 亲密度，质 → 好感度）
         const streakDays = await computeStreak(env, target);
         const daysSinceInteraction = await daysSinceLastUserMessage(env, now);
@@ -250,6 +314,7 @@ export async function archiveOneDay(env: Env, target: string, now: Date): Promis
           }
         }
       } catch (e) {
+        distillError = e instanceof Error ? e.message : String(e);
         console.error('[daily] distill failed:', e);
       }
     }
@@ -258,7 +323,7 @@ export async function archiveOneDay(env: Env, target: string, now: Date): Promis
     try {
       const emotionState = await loadEmotionState(env, now.getTime());
       // Workers AI 只复核当天「有歧义」的消息（单日最多 8 条），补词典漏检
-      const dayUserTexts = dayRows.filter((r) => r.role === 'user').map((r) => r.content);
+      const dayUserTexts = rows.filter((r) => r.role === 'user').map((r) => r.content);
       const extraEvents = await reviewDayEvents(env, dayUserTexts, now.getTime());
 
       let vector = emotionState.vector;
@@ -376,6 +441,49 @@ export async function archiveOneDay(env: Env, target: string, now: Date): Promis
       console.error('[daily] relation decay failed:', e);
     }
 
+    // 6.5) 保守去重：只合并重复条目，不改事实；受保护分区不动。
+    //      放在所有 memory 维护之后、写回之前，保证写进 R2 的是紧凑版本。
+    let compactedRemoved = 0;
+    try {
+      const beforeDensity = memoryDensity(memory);
+      const compacted = compactMemoryEntries(memory);
+      compactedRemoved = compacted.removed;
+      if (compacted.removed > 0) {
+        memory = compacted.text;
+        const afterDensity = memoryDensity(memory);
+        console.log(
+          `[daily] 记忆去重 ${compacted.removed} 条：${beforeDensity.entries} 条/${beforeDensity.bytes}B → ${afterDensity.entries} 条/${afterDensity.bytes}B`,
+        );
+      }
+    } catch (e) {
+      console.error('[daily] memory compact failed:', e);
+    }
+
+    // 6.6) 超过 24KB 时，把最旧的往事无损搬进档案（只搬不删）；
+    //      档案也在 D1 索引里，仍可按需召回，只是不再常驻提示词。
+    let archivedCount = 0;
+    try {
+      for (const header of ['## 共同经历', '## 近期动态', '## 进行中的事项']) {
+        if (byteLength(memory) <= CORE_TARGET_BYTES) break;
+        const demoted = demoteSectionEntries(memory, header, CORE_TARGET_BYTES, 4);
+        if (demoted.removed.length === 0) continue;
+        await appendArchiveLines(env, demoted.removed);
+        const archive = await getArchiveLines(env);
+        const preserved = demoted.removed.every((line) => archiveHasLine(archive, line));
+        if (!preserved) {
+          console.error(`[daily] ${header} 分层中止：档案未确认写入，保留核心层`);
+          break;
+        }
+        memory = demoted.text;
+        archivedCount += demoted.removed.length;
+      }
+      if (archivedCount > 0) {
+        console.log(`[daily] 记忆分层：${archivedCount} 条旧往事搬进档案，memory=${byteLength(memory)}B`);
+      }
+    } catch (e) {
+      console.error('[daily] memory demote failed:', e);
+    }
+
     // 7) 写回 R2 + 强制刷新 KV 缓存（24h TTL）
     await putMemory(env, memory);
     // 重建 D1 记忆检索索引（幂等；失败不影响归档，下次可手动 /api/admin/memory/reindex）
@@ -412,8 +520,10 @@ export async function archiveOneDay(env: Env, target: string, now: Date): Promis
         : usedFallback
           ? '；提炼用 Workers AI 兜底'
           : '';
-    const detail = `归档 ${rows.length} 条消息；记忆 ${before}→${after} 字节；提炼=${distilled}${costInfo}；裁剪=${trimmed}`;
-    await finishJob(env, 'daily_archive', target, detail, true);
+    const errorInfo = distillError ? `；提炼错误=${distillError.slice(0, 160)}` : '';
+    const detail = `归档 ${rows.length} 条消息；记忆 ${before}→${after} 字节；提炼=${distilled}${costInfo}；去重=${compactedRemoved}；分层=${archivedCount}；裁剪=${trimmed}${errorInfo}`;
+    // 提炼失败时不把任务标 done：runDailyArchive 下次会把它当 failed 补跑
+    await finishJob(env, 'daily_archive', target, detail, !distillError);
     return {
       target,
       messages: rows.length,
@@ -422,6 +532,8 @@ export async function archiveOneDay(env: Env, target: string, now: Date): Promis
       distilled,
       trimmed,
       catchup_days: [],
+      ...(distillError ? { distill_error: distillError } : {}),
+      note: distillError ? `提炼失败，已保留归档等待补跑：${distillError}` : undefined,
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -455,16 +567,26 @@ export async function cleanupOldMessages(
 ): Promise<{ deleted: number; keptFrom: string; dates: string[] }> {
   const today = dateKeyInBeijing(now);
   const keptFrom = previousDateKey(today); // 保留 >= 昨天
-  const rows = await env.DB.prepare(
-    'SELECT DISTINCT date_key FROM messages WHERE date_key < ? ORDER BY date_key ASC LIMIT 60',
-  )
-    .bind(keptFrom)
-    .all<{ date_key: string }>();
+  const [rows, jobs] = await Promise.all([
+    env.DB.prepare(
+      'SELECT DISTINCT date_key FROM messages WHERE date_key < ? ORDER BY date_key ASC LIMIT 60',
+    )
+      .bind(keptFrom)
+      .all<{ date_key: string }>(),
+    env.DB.prepare(
+      "SELECT target, status, detail FROM cron_runs WHERE job_type = 'daily_archive'",
+    ).all<{ target: string; status: string; detail: string | null }>(),
+  ]);
+  const jobMap = new Map((jobs.results ?? []).map((r) => [r.target, r]));
   const deletedDates: string[] = [];
   let deleted = 0;
   for (const row of rows.results ?? []) {
     const d = row.date_key;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+    // 只有「归档 + 提炼都成功」的日期才允许删 D1；提炼失败的日期要留给补跑。
+    const job = jobMap.get(d);
+    if (!job || job.status !== 'done') continue;
+    if ((job.detail ?? '').includes('提炼错误')) continue;
     if (!(await hasArchivedDate(env, d))) continue;
     const res = await env.DB.prepare('DELETE FROM messages WHERE date_key = ?').bind(d).run();
     deleted += res.meta.changes ?? 0;
@@ -473,7 +595,55 @@ export async function cleanupOldMessages(
   return { deleted, keptFrom, dates: deletedDates };
 }
 
-/** 每日归档入口：先补跑历史失败日期（最旧优先，≤7 个），再归档前一天。 */
+const CATCHUP_LIMIT = 7;
+const CATCHUP_SCAN_LIMIT = 20;
+
+/**
+ * 找出需要补归档的日期：
+ * 1) cron_runs 里 failed 的日期；
+ * 2) 超过 2 小时仍卡在 running 的任务；
+ * 3) D1 里还有消息、但 R2 没有归档的日期（Worker 当天完全没跑过时不会有 cron_runs 行）。
+ */
+export async function findArchiveCatchupTargets(env: Env, now: Date): Promise<string[]> {
+  const prev = previousDateKey(dateKeyInBeijing(now));
+  const targets = new Set<string>();
+
+  const failed = await env.DB.prepare(
+    "SELECT target FROM cron_runs WHERE job_type = 'daily_archive' AND status = 'failed' AND target < ? ORDER BY target ASC LIMIT ?",
+  )
+    .bind(prev, CATCHUP_LIMIT)
+    .all<{ target: string }>();
+  for (const row of failed.results ?? []) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(row.target)) targets.add(row.target);
+  }
+
+  const staleCutoff = isoInBeijing(new Date(now.getTime() - STALE_RUNNING_MS));
+  const stale = await env.DB.prepare(
+    "SELECT target FROM cron_runs WHERE job_type = 'daily_archive' AND status = 'running' AND target < ? AND run_at < ? ORDER BY target ASC LIMIT ?",
+  )
+    .bind(prev, staleCutoff, CATCHUP_LIMIT)
+    .all<{ target: string }>();
+  for (const row of stale.results ?? []) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(row.target)) targets.add(row.target);
+  }
+
+  // 从 D1 反查“有消息但没归档”的日期；只扫最近 20 个，避免 R2 读放大。
+  const candidates = await env.DB.prepare(
+    'SELECT DISTINCT date_key FROM messages WHERE date_key < ? ORDER BY date_key ASC LIMIT ?',
+  )
+    .bind(prev, CATCHUP_SCAN_LIMIT)
+    .all<{ date_key: string }>();
+  for (const row of candidates.results ?? []) {
+    if (targets.size >= CATCHUP_LIMIT) break;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(row.date_key)) continue;
+    if (targets.has(row.date_key)) continue;
+    if (!(await hasArchivedDate(env, row.date_key))) targets.add(row.date_key);
+  }
+
+  return [...targets].sort().slice(0, CATCHUP_LIMIT);
+}
+
+/** 每日归档入口：先补跑历史失败/缺失日期（最旧优先，≤7 个），再归档前一天。 */
 export async function runDailyArchive(env: Env, now: Date): Promise<DailyArchiveResult> {
   // 存储容量检查：主账号接近上限时，把后续写入切换到小号 R2
   await checkStorageCapacity(env).catch((e) => console.error('[storage] capacity check failed:', e));
@@ -485,18 +655,14 @@ export async function runDailyArchive(env: Env, now: Date): Promise<DailyArchive
   await cleanupQueue(env).catch((e) => console.error('[queue] cleanup failed:', e));
   await cleanupStaleObjects(env, now).catch((e) => console.error('[r2] cleanup failed:', e));
 
-  const failed = await env.DB.prepare(
-    "SELECT target FROM cron_runs WHERE job_type = 'daily_archive' AND status = 'failed' ORDER BY target ASC LIMIT 7",
-  ).all<{ target: string }>();
-
+  const catchupTargets = await findArchiveCatchupTargets(env, now);
   const catchup: string[] = [];
-  for (const row of failed.results ?? []) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(row.target)) continue;
+  for (const target of catchupTargets) {
     try {
-      const r = await archiveOneDay(env, row.target, now);
-      catchup.push(`${r.target}(${r.messages}条)`);
+      const r = await archiveOneDay(env, target, now);
+      catchup.push(`${r.target}(${r.messages}条${r.distill_error ? '，提炼待补' : ''})`);
     } catch (e) {
-      console.error('[daily] catch-up failed for', row.target, e);
+      console.error('[daily] catch-up failed for', target, e);
     }
   }
 

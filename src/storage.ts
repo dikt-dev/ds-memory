@@ -46,9 +46,17 @@ function s3Url(env: Env, key: string): string {
   return `https://${env.SECONDARY_R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${env.SECONDARY_R2_BUCKET}/${encoded}`;
 }
 
+const MODE_CACHE_MS = 30_000;
+// 一个 isolate 只服务一个部署，用模块级缓存即可；避免每次 R2 读都先走一次 KV。
+let modeCache: { mode: StorageMode; at: number } | null = null;
+
+/** 存储模式读取：isolate 内缓存 30 秒，避免每次读写都多一次 KV 往返。 */
 export async function getStorageMode(env: Env): Promise<StorageMode> {
+  if (modeCache && Date.now() - modeCache.at < MODE_CACHE_MS) return modeCache.mode;
   try {
-    return (await env.KV.get(STORAGE_MODE_KV)) === 'secondary' ? 'secondary' : 'main';
+    const mode = (await env.KV.get(STORAGE_MODE_KV)) === 'secondary' ? 'secondary' : 'main';
+    modeCache = { mode, at: Date.now() };
+    return mode;
   } catch {
     return 'main';
   }
@@ -56,6 +64,12 @@ export async function getStorageMode(env: Env): Promise<StorageMode> {
 
 export async function setStorageMode(env: Env, mode: StorageMode): Promise<void> {
   await env.KV.put(STORAGE_MODE_KV, mode);
+  modeCache = { mode, at: Date.now() };
+}
+
+/** 测试/手动切换后立即按最新模式读取。 */
+export function invalidateStorageModeCache(_env?: Env): void {
+  modeCache = null;
 }
 
 export interface StoredObject {
@@ -84,11 +98,8 @@ export async function putObject(
   await env.R2.put(key, body, opts?.contentType ? { httpMetadata: { contentType: opts.contentType } } : undefined);
 }
 
-/** 读对象：主账号优先，小号兜底。 */
-export async function getObject(env: Env, key: string): Promise<StoredObject | null> {
-  const main = await env.R2.get(key).catch(() => null);
-  if (main) return main;
-  if (!secondaryEnabled(env)) return null;
+/** 从小号 R2 读对象；404/网络失败返回 null。 */
+async function getSecondaryObject(env: Env, key: string): Promise<StoredObject | null> {
   const res = await s3Client(env).fetch(s3Url(env, key)).catch(() => null);
   if (!res || res.status === 404 || !res.ok) return null;
   const buf = await res.arrayBuffer();
@@ -100,10 +111,36 @@ export async function getObject(env: Env, key: string): Promise<StoredObject | n
   };
 }
 
+/**
+ * 读对象：按当前存储模式决定“新对象在哪边”。
+ *
+ * 历史实现固定主账号优先，导致切到小号后：memory.md / archive.md 写在小号，
+ * 主账号还留着旧文件，KV 缓存过期后回源会读到旧记忆（记忆回滚）。
+ * 现在 secondary 模式先读小号，主账号只作为历史对象兜底。
+ */
+export async function getObject(env: Env, key: string): Promise<StoredObject | null> {
+  const secondaryFirst = (await getStorageMode(env)) === 'secondary' && secondaryEnabled(env);
+  if (secondaryFirst) {
+    const sec = await getSecondaryObject(env, key);
+    if (sec) return sec;
+  }
+
+  const main = await env.R2.get(key).catch(() => null);
+  if (main) return main;
+  if (!secondaryEnabled(env) || secondaryFirst) return null;
+  return getSecondaryObject(env, key);
+}
+
 export async function headObject(env: Env, key: string): Promise<{ size: number } | null> {
+  const secondaryFirst = (await getStorageMode(env)) === 'secondary' && secondaryEnabled(env);
+  if (secondaryFirst) {
+    const res = await s3Client(env).fetch(s3Url(env, key), { method: 'HEAD' }).catch(() => null);
+    if (res?.ok) return { size: Number(res.headers.get('content-length') ?? 0) };
+  }
+
   const main = await env.R2.head(key).catch(() => null);
   if (main) return { size: main.size };
-  if (!secondaryEnabled(env)) return null;
+  if (!secondaryEnabled(env) || secondaryFirst) return null;
   const res = await s3Client(env).fetch(s3Url(env, key), { method: 'HEAD' }).catch(() => null);
   if (!res || !res.ok) return null;
   return { size: Number(res.headers.get('content-length') ?? 0) };

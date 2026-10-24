@@ -148,18 +148,86 @@ export async function recentMessages(env: Env, limit = 12): Promise<MessageRow[]
   return (result.results ?? []).reverse();
 }
 
+/** 消息比较：先时间，再 id，保证同一毫秒内也有稳定顺序。 */
+function compareMessages(a: MessageRow, b: MessageRow): number {
+  return a.created_ms - b.created_ms || a.id - b.id;
+}
+
+/**
+ * 按 turn_id 分组（一轮 = 用户消息 + 它的回复，或一条主动消息）。
+ * 导出为纯函数，方便测试「上一句/上上句」的排序。
+ */
+export function groupTurns(rows: MessageRow[]): MessageRow[][] {
+  const seen = new Set<number>();
+  const map = new Map<number, MessageRow[]>();
+  for (const row of rows) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    const key = Number.isFinite(row.turn_id) && row.turn_id > 0 ? row.turn_id : row.id;
+    const list = map.get(key) ?? [];
+    list.push(row);
+    map.set(key, list);
+  }
+  const groups = [...map.values()].map((g) => g.slice().sort(compareMessages));
+  groups.sort((a, b) => compareMessages(a[0], b[0]));
+  return groups;
+}
+
+/** 取最近 N 轮（按时间从旧到新）。 */
+export function takeLastRounds(rows: MessageRow[], rounds: number): MessageRow[] {
+  const n = Math.max(1, Math.floor(rounds));
+  return groupTurns(rows).slice(-n).flat();
+}
+
+/** 从 D1 取最近 N 轮消息（按 turn_id 分组，时间升序）。 */
+export async function recentRoundMessages(env: Env, rounds: number): Promise<MessageRow[]> {
+  const limit = Math.max(1, Math.min(Math.floor(rounds), 30));
+  // turn_id=0 的旧数据按单条消息自成一轮，避免把很多无 turn 的消息合成一轮
+  const turnExpr = '(CASE WHEN turn_id > 0 THEN turn_id ELSE id END)';
+  const ids = await env.DB.prepare(
+    `SELECT ${turnExpr} AS turn_key FROM messages
+     GROUP BY ${turnExpr}
+     ORDER BY MAX(created_ms) DESC, MAX(id) DESC
+     LIMIT ?`,
+  )
+    .bind(limit)
+    .all<{ turn_key: number }>();
+  const turnIds = (ids.results ?? [])
+    .map((r) => r.turn_key)
+    .filter((n) => Number.isFinite(n));
+  if (turnIds.length === 0) return [];
+
+  const placeholders = turnIds.map(() => '?').join(',');
+  const res = await env.DB.prepare(
+    `SELECT ${SELECT_COLS} FROM messages
+     WHERE ${turnExpr} IN (${placeholders})
+     ORDER BY created_ms ASC, id ASC`,
+  )
+    .bind(...turnIds)
+    .all<MessageRow>();
+  return (res.results ?? []).sort(compareMessages);
+}
+
+/** 历史单条消息默认保留的字符数：最近 10 轮优先保质量，不做过度压缩。 */
+export const HISTORY_MESSAGE_MAX_CHARS = 2400;
+/** 带文件的消息保留更多字符，保证“那个表第三行”还能对上。 */
+export const HISTORY_FILE_MAX_CHARS = 4200;
+
 /**
  * 把历史消息压成更省 token 的形式（注入提示词用，不改 D1 原数据）：
  * - `[图片:images/...]` 这种 R2 路径缩成 `[图片]`（模型不需要知道路径）；
  * - 连续空白折叠成一个空格（B站/网页抓取块常带大量换行）；
- * - 超过 maxChars 截断（旧消息细节交给中期记忆/今日摘要）。
+ * - 超长时保留开头 + 结尾（结尾常包含结论/追问），中间省略，避免只剩开头。
  */
-export function compactHistoryMessage(content: string, maxChars = 400): string {
+export function compactHistoryMessage(content: string, maxChars = HISTORY_MESSAGE_MAX_CHARS): string {
   const cleaned = content
     .replace(/\[图片:images\/[^\]]+\]/g, '[图片]')
     .replace(/\s+/g, ' ')
     .trim();
-  return cleaned.length > maxChars ? `${cleaned.slice(0, maxChars)}…` : cleaned;
+  if (cleaned.length <= maxChars) return cleaned;
+  const head = Math.max(1, Math.ceil(maxChars * 0.7));
+  const tail = Math.max(1, Math.floor(maxChars * 0.3) - 1);
+  return `${cleaned.slice(0, head)}…${cleaned.slice(-tail)}`;
 }
 
 /** 增量读取：id 大于 afterId 的消息（升序），用于前端实时刷新。 */
@@ -263,16 +331,30 @@ export function historyTimeLabel(createdAt: string): string {
   return (createdAt || '').slice(5, 16).replace('T', ' ') || '时间未知';
 }
 
-/** 给短期历史配一句时间范围说明（只说明，不逐条打标签，避免模型模仿）。 */
+/** 给历史消息加上时间戳前缀（只进入本轮请求，不写回 D1）。 */
+export function withHistoryTimestamp(content: string, createdAt: string): string {
+  return `[${historyTimeLabel(createdAt)}] ${content}`;
+}
+
+/**
+ * 给最近 N 轮历史配一句顺序说明。
+ *
+ * 时间戳逐条放在消息开头，模型才能明确“上一句/上上句”；
+ * 同时提醒它这些标签只是元信息，回复里不要模仿输出。
+ */
 export function historyRangeNote(rows: MessageRow[], now: Date): string | null {
   if (rows.length === 0) return null;
+  const groups = groupTurns(rows);
   const first = rows[0];
   const last = rows[rows.length - 1];
   const hours = Math.max(0, Math.round((now.getTime() - last.created_ms) / 3600000));
   const gap = Math.max(0, Math.round((last.created_ms - first.created_ms) / 3600000));
   return (
-    `【历史时间】以上短期历史最早 ${historyTimeLabel(first.created_at)}，最近 ${historyTimeLabel(last.created_at)}；` +
-    `距现在约 ${hours} 小时，跨度约 ${gap} 小时。时间只是背景，回复时不要输出任何时间标签。`
+    `【历史顺序】接下来是最近 ${groups.length} 轮聊天记录，按时间从旧到新排列；` +
+    `每条开头的 [MM-DD HH:mm] 是发送时间，只用于判断先后，回复时绝对不要输出时间标签。` +
+    `最后一条是最近一条历史消息，当前用户消息在它之后。` +
+    `最早 ${historyTimeLabel(first.created_at)}，最近 ${historyTimeLabel(last.created_at)}；` +
+    `距现在约 ${hours} 小时，跨度约 ${gap} 小时。`
   );
 }
 

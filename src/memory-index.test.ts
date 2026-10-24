@@ -4,7 +4,10 @@ import {
   clipMatchedClauses,
   decodeVec,
   extractCoreMemory,
+  extractPromptMemory,
+  MEMORY_INLINE_MAX_BYTES,
   mmrSelect,
+  topKeywords,
   needsLlmRerank,
   parseMemoryEntries,
   quantizeVec,
@@ -25,6 +28,9 @@ const SAMPLE = `# 长期记忆
 - [26-10-21] 深圳；上班8:15
 - [26-10-21] 职业=C开发
 
+## 偏好与习惯
+- [26-10-21] 颜色=蓝
+
 ## 近期动态
 - [26-10-24] 赛博搬家进行中
 `;
@@ -36,6 +42,32 @@ describe('extractCoreMemory', () => {
     expect(core).toContain('## 称呼与关系');
     expect(core).not.toContain('## 关于用户');
     expect(core).not.toContain('## 近期动态');
+  });
+});
+
+describe('extractPromptMemory（混合注入）', () => {
+  it('小记忆全量带上', () => {
+    const out = extractPromptMemory(SAMPLE);
+    expect(out.mode).toBe('full');
+    expect(out.text).toBe(SAMPLE);
+  });
+
+  it('大记忆只带核心 + 稳定画像，不带共同经历', () => {
+    const big = `${SAMPLE}\n## 共同经历\n- [26-10-21] ${'很长的往事'.repeat(4000)}\n`;
+    expect(big.length).toBeGreaterThan(MEMORY_INLINE_MAX_BYTES);
+    const out = extractPromptMemory(big);
+    expect(out.mode).toBe('compact');
+    expect(out.text).toContain('## 关于用户');
+    expect(out.text).toContain('## 偏好与习惯');
+    expect(out.text).not.toContain('## 共同经历');
+  });
+});
+
+describe('topKeywords', () => {
+  it('取高频 bigram，限制条数', () => {
+    const words = topKeywords('通宵通宵通宵熬夜', 3);
+    expect(words[0]).toBe('通宵');
+    expect(words).toHaveLength(3);
   });
 });
 
@@ -96,6 +128,11 @@ describe('密度视图工具', () => {
     const out = stripDuplicateRecall(recalled, seen);
     expect(out).not.toContain('用户是写C的开发者');
     expect(out).toContain('Worker');
+  });
+
+  it('没有日期的召回行也能与历史去重', () => {
+    const out = stripDuplicateRecall('## 相关记忆\n- 用户是 C 开发者', ['用户是 C 开发者']);
+    expect(out).not.toContain('用户是 C 开发者');
   });
 });
 

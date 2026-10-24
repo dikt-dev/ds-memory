@@ -10,8 +10,16 @@ import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
 import { attachWeather, getOrCreateDayContext } from './context';
 import { getMemory } from './memory';
 import { fetchWeather } from './weather';
-import { insertUserMessage, insertAssistantReply, compactHistoryMessage, historyRangeNote } from './db';
-import { loadRecentHistory } from './recent-context';
+import {
+  insertUserMessage,
+  insertAssistantReply,
+  compactHistoryMessage,
+  historyRangeNote,
+  withHistoryTimestamp,
+  HISTORY_FILE_MAX_CHARS,
+  HISTORY_MESSAGE_MAX_CHARS,
+} from './db';
+import { loadRecentRounds, RECENT_ROUNDS } from './recent-context';
 import { calcCost, loadPricing } from './pricing';
 import { streamDeepSeek, type DeepSeekMessage } from './deepseek';
 import { getTodaySummary } from './summary';
@@ -24,7 +32,7 @@ import { moodFromVector } from './emotion-vector';
 import { readSessionFacts } from './session-facts';
 import { buildVoiceDirective, recentOpeners } from './voice';
 import { formatRecentMemoBlock, getRecentMemo } from './recent-memory';
-import { extractCoreMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
+import { extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 
 export interface ChatImage {
   key: string; // R2 对象键（images/日期/时间戳.jpg）
@@ -42,9 +50,19 @@ export async function streamChat(
 
   // 1) 组装上下文（先取历史，再落 user 消息，避免历史里重复出现本条）
   const dateKey = dateKeyInBeijing(now);
-  const memory = await getMemory(env);
-  const dayCtxFile = await getOrCreateDayContext(env, dateKey);
-  const fetchedWeather = await fetchWeather(env);
+  // 这些读取互不依赖：并行发起，减少手机 QQ 场景的首字延迟。
+  const [memory, dayCtxFile, fetchedWeather, history, recentMemoRaw, summaryRaw, personaState] =
+    await Promise.all([
+      getMemory(env),
+      getOrCreateDayContext(env, dateKey),
+      fetchWeather(env),
+      loadRecentRounds(env, RECENT_ROUNDS, now),
+      getRecentMemo(env),
+      getTodaySummary(env, dateKey),
+      loadPersonaState(env),
+    ]);
+  // 小记忆全量带上，大记忆只带核心+稳定画像，其余靠召回
+  const promptMemory = extractPromptMemory(memory);
   // 拉取失败时回退到当天缓存，避免提示词里直接没有天气、让模型去翻旧记忆
   const weather = fetchedWeather ?? dayCtxFile.weather ?? null;
   if (fetchedWeather) await attachWeather(env, dateKey, fetchedWeather, dayCtxFile);
@@ -54,13 +72,12 @@ export async function streamChat(
     is_holiday: dayCtxFile.is_holiday,
     holiday_note: dayCtxFile.holiday_note,
   };
-  const history = await loadRecentHistory(env, 12, now);
   // 最近几条回复的开头：避免连续几轮用同一句开场白
   const avoidOpeners = recentOpeners(history.filter((m) => m.role === 'assistant').map((m) => m.content));
   // ★ 中期记忆（最近 24 小时）优先：它存在时就不再注入今日摘要，避免同一段内容发两遍
-  const recentMemo = formatRecentMemoBlock(await getRecentMemo(env));
-  const todaySummary = recentMemo ? null : await getTodaySummary(env, dateKey);
-  const personaDrift = buildPersonaDriftLine(await loadPersonaState(env));
+  const recentMemo = formatRecentMemoBlock(recentMemoRaw);
+  const todaySummary = recentMemo ? null : summaryRaw;
+  const personaDrift = buildPersonaDriftLine(personaState);
 
   // ★ 按需检索：用当前消息 + 最近几条用户消息去档案里找相关往事（不命中就不占字节）
   const recallQuery = [
@@ -75,10 +92,12 @@ export async function streamChat(
     recallQuery,
     undefined,
     history.slice(-8).map((m) => m.content).join(' '),
+    // 全量记忆已经带上所有 memory 条目，召回只补档案层的旧事
+    { skipMemorySource: promptMemory.mode === 'full' },
   );
   const recalled = stripDuplicateRecall(
     recalledRaw,
-    [...history.map((m) => m.content), recentMemo].filter(Boolean),
+    [...history.map((m) => m.content), recentMemo, promptMemory.text].filter(Boolean),
   );
 
   // ★ 活人感：在落库本条前采集「距上次聊天间隔 + 今日轮数」
@@ -155,7 +174,8 @@ export async function streamChat(
       content: buildSystemPrompt({
         now,
         ctx,
-        memory: extractCoreMemory(memory),
+        memory: promptMemory.text,
+        memoryMode: promptMemory.mode,
         weather,
         todaySummary,
         recentMemo,
@@ -170,10 +190,17 @@ export async function streamChat(
         userAddress: env.USER_ADDRESS,
       }) + (historyNote ? `\n\n${historyNote}` : ''),
     },
-    // 最近 4 条保留原文（保证接得住当前话题），更早的压缩到 400 字内省 token
-    ...history.map((m, i) => ({
+    // 最近 10 轮按时间从旧到新排列；每条带发送时间，模型才能判断上一句/上上句。
+    // 单条只做超长保护（默认 2400 字，带文件 4200 字），不做过去那种 400 字过度压缩。
+    ...history.map((m) => ({
       role: m.role,
-      content: i >= history.length - 4 ? m.content : compactHistoryMessage(m.content),
+      content: withHistoryTimestamp(
+        compactHistoryMessage(
+          m.content,
+          m.content.includes('【文件：') ? HISTORY_FILE_MAX_CHARS : HISTORY_MESSAGE_MAX_CHARS,
+        ),
+        m.created_at,
+      ),
     })),
     { role: 'user', content: userContent },
   ];

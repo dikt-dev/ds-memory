@@ -19,7 +19,8 @@ import { getMemory } from './memory';
 import { fetchWeather } from './weather';
 import { getOrCreateDayContext, type DayContextFile } from './context';
 import { getTodaySummary } from './summary';
-import { recentMessages, recentProactiveMessages, insertProactiveMessage, updateMessageUsage } from './db';
+import { historyTimeLabel, recentProactiveMessages, insertProactiveMessage, updateMessageUsage } from './db';
+import { loadRecentRounds, RECENT_ROUNDS } from './recent-context';
 import { parseRelationValues } from './memory-maintenance';
 import { enqueueProactive } from './queue';
 import { completeDeepSeek } from './deepseek';
@@ -48,7 +49,7 @@ import {
 import { buildCharacterCard } from './character-card';
 import { buildVoiceDirective } from './voice';
 import { formatRecentMemoBlock, getRecentMemo } from './recent-memory';
-import { extractCoreMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
+import { extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { readSessionFacts } from './session-facts';
 import { facetsOf, processEmotionTurn } from './emotion-context';
@@ -173,10 +174,11 @@ async function generateProactive(
     getOrCreateDayContext(env, dateKey),
     getRecentMemo(env),
     getTodaySummary(env, dateKey),
-    recentMessages(env, 12),
+    loadRecentRounds(env, RECENT_ROUNDS, now),
     recentProactiveMessages(env, 6),
   ]);
   const relation = parseRelationValues(memory);
+  const promptMemory = extractPromptMemory(memory);
   // 中期记忆优先：它存在时跳过今日摘要，避免重复
   const recentMemo = formatRecentMemoBlock(recentMemoRaw);
   const todaySummary = recentMemo ? null : todaySummaryRaw;
@@ -229,16 +231,18 @@ async function generateProactive(
       .join(' '),
     undefined,
     focus,
+    { skipMemorySource: promptMemory.mode === 'full' },
   );
   const recalled = stripDuplicateRecall(
     recalledRaw,
-    [...history.map((m) => m.content), recentMemo].filter(Boolean),
+    [...history.map((m) => m.content), recentMemo, promptMemory.text].filter(Boolean),
   );
 
   const systemPrompt = buildBaseSystemPrompt({
     now,
     ctx,
-    memory: extractCoreMemory(memory),
+    memory: promptMemory.text,
+    memoryMode: promptMemory.mode,
     weather,
     todaySummary,
     recentMemo,
@@ -252,7 +256,11 @@ async function generateProactive(
 
   const historyText =
     history.length > 0
-      ? history.map((m) => `${m.role === 'user' ? '用户' : '助手'}：${m.content}`).join('\n')
+      ? history
+          .map(
+            (m) => `[${historyTimeLabel(m.created_at)}] ${m.role === 'user' ? '用户' : '助手'}：${m.content}`,
+          )
+          .join('\n')
       : '（无）';
   const recentText =
     recentProactive.length > 0 ? recentProactive.map((m) => `- ${m.content}`).join('\n') : '（无）';

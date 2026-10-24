@@ -13,13 +13,18 @@ import { streamChat } from './chat';
 import { messagesPage, usageByDay, messagesByDate, assistantReplyTo } from './db';
 import { getMemory, MEMORY_KV_KEY } from './memory';
 import { messagesSince } from './db';
-import { byteLength } from './memory-maintenance';
+import { byteLength, memoryDensity } from './memory-maintenance';
 import { getCityConfig, setCity } from './settings';
 import { fetchWeather } from './weather';
 import { saveImage } from './media';
 import { deleteObject, getObject, getStorageMode, listKeys, putObject, secondaryEnabled } from './storage';
 import { runDailyArchive, runContextRefresh, runMonthlyMerge, archiveOneDay } from './jobs';
-import { reindexMemory } from './memory-index';
+import {
+  extractPromptMemory,
+  MEMORY_INLINE_MAX_BYTES,
+  SEMANTIC_DUP_COSINE,
+  reindexMemory,
+} from './memory-index';
 import { generateRollup, previousPeriods } from './memory-rollups';
 import { getOrCreateDayContext } from './context';
 import { parseRelationValues, reportSectionBudgets } from './memory-maintenance';
@@ -374,11 +379,17 @@ app.post('/api/admin/run-daily', requireAuth, async (c) => {
   return c.json({ ok: true, ...result });
 });
 /**
- * 重建日归档（重写 R2 chat_logs 并重新提炼当天记忆；D1 消息不动）。
- * body: { dates?: string[] }，不传则按 D1 里出现的所有 date_key 逐天重建。
+ * 重建日归档（重写 R2 chat_logs；D1 消息不动）。
+ * body: { dates?: string[]; distill?: boolean }，不传 dates 则按 D1 里出现的所有 date_key 逐天重建。
+ * distill 默认 false：只重建日志，不重复提炼记忆；显式传 true 才会重新提炼（并先备份 memory.md）。
  */
 app.post('/api/admin/rearchive-logs', requireAuth, async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { dates?: string[] };
+  const body = (await c.req.json().catch(() => ({}))) as { dates?: string[]; distill?: boolean };
+  const reDistill = body.distill === true;
+  if (reDistill) {
+    const backup = `memory/backups/${new Date().toISOString().replace(/[:.]/g, '-')}.md`;
+    await putObject(c.env, backup, await getMemory(c.env));
+  }
   let dates = Array.isArray(body.dates) ? body.dates : [];
   if (dates.length === 0) {
     const rows = await c.env.DB.prepare(
@@ -389,14 +400,14 @@ app.post('/api/admin/rearchive-logs', requireAuth, async (c) => {
   const done: Array<{ date: string; messages: number; distilled: boolean; memory_bytes: number }> = [];
   for (const date of dates) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
-    // 允许重跑：清掉该日的归档锁，并删除旧日志（archiveOneDay 会重新写入）
+    // 允许重跑：清掉该日的归档锁。不要先删旧日志——
+    // D1 已被清理时，archiveOneDay 还要靠旧日志恢复原始对话。
     await c.env.DB.prepare(
       "DELETE FROM cron_runs WHERE job_type = 'daily_archive' AND target = ?",
     )
       .bind(date)
       .run();
-    await deleteObject(c.env, `chat_logs/${date}.log`).catch(() => {});
-    const r = await archiveOneDay(c.env, date, new Date());
+    const r = await archiveOneDay(c.env, date, new Date(), { memory: reDistill });
     done.push({
       date,
       messages: r.messages,
@@ -404,7 +415,7 @@ app.post('/api/admin/rearchive-logs', requireAuth, async (c) => {
       memory_bytes: r.memory_bytes_after,
     });
   }
-  return c.json({ ok: true, dates: done });
+  return c.json({ ok: true, re_distill: reDistill, dates: done });
 });
 app.post('/api/admin/run-monthly', requireAuth, async (c) => {
   const result = await runMonthlyMerge(c.env, new Date());
@@ -521,27 +532,49 @@ app.post('/api/admin/run-context', requireAuth, async (c) => {
 });
 
 app.get('/api/admin/stats', requireAuth, async (c) => {
-  const [countRow, oldestRow, runs, logKeys] = await Promise.all([
+  const [countRow, oldestRow, runs, logKeys, entryRow] = await Promise.all([
     c.env.DB.prepare('SELECT COUNT(*) AS c FROM messages').first<{ c: number }>(),
     c.env.DB.prepare('SELECT MIN(date_key) AS d FROM messages').first<{ d: string | null }>(),
     c.env.DB
       .prepare('SELECT job_type, target, status, detail, run_at FROM cron_runs ORDER BY id DESC LIMIT 10')
       .all(),
     listKeys(c.env, 'chat_logs/'),
+    c.env.DB
+      .prepare(
+        `SELECT COUNT(*) AS c,
+                COALESCE(SUM(CASE WHEN vec IS NOT NULL THEN 1 ELSE 0 END), 0) AS with_vec,
+                COALESCE(SUM(CASE WHEN dup_of IS NOT NULL THEN 1 ELSE 0 END), 0) AS dups,
+                COALESCE(MAX(updated_at), 0) AS last_at
+           FROM memory_entries`,
+      )
+      .first<{ c: number; with_vec: number; dups: number; last_at: number }>(),
   ]);
   const memory = await getMemory(c.env);
+  const promptMemory = extractPromptMemory(memory);
+  const density = memoryDensity(memory);
   // 分层记忆的可观测性：核心层占用、超预算分区、中期纪要条数、档案条数
   const [memo, archiveLines] = await Promise.all([getRecentMemo(c.env), getArchiveLines(c.env)]);
   return c.json({
     messages: countRow?.c ?? 0,
     oldest_date: oldestRow?.d ?? null,
     memory_bytes: byteLength(memory),
+    memory_prompt_bytes: byteLength(promptMemory.text),
+    memory_prompt_mode: promptMemory.mode,
+    memory_inline_max_bytes: MEMORY_INLINE_MAX_BYTES,
+    memory_density: density,
+    memory_entries: entryRow?.c ?? 0,
+    memory_entries_with_vec: entryRow?.with_vec ?? 0,
+    memory_duplicates: entryRow?.dups ?? 0,
+    last_memory_index_at: entryRow?.last_at ?? 0,
+    semantic_dup_cosine: SEMANTIC_DUP_COSINE,
+    // 兼容旧字段；现在只是统计参考，不再作为强制裁剪阈值
     core_target_bytes: CORE_TARGET_BYTES,
     over_budget_sections: reportSectionBudgets(memory)
       .filter((b) => b.over)
       .map((b) => ({ header: b.header, bytes: b.bytes, budget: b.budget })),
     recent_memo_items: memo ? memo.text.split('\n').filter((l) => l.trim().startsWith('- ')).length : 0,
     archive_lines: archiveLines.length,
+    archive_bytes: byteLength(archiveLines.join('\n')),
     chat_log_files: logKeys.length,
     storage_mode: await getStorageMode(c.env),
     recent_jobs: runs.results ?? [],

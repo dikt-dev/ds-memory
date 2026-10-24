@@ -1,37 +1,62 @@
 /**
  * 当日滚动摘要（阶段 4）：
- * - 触发：今天累计消息 ≥20 条，或距上次摘要 ≥2 小时且存在未总结的新消息；
- * - 增量：只提炼 up_to_id 之后的消息，由 Workers AI 生成 ≈100 字摘要；
- * - 存储：KV summary:YYYY-MM-DD = {text, updated_at, up_to_id}（TTL 36h；每日归档时删除）；
- * - 使用：聊天上下文组装时读入，与长期记忆（memory.md）、短期（最近 10 轮）并列。
+ * - 首次：今天累计消息 ≥20 条触发；
+ * - 之后：距上次摘要新增 ≥10 条，或距上次 ≥1 小时才再次生成（避免第 20 条后每条消息都调一次模型）；
+ * - 增量：只提炼 up_to_id 之后的消息，由 DeepSeek flash（失败回退 Workers AI）生成 ≈100 字摘要；
+ * - 存储：KV summary:YYYY-MM-DD = {text, updated_at, up_to_id, total}（TTL 36h；每日归档时删除）；
+ * - 使用：memo:24h 不存在时作为中期记忆兜底注入。
  */
 import type { Env } from './types';
 import { latestMessage } from './db';
 import { distillText } from './distill';
 import { addLlmCost } from './llm-cost';
 
-export const SUMMARY_TRIGGER_COUNT = 20; // 今天累计消息条数阈值（约 10 轮）
-export const SUMMARY_TRIGGER_INTERVAL_MS = 2 * 60 * 60 * 1000; // 距上次摘要时间阈值
+/** 首次生成摘要的消息条数阈值（约 10 轮）。 */
+export const SUMMARY_TRIGGER_COUNT = 20;
+/** 首次之后，新增消息达到这个数才再生成。 */
+export const SUMMARY_TRIGGER_DELTA = 10;
+/** 首次之后的最小重算间隔（1 小时）。 */
+export const SUMMARY_TRIGGER_INTERVAL_MS = 60 * 60 * 1000;
 export const SUMMARY_KV_TTL_SECONDS = 36 * 60 * 60;
+/** 单次送给摘要模型的最大字符数（保留最新的部分）。 */
+export const SUMMARY_INPUT_MAX_CHARS = 20000;
+/** 单次最多保留的当天新增对话字符数。 */
+export const SUMMARY_CONVERSATION_MAX_CHARS = 18000;
 const LOCK_TTL_SECONDS = 120;
 
 export interface DaySummary {
   text: string;
   updated_at: string;
   up_to_id: number;
+  /** 生成这份摘要时，当天 messages 的总条数（用于增量触发判断）。 */
+  total?: number;
 }
 
 export const summaryKey = (dateKey: string) => `summary:${dateKey}`;
 const lockKey = (dateKey: string) => `summary:lock:${dateKey}`;
 
-/** 触发判断（纯函数，可单测）：条数达标，或距上次摘要超过 2 小时。 */
+/**
+ * 触发判断（纯函数，可单测）：
+ * - 没有历史摘要：累计 ≥20 条才首次生成；
+ * - 有历史摘要：新增 ≥10 条，或距上次 ≥1 小时。
+ */
 export function shouldSummarize(total: number, prev: DaySummary | null, nowMs: number): boolean {
-  if (total >= SUMMARY_TRIGGER_COUNT) return true;
-  if (prev) {
-    const age = nowMs - new Date(prev.updated_at).getTime();
-    return Number.isFinite(age) && age >= SUMMARY_TRIGGER_INTERVAL_MS;
-  }
-  return false;
+  if (!prev) return total >= SUMMARY_TRIGGER_COUNT;
+  if (total <= 0) return false;
+  const newMessages = total - (prev.total ?? 0);
+  if (newMessages >= SUMMARY_TRIGGER_DELTA) return true;
+  const age = nowMs - new Date(prev.updated_at).getTime();
+  return Number.isFinite(age) && age >= SUMMARY_TRIGGER_INTERVAL_MS;
+}
+
+/** 构造摘要输入：旧摘要放最前，新增对话只保留最新的部分（避免丢最新消息）。 */
+export function buildSummaryInput(prevText: string | null, conversation: string): string {
+  const head = prevText?.trim() ? `此前今日摘要：${prevText.trim()}\n\n` : '';
+  const tail =
+    conversation.length > SUMMARY_CONVERSATION_MAX_CHARS
+      ? conversation.slice(-SUMMARY_CONVERSATION_MAX_CHARS)
+      : conversation;
+  return `${head}${tail}`;
 }
 
 export async function getDaySummaryRaw(env: Env, dateKey: string): Promise<DaySummary | null> {
@@ -94,13 +119,18 @@ export async function maybeSummarizeToday(env: Env, dateKey: string): Promise<vo
       if (msgs.length === 0) return;
 
       const conversation = msgs.map((m) => `${m.role === 'user' ? '用户' : '助手'}：${m.content}`).join('\n');
-      const input = `${fresh?.text ? `此前今日摘要：${fresh.text}\n\n` : ''}${conversation}`;
-      const text = await summarizeToday(env, input.slice(-30000), dateKey);
+      const input = buildSummaryInput(fresh?.text ?? null, conversation);
+      const text = await summarizeToday(env, input, dateKey);
       if (!text) return;
 
       await env.KV.put(
         summaryKey(dateKey),
-        JSON.stringify({ text, updated_at: new Date().toISOString(), up_to_id: latest.id } satisfies DaySummary),
+        JSON.stringify({
+          text,
+          updated_at: new Date().toISOString(),
+          up_to_id: latest.id,
+          total,
+        } satisfies DaySummary),
         { expirationTtl: SUMMARY_KV_TTL_SECONDS },
       );
     } finally {
@@ -119,7 +149,8 @@ async function summarizeToday(env: Env, input: string, dateKey: string): Promise
   const result = await distillText(
     env,
     SUMMARY_SYSTEM,
-    input.slice(0, 20000),
+    // ★ 保留最新的部分：之前的写法是 slice(0, 20000)，长对话会把最后 10k 字丢掉
+    input.slice(-SUMMARY_INPUT_MAX_CHARS),
     512,
     env.SUMMARY_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL,
   );

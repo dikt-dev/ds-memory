@@ -23,12 +23,16 @@ import {
   strongWords,
   stripTags,
 } from './memory-archive';
-import { DATE_PREFIX_RE, ENTRY_RE, normalizeDateKey } from './memory-maintenance';
+import { DATE_PREFIX_RE, ENTRY_RE, byteLength, normalizeDateKey } from './memory-maintenance';
 import { loadRollups } from './memory-rollups';
 import { distillText } from './distill';
 
 /** 永远常驻注入、不参与检索的分区（核心层）。 */
 export const CORE_SECTIONS = ['人物底色', '称呼与关系', '雷区与禁忌'];
+/** 记忆不大时优先全量注入，避免为了省几 KB 引入召回失败风险。 */
+export const MEMORY_INLINE_MAX_BYTES = 16 * 1024;
+/** compact 模式下的稳定画像：这些事实即使没被召回也值得常驻。 */
+export const STABLE_SECTIONS = [...CORE_SECTIONS, '关于用户', '偏好与习惯'];
 
 /** 各分区在召回里的重要度（越高越优先占 top-k 名额）。 */
 export const SECTION_IMPORTANCE: Record<string, number> = {
@@ -50,6 +54,14 @@ export const RECALL_TOP_K = 6;
 export const CANDIDATE_TOP_K = 20;
 /** MMR 去冗余惩罚系数（越大越优先多样性）。 */
 const MMR_PENALTY = 6;
+/** 语义去重余弦阈值：0.9 太低，容易把相关但不同的短句误判成重复。 */
+export const SEMANTIC_DUP_COSINE = 0.95;
+/** 超过这个条数就不做全量 O(n²) 语义去重，避免每日归档卡住。 */
+export const MAX_SEMANTIC_DEDUP_ENTRIES = 3000;
+/** 关键词召回已经足够强时，跳过查询 embedding（省一次 Workers AI 调用/延迟）。 */
+export const VECTOR_TRIGGER_SCORE = 6;
+/** LLM 重排超时：宁可回退确定性排序，也不让一次重排拖慢整条回复。 */
+export const RERANK_TIMEOUT_MS = 1200;
 
 /** 默认语义向量模型（多语言；失败自动降级关键词召回）。 */
 export const DEFAULT_EMBEDDING_MODEL = '@cf/baai/bge-m3';
@@ -76,19 +88,36 @@ interface ParsedEntry {
   source: 'memory' | 'archive';
 }
 
-/** 从 memory.md 里抽出「常驻核心」区块（人物底色/称呼与关系/雷区与禁忌）。 */
-export function extractCoreMemory(text: string): string {
+/** 抽出指定分区（保留分区标题与正文）。 */
+export function extractSections(text: string, headers: string[]): string {
+  const wanted = new Set(headers);
   const lines = text.split('\n');
   const out: string[] = [];
   let current = '';
   for (const line of lines) {
     const m = line.match(/^##\s+(.*)$/);
-    if (m) {
-      current = m[1].trim();
-    }
-    if (current && CORE_SECTIONS.includes(current)) out.push(line);
+    if (m) current = m[1].trim();
+    if (current && wanted.has(current)) out.push(line);
   }
   return out.join('\n').trim();
+}
+
+/** 从 memory.md 里抽出「常驻核心」区块（人物底色/称呼与关系/雷区与禁忌）。 */
+export function extractCoreMemory(text: string): string {
+  return extractSections(text, CORE_SECTIONS);
+}
+
+/**
+ * 决定本轮提示词带哪一份记忆：
+ * - memory.md ≤ 16KB：全量带上（稳定前缀、命中缓存，质量最好）；
+ * - 超过 16KB：带核心 + 关于用户 + 偏好与习惯，其余靠召回。
+ */
+export function extractPromptMemory(
+  text: string,
+  inlineMaxBytes = MEMORY_INLINE_MAX_BYTES,
+): { text: string; mode: 'full' | 'compact' } {
+  if (byteLength(text) <= inlineMaxBytes) return { text, mode: 'full' };
+  return { text: extractSections(text, STABLE_SECTIONS), mode: 'compact' };
 }
 
 /** 把记忆文本解析成条目（非核心分区才进索引）。 */
@@ -120,6 +149,16 @@ export function parseMemoryEntries(
     out.push({ section, content, date, source });
   }
   return out;
+}
+
+/** 取条目里频次最高的 bigram 作为轻量关键词，避免每轮召回都重新切全文。 */
+export function topKeywords(text: string, max = 24): string[] {
+  const counts = new Map<string, number>();
+  for (const g of bigrams(text)) counts.set(g, (counts.get(g) ?? 0) + 1);
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)
+    .slice(0, max)
+    .map(([g]) => g);
 }
 
 function hashId(section: string, date: string | null, content: string): string {
@@ -188,7 +227,7 @@ export async function reindexMemory(
         date: p.date,
         importance: sectionImportance(p.section),
         tags,
-        keywords: [],
+        keywords: topKeywords(p.content, 24),
         vec: null,
         source: p.source,
         dupOf: null,
@@ -224,7 +263,10 @@ export async function reindexMemory(
 
     // 语义去重（只发生在索引视图，不动本体）：同一分区里高度相似的条目，
     // 只让"内容更详细"的那条参与召回，其余指向它。
-    {
+    // 收紧到 0.95 + 长度比例保护，避免把相关但不同的事实误隐藏。
+    if (rows.length <= MAX_SEMANTIC_DEDUP_ENTRIES) {
+      const vecById = new Map<string, number[] | null>();
+      for (const r of rows) vecById.set(r.id, r.vec ? decodeVec(r.vec) : null);
       const groups = new Map<string, MemoryEntryRow[]>();
       for (const r of rows) {
         const list = groups.get(r.section) ?? [];
@@ -235,15 +277,18 @@ export async function reindexMemory(
         list.sort((a, b) => b.content.length - a.content.length); // 长的优先当主条
         const primaries: MemoryEntryRow[] = [];
         for (const r of list) {
-          const rv = r.vec ? decodeVec(r.vec) : null;
+          const rv = vecById.get(r.id) ?? null;
           let hit: MemoryEntryRow | null = null;
           if (rv) {
             for (const p of primaries) {
-              const pv = p.vec ? decodeVec(p.vec) : null;
+              const pv = vecById.get(p.id) ?? null;
               if (!pv) continue;
+              const longer = Math.max(p.content.length, r.content.length);
+              const shorter = Math.min(p.content.length, r.content.length);
+              if (longer === 0 || shorter / longer < 0.5) continue;
               const bothTagged = p.tags.length > 0 && r.tags.length > 0;
               if (bothTagged && !p.tags.some((t) => r.tags.includes(t))) continue;
-              if (cosine(rv, pv) >= 0.9) {
+              if (cosine(rv, pv) >= SEMANTIC_DUP_COSINE) {
                 hit = p;
                 break;
               }
@@ -253,6 +298,10 @@ export async function reindexMemory(
           else primaries.push(r);
         }
       }
+    } else {
+      console.warn(
+        `[memory-index] ${rows.length} 条超过语义去重上限 ${MAX_SEMANTIC_DEDUP_ENTRIES}，本轮跳过 O(n²) 去重`,
+      );
     }
 
     const stmt = env.DB.prepare(
@@ -382,11 +431,13 @@ interface MemCache {
 }
 let memCache: MemCache | null = null;
 const qvecMem = new Map<string, number[]>();
+/** 召回侧向量解码缓存：同一份索引在多次请求间复用，避免每轮都解码全部 1024 维向量。 */
+const decodedVecCache = new Map<string, number[] | null>();
 
 async function putIndexKv(env: Env, rows: MemoryEntryRow[]): Promise<void> {
   try {
     let payload = JSON.stringify({ v: 1, at: Date.now(), rows });
-    if (payload.length > KV_INDEX_MAX_BYTES) {
+    if (byteLength(payload) > KV_INDEX_MAX_BYTES) {
       // 太大就丢弃向量，关键词召回仍可用（向量路径只在 D1 回源时生效）
       console.warn('[memory-index] KV index too large, dropping vec in cache');
       payload = JSON.stringify({
@@ -518,7 +569,8 @@ export function clipMatchedClauses(
 
 function clauseFingerprint(s: string): string {
   return s
-    .replace(/^-\s*\[[^\]]+\]\s*/, '')
+    // 同时兼容「- [日期] 内容」和「- 内容」：没有日期的召回行也要能去重
+    .replace(/^-\s*(?:\[[^\]]+\]\s*)?/, '')
     .toLowerCase()
     .replace(/[\s\u3000，。、；：！？,.;:!?"'“”‘’（）()【】\[\]]/g, '');
 }
@@ -527,7 +579,7 @@ export function clauseFingerprints(text: string): Set<string> {
   const out = new Set<string>();
   for (const c of (text || '').split(/[。！？；!?;\n]/)) {
     const fp = clauseFingerprint(c);
-    if (fp.length >= 8) out.add(fp);
+    if (fp.length >= 6) out.add(fp);
   }
   return out;
 }
@@ -619,13 +671,14 @@ async function llmRerank(
       '优先稳定事实、正在做的事、雷区；不要选只靠一个泛词碰上的无关条目。' +
       '只输出 JSON 数组，例如 [1,4,7]，不要解释。';
     const user = `用户消息：${query}\n\n候选：\n${lines}\n\n最多选 ${k} 条，输出序号数组。`;
-    const res = await distillText(
-      env,
-      system,
-      user,
-      120,
-      env.SUMMARY_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL,
-    );
+    const res = await Promise.race([
+      distillText(env, system, user, 120, env.SUMMARY_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), RERANK_TIMEOUT_MS)),
+    ]);
+    if (!res) {
+      console.warn(`[memory-index] llm rerank timeout ${RERANK_TIMEOUT_MS}ms, fallback`);
+      return null;
+    }
     const nums = [...res.text.matchAll(/\d+/g)]
       .map((m) => Number(m[0]))
       .filter((n, i, arr) => n >= 1 && n <= pool.length && arr.indexOf(n) === i)
@@ -652,17 +705,20 @@ function ensureOngoing(selected: Scored[], pool: Scored[], k: number): Scored[] 
   return next;
 }
 
-/** 按当前话题召回 top-k 条记忆（双路打分，无命中回退最近条目）。 */
+/** 按当前话题召回 top-k 条记忆（关键词优先，必要时补向量；无命中返回空）。 */
 export async function recallMemoryForChat(
   env: Env,
   query: string,
   k = RECALL_TOP_K,
   focus = '',
+  opts: { skipMemorySource?: boolean } = {},
 ): Promise<string> {
   const q = (query || '').slice(-1000).trim();
   if (!q) return '';
   try {
-    const rows = (await loadRows(env)).filter((r) => !r.dupOf);
+    const rows = (await loadRows(env)).filter(
+      (r) => !r.dupOf && (!opts.skipMemorySource || r.source === 'archive'),
+    );
     if (rows.length === 0) return '';
 
     const qGrams = new Set(bigrams(q));
@@ -672,12 +728,17 @@ export async function recallMemoryForChat(
     const focusWords = new Set(strongWords(focus).filter((w) => w.length >= 3));
 
     let qVec: number[] | null = null;
-    // 查询向量缓存：先内存，再 KV（1h），都没有才调 AI
-    const qKey = `memory:qvec:${hashId('q', null, q.slice(0, 200))}`;
-    const cachedQ = qvecMem.get(qKey);
-    if (cachedQ) {
-      qVec = cachedQ.length > 0 ? cachedQ : null;
-    } else {
+    let qVecLoaded = false;
+    // 查询向量按需加载：关键词已经很强时不调 Workers AI，省一次调用和首字延迟
+    const loadQueryVec = async (): Promise<number[] | null> => {
+      if (qVecLoaded) return qVec;
+      qVecLoaded = true;
+      const qKey = `memory:qvec:${hashId('q', null, q.slice(0, 200))}`;
+      const cachedQ = qvecMem.get(qKey);
+      if (cachedQ) {
+        qVec = cachedQ.length > 0 ? cachedQ : null;
+        return qVec;
+      }
       try {
         const kvQ = (await env.KV.get(qKey, 'json').catch(() => null)) as number[] | null;
         if (Array.isArray(kvQ) && kvQ.length > 0) {
@@ -695,13 +756,20 @@ export async function recallMemoryForChat(
       }
       if (qvecMem.size > 200) qvecMem.clear();
       qvecMem.set(qKey, qVec ?? []);
-    }
+      return qVec;
+    };
 
     const decoded = new Map<string, number[] | null>();
     const vecOf = (r: MemoryEntryRow): number[] | null => {
       if (!r.vec) return null;
-      if (!decoded.has(r.id)) decoded.set(r.id, decodeVec(r.vec));
-      return decoded.get(r.id) ?? null;
+      if (!decoded.has(r.id)) {
+        const cached = decodedVecCache.get(r.id);
+        decoded.set(r.id, cached !== undefined ? cached : decodeVec(r.vec));
+      }
+      const value = decoded.get(r.id) ?? null;
+      if (decodedVecCache.size > 5000) decodedVecCache.clear();
+      decodedVecCache.set(r.id, value);
+      return value;
     };
 
     // 时间金字塔：60 天前权重减半、90 天前再降一档，让周/月摘要接管常规召回
@@ -713,35 +781,51 @@ export async function recallMemoryForChat(
     const cutoff60 = fmt(bjNow.getTime() - 60 * 86400000);
     const cutoff90 = fmt(bjNow.getTime() - 90 * 86400000);
 
-    const scored = rows.map((r) => {
+    const scoreRow = (r: MemoryEntryRow, vec: number[] | null): number => {
       let score = 0;
-      for (const g of bigrams(r.content)) if (qGrams.has(g)) score += 1;
+      const grams = r.keywords.length > 0 ? r.keywords : bigrams(r.content);
+      for (const g of grams) if (qGrams.has(g)) score += 1;
       for (const t of r.tags) if (tagCtx.includes(t)) score += 3;
       for (const w of qWords) if (r.content.toLowerCase().includes(w)) score += 2;
       for (const a of aliases) if (r.content.toLowerCase().includes(a)) score += 2;
       for (const w of focusWords) if (r.content.toLowerCase().includes(w)) score += 2;
-      if (qVec) {
-        const rv = vecOf(r);
-        if (rv) score += cosine(qVec, rv) * 3;
-      }
+      const rv = vec ? vecOf(r) : null;
+      if (vec && rv) score += cosine(vec, rv) * 3;
       // ★ 重要度只在“确实相关”时加分：不能只靠 importance 让无关条目进候选池，
       //   否则每轮都有 20 条候选、top 分数又接近，会频繁触发 LLM 重排拖慢回复。
       if (score > 0) score += r.importance;
       if (r.date && r.date < cutoff90) score *= 0.25;
       else if (r.date && r.date < cutoff60) score *= 0.5;
-      return { r, score };
-    });
+      return score;
+    };
+
+    const makePool = (scored: Array<{ r: MemoryEntryRow; score: number }>) =>
+      scored
+        .filter((x) => x.score > 0)
+        .sort(
+          (a, b) =>
+            b.score - a.score ||
+            b.r.importance - a.r.importance ||
+            (b.r.date ?? '').localeCompare(a.r.date ?? ''),
+        )
+        .slice(0, CANDIDATE_TOP_K);
+
+    let scored = rows.map((r) => ({ r, score: scoreRow(r, null) }));
+    let pool = makePool(scored);
+    const needVector =
+      pool.length < k ||
+      (pool[0]?.score ?? 0) < VECTOR_TRIGGER_SCORE ||
+      /(那个|上次|之前|那件事|这事|它|他们)/.test(q);
+    if (needVector) {
+      const vec = await loadQueryVec();
+      if (vec) {
+        qVec = vec;
+        scored = rows.map((r) => ({ r, score: scoreRow(r, qVec) }));
+        pool = makePool(scored);
+      }
+    }
 
     // 粗召回 20 条候选 → MMR 去冗余 → 条件 LLM 重排 → 强保“进行中的事项”
-    const pool = scored
-      .filter((x) => x.score > 0)
-      .sort(
-        (a, b) =>
-          b.score - a.score ||
-          b.r.importance - a.r.importance ||
-          (b.r.date ?? '').localeCompare(a.r.date ?? ''),
-      )
-      .slice(0, CANDIDATE_TOP_K);
 
     let picked = pool.slice(0, k);
     if (pool.length > k) picked = mmrSelect(pool, k);
@@ -756,8 +840,9 @@ export async function recallMemoryForChat(
     }
     picked = ensureOngoing(picked, pool, k);
     if (picked.length === 0) {
-      // 召回兜底：最近更新的几条（宁可有相关背景，也不能完全断片）
-      picked = rows.slice(0, k).map((r) => ({ r, score: 0 }));
+      // 无命中就返回空：过去用 rows.slice(0,k) 兜底，KV/D1 两条路径顺序不一致，
+      // 会注入与当前话题无关的条目，反而带偏回复。
+      return '';
     }
     const lines = picked
       .map((x) => {

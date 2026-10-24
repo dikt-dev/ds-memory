@@ -233,7 +233,7 @@ function normalizeBullets(lines: string[], fallbackDate?: string): string[] {
     const t = raw.trim();
     if (!t) continue;
     // 关系变量由 applyRelationUpdates 单独处理，不走普通条目
-    if (AFFINITY_VAL_RE.test(t) || INTIMACY_VAL_RE.test(t) || MOOD_VAL_RE.test(t)) continue;
+    if (/^(好感度|亲密度|心情值?|信任|尊重|心动)\s*[:：]/.test(t)) continue;
     // 女性注释行不当作条目
     if (t.startsWith('<!--')) continue;
     const m = t.match(/^[-*]\s*(.*)$/);
@@ -537,6 +537,112 @@ export function pruneTransientSections(
 
   if (removed === 0) return { text, removed: 0, removedLines: [] };
   return { text: reassemble(pre, next), removed, removedLines };
+}
+
+/* ---------- 记忆密度：保守去重 ---------- */
+
+export interface MemoryCompactionResult {
+  text: string;
+  removed: number;
+  merged: number;
+}
+
+function entryContent(line: string): string | null {
+  if (!ENTRY_RE.test(line)) return null;
+  return line.replace(ENTRY_PREFIX_RE, '').trim() || null;
+}
+
+function entryDateOf(line: string): string | null {
+  const m = line.match(ENTRY_RE);
+  return m ? normalizeDateKey(m[1]) : null;
+}
+
+/**
+ * 保守的密度整理（不改事实，只去重）：
+ * - 「关于用户」「偏好与习惯」：同键取最新值；同内容取信息量最大的一条（日期取最早）；
+ * - 其它分区：只合并「同一天、同内容」的重复条目，避免把不同日期发生的事误删；
+ * - 受保护分区（人物底色/称呼/雷区）一行不动。
+ *
+ * 返回 removed 便于写日志和统计；不删除任何分区标题。
+ */
+export function compactMemoryEntries(text: string): MemoryCompactionResult {
+  const { pre, sections } = parseSections(text);
+  let removed = 0;
+  let merged = 0;
+
+  for (const sec of sections) {
+    const header = sec.header.trim();
+    if (PROTECTED_HEADERS.includes(header)) continue;
+    const profile = OVERWRITE_HEADERS.includes(header);
+    const out: string[] = [];
+    const seen = new Map<string, number>();
+
+    for (const line of sec.lines) {
+      const content = entryContent(line);
+      if (content === null) {
+        out.push(line);
+        continue;
+      }
+      const date = entryDateOf(line);
+      const keyed = profile && overwriteKeyOf(line) !== null;
+      const key = profile
+        ? (overwriteKeyOf(line) ?? normalizeForCompare(content))
+        : `${date ?? ''}|${normalizeForCompare(content)}`;
+      let idx = seen.get(key);
+
+      // profile 区允许「包含关系」的近似重复：例如旧条目「用户是 C 开发者」
+      // 与新条目「用户是 C 开发者，做跨端聊天软件」只保留信息更全的那条。
+      if (idx === undefined && profile && !keyed) {
+        const norm = normalizeForCompare(content);
+        if (norm.length >= 6) {
+          for (let i = 0; i < out.length; i++) {
+            const other = entryContent(out[i]);
+            if (!other || overwriteKeyOf(out[i]) !== null) continue;
+            const otherNorm = normalizeForCompare(other);
+            if (otherNorm.length >= 6 && (otherNorm.includes(norm) || norm.includes(otherNorm))) {
+              idx = i;
+              break;
+            }
+          }
+        }
+      }
+
+      if (idx === undefined) {
+        seen.set(key, out.length);
+        out.push(line);
+        continue;
+      }
+
+      // 重复：
+      // - 键=值：新日期覆盖旧值（避免把“职业=Go”改回旧的“职业=C…”）；
+      // - 普通内容：保留更长（信息更全）的正文；profile 区日期取最早，事件区日期必然相同。
+      const prev = out[idx];
+      const prevContent = entryContent(prev) ?? '';
+      const prevDate = entryDateOf(prev);
+      const bothKeyed = keyed && overwriteKeyOf(prev) !== null;
+      const newer = Boolean(date && prevDate && date > prevDate);
+      const keep = bothKeyed ? (newer ? content : prevContent) : content.length > prevContent.length ? content : prevContent;
+      const keepDate = bothKeyed
+        ? (newer ? date : prevDate) ?? date ?? prevDate
+        : profile
+          ? [prevDate, date].filter(Boolean).sort()[0] ?? null
+          : (prevDate ?? date);
+      out[idx] = `- [${compactDateKey(keepDate ?? '')}] ${keep}`;
+      removed += 1;
+      merged += 1;
+    }
+    sec.lines = out;
+  }
+
+  if (removed === 0) return { text, removed: 0, merged: 0 };
+  return { text: reassemble(pre, sections), removed, merged };
+}
+
+/** 记忆密度指标：条目数、字节数、平均每条字节。 */
+export function memoryDensity(text: string): { entries: number; bytes: number; bytesPerEntry: number } {
+  const entries = (text.match(/^-\s*\[(?:\d{4}|\d{2})-\d{2}-\d{2}\]/gm) ?? []).length;
+  const bytes = byteLength(text);
+  return { entries, bytes, bytesPerEntry: entries > 0 ? Math.round(bytes / entries) : 0 };
 }
 
 /** 日期加减（YYYY-MM-DD）。 */

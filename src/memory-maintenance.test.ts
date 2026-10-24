@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   applyRelationDelta,
   byteLength,
+  compactMemoryEntries,
+  memoryDensity,
   demoteSectionEntries,
   enforceSectionBudgets,
   ensureModuleComments,
@@ -388,6 +390,62 @@ describe('分层 demoteSectionEntries', () => {
     const before = build().replace('## 共同经历', '## 雷区与禁忌');
     const res = demoteSectionEntries(before, '## 雷区与禁忌', 100, 3);
     expect(res.removed).toEqual([]);
+  });
+});
+
+describe('记忆密度整理 compactMemoryEntries', () => {
+  it('关于用户同内容跨日期去重，保留信息更长的正文与最早日期', () => {
+    const before = `# 长期记忆
+
+## 关于用户
+- [26-10-01] 用户是 C 开发者
+- [26-10-20] 用户是 C 开发者，做跨端聊天软件
+
+## 雷区与禁忌
+- 不要提加班
+- 不要提加班
+`;
+    const out = compactMemoryEntries(before);
+    expect(out.removed).toBe(1);
+    expect(out.text).toContain('用户是 C 开发者，做跨端聊天软件');
+    expect(out.text).not.toContain('用户是 C 开发者\n');
+    // 受保护分区不动
+    expect(out.text.match(/不要提加班/g)).toHaveLength(2);
+  });
+
+  it('关于用户的键=值取最新值，不被旧的长句覆盖', () => {
+    const before = `# 长期记忆\n\n## 关于用户\n- [26-10-01] 职业=C 开发者，做 epoll/timerfd 很久了\n- [26-10-20] 职业=Go\n`;
+    const out = compactMemoryEntries(before);
+    expect(out.text).toContain('职业=Go');
+    expect(out.text).not.toContain('职业=C 开发者');
+  });
+
+  it('事件分区只合并同一天同内容，不误删不同日期的同一件事', () => {
+    const before = `# 长期记忆
+
+## 共同经历
+- [26-10-01] 一起吃饭
+- [26-10-01] 一起吃饭
+- [26-10-02] 一起吃饭
+`;
+    const out = compactMemoryEntries(before);
+    expect(out.removed).toBe(1);
+    expect(out.text.match(/\[26-10-01\] 一起吃饭/g)).toHaveLength(1);
+    expect(out.text).toContain('[26-10-02] 一起吃饭');
+  });
+
+  it('没有重复时原样返回', () => {
+    const before = '# 长期记忆\n\n## 关于用户\n- [26-10-01] 唯一事实\n';
+    const out = compactMemoryEntries(before);
+    expect(out.removed).toBe(0);
+    expect(out.text).toBe(before);
+  });
+
+  it('memoryDensity 统计条目数与平均字节', () => {
+    const d = memoryDensity('# x\n- [26-10-01] a\n- [26-10-02] bb\n');
+    expect(d.entries).toBe(2);
+    expect(d.bytes).toBeGreaterThan(0);
+    expect(d.bytesPerEntry).toBeGreaterThan(0);
   });
 });
 

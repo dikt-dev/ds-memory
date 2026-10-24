@@ -112,6 +112,8 @@ CREATE TABLE IF NOT EXISTS memory_entries (
   keywords    TEXT NOT NULL DEFAULT '[]',
   vec         TEXT,                     -- JSON number[]（embedding，可为 NULL → 关键词召回）
   source      TEXT NOT NULL DEFAULT 'memory',  -- memory | archive
+  -- 语义去重指针：指向内容更详细的主条目；NULL = 自己就是主条目（召回视图用，本体不动）
+  dup_of      TEXT,
   created_at  INTEGER NOT NULL,
   updated_at  INTEGER NOT NULL
 );
@@ -132,6 +134,4 @@ CREATE TABLE IF NOT EXISTS memory_rollups (
 
 CREATE INDEX IF NOT EXISTS idx_memory_rollups_period ON memory_rollups(period);
 
--- 语义去重指针（召回视图用，本体不动）
-
--- 语义去重指针（召回视图用，本体不动）
+CREATE INDEX IF NOT EXISTS idx_memory_entries_dup ON memory_entries(dup_of);

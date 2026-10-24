@@ -56,6 +56,8 @@ export interface BasePromptArgs {
   recentMemo?: string | null;
   /** 从记忆档案按话题检索到的往事（无命中则为空） */
   recalled?: string | null;
+  /** full = 本轮带完整长期记忆；compact = 只带核心+稳定画像，其余靠召回 */
+  memoryMode?: 'full' | 'compact';
   /** 最近发过的文件（已格式化好的 markdown 块） */
   recentFiles?: string | null;
   /** 客户端是否支持语音回复（只有它声明了才提示模型可用 [语音]） */
@@ -89,6 +91,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     recentMemo,
     recalled,
     recentFiles,
+    memoryMode = 'full',
     voiceReply,
     characterName,
     userAddress,
@@ -145,8 +148,15 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
 
   // ── ② 稳定（每天 04:00 才变）：长期记忆 ─────────────────────
   lines.push('');
-  lines.push('## 核心记忆（永远带上的长期设定）');
+  lines.push(
+    memoryMode === 'compact'
+      ? '## 核心记忆（人物底色/称呼/雷区 + 稳定画像；其余按本轮话题检索）'
+      : '## 长期记忆（本轮完整带上）',
+  );
   lines.push(compactMemoryForPrompt(memory) || '（暂无记忆）');
+  if (memoryMode === 'compact') {
+    lines.push('（其余记忆按本轮话题检索，可能不完整；没检索到就说记不清，不要编。）');
+  }
   lines.push('');
   lines.push('## 记忆使用规则（重要性权重，不是字数占比）');
   lines.push('- 长期记忆 50%：稳定身份、偏好、关系、雷区；长期有效。用户明确说“现在改了/不再这样”时，以新说法为准。');

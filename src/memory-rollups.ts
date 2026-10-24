@@ -77,7 +77,8 @@ export async function generateRollup(
   const input = `${existing?.content ? `【现有摘要】\n${existing.content}\n\n` : ''}【该周期记忆条目 ${items.length} 条】\n${items
     .map((r) => `- ${r.date ? `[${r.date}] ` : ''}${r.content}`)
     .join('\n')
-    .slice(0, 12000)}`;
+    // 条目多时保留最新的部分；旧内容已经在【现有摘要】里
+    .slice(-12000)}`;
 
   const result = await distillText(
     env,

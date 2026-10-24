@@ -1,10 +1,10 @@
 /**
  * 记忆档案层（分层记忆的第二层）。
  *
- * 分层思路：
- *   核心层 = memory.md（常驻注入，目标 ≤12KB，质量优先不压缩）
- *   档案层 = R2 memory/archive.md（不设上限，按时间累积的往事）
- *   检索   = 聊天时按当前话题召回，只把命中的几条注入（~150~300B）
+ * 当前思路：
+ *   memory.md 本体不强制裁剪：≤16KB 时全量注入；更大时只带核心+稳定画像。
+ *   档案层 = R2 memory/archive.md（按时间累积的往事，主要接收过期的「近期动态」）
+ *   检索   = 聊天时按当前话题从 D1 memory_entries 召回，只把命中的几条注入（~150~300B）
  *
  * 召回策略（三招叠加，全部确定性、不额外调用模型）：
  *   ① 同义词/别名扩展：用户说「熬夜」也能命中写着「通宵」的条目
@@ -21,7 +21,7 @@ export const ARCHIVE_R2_KEY = 'memory/archive.md';
 const ARCHIVE_KV_KEY = 'archive:cache';
 const ARCHIVE_CACHE_TTL = 300;
 
-/** 核心层（memory.md）的目标体积：24KB，质量优先，超出的往事无损沉进档案 */
+/** 核心层目标体积：超过 24KB 时把最旧往事无损搬进档案（仍可被索引召回）。 */
 export const CORE_TARGET_BYTES = 24000;
 /** 一次注入最多带几条往事 */
 export const RECALL_LIMIT = 4;
@@ -364,7 +364,7 @@ export async function appendArchiveLines(env: Env, incoming: string[]): Promise<
   }
 }
 
-/** 按话题检索档案，返回可直接注入的块（无命中返回空串）。 */
+/** 旧版档案直检入口（保留给纯函数测试/兼容；生产聊天已改用 D1 记忆索引）。 */
 export async function recallForQuery(env: Env, query: string): Promise<string> {
   if (!query.trim()) return '';
   try {

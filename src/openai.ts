@@ -14,8 +14,18 @@ import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
 import { attachWeather, getOrCreateDayContext } from './context';
 import { getMemory } from './memory';
 import { fetchWeather } from './weather';
-import { insertUserMessage, insertAssistantReply, latestMessage, compactHistoryMessage, historyRangeNote } from './db';
-import { loadRecentHistory } from './recent-context';
+import {
+  insertUserMessage,
+  insertAssistantReply,
+  latestMessage,
+  compactHistoryMessage,
+  historyRangeNote,
+  withHistoryTimestamp,
+  HISTORY_FILE_MAX_CHARS,
+  HISTORY_MESSAGE_MAX_CHARS,
+  type MessageRow,
+} from './db';
+import { loadRecentRounds, RECENT_ROUNDS } from './recent-context';
 import { calcCost, loadPricing, type TokenUsage } from './pricing';
 import { completeDeepSeek, streamDeepSeek, type DeepSeekMessage } from './deepseek';
 import { getTodaySummary, maybeSummarizeToday } from './summary';
@@ -28,7 +38,7 @@ import { facetsOf, processEmotionTurn } from './emotion-context';
 import { moodFromVector } from './emotion-vector';
 import { buildVoiceDirective, recentOpeners } from './voice';
 import { formatRecentMemoBlock, getRecentMemo, maybeRefreshRecentMemo } from './recent-memory';
-import { extractCoreMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
+import { extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 import { recordFiles, recentFilesBlock } from './recent-files';
 
 type AppEnv = { Bindings: Env };
@@ -329,9 +339,18 @@ openaiApp.post('/chat/completions', async (c) => {
   const dateKey = dateKeyInBeijing(now);
   c.executionCtx.waitUntil(maybeSummarizeToday(c.env, dateKey)); // 异步滚动摘要，不阻塞
   c.executionCtx.waitUntil(maybeRefreshRecentMemo(c.env, now)); // 异步刷新中期记忆（最近 24h）
-  const memory = await getMemory(c.env);
-  const dayCtx = await getOrCreateDayContext(c.env, dateKey);
-  const fetchedWeather = await fetchWeather(c.env);
+  // 这些读取互不依赖：并行发起，减少 QQ 场景的首字延迟。
+  const [memory, dayCtx, fetchedWeather, recentMemoRaw, summaryRaw, personaState, facts] =
+    await Promise.all([
+      getMemory(c.env),
+      getOrCreateDayContext(c.env, dateKey),
+      fetchWeather(c.env),
+      getRecentMemo(c.env),
+      getTodaySummary(c.env, dateKey),
+      loadPersonaState(c.env),
+      readSessionFacts(c.env, now, dateKey),
+    ]);
+  const promptMemory = extractPromptMemory(memory);
   // 拉取失败时回退当天缓存，避免“没有天气”时模型去翻旧记忆
   const weather = fetchedWeather ?? dayCtx.weather ?? null;
   if (fetchedWeather) await attachWeather(c.env, dateKey, fetchedWeather, dayCtx);
@@ -341,15 +360,13 @@ openaiApp.post('/chat/completions', async (c) => {
     is_holiday: dayCtx.is_holiday,
     holiday_note: dayCtx.holiday_note,
   };
-  const recentMemo = formatRecentMemoBlock(await getRecentMemo(c.env));
+  const recentMemo = formatRecentMemoBlock(recentMemoRaw);
   // 文件沉淀：先记账再读，本轮发的文件立刻能出现在提示词里
   await recordFiles(c.env, body?.files);
   const recentFiles = await recentFilesBlock(c.env, now);
   // 中期记忆存在时跳过今日摘要，避免重复注入同一段时间的事
-  const todaySummary = recentMemo ? null : await getTodaySummary(c.env, dateKey);
+  const todaySummary = recentMemo ? null : summaryRaw;
   const relation = parseRelationValues(memory);
-  // ★ 先取会话事实：环境漂移要按「距上次多久」折算，不能每轮全额叠加
-  const facts = await readSessionFacts(c.env, now, dateKey);
   const envHour = beijingHour(now);
   const envMonth = beijingMonth(now);
   // AstrBot 侧默认渠道为 AstrBot；未来其它客户端调用 /v1 可用 X-Client-Channel 声明
@@ -387,63 +404,65 @@ openaiApp.post('/chat/completions', async (c) => {
     characterName: c.env.CHARACTER_NAME,
   });
   const cardTextWithMood = charCard.cardText;
-  // ★ 按需检索：用本轮用户消息 + 前面几条用户消息去档案里找相关往事
+  // 先加载最近 10 轮历史：QQ 客户端只发当前一条，历史必须从 D1 补。
+  // 这样召回 query 也能带上“上一句/上上句”，而不是只拿当前几个字去搜。
+  let historyRaw: MessageRow[] = [];
+  let historyMessages: DeepSeekMessage[] = [];
+  let historyNote: string | null = null;
+  if (body?.inject_history === true && !skipRecording) {
+    historyRaw = await loadRecentRounds(c.env, RECENT_ROUNDS, now);
+    historyNote = historyRangeNote(historyRaw, now);
+    historyMessages = historyRaw
+      .filter(
+        (m, i) =>
+          !(i === historyRaw.length - 1 && m.role === 'user' && m.content === lastUserCleaned),
+      )
+      .filter((m) => m.content.trim())
+      .map((m) => ({
+        role: m.role === 'assistant' ? ('assistant' as const) : ('user' as const),
+        content: withHistoryTimestamp(
+          compactHistoryMessage(
+            m.content,
+            m.content.includes('【文件：') ? HISTORY_FILE_MAX_CHARS : HISTORY_MESSAGE_MAX_CHARS,
+          ),
+          m.created_at,
+        ),
+      }));
+  }
+  // 召回 query：当前消息 + 最近 3 条用户历史（按时间从旧到新）
   const recallQuery = [
     lastUserCleaned,
+    ...historyRaw.filter((m) => m.role === 'user').slice(-3).map((m) => m.content),
     ...textMessages
       .filter((m) => m.role === 'user')
       .slice(-3, -1)
       .map((m) => contentToText(m.content)),
   ].join(' ');
-  // QQ 客户端只发当前一条；inject_history=true 时从 D1 补最近 12 条短期原文。
-  // 当前消息尚未落库，所以不会重复；若历史末尾与当前文本相同，再主动去重一次。
-  let historyMessages: DeepSeekMessage[] = [];
-  let historyNote: string | null = null;
-  if (body?.inject_history === true && !skipRecording) {
-    const rows = await loadRecentHistory(c.env, 12, now);
-    historyNote = historyRangeNote(rows, now);
-    historyMessages = rows
-      .filter(
-        (m, i) =>
-          !(i === rows.length - 1 && m.role === 'user' && m.content === lastUserCleaned),
-      )
-      .filter((m) => m.content.trim())
-      .map((m, i, arr) => ({
-        role: m.role === 'assistant' ? 'assistant' : 'user',
-        // 最近 4 条保留原文，更早的压缩到 400 字内省 token
-        // ★ 带文件的消息放宽到 3000 字：压缩到 400 字后「那个表第三行」就对不上了。
-        content:
-          i >= arr.length - 4
-            ? m.content
-            : m.content.includes('【文件：')
-              ? compactHistoryMessage(m.content, 3000)
-              : compactHistoryMessage(m.content),
-      }));
-  }
   const focus = [
     lastUserCleaned,
-    ...historyMessages.map((m) => m.content),
+    ...historyMessages.map((m) => (typeof m.content === 'string' ? m.content : contentToText(m.content))),
   ].join(' ');
-  const recalledRaw = await recallMemoryForChat(c.env, recallQuery, undefined, focus);
+  const recalledRaw = await recallMemoryForChat(c.env, recallQuery, undefined, focus, {
+    skipMemorySource: promptMemory.mode === 'full',
+  });
   const recalled = stripDuplicateRecall(
     recalledRaw,
-    [
-      ...historyMessages.map((m) => (typeof m.content === 'string' ? m.content : contentToText(m.content))),
-      recentMemo,
-    ].filter(Boolean),
+    [...historyRaw.map((m) => m.content), recentMemo, promptMemory.text].filter(Boolean),
   );
   const astrbotSystems = textMessages.filter((m) => m.role === 'system').map((m) => m.content);
   // 最近几条回复的开头：避免连续几轮用同一句开场白
-  const avoidOpeners = recentOpeners(
-    textMessages.filter((m) => m.role === 'assistant').map((m) => contentToText(m.content)),
-  );
-  const personaDrift = buildPersonaDriftLine(await loadPersonaState(c.env));
+  const avoidOpeners = recentOpeners([
+    ...historyRaw.filter((m) => m.role === 'assistant').map((m) => m.content),
+    ...textMessages.filter((m) => m.role === 'assistant').map((m) => contentToText(m.content)),
+  ]);
+  const personaDrift = buildPersonaDriftLine(personaState);
   const mergedSystem = [
     ...astrbotSystems,
     buildBaseSystemPrompt({
       now,
       ctx,
-      memory: extractCoreMemory(memory),
+      memory: promptMemory.text,
+      memoryMode: promptMemory.mode,
       weather,
       todaySummary,
       recentMemo,
