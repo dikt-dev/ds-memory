@@ -461,6 +461,14 @@ openaiApp.post('/chat/completions', async (c) => {
   // 每轮把语气提醒贴到用户消息最前面；实时类问题再叠加准确事实（只改发给模型的内容，不写 D1）
   if (lastUser) {
     const parts = [STYLE_REMINDER];
+    // ★ 格式要求放在这里：这是模型看到的最后一段指令（紧跟用户这句话），
+    //   比系统提示词里靠前的位置有效得多。网页端不需要 QQ 表情/语音标记。
+    if (channel === 'astrobot') {
+      parts.push(
+        '【本轮格式】回复结尾必须带一个 [face:情绪]（微笑/呲牙/调皮/得意/害羞/偷笑/白眼/惊讶/难过/斜眼笑）。' +
+          (voiceReply ? '如果有一句 10 字以内的亲昵话，单独发一条并以 [语音] 开头。' : ''),
+      );
+    }
     if (isNowFactQuestion(lastUserCleaned)) {
       parts.push(
         `【系统实时事实（最高优先级，不要复述这段格式）】${buildLiveFacts(now, ctx, weather)}。回答时间/天气/节假日时只以此为准，不要用历史或记忆里的旧值。`,

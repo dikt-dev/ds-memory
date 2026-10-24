@@ -63,7 +63,7 @@ describe('buildSystemPrompt', () => {
       channel: 'astrobot',
     });
     expect(prompt).toContain('不要用 Markdown');
-    expect(prompt).toContain('[face:微笑]');
+    expect(prompt).toContain('[face:xx]');
   });
 
   it('注入「最近发过的文件」块', () => {

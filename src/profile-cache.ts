@@ -57,3 +57,31 @@ export async function setCachedProfile(env: Env, profile: UserProfile): Promise<
   await env.KV.put(PROFILE_KV_KEY, JSON.stringify(cached), { expirationTtl: PROFILE_TTL_SECONDS }).catch(() => {});
   await env.KV.delete(PROFILE_DIRTY_KEY).catch(() => {});
 }
+
+// ── QQ 通道心跳（客户端每 5 分钟上报一次） ─────────────────────────
+export interface HeartbeatRecord {
+  at: string;
+  connected: boolean;
+  queue_depth: number | null;
+  version: string | null;
+  last_error: string | null;
+}
+
+/** 读心跳记录（没有或格式不对返回 null）。 */
+export async function getHeartbeat(env: Env): Promise<HeartbeatRecord | null> {
+  const raw = (await env.KV.get('proactive:heartbeat', 'json').catch(() => null)) as
+    | HeartbeatRecord
+    | null;
+  if (!raw || typeof raw.at !== 'string') return null;
+  return raw;
+}
+
+/** 读「上次已经提醒过的掉线心跳时间」。 */
+export async function getOfflineAlertedAt(env: Env): Promise<string | null> {
+  return env.KV.get('proactive:offline_alert').catch(() => null);
+}
+
+/** 记下已提醒（同一个掉线事件只提醒一次）。 */
+export async function setOfflineAlertedAt(env: Env, at: string): Promise<void> {
+  await env.KV.put('proactive:offline_alert', at, { expirationTtl: 7 * 86400 }).catch(() => {});
+}
