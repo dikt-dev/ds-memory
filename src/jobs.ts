@@ -40,7 +40,7 @@ import { FACET_KEYS } from './relation-facets';
 import { applyRelationDecay } from './memory-maintenance';
 import { getDaySummaryRaw, summaryKey } from './summary';
 import { checkStorageCapacity, cleanupStaleObjects, deleteObject, getObject, listKeys, putObject } from './storage';
-import { messagesByDate, type MessageRow } from './db';
+import { messagesByDate, assistantReplyTo, type MessageRow } from './db';
 import { backfillFeedback } from './feedback';
 import { cleanupQueue } from './queue';
 import { addLlmCost } from './llm-cost';
@@ -88,6 +88,22 @@ async function claimJob(env: Env, jobType: string, target: string): Promise<bool
   return true;
 }
 
+/**
+ * 归档补全：一天的最后一条如果是用户消息，而 AI 的回复落在下一天，
+ * 把这条回复也补进当天日志，保证归档以 AI 的话收尾、对话完整。
+ * 只追加，不删除、不改写 D1；月度合并会按 id 去重。
+ */
+export function completeConversationRows(
+  rows: MessageRow[],
+  reply: MessageRow | null,
+): MessageRow[] {
+  if (rows.length === 0 || !reply) return rows;
+  const last = rows[rows.length - 1];
+  if (last.role !== 'user') return rows;
+  if (rows.some((r) => r.id === reply.id)) return rows;
+  return [...rows, reply];
+}
+
 async function finishJob(env: Env, jobType: string, target: string, detail: string, ok: boolean): Promise<void> {
   await env.DB.prepare(
     'UPDATE cron_runs SET status = ?, detail = ?, run_at = ? WHERE job_type = ? AND target = ?',
@@ -113,7 +129,18 @@ async function archiveOneDay(env: Env, target: string, now: Date): Promise<Daily
 
   try {
     // 1) 当天的全部消息（按自然日 date_key 查询）
-    const rows = await messagesByDate(env, target);
+    const dayRows = await messagesByDate(env, target);
+    // 跨天补全：最后一条是用户消息时，把落在下一天的 AI 回复补进当天日志
+    let rows = dayRows;
+    const lastRow = dayRows[dayRows.length - 1];
+    if (lastRow && lastRow.role === 'user') {
+      const reply = await assistantReplyTo(env, lastRow.id).catch(() => null);
+      const completed = completeConversationRows(dayRows, reply);
+      if (completed !== dayRows) {
+        rows = completed;
+        console.log(`[daily] ${target} 补上跨天 AI 回复 #${reply?.id}，保证以 AI 收尾`);
+      }
+    }
 
     // 2) 当天上下文 + 天气快照（优先用当天聊天时记录的天气）
     const ctx = await getOrCreateDayContext(env, target);

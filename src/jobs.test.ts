@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeDailyLogs, missingDatesInMonth } from './jobs';
+import { mergeDailyLogs, missingDatesInMonth, completeConversationRows } from './jobs';
 import { daysInMonth, subtractMonths } from './date';
 import type { MessageRow } from './db';
 
@@ -95,5 +95,31 @@ describe('missingDatesInMonth', () => {
       'chat_logs/2026-10.json',
     ]);
     expect(missing).toHaveLength(30); // 只认当月 .log
+  });
+});
+
+describe('completeConversationRows —— 归档以 AI 收尾', () => {
+  const reply = (id: number): MessageRow => ({
+    ...mk(999),
+    id,
+    role: 'assistant',
+    content: `reply-${id}`,
+    reply_to_id: 1,
+  });
+
+  it('最后一条是用户且回复落在下一天时补上', () => {
+    const out = completeConversationRows([mk(1)], reply(2));
+    expect(out.map((r) => r.id)).toEqual([1, 2]);
+    expect(out[out.length - 1].role).toBe('assistant');
+  });
+
+  it('最后一条已经是 AI 时不改', () => {
+    const rows = [mk(1), reply(2)];
+    expect(completeConversationRows(rows, reply(3))).toBe(rows);
+  });
+
+  it('回复已在当天时不重复', () => {
+    const rows = [mk(1), reply(2)];
+    expect(completeConversationRows(rows, reply(2))).toBe(rows);
   });
 });

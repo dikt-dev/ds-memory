@@ -257,6 +257,16 @@ export async function messagesByDate(env: Env, dateKey: string): Promise<Message
   return res.results ?? [];
 }
 
+/** 某条用户消息对应的助手回复（可能落在下一天，归档补全用）。 */
+export async function assistantReplyTo(env: Env, userMessageId: number): Promise<MessageRow | null> {
+  const res = await env.DB.prepare(
+    `SELECT ${SELECT_COLS} FROM messages WHERE reply_to_id = ? AND role = 'assistant' ORDER BY id ASC LIMIT 1`,
+  )
+    .bind(userMessageId)
+    .first<MessageRow>();
+  return res ?? null;
+}
+
 /** 最近的 AI 主动消息（避免内容重复用）。 */
 export async function recentProactiveMessages(env: Env, limit = 6): Promise<MessageRow[]> {
   const res = await env.DB.prepare(
