@@ -143,7 +143,7 @@ runtime_state / auth_revocations / memory_* / memory_jobs / affect_* / attitude_
 
 ```text
 tsc --noEmit     ✅
-vitest run       57 files / 691 tests ✅
+vitest run       57 files / 692 tests ✅
 scripts/verify.sh ✅ exit 0
 ```
 
