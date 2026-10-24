@@ -180,6 +180,8 @@ export async function streamChat(
   // 4) 流式转发；流结束落库 + 计费
   return streamDeepSeek(env, messages, {
     appendUsageEvent: true,
+    // ★ 不限制回复长度（8192 = 模型输出上限）
+    maxTokens: 8192,
     onFinish: async (text, usage) => {
       let cost = 0;
       let assistantId: number | undefined;

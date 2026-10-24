@@ -208,11 +208,10 @@ describe('voice —— 语言层', () => {
     expect(casualness(600)).toBeLessThan(casualness(900));
     expect(casualness(1000)).toBe(1);
   });
-  it('语音指令包含禁用词与口头禅', () => {
+  it('语言层只指向人设与记忆', () => {
     const v = buildVoiceDirective(700);
-    expect(v).toContain('绝对不要出现');
-    expect(v).toContain('嘿嘿');
-    expect(v).toContain('改口');
+    expect(v).toContain('记忆里那个人');
+    expect(v).not.toContain('绝对不要出现');
   });
 
   // 注意：小癖好/小脾气已移到 memory.md「人物底色」，voice 不再重复，

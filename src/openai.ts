@@ -465,8 +465,7 @@ openaiApp.post('/chat/completions', async (c) => {
     //   比系统提示词里靠前的位置有效得多。网页端不需要 QQ 表情/语音标记。
     if (channel === 'astrobot') {
       parts.push(
-        '【本轮格式】回复结尾必须带一个 [face:情绪]（微笑/呲牙/调皮/得意/害羞/偷笑/白眼/惊讶/难过/斜眼笑）。' +
-          (voiceReply ? '如果有一句 10 字以内的亲昵话，单独发一条并以 [语音] 开头。' : ''),
+        '【可用】[face:表情名] → QQ 表情；' + (voiceReply ? '[语音] 开头 → 一条语音。' : '') + '用不用随你。',
       );
     }
     if (isNowFactQuestion(lastUserCleaned)) {
@@ -570,7 +569,8 @@ openaiApp.post('/chat/completions', async (c) => {
   // 回复长度交给模型自己决定：完美复刻语气优先，不再按对方字数硬压
   const requested =
     typeof body?.max_tokens === 'number' && body.max_tokens > 0 ? Math.floor(body.max_tokens) : null;
-  const maxTokens = requested ?? undefined;
+  // 8192 = DeepSeek 的输出上限，等于「不限制长度」
+  const maxTokens = requested ?? 8192;
 
   // 4) 流式 / 非流式
   if (body?.stream !== false) {

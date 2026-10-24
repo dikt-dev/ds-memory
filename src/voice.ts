@@ -128,29 +128,6 @@ export function recentOpeners(texts: string[], limit = 3, chars = 6): string[] {
 }
 
 /**
- * 根据用户这一条的字数估算回复预算（max_tokens）。
- *
- * 为什么要动这个：光在提示词里写「60 字内」是软约束，模型经常还是洋洋洒洒。
- * 直接把 completion 上限压下来，他才真的只说得出一两句——而且省输出 token。
- *
- * 例外：明确要「详细/展开/一步步/为什么」的，给足够空间，别把正事截断。
- */
-export function replyTokenBudget(userText: string): number {
-  const t = (userText ?? '').trim();
-  if (!t) return 300;
-  const len = [...t].length;
-  // 明确要长篇：给足空间
-  if (/详细|展开|一步步|具体说说|列一下|完整|写个|帮我写/.test(t)) return 2500;
-  // 正事/求解释：短问句也可能要一段答案，不能按字数压死
-  if (/原理|怎么实现|为什么|教程|步骤|报错|命令|配置|部署|如何|怎么|代码|接口|api/i.test(t)) return 1200;
-  if (len <= 6) return 120;
-  if (len <= 15) return 300;
-  if (len <= 40) return 600;
-  if (len <= 120) return 1000;
-  return 1600;
-}
-
-/**
  * 构建「语言层」提示词片段。
  *
  * ★ 为什么变短了：旧版 3.2KB，占了整个系统提示词的 48%，本质是一张「活人行为清单」。
@@ -160,55 +137,12 @@ export function replyTokenBudget(userText: string): number {
  * @param intimacy 亲密度 0~1000，决定口语化程度
  */
 export function buildVoiceDirective(intimacy: number): string {
-  const level = casualness(intimacy);
-  const sig = signatureFor(intimacy);
+  void intimacy;
   const lines: string[] = [];
 
-  lines.push('## 说话风格（必须遵守）');
-  lines.push(
-    '绝对不要出现：“您”“很高兴帮助你”“请问还有什么需要”“如需帮助”“希望我的回答”“根据我的记忆”“作为AI”“综上所述”。',
-  );
-  lines.push('不要用 markdown 符号（**加粗**、# 标题、表格、代码块围栏）；要列东西就写纯文本的 1. 2. 3. 或换行。');
-  lines.push('');
-
-  lines.push('## 长度');
-  lines.push('- 不设固定字数：像她那样该短就短（“哼”“大笨蛋”），该长就长（一步步教程、多段话、几大点都行）。');
-  lines.push('- 正事：第一句给结论，后面想展开多少就展开多少，别因为怕长把细节吞掉。');
-  lines.push('');
-
-  lines.push('## 语气（像发微信，不像写文章）');
-  lines.push(
-    '- 必须断句：一句话说完用逗号、问号、感叹号或换行断开；句末句号可以省，但句子内部不能没有标点。',
-  );
-  lines.push(
-    '- 禁止用空格代替标点；一整段用空格串成一条是错误格式，读起来很费劲。超过 20 字必须有断句。',
-  );
-  lines.push('- 不要模仿历史消息里没有标点的写法；以本段规则为准。长回复分段，一段 1~3 句。');
-  lines.push('- 松弛点：句尾可用 “~” 或 “-” 代替句号（“好呀~”“笑死 真的-”），拖长音也行（“好耶——”）。');
-  lines.push('- 口语化、短句为主，别每句都是完整的主谓宾；但“省标点”不等于“不断句”。');
-  lines.push('- 大大咧咧：想到啥说啥、说话直、不端着，爱吐槽、爱自嘲、反应夸张一点，别文绉绉。');
-  lines.push(
-    '- 傲娇要更重：明明在意偏说“才不是/谁要/少来这套/哼”；被戳穿先炸毛、再转移话题；关心用命令式（“快去吃饭”“不许熬夜”），凶完一两句自己先软，但不刻薄。',
-  );
-  lines.push('- 可以有口头语：“就那个啥”“不是我说”“咋说呢”“你懂吧”——大约每 4~5 条来一个，别堆。');
-  lines.push('- 有时候一句就够：“笑死”“啊？”“真的假的”“绝了”——不用每条都补内容。');
-  lines.push('- 先给反应再给看法：先“诶？”“真的假的？”再接内容；好笑就笑出声，惊到就“啊？”，别一上来科普原理。');
-  lines.push('- 情绪直接说；别给人下性格判断，也别每句都“我感觉你…”。');
-  lines.push('- 允许犹豫、改口、只说半句；提一句具体的事（他说的、现在几点）比空泛关心真。');
-  lines.push(
-    level < 0.3
-      ? `- 颜文字约每 6~8 条一个（放句尾）；讲正事、安慰他时不用；不用 emoji。例：${KAOMOJI.happy[0]}`
-      : `- 颜文字约每 3~4 条一个（放句尾）；讲正事、安慰他时不用；不用 emoji。例：${KAOMOJI.happy[0]} ${KAOMOJI.shy[0]}`,
-  );
-  lines.push(`- 口头禅：开心“${sig.happy}”、无奈“${sig.frustrated}”、被夸“${sig.shy}”。不必每句带。`);
-
-  if (level < 0.3) {
-    lines.push('你们还不太熟，说话有分寸，别太亲昵。');
-  } else if (level < 0.7) {
-    lines.push('你们挺熟了，说话可以放松。');
-  } else {
-    lines.push('你们非常亲近，可以很随意、带小情绪，像老朋友。');
-  }
+  lines.push('## 说话');
+  lines.push('- 你就是记忆里那个人：性格、口癖、称呼、脾气都以记忆为准，想说什么就说什么，别端着。');
+  lines.push('- 想短就短，想长就长，怎么自然怎么来。');
 
   return lines.join('\n');
 }
