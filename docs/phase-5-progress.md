@@ -207,12 +207,53 @@ wrangler deploy --dry-run
 
 ---
 
-## 4. 手机连接与安全
+## 4. 手机自动停止修复
 
-- 手机 SSH 已连通；
-- 客户端已停止/重启过一次，当前 `python3 main.py` 运行、NapCat 已连接；
-- 手机已插电（PLUGGED_AC/CHARGING）；
-- 之前 6MB 图片导致的 `SSLV3_ALERT_BAD_RECORD_MAC` 尚未复现，继续观察；
+### 4.1 发现的误判与根因
+
+- `ds.sh status` 只看 `.run/client.pid`，而 `run-all.sh` 启动的进程不写这个旧 PID 文件；
+- 所以客户端明明在跑，`status` 也可能显示“未运行”；
+- 真正的停止是 tmux/run-all 会话被 Android 杀掉后，30s 自检也一起消失，没有东西再拉起；
+- 20:04 的停止日志停在 6MB 图片上传 TLS 错误后，没有优雅退出记录，符合“进程被系统杀/崩溃”而非正常 shutdown。
+
+### 4.2 已实施
+
+- 新增 `ds-qq-client/watchdog.sh`：
+  - 检查 tmux 会话、面板 dead、主进程；
+  - 缺失时重建 `dsqq` 会话；
+  - 写 `logs/watchdog.log`。
+- `termux-job-scheduler` 已注册：
+
+```text
+job-id 1001
+period 900000ms（15 分钟）
+persisted true
+battery-not-low false
+```
+
+- `ds.sh start` 会额外触发 watchdog（会话存在但进程死掉时也能修）；
+- `ds.sh status` 改为 `pgrep` 检测，不再依赖旧 PID 文件；
+- `run-all.sh` 启动 client/NapCat 时更新 `.run/*.pid`。
+
+### 4.3 恢复演练
+
+```text
+bash ds.sh stop
+→ client down
+sh watchdog.sh
+→ 自动重建 dsqq 会话
+→ client up
+```
+
+当前：
+
+```text
+client 运行中
+napcat 运行中（已连接 QQ 2219827501）
+```
+
+手机已插电（PLUGGED_AC/CHARGING），之前 6MB 图片导致的
+`SSLV3_ALERT_BAD_RECORD_MAC` 尚未复现，继续观察。
 - **安全提示**：`ds-qq-client/tests/_ssh_exec.sh` 等辅助脚本包含明文手机凭据，建议轮换手机密码并改为从环境变量读取；本次不会把凭据写入仓库或文档。
 
 ---
