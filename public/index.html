@@ -792,7 +792,7 @@ async function resetAndLoadHistory() {
 }
 
 /* ---------- 实时刷新：定时增量拉取（让 QQ / 其它渠道的消息即时出现）---------- */
-const POLL_INTERVAL_MS = 3000;
+const POLL_INTERVAL_MS = 20000;
 let pollTimer = null;
 let pollingNow = false;
 let sending = false;
@@ -805,7 +805,7 @@ async function pollNewMessages() {
   pollingNow = true;
   try {
     const res = await fetch(`/api/history/since?after_id=${latestSeenId}&limit=50`);
-    if (res.status === 401) { showLogin(); return; }
+    if (res.status === 401) { stopPolling(); showLogin(); return; }
     if (!res.ok) return;
     const data = await res.json();
     const incoming = (data.messages || []).filter((m) => Number.isFinite(m.id) && m.id > latestSeenId);
@@ -838,9 +838,20 @@ function startPolling() {
   pollTimer = setInterval(pollNewMessages, POLL_INTERVAL_MS);
 }
 
-// 切回前台立即补拉一次
+function stopPolling() {
+  if (!pollTimer) return;
+  clearInterval(pollTimer);
+  pollTimer = null;
+}
+
+// 可见时恢复轮询并立即补拉；后台标签页完全停止，不占请求。
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') pollNewMessages();
+  if (document.visibilityState === 'visible') {
+    startPolling();
+    pollNewMessages();
+  } else {
+    stopPolling();
+  }
 });
 
 messagesEl.addEventListener('scroll', () => {
@@ -1231,7 +1242,7 @@ async function send() {
   }
 }
 
-/* ---------- 会话恢复：有有效 Cookie（7 天内）自动免登录 ---------- */
+/* ---------- 会话恢复：有有效 Cookie（24 小时内）自动免登录 ---------- */
 async function initSession() {
   try {
     const res = await fetch('/api/history?limit=5');

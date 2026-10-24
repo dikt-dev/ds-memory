@@ -5,12 +5,13 @@
  * - 人物底色/称呼/雷区/价值观永远由 memory.md 的核心层提供，绝不由这里改；
  * - 这里只维护 6 个“可漂移”的性格维度，每次最多 ±2，上下限受基线约束；
  * - 至少积累 7 天、15 条用户消息才结算一次，避免单日情绪带偏；
- * - 状态存 KV（persona:state），只影响提示词里的“近期倾向”，不写 memory.md；
+ * - 状态存 D1 runtime_state（key=persona:state；无 D1 时回退 KV），只影响提示词里的“近期倾向”，不写 memory.md；
  * - 变化不主动告诉用户，也不让模型刻意表演。
  */
 import type { Env } from './types';
 import { distillText } from './distill';
 import { dateKeyInBeijing } from './date';
+import { getRuntimeState, putRuntimeState } from './runtime-store';
 
 export const TRAIT_KEYS = ['傲娇', '活泼', '黏人', '大大咧咧', '温柔', '毒舌'] as const;
 export type TraitKey = (typeof TRAIT_KEYS)[number];
@@ -64,7 +65,8 @@ function parseState(raw: unknown): PersonaState | null {
 
 export async function loadPersonaState(env: Env): Promise<PersonaState> {
   try {
-    const raw = (await env.KV.get(STATE_KV, 'json')) as unknown;
+    const rawText = await getRuntimeState(env, STATE_KV);
+    const raw = rawText ? (JSON.parse(rawText) as unknown) : null;
     const parsed = parseState(raw);
     if (parsed) return parsed;
   } catch {
@@ -78,7 +80,7 @@ export async function loadPersonaState(env: Env): Promise<PersonaState> {
     lastReview: dateKeyInBeijing(),
     history: [],
   };
-  await env.KV.put(STATE_KV, JSON.stringify(fresh)).catch(() => {});
+  await putRuntimeState(env, STATE_KV, JSON.stringify(fresh)).catch(() => {});
   return fresh;
 }
 
@@ -202,6 +204,6 @@ export async function maybeReviewPersonaDrift(
       },
     ].slice(-12),
   };
-  await env.KV.put(STATE_KV, JSON.stringify(updated));
+  await putRuntimeState(env, STATE_KV, JSON.stringify(updated));
   return { reviewed: true, deltas };
 }

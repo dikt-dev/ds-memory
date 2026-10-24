@@ -44,8 +44,9 @@ wrangler r2 bucket create ds-memory-r2
 wrangler kv namespace create MEMORY_KV
 
 # 2) 本地开发变量
-cp .dev.vars.example .dev.vars      # 填 DEEPSEEK_API_KEY 与 ACCESS_PASSWORD_HASH
+cp .dev.vars.example .dev.vars      # 填 DEEPSEEK_API_KEY / ACCESS_PASSWORD_HASH / AUTH_SECRET
 node scripts/hash-password.mjs '你的口令'   # 生成口令哈希
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"  # 生成 AUTH_SECRET
 
 # 3) 初始化数据库与初始记忆
 wrangler d1 execute ds-memory-db --remote --file=./schema.sql
@@ -54,6 +55,7 @@ wrangler r2 object put ds-memory-r2/memory.md --file=memory-template.md
 # 4) 配置密钥并发布
 wrangler secret put DEEPSEEK_API_KEY
 wrangler secret put ACCESS_PASSWORD_HASH
+wrangler secret put AUTH_SECRET
 wrangler deploy
 ```
 
@@ -104,6 +106,7 @@ USER_ADDRESS   = "主人"     # 它怎么称呼你（可删，改用记忆里的
 |---|---|---|
 | `DEEPSEEK_API_KEY` | ✅ | DeepSeek 对话与提炼 |
 | `ACCESS_PASSWORD_HASH` | ✅ | 网页口令哈希（`salt:sha256`） |
+| `AUTH_SECRET` | ✅ | 无状态签名 Cookie 的 HMAC 密钥（Phase 1 起） |
 | `ASTROBOT_API_KEY` | 可选 | OpenAI 兼容端点 / 队列鉴权 |
 | `SECONDARY_R2_*` | 可选 | 小号 R2（主账号容量用尽后自动切换） |
 | `ASTROBOT_OPENAPI_KEY` | 可选 | AstrBot 直连推送 |

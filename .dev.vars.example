@@ -7,6 +7,12 @@ DEEPSEEK_API_KEY=sk-xxxxxxxx
 # 访问口令哈希：node scripts/hash-password.mjs <你的口令> 生成（格式 salt:hash）
 ACCESS_PASSWORD_HASH=REPLACE_ME
 
+# 无状态签名 Cookie 的 HMAC 密钥：node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# 不要提交真实值；生产用 wrangler secret put AUTH_SECRET 设置
+AUTH_SECRET=REPLACE_ME
+# signed（默认）| kv（临时回滚旧 KV 登录态）
+AUTH_MODE=signed
+
 # OpenAI 兼容端点（AstrBot 等）的 Bearer 密钥：node -e "console.log(require('crypto').randomBytes(32).toString('hex'))" 生成
 ASTROBOT_API_KEY=REPLACE_ME
 

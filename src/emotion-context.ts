@@ -1,16 +1,17 @@
 /**
- * 情感系统的运行时编排：读 KV → 抽事件 → 更新情绪向量 / 5 轴增量 → 存 KV → 出快照。
+ * 情感系统的运行时编排：读 D1 runtime_state → 抽事件 → 更新情绪向量 / 5 轴增量 → 写回 → 出快照。
  *
- * 存储位置：KV（`emotion:state`），**不写 memory.md**。
- * 原因：memory.md 有 12KB 硬预算，情绪是高频易变的临时数据，挤进去会挤掉长期记忆。
+ * 存储位置：D1 `runtime_state`（key=`emotion:state`），**不写 memory.md**。
+ * D1 不可用时 runtime-store 自动回退 KV（测试/灰度安全）。
  * memory.md 里只保留每日结算后的 5 个整数（喜欢 / 信任 / 尊重 / 心动 / 熟悉）。
  *
  * 成本控制：
  * - 聊天关键路径上**只跑规则**（零请求、零延迟）；Workers AI 复核只在每日任务里跑
- * - KV 写入前做脏检查：这一轮没抽到事件、向量也没变，就不写
+ * - D1 runtime_state 写入前做脏检查：这一轮没抽到事件、向量也没变，就不写
  */
 
 import type { Env } from './types';
+import { deleteRuntimeState, getRuntimeState, putRuntimeState } from './runtime-store';
 import {
   applyEnvironmentToEmotion,
   decayEmotion,
@@ -44,7 +45,7 @@ import type { MoodEnvironment } from './mood-env';
 
 const STATE_KEY = 'emotion:state';
 const STATE_TTL_SECONDS = 90 * 24 * 60 * 60;
-/** 事件池上限：够撑一周的小情绪，又不至于把 KV 撑大。 */
+/** 事件池上限：够撑一周的小情绪，又不至于把 runtime_state 撑大。 */
 const MAX_EVENTS = 30;
 
 export type FacetAccum = Partial<Record<FacetKey, number>>;
@@ -95,7 +96,7 @@ function sanitizeFacetDelta(raw: unknown): FacetAccum {
 /** 读取状态，并按「距上次多久」做时间衰减。 */
 export async function loadEmotionState(env: Env, now: number): Promise<EmotionState> {
   try {
-    const raw = await env.KV.get(STATE_KEY);
+    const raw = await getRuntimeState(env, STATE_KEY);
     if (!raw) return emptyEmotionState(now);
     const parsed = JSON.parse(raw) as Partial<EmotionState>;
     const at = typeof parsed.at === 'number' ? parsed.at : now;
@@ -118,14 +119,14 @@ export async function saveEmotionState(env: Env, state: EmotionState): Promise<v
     facetDelta: state.facetDelta,
     at: state.at,
   });
-  await env.KV.put(STATE_KEY, payload, { expirationTtl: STATE_TTL_SECONDS }).catch((e) => {
+  await putRuntimeState(env, STATE_KEY, payload, STATE_TTL_SECONDS).catch((e) => {
     console.error('[emotion] 保存状态失败:', e);
   });
 }
 
 /** 清空（测试 / 重置用）。 */
 export async function resetEmotionState(env: Env): Promise<void> {
-  await env.KV.delete(STATE_KEY).catch(() => {});
+  await deleteRuntimeState(env, STATE_KEY).catch(() => {});
 }
 
 export interface EmotionTurnInput {
@@ -171,7 +172,7 @@ function addFacetDelta(target: FacetAccum, src: Partial<Record<FacetKey, number>
 /**
  * 处理一轮对话的情感变化（聊天三通道共用）。
  *
- * 注意：这里只更新 KV 里的运行时状态，**不写 memory.md**；
+ * 注意：这里只更新 D1 runtime_state 里的运行时状态，**不写 memory.md**；
  * memory.md 的整数由每日任务统一结算（见 settleEmotionDaily）。
  */
 export async function processEmotionTurn(input: EmotionTurnInput): Promise<EmotionTurnResult> {
@@ -223,7 +224,7 @@ export async function processEmotionTurn(input: EmotionTurnInput): Promise<Emoti
     at: now,
   };
 
-  // ④ 脏检查：没有新事件、向量也没变 → 不写 KV
+  // ④ 脏检查：没有新事件、向量也没变 → 不写 D1
   const changed = newEvents.length > 0 || vectorChanged(prevVector, vector);
   if (changed) await saveEmotionState(input.env, nextState);
 
@@ -342,7 +343,7 @@ export interface EmotionSimulationStep {
 /**
  * 纯函数模拟：喂一串用户消息，逐步算出情绪演化与快照。
  *
- * 不读写 KV、不影响线上状态，用于调阈值（admin/emotion/simulate 与本地调试共用）。
+ * 不读写 D1 runtime_state、不影响线上状态，用于调阈值（admin/emotion/simulate 与本地调试共用）。
  */
 export function simulateEmotion(
   texts: string[],

@@ -54,6 +54,7 @@ import { messagesByDate, assistantReplyTo, type MessageRow } from './db';
 import { backfillFeedback } from './feedback';
 import { cleanupQueue } from './queue';
 import { addLlmCost } from './llm-cost';
+import { cleanupRuntimeState, deleteRuntimeState } from './runtime-store';
 import { appendArchiveLines, archiveHasLine, CORE_TARGET_BYTES, getArchiveLines } from './memory-archive';
 
 export interface DailyArchiveResult {
@@ -503,7 +504,7 @@ export async function archiveOneDay(
       console.error('[daily] rollup error:', e);
     }
     // 当天已归档，清理滚动摘要（新的一天用新键）
-    await env.KV.delete(summaryKey(target)).catch(() => {});
+    await deleteRuntimeState(env, summaryKey(target)).catch(() => {});
     // 关系状态写入当天上下文（好感度/亲密度 + 综合态度）
     try {
       const relation = parseRelationValues(memory);
@@ -654,6 +655,7 @@ export async function runDailyArchive(env: Env, now: Date): Promise<DailyArchive
   // 清理：30 天前的已发送队列记录、过期的 context/images 文件
   await cleanupQueue(env).catch((e) => console.error('[queue] cleanup failed:', e));
   await cleanupStaleObjects(env, now).catch((e) => console.error('[r2] cleanup failed:', e));
+  await cleanupRuntimeState(env, now.getTime()).catch((e) => console.error('[runtime] cleanup failed:', e));
 
   const catchupTargets = await findArchiveCatchupTargets(env, now);
   const catchup: string[] = [];

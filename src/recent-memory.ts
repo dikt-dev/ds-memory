@@ -18,6 +18,7 @@ import type { Env } from './types';
 import { distillText } from './distill';
 import { addLlmCost } from './llm-cost';
 import { dateKeyInBeijing } from './date';
+import { acquireRuntimeLock, getRuntimeState, putRuntimeState, releaseRuntimeLock } from './runtime-store';
 
 const MEMO_KV = 'memo:24h';
 const LOCK_KV = 'memo:lock';
@@ -73,7 +74,7 @@ export function hasEnoughNewMaterial(newMessages: number, resetDetected: boolean
 /** 读取当前中期记忆（没有或格式坏了返回 null）。 */
 export async function getRecentMemo(env: Env): Promise<RecentMemo | null> {
   try {
-    const raw = await env.KV.get(MEMO_KV);
+    const raw = await getRuntimeState(env, MEMO_KV);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as RecentMemo;
     if (typeof parsed?.text !== 'string' || !parsed.text.trim()) return null;
@@ -154,9 +155,8 @@ export async function maybeRefreshRecentMemo(env: Env, now: Date = new Date()): 
     if (!shouldRefreshRecentMemo({ newMessages, ageMs })) return;
     if (!hasEnoughNewMaterial(newMessages, resetDetected)) return;
 
-    // ★ 便宜的判断通过后再加锁：否则每条消息都要白写两次 KV（put + delete）
-    if (await env.KV.get(LOCK_KV).catch(() => null)) return;
-    await env.KV.put(LOCK_KV, '1', { expirationTtl: LOCK_TTL_SECONDS }).catch(() => {});
+    // ★ 便宜的判断通过后再加锁；D1 原子 UPSERT，无 D1 时回退 KV。
+    if (!(await acquireRuntimeLock(env, LOCK_KV, LOCK_TTL_SECONDS))) return;
 
     try {
       // 增量：只取新消息；冷启动或表重置：取 24h 内最近的 N 条
@@ -191,13 +191,16 @@ export async function maybeRefreshRecentMemo(env: Env, now: Date = new Date()): 
         .join('\n');
       if (!text) return;
 
-      await env.KV.put(MEMO_KV, JSON.stringify({ text, up_to_id: latest.id, updated_at: now.toISOString() }), {
-        expirationTtl: MEMO_TTL_SECONDS,
-      });
+      await putRuntimeState(
+        env,
+        MEMO_KV,
+        JSON.stringify({ text, up_to_id: latest.id, updated_at: now.toISOString() }),
+        MEMO_TTL_SECONDS,
+      );
       // 摘要类调用也要计入当天费用（否则 /api/usage 会低估）
       await addLlmCost(env, dateKeyInBeijing(now), result.cost);
     } finally {
-      await env.KV.delete(LOCK_KV).catch(() => {});
+      await releaseRuntimeLock(env, LOCK_KV);
     }
   } catch (e) {
     console.error('[memo] refresh failed:', e);

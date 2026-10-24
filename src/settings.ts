@@ -3,6 +3,7 @@
  * 配置存 KV config:city（用 Open-Meteo 地理编码解析坐标）；未设置时回退 wrangler.toml 的 vars。
  */
 import type { Env } from './types';
+import { deleteRuntimeState } from './runtime-store';
 
 export interface CityConfig {
   city: string;
@@ -104,5 +105,7 @@ export async function setCity(
   await env.KV.put(CITY_CONFIG_KV, JSON.stringify(config));
   await env.KV.delete(`weather:${prev.city}`).catch(() => {});
   await env.KV.delete(`weather:${config.city}`).catch(() => {});
+  await deleteRuntimeState(env, `weather:${prev.city}`).catch(() => {});
+  await deleteRuntimeState(env, `weather:${config.city}`).catch(() => {});
   return config;
 }

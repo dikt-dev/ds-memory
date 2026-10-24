@@ -26,10 +26,23 @@ function fakeEnv(heartbeat: Record<string, unknown> | null, alertedAt: string | 
       prepare: (sql: string) => ({
         bind: (...args: unknown[]) => ({
           first: async () => {
+            // runtime_state：返回 KV 替身里的值，模拟 D1 行
+            if (sql.includes('runtime_state')) {
+              const key = String(args[0]);
+              const value = store.get(key);
+              return value === undefined ? null : { value };
+            }
             enqueued.push(String(args[0]));
             return { id: 1 };
           },
-          run: async () => ({ meta: { changes: 1 } }),
+          run: async () => {
+            if (sql.includes('runtime_state')) {
+              const key = String(args[0]);
+              const value = String(args[1]);
+              store.set(key, value);
+            }
+            return { meta: { changes: 1 } };
+          },
           all: async () => ({ results: [] }),
         }),
       }),

@@ -20,6 +20,9 @@ import { ENTRY_RE, ENTRY_PREFIX_RE, normalizeDateKey } from './memory-maintenanc
 export const ARCHIVE_R2_KEY = 'memory/archive.md';
 const ARCHIVE_KV_KEY = 'archive:cache';
 const ARCHIVE_CACHE_TTL = 300;
+/** Phase 1：档案热缓存放 isolate，不再读写 KV。 */
+const ARCHIVE_MEM_TTL_MS = ARCHIVE_CACHE_TTL * 1000;
+let archiveMemoryCache: { at: number; text: string } | null = null;
 
 /** 核心层目标体积：超过 24KB 时把最旧往事无损搬进档案（仍可被索引召回）。 */
 export const CORE_TARGET_BYTES = 24000;
@@ -320,18 +323,15 @@ export function formatRecalledBlock(lines: string[]): string {
  *   相当于每次追加都把 2000 行之前的历史永久丢掉。截断只能放在检索侧。
  */
 export async function getArchiveLines(env: Env): Promise<string[]> {
-  try {
-    const cached = await env.KV.get(ARCHIVE_KV_KEY);
-    if (cached !== null) return parseArchiveLines(cached);
-  } catch {
-    /* 缓存不可用就回源 */
+  if (archiveMemoryCache && Date.now() - archiveMemoryCache.at < ARCHIVE_MEM_TTL_MS) {
+    return parseArchiveLines(archiveMemoryCache.text);
   }
 
   try {
     const obj = await getObject(env, ARCHIVE_R2_KEY);
     if (!obj) return [];
     const text = await obj.text();
-    await env.KV.put(ARCHIVE_KV_KEY, text, { expirationTtl: ARCHIVE_CACHE_TTL }).catch(() => {});
+    archiveMemoryCache = { at: Date.now(), text };
     return parseArchiveLines(text);
   } catch (e) {
     console.error('[archive] read failed:', e);
@@ -356,7 +356,7 @@ export async function appendArchiveLines(env: Env, incoming: string[]): Promise<
     if (added === 0) return 0;
     const merged = mergeArchiveLines(existing, tagged);
     await putObject(env, ARCHIVE_R2_KEY, serializeArchiveLines(merged), { contentType: 'text/markdown' });
-    await env.KV.delete(ARCHIVE_KV_KEY).catch(() => {}); // 让下次读到新内容
+    archiveMemoryCache = null; // 让下次读到新内容
     return added;
   } catch (e) {
     console.error('[archive] append failed:', e);

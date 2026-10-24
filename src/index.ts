@@ -8,7 +8,15 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import type { Env } from './types';
 import { buildDayContext, hasHolidayTable } from './holidays';
 import { addDays, dateKeyInBeijing, isoInBeijing } from './date';
-import { randomHex, verifyPassword } from './auth';
+import {
+  AUTH_TOKEN_TTL_SECONDS,
+  isAuthTokenRevoked,
+  revokeAllAuth,
+  randomHex,
+  signAuthToken,
+  verifyAuthToken,
+  verifyPassword,
+} from './auth';
 import { streamChat } from './chat';
 import { messagesPage, usageByDay, messagesByDate, assistantReplyTo } from './db';
 import { getMemory, MEMORY_KV_KEY } from './memory';
@@ -56,6 +64,8 @@ import { applyEventsToVector, extractEmotionEvents, reconcileWithApology, type E
 import { buildEmotionSnapshot, describeEmotionState } from './emotion-snapshot';
 import { decayEmotion, emptyEmotionVector, type EmotionVector } from './emotion-vector';
 import { elapsedMs, logTrace, REQUEST_ID_HEADER, shouldLogHttp, startTrace } from './trace';
+import { deleteRuntimeState, getRuntimeState, putRuntimeState } from './runtime-store';
+import { getHeartbeat } from './profile-cache';
 
 type AppEnv = { Bindings: Env; Variables: { requestId: string } };
 const app = new Hono<AppEnv>();
@@ -79,19 +89,40 @@ app.use('*', async (c, next) => {
 });
 
 const AUTH_KV_PREFIX = 'auth:';
-const AUTH_TTL_SECONDS = 7 * 24 * 60 * 60;
+const AUTH_TTL_SECONDS = AUTH_TOKEN_TTL_SECONDS;
 
-/** QQ 客户端心跳（存在 KV，用于判断通道是否还活着）。 */
+function authSecret(env: Env): string | null {
+  return env.AUTH_SECRET?.trim() || env.ACCESS_PASSWORD_HASH?.trim() || null;
+}
+
+function authMode(env: Env): 'signed' | 'kv' {
+  return (env.AUTH_MODE ?? 'signed').toLowerCase() === 'kv' ? 'kv' : 'signed';
+}
+
+/** QQ 客户端心跳（D1 runtime_state，用于判断通道是否还活着）。 */
 const HEARTBEAT_KV_KEY = 'proactive:heartbeat';
 const HEARTBEAT_TTL_SECONDS = 7 * 24 * 60 * 60;
 /** 超过这么久没心跳就算离线（客户端 5 分钟一次）。 */
 const HEARTBEAT_ONLINE_SECONDS = 15 * 60;
 
-/** 登录校验：Cookie 中的 token 必须在 KV 中存在。 */
+/** 登录校验：signed 优先（无 KV 读）；kv 模式保留为回滚路径。 */
 async function requireAuth(c: Context<AppEnv>, next: Next) {
   const token = getCookie(c, 'ds_token');
-  const ok = token ? (await c.env.KV.get(`${AUTH_KV_PREFIX}${token}`)) === '1' : false;
-  if (!ok) return c.json({ error: '未登录或会话已过期' }, 401);
+  if (!token) return c.json({ error: '未登录或会话已过期' }, 401);
+
+  const secret = authSecret(c.env);
+  if (authMode(c.env) === 'kv' || !secret) {
+    const ok = (await c.env.KV.get(`${AUTH_KV_PREFIX}${token}`)) === '1';
+    if (!ok) return c.json({ error: '未登录或会话已过期' }, 401);
+    await next();
+    return;
+  }
+
+  const payload = await verifyAuthToken(token, secret);
+  if (!payload) return c.json({ error: '未登录或会话已过期' }, 401);
+  if (await isAuthTokenRevoked(c.env, payload)) {
+    return c.json({ error: '会话已失效，请重新登录' }, 401);
+  }
   await next();
 }
 
@@ -221,8 +252,14 @@ app.post('/api/login', async (c) => {
   }
   await c.env.KV.delete(failKey).catch(() => {});
 
-  const token = randomHex(32);
-  await c.env.KV.put(`${AUTH_KV_PREFIX}${token}`, '1', { expirationTtl: AUTH_TTL_SECONDS });
+  const secret = authSecret(c.env);
+  let token: string;
+  if (authMode(c.env) === 'signed' && secret) {
+    token = (await signAuthToken(secret)).token;
+  } else {
+    token = randomHex(32);
+    await c.env.KV.put(`${AUTH_KV_PREFIX}${token}`, '1', { expirationTtl: AUTH_TTL_SECONDS });
+  }
   setCookie(c, 'ds_token', token, {
     httpOnly: true,
     sameSite: 'Strict',
@@ -234,8 +271,14 @@ app.post('/api/login', async (c) => {
 });
 
 app.post('/api/logout', async (c) => {
-  const token = getCookie(c, 'ds_token');
-  if (token) await c.env.KV.delete(`${AUTH_KV_PREFIX}${token}`).catch(() => {});
+  const body = (await c.req.json().catch(() => null)) as { all?: unknown } | null;
+  if (body?.all === true) {
+    // 全部登出：写全局吊销；signed token 在吊销时间之前的都失效。
+    await revokeAllAuth(c.env);
+  } else {
+    const token = getCookie(c, 'ds_token');
+    if (token) await c.env.KV.delete(`${AUTH_KV_PREFIX}${token}`).catch(() => {});
+  }
   deleteCookie(c, 'ds_token', { path: '/' });
   return c.json({ ok: true });
 });
@@ -370,7 +413,17 @@ app.post('/api/admin/memory/rollup', requireAuth, async (c) => {
 });
 /** 危险操作：清空 D1 全部业务表 + R2 全部对象（主/小号）+ 记忆相关 KV，仅测试期使用。 */
 app.post('/api/admin/wipe-data', requireAuth, async (c) => {
-  const tables = ['messages', 'proactive_feedback', 'proactive_log', 'proactive_queue', 'cron_runs', 'memory_entries', 'memory_rollups'];
+  const tables = [
+    'messages',
+    'proactive_feedback',
+    'proactive_log',
+    'proactive_queue',
+    'cron_runs',
+    'memory_entries',
+    'memory_rollups',
+    'runtime_state',
+    'auth_revocations',
+  ];
   const d1 = { tables: 0, rows: 0 };
   for (const t of tables) {
     const r = await c.env.DB.prepare(`DELETE FROM ${t}`).run();
@@ -384,11 +437,20 @@ app.post('/api/admin/wipe-data', requireAuth, async (c) => {
     r2 += 1;
   }
   const kvKeys = [
-    MEMORY_KV_KEY, 'archive:cache', 'memo:24h', 'memo:lock',
-    'profile:user', 'profile:dirty', 'proactive:heartbeat',
-    'summary:2026-10-23', 'summary:2026-10-24',
-    'mood:usage:2026-10-23', 'mood:usage:2026-10-24',
-    'memory:index', 'emotion:state',
+    MEMORY_KV_KEY,
+    'archive:cache',
+    'memo:24h',
+    'memo:lock',
+    'profile:user',
+    'profile:dirty',
+    'proactive:heartbeat',
+    'proactive:offline_alert',
+    'proactive:paused_until',
+    'files:recent',
+    `summary:${dateKeyInBeijing(new Date())}`,
+    `cost:llm:${dateKeyInBeijing(new Date())}`,
+    'memory:index',
+    'emotion:state',
   ];
   for (const k of kvKeys) await c.env.KV.delete(k).catch(() => {});
   return c.json({ ok: true, d1, r2_deleted: r2, kv_cleared: kvKeys.length });
@@ -550,6 +612,50 @@ app.post('/api/admin/run-context', requireAuth, async (c) => {
   });
 });
 
+/** KV 审计：列出当前 KV key 分布 + runtime_state 迁移情况。读写次数以 Cloudflare Dashboard 为准。 */
+app.get('/api/admin/kv-audit', requireAuth, async (c) => {
+  let keys: string[] = [];
+  let listTruncated = false;
+  try {
+    const listed = await c.env.KV.list({ limit: 1000 });
+    keys = listed.keys.map((k) => k.name);
+    listTruncated = !listed.list_complete;
+  } catch {
+    listTruncated = true;
+  }
+  const prefixes = new Map<string, number>();
+  for (const key of keys) {
+    const prefix = key.includes(':') ? key.slice(0, key.indexOf(':') + 1) : key;
+    prefixes.set(prefix, (prefixes.get(prefix) ?? 0) + 1);
+  }
+  let runtimeRows = 0;
+  let runtimeExpired = 0;
+  try {
+    const row = await c.env.DB.prepare(
+      'SELECT COUNT(*) AS c, SUM(CASE WHEN expires_at IS NOT NULL AND expires_at <= ? THEN 1 ELSE 0 END) AS e FROM runtime_state',
+    )
+      .bind(Date.now())
+      .first<{ c: number; e: number | null }>();
+    runtimeRows = row?.c ?? 0;
+    runtimeExpired = row?.e ?? 0;
+  } catch {
+    /* 表未迁移 */
+  }
+  return c.json({
+    ok: true,
+    auth_mode: c.env.AUTH_MODE ?? 'signed',
+    kv: {
+      total_keys: keys.length,
+      list_truncated: listTruncated,
+      prefixes: [...prefixes.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([prefix, count]) => ({ prefix, count })),
+    },
+    runtime_state: { rows: runtimeRows, expired: runtimeExpired },
+    note: 'KV 读/写/删次数请查看 Cloudflare Dashboard → Workers & Pages → KV → Metrics；本接口只做 key 分布审计。',
+  });
+});
+
 app.get('/api/admin/stats', requireAuth, async (c) => {
   const [countRow, oldestRow, runs, logKeys, entryRow] = await Promise.all([
     c.env.DB.prepare('SELECT COUNT(*) AS c FROM messages').first<{ c: number }>(),
@@ -646,20 +752,14 @@ app.post('/api/proactive/ack', async (c) => {
 /** 队列状态（供调试）。 */
 app.get('/api/proactive/stats', requireAuth, async (c) => {
   const stats = await queueStats(c.env);
-  const hb = (await c.env.KV.get(HEARTBEAT_KV_KEY, 'json').catch(() => null)) as {
-    at?: string;
-    connected?: boolean;
-    queue_depth?: number | null;
-    version?: string | null;
-    last_error?: string | null;
-  } | null;
+  const hb = await getHeartbeat(c.env);
   const ageSeconds = hb?.at ? (Date.now() - Date.parse(hb.at)) / 1000 : null;
   return c.json({
     ...stats,
     // ★ QQ 通道可见性：手机杀后台后客户端会静默消失，只能靠心跳判断
     heartbeat: hb,
     heartbeat_age_seconds: ageSeconds,
-    paused_until: await c.env.KV.get('proactive:paused_until').catch(() => null),
+    paused_until: await getRuntimeState(c.env, 'proactive:paused_until').catch(() => null),
     channel_online: ageSeconds !== null && ageSeconds < HEARTBEAT_ONLINE_SECONDS,
   });
 });
@@ -694,13 +794,11 @@ app.post('/api/proactive/pause', async (c) => {
   const body = (await c.req.json().catch(() => null)) as { days?: unknown } | null;
   const days = Math.min(30, Math.max(0, Number(body?.days ?? 7) || 0));
   if (days === 0) {
-    await c.env.KV.delete('proactive:paused_until').catch(() => {});
+    await deleteRuntimeState(c.env, 'proactive:paused_until').catch(() => {});
     return c.json({ ok: true, paused_until: null });
   }
   const until = new Date(Date.now() + days * 86400000).toISOString();
-  await c.env.KV.put('proactive:paused_until', until, {
-    expirationTtl: days * 86400 + 3600,
-  });
+  await putRuntimeState(c.env, 'proactive:paused_until', until, days * 86400 + 3600);
   return c.json({ ok: true, paused_until: until });
 });
 
@@ -720,9 +818,7 @@ app.post('/api/proactive/heartbeat', async (c) => {
     version: typeof body?.version === 'string' ? body.version.slice(0, 40) : null,
     last_error: typeof body?.last_error === 'string' ? body.last_error.slice(0, 200) : null,
   };
-  await c.env.KV.put(HEARTBEAT_KV_KEY, JSON.stringify(payload), {
-    expirationTtl: HEARTBEAT_TTL_SECONDS,
-  });
+  await putRuntimeState(c.env, HEARTBEAT_KV_KEY, JSON.stringify(payload), HEARTBEAT_TTL_SECONDS);
   return c.json({ ok: true });
 });
 

@@ -3,13 +3,14 @@
  * - 首次：今天累计消息 ≥20 条触发；
  * - 之后：距上次摘要新增 ≥10 条，或距上次 ≥1 小时才再次生成（避免第 20 条后每条消息都调一次模型）；
  * - 增量：只提炼 up_to_id 之后的消息，由 DeepSeek flash（失败回退 Workers AI）生成 ≈100 字摘要；
- * - 存储：KV summary:YYYY-MM-DD = {text, updated_at, up_to_id, total}（TTL 36h；每日归档时删除）；
+ * - 存储：D1 runtime_state key=`summary:YYYY-MM-DD` = {text, updated_at, up_to_id, total}（TTL 36h；每日归档时删除）；
  * - 使用：memo:24h 不存在时作为中期记忆兜底注入。
  */
 import type { Env } from './types';
 import { latestMessage } from './db';
 import { distillText } from './distill';
 import { addLlmCost } from './llm-cost';
+import { acquireRuntimeLock, getRuntimeState, putRuntimeState, releaseRuntimeLock } from './runtime-store';
 
 /** 首次生成摘要的消息条数阈值（约 10 轮）。 */
 export const SUMMARY_TRIGGER_COUNT = 20;
@@ -61,7 +62,7 @@ export function buildSummaryInput(prevText: string | null, conversation: string)
 
 export async function getDaySummaryRaw(env: Env, dateKey: string): Promise<DaySummary | null> {
   try {
-    const raw = await env.KV.get(summaryKey(dateKey));
+    const raw = await getRuntimeState(env, summaryKey(dateKey));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as DaySummary;
     if (typeof parsed.text === 'string' && typeof parsed.up_to_id === 'number') return parsed;
@@ -96,10 +97,9 @@ export async function maybeSummarizeToday(env: Env, dateKey: string): Promise<vo
     if (total === 0) return;
     if (!shouldSummarize(total, prev, Date.now())) return;
 
-    // 便宜判断通过后才加锁
+    // 便宜判断通过后才加锁；D1 原子 UPSERT，无 D1 时回退 KV。
     const lock = lockKey(dateKey);
-    if (await env.KV.get(lock).catch(() => null)) return;
-    await env.KV.put(lock, '1', { expirationTtl: LOCK_TTL_SECONDS }).catch(() => {});
+    if (!(await acquireRuntimeLock(env, lock, LOCK_TTL_SECONDS))) return;
 
     try {
       // 二次确认：并发窗口里可能已经有人生成过
@@ -123,7 +123,8 @@ export async function maybeSummarizeToday(env: Env, dateKey: string): Promise<vo
       const text = await summarizeToday(env, input, dateKey);
       if (!text) return;
 
-      await env.KV.put(
+      await putRuntimeState(
+        env,
         summaryKey(dateKey),
         JSON.stringify({
           text,
@@ -131,10 +132,10 @@ export async function maybeSummarizeToday(env: Env, dateKey: string): Promise<vo
           up_to_id: latest.id,
           total,
         } satisfies DaySummary),
-        { expirationTtl: SUMMARY_KV_TTL_SECONDS },
+        SUMMARY_KV_TTL_SECONDS,
       );
     } finally {
-      await env.KV.delete(lock).catch(() => {});
+      await releaseRuntimeLock(env, lock);
     }
   } catch (e) {
     console.error('[summary] maybeSummarizeToday failed:', e);

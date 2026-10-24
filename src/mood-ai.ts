@@ -20,6 +20,7 @@
 
 import type { Env } from './types';
 import { analyzeMood, type MoodLabel, type MoodResult } from './mood';
+import { getRuntimeState, putRuntimeState } from './runtime-store';
 
 /** 歧义缓存键前缀。 */
 const MOOD_AI_CACHE_PREFIX = 'mood:ai:';
@@ -128,7 +129,7 @@ export async function verifyMoodWithAI(
   void keywordMood; // 保留参数：将来可能要「关键词 + AI」两段式，目前只用 AI 标签
   const cacheKey = `${MOOD_AI_CACHE_PREFIX}${quickHash(text)}`;
   try {
-    const cached = await env.KV.get(cacheKey);
+    const cached = await getRuntimeState(env, cacheKey);
     if (cached) {
       const label = cached.trim() as MoodLabel;
       if (isValidLabel(label)) return label;
@@ -150,7 +151,7 @@ export async function verifyMoodWithAI(
     const label = extractLabel(raw);
     if (!label) return null;
 
-    await env.KV.put(cacheKey, label, { expirationTtl: CACHE_TTL_SECONDS }).catch(() => {});
+    await putRuntimeState(env, cacheKey, label, CACHE_TTL_SECONDS).catch(() => {});
     return label;
   } catch (e) {
     console.warn('[mood-ai] Workers AI 复核失败，回退关键词结果：', e);

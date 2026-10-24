@@ -1,10 +1,11 @@
 /**
- * 天气服务：Open-Meteo（免费、无需 Key）+ KV 缓存 30 分钟。
+ * 天气服务：Open-Meteo（免费、无需 Key）+ D1 runtime_state 缓存 30 分钟。
  * 失败降级：读过期缓存 → 都没有则返回 null（调用方用占位/省略天气）。
  */
 import type { Env } from './types';
 import type { WeatherInfo } from './prompt';
 import { getCityConfig } from './settings';
+import { getRuntimeState, putRuntimeState } from './runtime-store';
 
 const KV_PREFIX = 'weather:';
 export const WEATHER_CACHE_TTL_SECONDS = 30 * 60;
@@ -68,7 +69,7 @@ function parseCache(raw: string | null): CachedWeather | null {
 export async function fetchWeather(env: Env): Promise<WeatherInfo | null> {
   const cfg = await getCityConfig(env);
   const key = `${KV_PREFIX}${cfg.city}`;
-  const cached = parseCache(await env.KV.get(key).catch(() => null));
+  const cached = parseCache(await getRuntimeState(env, key).catch(() => null));
   if (cached && isFresh(cached.updated_at)) {
     return { city: cached.city, temp_c: cached.temp_c, desc: cached.desc };
   }
@@ -94,7 +95,7 @@ export async function fetchWeather(env: Env): Promise<WeatherInfo | null> {
       desc: describeWeatherCode(code),
       updated_at: new Date().toISOString(),
     };
-    await env.KV.put(key, JSON.stringify(info), { expirationTtl: WEATHER_CACHE_TTL_SECONDS });
+    await putRuntimeState(env, key, JSON.stringify(info), WEATHER_CACHE_TTL_SECONDS);
     return { city: info.city, temp_c: info.temp_c, desc: info.desc };
   } catch (e) {
     console.error('[weather] fetch failed:', e);

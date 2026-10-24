@@ -14,6 +14,7 @@
 | 类型检查 | `node node_modules/typescript/bin/tsc --noEmit` | ✅ 0 error |
 | 单测（Phase 0 前） | `node node_modules/vitest/vitest.mjs run` | ✅ 45 files / 631 tests |
 | 单测（Phase 0 后） | `bash scripts/verify.sh` | ✅ 46 files / 637 tests |
+| 单测（Phase 1 后） | `bash scripts/verify.sh` | ✅ 47 files / 645 tests |
 | 验证脚本 | `bash scripts/verify.sh` | ✅ tsc + vitest |
 
 > 注意：在当前 DSH 沙箱内，Vitest/Vite 需要启动子进程；若沙箱为 workspace-write 可能报 `spawn EPERM`。这不是代码失败。基线记录来自完整权限执行。
@@ -25,8 +26,8 @@
 | 项 | 值 |
 |---|---|
 | `src/*.ts` | 约 50 个模块 |
-| 测试文件 | 45（Phase 0 前）→ 46（含 trace 测试） |
-| 测试用例 | 631（Phase 0 前）→ 637（含 trace 测试） |
+| 测试文件 | 45（Phase 0 前）→ 46（trace）→ 47（Phase 1 auth/runtime） |
+| 测试用例 | 631（Phase 0 前）→ 637（trace）→ 645（Phase 1） |
 | 入口 | `src/index.ts` |
 | 前端 | `public/index.html` |
 | 数据库 schema | `schema.sql` |

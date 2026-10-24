@@ -50,6 +50,7 @@ import { buildCharacterCard } from './character-card';
 import { buildVoiceDirective } from './voice';
 import { formatRecentMemoBlock, getRecentMemo } from './recent-memory';
 import { extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
+import { getRuntimeState } from './runtime-store';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { readSessionFacts } from './session-facts';
 import { facetsOf, processEmotionTurn } from './emotion-context';
@@ -65,7 +66,7 @@ export interface ProactiveResult {
   reasons?: string[];
 }
 
-/** 收集用户行为画像（优先读 KV 缓存，脏了才重算）。 */
+/** 收集用户行为画像（优先读 D1 runtime_state 缓存，脏了才重算）。 */
 async function collectUserProfile(env: Env, now: Date): Promise<UserProfile> {
   // ① 缓存命中
   const cached = await getCachedProfile(env);
@@ -454,7 +455,7 @@ async function emit(
 const PAUSE_KEY = 'proactive:paused_until';
 
 export async function isPaused(env: Env, now: Date): Promise<boolean> {
-  const raw = await env.KV.get(PAUSE_KEY).catch(() => null);
+  const raw = await getRuntimeState(env, PAUSE_KEY).catch(() => null);
   if (!raw) return false;
   const until = Date.parse(raw);
   return Number.isFinite(until) && now.getTime() < until;

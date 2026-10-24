@@ -5,9 +5,10 @@
  * 「上次那个表格」就彻底对不上了。这里只存**文件名 + 字数**，很便宜，
  * 却能让模型在一周内认出「你说的是哪个文件」。
  *
- * 存储：KV files:recent（最多 8 条，7 天过期）。
+ * 存储：D1 runtime_state key=`files:recent`（最多 8 条，7 天过期）。
  */
 import type { Env } from './types';
+import { getRuntimeState, putRuntimeState } from './runtime-store';
 
 export interface FileDigest {
   name: string;
@@ -18,6 +19,17 @@ export interface FileDigest {
 const KEY = 'files:recent';
 const MAX_FILES = 8;
 const MAX_AGE_DAYS = 7;
+
+async function readFiles(env: Env): Promise<FileDigest[]> {
+  const raw = await getRuntimeState(env, KEY).catch(() => null);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? (parsed as FileDigest[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 function parse(input: unknown): FileDigest[] {
   if (!Array.isArray(input)) return [];
@@ -37,17 +49,15 @@ function parse(input: unknown): FileDigest[] {
 export async function recordFiles(env: Env, files: unknown): Promise<void> {
   const incoming = parse(files);
   if (incoming.length === 0) return;
-  const prev = ((await env.KV.get(KEY, 'json').catch(() => null)) as FileDigest[] | null) ?? [];
+  const prev = await readFiles(env);
   const names = new Set(incoming.map((f) => f.name));
   const merged = [...incoming, ...prev.filter((f) => !names.has(f.name))].slice(0, MAX_FILES);
-  await env.KV
-    .put(KEY, JSON.stringify(merged), { expirationTtl: MAX_AGE_DAYS * 86400 })
-    .catch(() => {});
+  await putRuntimeState(env, KEY, JSON.stringify(merged), MAX_AGE_DAYS * 86400).catch(() => {});
 }
 
 /** 生成提示词里的「最近发过的文件」块；没有则返回 null。 */
 export async function recentFilesBlock(env: Env, now: Date): Promise<string | null> {
-  const list = ((await env.KV.get(KEY, 'json').catch(() => null)) as FileDigest[] | null) ?? [];
+  const list = await readFiles(env);
   if (!Array.isArray(list) || list.length === 0) return null;
   const fresh = list
     .filter((f) => f && typeof f.name === 'string')

@@ -739,18 +739,12 @@ export async function recallMemoryForChat(
         qVec = cachedQ.length > 0 ? cachedQ : null;
         return qVec;
       }
+      // Phase 1：不再把 query 向量写 KV（命中率低、每句都写）。
+      // 只在 isolate 内缓存；冷启动重新 embedding 一次可以接受。
       try {
-        const kvQ = (await env.KV.get(qKey, 'json').catch(() => null)) as number[] | null;
-        if (Array.isArray(kvQ) && kvQ.length > 0) {
-          qVec = kvQ;
-        } else {
-          const model = env.EMBEDDING_MODEL || DEFAULT_EMBEDDING_MODEL;
-          const res = (await env.AI.run(model as never, { text: [q] })) as { data?: number[][] };
-          if (Array.isArray(res?.data) && res.data[0]) {
-            qVec = res.data[0];
-            await env.KV.put(qKey, JSON.stringify(qVec), { expirationTtl: 3600 }).catch(() => {});
-          }
-        }
+        const model = env.EMBEDDING_MODEL || DEFAULT_EMBEDDING_MODEL;
+        const res = (await env.AI.run(model as never, { text: [q] })) as { data?: number[][] };
+        if (Array.isArray(res?.data) && res.data[0]) qVec = res.data[0];
       } catch {
         qVec = null;
       }

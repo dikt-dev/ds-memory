@@ -18,7 +18,7 @@
 | 存储 | D1 + R2（主/小号）+ KV + Workers AI |
 | 模型 | DeepSeek `deepseek-flash`（对话）、`deepseek-v4-pro`（每日提炼）、Workers AI 兜底 |
 | 手机端 | `../ds-qq-client`，Python + NapCat/OneBot 11 |
-| 测试 | 46 个测试文件、637 个用例（Phase 0 加入 trace 测试后；基线为 45/631） |
+| 测试 | 47 个测试文件、645 个用例（Phase 1 加入 trace/auth/runtime/schema 测试后；基线为 45/631） |
 | 构建检查 | `tsc --noEmit` |
 
 ---
@@ -171,6 +171,8 @@ KV auth / memory cache / memo / summary / emotion / heartbeat / ...
 | `storage:usage` | R2 用量 | 6h | 日检查 | D1（可选） |
 | `config:city` | 城市配置 | 无 | 每轮读 | isolate + KV/D1 |
 
+> **Phase 1 更新**：`auth` 改为无状态签名 Cookie；`proactive:heartbeat`、`emotion:state`、`profile:*`、`memo/summary` 内容与锁、`weather:*`、`cost:llm:*`、`files:recent`、`persona:state` 已迁到 D1 `runtime_state`；`memory:qvec:*` 与 `archive:cache` 已删除 KV 路径。仍保留 KV 的主要是 `memory:cache`、`memory:index`、`relation:active_days`、`aversion:candidates`、`config:city`、`storage:*` 等低频/大对象。
+
 > 当前免费额度：KV 读 100,000/天、写 1,000/天、删 1,000/天。
 
 ---
@@ -208,8 +210,8 @@ KV auth / memory cache / memo / summary / emotion / heartbeat / ...
 
 | 项 | 值 |
 |---|---|
-| 测试文件 | 46（基线 45；Phase 0 新增 `trace.test.ts`） |
-| 测试用例 | 637（基线 631；Phase 0 新增 6 条 trace 测试） |
+| 测试文件 | 47（基线 45；Phase 0 新增 trace，Phase 1 新增 auth/runtime） |
+| 测试用例 | 645（基线 631；Phase 0 +6，Phase 1 +8） |
 | 类型检查 | `node node_modules/typescript/bin/tsc --noEmit` |
 | 测试命令 | `node node_modules/vitest/vitest.mjs run` |
 | 关键测试 | 10 轮历史、记忆合并/去重、摘要触发、召回、关系/情绪、归档、队列、API 解析 |

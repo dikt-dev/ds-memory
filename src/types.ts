@@ -30,6 +30,10 @@ export interface Env {
   // secrets（可选：未配置时对应功能降级）
   DEEPSEEK_API_KEY?: string;
   ACCESS_PASSWORD_HASH?: string;
+  /** 无状态鉴权签名密钥；缺失时回退 ACCESS_PASSWORD_HASH（不推荐长期使用）。 */
+  AUTH_SECRET?: string;
+  /** 鉴权模式：signed（默认）| kv（回滚用）。 */
+  AUTH_MODE?: string;
   ASTROBOT_API_KEY?: string; // OpenAI 兼容端点（AstrBot 等）的 Bearer 密钥
   // 小号 R2（S3 兼容 API）：主账号容量达到阈值后，新数据写入小号
   SECONDARY_R2_ACCOUNT_ID?: string;

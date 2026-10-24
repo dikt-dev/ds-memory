@@ -101,6 +101,23 @@ CREATE TABLE IF NOT EXISTS proactive_queue (
 CREATE INDEX IF NOT EXISTS idx_proactive_pending ON proactive_queue(sent_at, id);
 CREATE INDEX IF NOT EXISTS idx_proactive_queue_msg ON proactive_queue(message_id);
 
+-- ---------- 运行时状态（Phase 1：替代高频 KV） ----------
+CREATE TABLE IF NOT EXISTS runtime_state (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  expires_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_runtime_state_expires
+  ON runtime_state(expires_at);
+
+-- 无状态鉴权的吊销表：scope='global' 表示全部登出
+CREATE TABLE IF NOT EXISTS auth_revocations (
+  scope      TEXT PRIMARY KEY,
+  revoked_at INTEGER NOT NULL
+);
+
 -- ---------- 记忆条目索引（可重建，memory.md/archive.md 是本体） ----------
 CREATE TABLE IF NOT EXISTS memory_entries (
   id          TEXT PRIMARY KEY,

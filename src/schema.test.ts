@@ -12,6 +12,11 @@ describe('schema.sql 与索引代码保持一致', () => {
     expect(schemaSql).toContain('idx_memory_entries_dup');
   });
 
+  it('包含 Phase 1 的 runtime_state 与 auth_revocations', () => {
+    expect(schemaSql).toContain('CREATE TABLE IF NOT EXISTS runtime_state');
+    expect(schemaSql).toContain('CREATE TABLE IF NOT EXISTS auth_revocations');
+  });
+
   it('存在 dup_of 的迁移脚本（已有库升级用）', () => {
     expect(migrationSql).toContain('ADD COLUMN dup_of');
   });
