@@ -4,7 +4,7 @@
  * 图片：已压缩存入 R2（images/日期/时间戳.jpg），发给 DeepSeek 时从 R2 读回；D1 只记录 R2 路径。
  */
 import type { Env } from './types';
-import { buildSystemPrompt, type MessageChannel, buildLiveFacts, isNowFactQuestion } from './prompt';
+import { buildSystemPrompt, type MessageChannel, buildLiveFacts, isNowFactQuestion, STYLE_REMINDER } from './prompt';
 import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
 import { attachWeather, getOrCreateDayContext } from './context';
 import { getMemory } from './memory';
@@ -130,13 +130,19 @@ export async function streamChat(
     ];
   }
 
-  // 实时类问题：把准确事实贴到用户消息最前面（不写入 D1，只用于本轮回答）
-  if (isNowFactQuestion(content)) {
-    const facts = `【系统实时事实（最高优先级，不要复述这段格式）】${buildLiveFacts(now, ctx, weather)}。回答时间/天气/节假日时只以此为准，不要用历史或记忆里的旧值。\n\n`;
+  // 每轮把语气提醒贴到用户消息最前面；实时类问题再叠加准确事实（不写入 D1）
+  {
+    const parts = [STYLE_REMINDER];
+    if (isNowFactQuestion(content)) {
+      parts.push(
+        `【系统实时事实（最高优先级，不要复述这段格式）】${buildLiveFacts(now, ctx, weather)}。回答时间/天气/节假日时只以此为准，不要用历史或记忆里的旧值。`,
+      );
+    }
+    const prefix = `${parts.join('\n\n')}\n\n`;
     userContent =
       typeof userContent === 'string'
-        ? facts + userContent
-        : [{ type: 'text', text: facts }, ...userContent];
+        ? prefix + userContent
+        : [{ type: 'text', text: prefix }, ...userContent];
   }
 
   const messages: DeepSeekMessage[] = [

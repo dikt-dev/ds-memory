@@ -8,7 +8,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { Env } from './types';
-import { buildBaseSystemPrompt, normalizeChannel, buildLiveFacts, isNowFactQuestion } from './prompt';
+import { buildBaseSystemPrompt, normalizeChannel, buildLiveFacts, isNowFactQuestion, STYLE_REMINDER } from './prompt';
 import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
 import { attachWeather, getOrCreateDayContext } from './context';
 import { getMemory } from './memory';
@@ -454,13 +454,19 @@ openaiApp.post('/chat/completions', async (c) => {
     ...textMessages.filter((m) => m.role !== 'system'),
   ];
 
-  // 实时类问题：把准确事实贴到本轮用户消息最前面（只改发给模型的内容，不写 D1）
-  if (lastUser && isNowFactQuestion(lastUserCleaned)) {
-    const facts = `【系统实时事实（最高优先级，不要复述这段格式）】${buildLiveFacts(now, ctx, weather)}。回答时间/天气/节假日时只以此为准，不要用历史或记忆里的旧值。\n\n`;
+  // 每轮把语气提醒贴到用户消息最前面；实时类问题再叠加准确事实（只改发给模型的内容，不写 D1）
+  if (lastUser) {
+    const parts = [STYLE_REMINDER];
+    if (isNowFactQuestion(lastUserCleaned)) {
+      parts.push(
+        `【系统实时事实（最高优先级，不要复述这段格式）】${buildLiveFacts(now, ctx, weather)}。回答时间/天气/节假日时只以此为准，不要用历史或记忆里的旧值。`,
+      );
+    }
+    const prefix = `${parts.join('\n\n')}\n\n`;
     lastUser.content =
       typeof lastUser.content === 'string'
-        ? facts + lastUser.content
-        : [{ type: 'text' as const, text: facts }, ...lastUser.content];
+        ? prefix + lastUser.content
+        : [{ type: 'text' as const, text: prefix }, ...lastUser.content];
   }
 
   // 3) 图片：普通图片先压缩存 R2；带 #__transient 的（视频帧/拼图）只给模型看，不落 R2。

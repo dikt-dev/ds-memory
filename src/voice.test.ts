@@ -68,8 +68,8 @@ describe('buildVoiceDirective', () => {
 
   it('体积受控：不再是一张 3KB 的教科书清单', () => {
     const bytes = new TextEncoder().encode(buildVoiceDirective(900)).length;
-    // 旧版约 3.2KB（占系统提示词 48%）；压缩后控制在 2KB 以内
-    expect(bytes).toBeLessThan(2000);
+    // 旧版约 3.2KB；新增“大大咧咧/傲娇加码/断句可读”后放宽到 2.6KB
+    expect(bytes).toBeLessThan(2600);
   });
 });
 
