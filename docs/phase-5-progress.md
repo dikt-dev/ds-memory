@@ -210,6 +210,20 @@ wrangler deploy --dry-run
 
 ---
 
+### 1.8 每日观察快照
+
+新增 `scripts/p5-observe.mjs` / `pnpm observe:p5`：
+
+```text
+health=200 readiness=200 metrics=200 storage=200
+{"ready":true,"qq":"shadow","web":"legacy","facts":23,"chunks":38}
+```
+
+快照写入 `backup/p5-observation/YYYY-MM-DD.json`，包含 readiness、7 天指标、
+小号 R2 put/get/delete + 回源结果，作为 7 天/2 周门禁的逐日证据。
+
+---
+
 ## 3. 未执行（观察/门禁）
 
 | 项 | 状态 | 说明 |
