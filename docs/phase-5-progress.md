@@ -250,6 +250,18 @@ sh watchdog.sh
 → client up
 ```
 
+只杀主进程的故障注入：
+
+```text
+kill <main.py PID>
+→ run-all 30s 自检在 40s 内拉起新 PID（13746 → 14853）
+→ NapCat 重新连接
+```
+
+说明：只要 tmux/run-all 还活着，客户端单进程死掉能自愈；
+如果 tmux 一起被杀，由 15 分钟 watchdog 负责；如果整个 Termux 被杀，
+则依赖 Termux JobScheduler（一次性 job 1002 已验证能执行）。
+
 当前：
 
 ```text
