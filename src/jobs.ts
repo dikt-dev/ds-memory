@@ -431,6 +431,48 @@ export async function archiveOneDay(env: Env, target: string, now: Date): Promis
   }
 }
 
+/** 判断某天的聊天记录是否已经有安全归档（日文件或月文件）。 */
+async function hasArchivedDate(env: Env, dateKey: string): Promise<boolean> {
+  const daily = await getObject(env, `chat_logs/${dateKey}.log`).catch(() => null);
+  if (daily) return true;
+  const month = await getObject(env, `chat_logs/${dateKey.slice(0, 7)}.json`).catch(() => null);
+  if (!month) return false;
+  try {
+    const parsed = JSON.parse(await month.text()) as { messages?: MessageRow[] };
+    return (parsed.messages ?? []).some((m) => m.date_key === dateKey);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * D1 只保留今天和昨天：更早的日期必须已归档才删除，没归档绝不删。
+ * 归档文件在 R2，短期记忆需要时会从归档回补。
+ */
+export async function cleanupOldMessages(
+  env: Env,
+  now: Date,
+): Promise<{ deleted: number; keptFrom: string; dates: string[] }> {
+  const today = dateKeyInBeijing(now);
+  const keptFrom = previousDateKey(today); // 保留 >= 昨天
+  const rows = await env.DB.prepare(
+    'SELECT DISTINCT date_key FROM messages WHERE date_key < ? ORDER BY date_key ASC LIMIT 60',
+  )
+    .bind(keptFrom)
+    .all<{ date_key: string }>();
+  const deletedDates: string[] = [];
+  let deleted = 0;
+  for (const row of rows.results ?? []) {
+    const d = row.date_key;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+    if (!(await hasArchivedDate(env, d))) continue;
+    const res = await env.DB.prepare('DELETE FROM messages WHERE date_key = ?').bind(d).run();
+    deleted += res.meta.changes ?? 0;
+    deletedDates.push(d);
+  }
+  return { deleted, keptFrom, dates: deletedDates };
+}
+
 /** 每日归档入口：先补跑历史失败日期（最旧优先，≤7 个），再归档前一天。 */
 export async function runDailyArchive(env: Env, now: Date): Promise<DailyArchiveResult> {
   // 存储容量检查：主账号接近上限时，把后续写入切换到小号 R2
@@ -464,10 +506,20 @@ export async function runDailyArchive(env: Env, now: Date): Promise<DailyArchive
   await maybeReviewPersonaDrift(env, now).catch((e) =>
     console.error('[persona] weekly review failed:', e),
   );
+  // D1 只保留今天和昨天；更早的必须先有归档才删
+  const cleanup = await cleanupOldMessages(env, now).catch((e) => {
+    console.error('[daily] cleanup old messages failed:', e);
+    return { deleted: 0, keptFrom: target, dates: [] as string[] };
+  });
+  const cleanupNote = cleanup.deleted
+    ? `；清理已归档旧消息 ${cleanup.deleted} 条（${cleanup.dates.join('、')}），保留 ${cleanup.keptFrom} 起`
+    : '';
   return {
     ...main,
     catchup_days: catchup,
-    note: catchup.length ? `补跑失败日期：${catchup.join('、')}；${main.note ?? ''}` : main.note,
+    note:
+      (catchup.length ? `补跑失败日期：${catchup.join('、')}；${main.note ?? ''}` : main.note) +
+      cleanupNote,
   };
 }
 
