@@ -82,6 +82,37 @@ scripts/verify.sh ✅ exit 0
 
 ---
 
+### 1.5 QQ 客户端现状（手机 SSH 只读检查）
+
+- 手机 SSH 可达；Termux 实际登录用户与配置脚本里的用户名不同，以 `whoami` 为准；
+- `ds.sh status`：**client 未运行，NapCat 未运行**，6700/8080/6099 均未监听；
+- 最近 client.log：
+  - 19:54 Worker 健康检查 ok；
+  - 20:03 正常回复；
+  - 20:04 上传约 6MB 图片时 `SSL: SSLV3_ALERT_BAD_RECORD_MAC`，之后进程停止；
+- 电量约 43%，未充电，插头 off；`plug-guard` 建议保持，未自动充电。
+
+QQ 客户端单测（本地）：
+
+```text
+test_worker.py          16 passed
+test_proactive_ack.py    4 passed
+test_record_flag.py      5 passed
+```
+
+结论：契约未变；当前卡在手机客户端运行状态/TLS 上传，不是 Worker 协议变更。
+
+### 1.6 生产打包预检
+
+```text
+wrangler deploy --dry-run
+→ Total Upload: 741.40 KiB / gzip: 179.93 KiB
+→ bindings 正常
+→ 未部署
+```
+
+---
+
 ## 3. 未执行（需要确认/等待）
 
 | 项 | 状态 | 说明 |
@@ -96,13 +127,21 @@ scripts/verify.sh ✅ exit 0
 
 ---
 
-## 4. 手机连接（待补充）
+## 4. 手机连接与安全
 
-用户已开启手机 SSH/FTP，但需要：
+- 手机 SSH 已连通，只做了只读检查；
+- 未启动客户端、未改配置、未重启 NapCat；
+- 手机电量低且未充电，启动前需要确认是否接电源；
+- **安全提示**：`ds-qq-client/tests/_ssh_exec.sh` 等辅助脚本包含明文手机凭据，建议轮换手机密码并改为从环境变量读取；本次不会把凭据写入仓库或文档。
 
-- 手机局域网 IP（或 Tailscale/ZeroTier 地址）；
-- SSH 用户名 + 端口（Termux 常见 8022）；
-- FTP 端口（常见 21）；
-- 允许执行的范围（只读检查 / 重启客户端 / 部署）。
+---
 
-凭据不会写入仓库或文档。
+## 5. 下一步
+
+需要用户确认：
+
+1. 是否先给手机接电源，再启动 `ds.sh start` 复现/观察 TLS 上传问题；
+2. 是否允许执行生产迁移 003–006 + 部署（默认 legacy）；
+3. 是否先只做 QQ shadow。
+
+在确认前，Phase 5 保持“预检完成、未切线上”。
