@@ -88,6 +88,8 @@ export const MEMORY_SECTION_ORDER = [
   '近期动态',
 ] as const;
 
+const QUERY_STOP_CHARS = new Set('我的你他她它这那有是个了吗呢吧啊什么怎为在就和与及或把被让给对从到又还都也一不没天吃今'.split(''));
+
 const IMPORTANCE: Record<string, number> = {
   关于用户: 3,
   偏好与习惯: 3,
@@ -308,6 +310,10 @@ export function rankMemoryChunks(
   const qWords = new Set(strongWords(q).filter((w) => w.length >= 3));
   const aliases = new Set(aliasTerms(q));
   const focusWords = new Set(strongWords(focus).filter((w) => w.length >= 3));
+  // 中文单字兜底：bigram 覆盖不到「猫」这类单字实体。
+  const qChars = [...new Set(q)].filter(
+    (c) => /[\u4e00-\u9fff]/.test(c) && !QUERY_STOP_CHARS.has(c),
+  );
   const oldCutoff = new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10);
   const scored = chunks.map((chunk) => {
     let score = 0;
@@ -317,6 +323,7 @@ export function rankMemoryChunks(
     for (const w of qWords) if (chunk.content.toLowerCase().includes(w)) score += 2;
     for (const a of aliases) if (chunk.content.toLowerCase().includes(a)) score += 2;
     for (const w of focusWords) if (chunk.content.toLowerCase().includes(w)) score += 2;
+    for (const c of qChars) if (chunk.content.includes(c)) score += 1;
     if (score > 0) score += chunk.importance;
     if (chunk.date && chunk.date < oldCutoff) score *= 0.5;
     return { chunk, score };

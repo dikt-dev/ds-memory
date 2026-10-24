@@ -5,9 +5,11 @@
  * 旧表 memory_entries / 旧召回路径完全不动，便于影子对比与回滚。
  */
 import type { Env } from './types';
+import { autoTags, bigrams } from './memory-archive';
 import {
   buildMemoryChunks,
   parseMemoryContext,
+  stableHash,
   type MemoryChunk,
   type MemoryEvent,
   type MemoryFact,
@@ -161,6 +163,23 @@ export async function replaceMemoryContext(
   const parsed = parseMemoryContext(text, now);
   const chunks = buildMemoryChunks(parsed, now);
 
+  // 保留已回填的来源：reparse 出来的 fact 默认 source_message_ids=[]，
+  // 若不合并，每日重建会把 provenance 清空。
+  const existing = await env.DB.prepare(
+    `SELECT id, source_message_ids FROM memory_facts WHERE origin = ?`,
+  )
+    .bind(origin)
+    .all<{ id: string; source_message_ids: string }>();
+  const existingSources = new Map(
+    (existing.results ?? []).map((r) => [r.id, parseArray<number>(r.source_message_ids)]),
+  );
+  for (const fact of parsed.facts) {
+    if (fact.sourceMessageIds.length === 0) {
+      const old = existingSources.get(fact.id);
+      if (old && old.length > 0) fact.sourceMessageIds = old;
+    }
+  }
+
   const factIds = new Set(parsed.facts.map((f) => f.id));
   const eventIds = new Set(parsed.events.map((e) => e.id));
   const chunkIds = new Set(chunks.map((c) => c.id));
@@ -235,4 +254,126 @@ export async function memoryContextStats(env: Env): Promise<MemoryContextStats> 
     summaries: Number(row?.summaries) || 0,
     chunks: Number(row?.chunks) || 0,
   };
+}
+
+/**
+ * 把既有 memory_rollups（周/月摘要）同步成 MemorySummary + chunk。
+ * 幂等：先 upsert，再删除 origin='rollup' 里已不存在的旧 chunk。
+ */
+export async function syncRollupSummaries(env: Env, now = Date.now()): Promise<number> {
+  const rows = await env.DB.prepare(
+    `SELECT id, level, period, content, created_at
+     FROM memory_rollups
+     WHERE content IS NOT NULL AND content <> '' AND content <> '（无）'
+     ORDER BY period ASC`,
+  ).all<{ id: string; level: 'week' | 'month'; period: string; content: string; created_at: number }>();
+  const items = rows.results ?? [];
+  const chunks: MemoryChunk[] = [];
+  const summaryIds: string[] = [];
+
+  for (const r of items) {
+    const id = `rollup:${r.id}`;
+    summaryIds.push(id);
+    await env.DB.prepare(
+      `INSERT OR REPLACE INTO memory_summaries
+       (id, level, period, content, source_ids, origin, created_at)
+       VALUES (?, ?, ?, ?, ?, 'rollup', ?)`,
+    )
+      .bind(id, r.level, r.period, r.content, JSON.stringify([r.id]), r.created_at)
+      .run();
+    const date = r.level === 'month' ? `${r.period}-01` : r.period;
+    chunks.push({
+      id: `chunk_summary_${r.id}`,
+      source: 'summary',
+      sourceId: id,
+      section: '摘要',
+      content: r.content,
+      date,
+      keywords: bigrams(r.content).slice(0, 24),
+      tags: autoTags(r.content, 3),
+      importance: 4,
+      contentHash: stableHash(r.content),
+      updatedAt: now,
+    });
+  }
+
+  const old = await env.DB.prepare(
+    `SELECT id FROM memory_chunks WHERE origin = 'rollup' AND source = 'summary'`,
+  ).all<{ id: string }>();
+  const keep = new Set(chunks.map((c) => c.id));
+  const stale = (old.results ?? []).map((r) => r.id).filter((id) => !keep.has(id));
+  await insertChunks(env, chunks, 'rollup');
+  await deleteIds(env, 'memory_chunks', stale);
+
+  const oldSummaries = await env.DB.prepare(
+    `SELECT id FROM memory_summaries WHERE origin = 'rollup'`,
+  ).all<{ id: string }>();
+  const keepSummaries = new Set(summaryIds);
+  const staleSummaries = (oldSummaries.results ?? [])
+    .map((r) => r.id)
+    .filter((id) => !keepSummaries.has(id));
+  await deleteIds(env, 'memory_summaries', staleSummaries);
+  return items.length;
+}
+
+/** 从事实里提取一个用于消息回溯的检索词（对象优先）。 */
+export function provenanceSearchTerm(fact: Pick<MemoryFact, 'content' | 'object'>): string {
+  const raw = (fact.object || fact.content)
+    .replace(/^\[[^\]]+\]\s*/, '')
+    .replace(/^[^=＝\n]{1,16}[=＝]\s*/, '')
+    .trim();
+  return raw.replace(/[%_]/g, '').slice(0, 30);
+}
+
+/**
+ * 为 source_message_ids 为空的事实回填来源消息 ID。
+ * 这是近似回溯：用对象/内容在最近消息里找包含该片段的记录，最多 5 条。
+ */
+export async function backfillMemoryProvenance(env: Env, limit = 80): Promise<number> {
+  const rows = await env.DB.prepare(
+    `SELECT id, content, object FROM memory_facts
+     WHERE source_message_ids IS NULL OR source_message_ids = '[]'
+     ORDER BY updated_at DESC
+     LIMIT ?`,
+  )
+    .bind(limit)
+    .all<{ id: string; content: string; object: string | null }>();
+
+  let linked = 0;
+  for (const fact of rows.results ?? []) {
+    const term = provenanceSearchTerm(fact);
+    if (term.length < 2) continue;
+    const found = await env.DB.prepare(
+      `SELECT id FROM messages WHERE content LIKE ? ORDER BY id DESC LIMIT 5`,
+    )
+      .bind(`%${term}%`)
+      .all<{ id: number }>();
+    const ids = (found.results ?? []).map((r) => r.id);
+    if (ids.length === 0) continue;
+    await env.DB.prepare(
+      `UPDATE memory_facts SET source_message_ids = ?, updated_at = ? WHERE id = ?`,
+    )
+      .bind(JSON.stringify(ids), Date.now(), fact.id)
+      .run();
+    linked += 1;
+  }
+  return linked;
+}
+
+export interface MemoryJobStats {
+  queued: number;
+  running: number;
+  done: number;
+  failed: number;
+}
+
+export async function memoryJobStats(env: Env): Promise<MemoryJobStats> {
+  const rows = await env.DB.prepare(
+    `SELECT status, COUNT(*) AS c FROM memory_jobs GROUP BY status`,
+  ).all<{ status: keyof MemoryJobStats; c: number }>();
+  const out: MemoryJobStats = { queued: 0, running: 0, done: 0, failed: 0 };
+  for (const r of rows.results ?? []) {
+    if (r.status in out) out[r.status] = Number(r.c) || 0;
+  }
+  return out;
 }

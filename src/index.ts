@@ -33,7 +33,15 @@ import {
   SEMANTIC_DUP_COSINE,
   reindexMemory,
 } from './memory-index';
-import { memoryContextStats, replaceMemoryContext } from './memory-context-store';
+import {
+  backfillMemoryProvenance,
+  memoryContextStats,
+  memoryJobStats,
+  replaceMemoryContext,
+  syncRollupSummaries,
+} from './memory-context-store';
+import { enqueueMemoryJob, runMemoryJobs } from './memory-jobs';
+import { parseMemoryContext, projectMemoryContext } from './memory-domain';
 import { generateRollup, previousPeriods } from './memory-rollups';
 import { getOrCreateDayContext } from './context';
 import { parseRelationValues, reportSectionBudgets } from './memory-maintenance';
@@ -394,6 +402,45 @@ app.post('/api/admin/memory/rebuild-context', requireAuth, async (c) => {
   const memory = await getMemory(c.env);
   const result = await replaceMemoryContext(c.env, memory, 'memory');
   return c.json({ ok: true, ...result });
+});
+/** Phase 2B：同步周/月摘要到 Memory Context。 */
+app.post('/api/admin/memory/sync-summaries', requireAuth, async (c) => {
+  const summaries = await syncRollupSummaries(c.env);
+  return c.json({ ok: true, summaries });
+});
+/** Phase 2B：用消息内容回填事实来源（近似回溯，最多 5 条/事实）。 */
+app.post('/api/admin/memory/backfill-provenance', requireAuth, async (c) => {
+  const linked = await backfillMemoryProvenance(c.env);
+  return c.json({ ok: true, linked });
+});
+/** Phase 2B：手动处理 queued 记忆任务。 */
+app.post('/api/admin/memory/jobs/run', requireAuth, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { limit?: unknown } | null;
+  const limit = Math.min(10, Math.max(1, Number(body?.limit ?? 3) || 3));
+  const result = await runMemoryJobs(c.env, new Date(), limit);
+  return c.json({ ok: true, ...result });
+});
+/** Phase 2B：任务队列状态。 */
+app.get('/api/admin/memory/jobs', requireAuth, async (c) => {
+  return c.json({ ok: true, ...(await memoryJobStats(c.env)) });
+});
+/** Phase 2B：投影预览（只读，不写回 memory.md）。 */
+app.get('/api/admin/memory/projection', requireAuth, async (c) => {
+  const memory = await getMemory(c.env);
+  const parsed = parseMemoryContext(memory);
+  const projection = projectMemoryContext(memory, parsed);
+  return c.json({
+    ok: true,
+    bytes: byteLength(projection),
+    facts: parsed.facts.length,
+    events: parsed.events.length,
+    preview: projection.length > 4000 ? `${projection.slice(0, 4000)}\n…` : projection,
+  });
+});
+/** 把一条重建任务放入队列（异步；供 cron/手动调用）。 */
+app.post('/api/admin/memory/enqueue-rebuild', requireAuth, async (c) => {
+  const id = await enqueueMemoryJob(c.env, 'rebuild_context', 'memory.md');
+  return c.json({ ok: true, id });
 });
 /** 合并版：刷新 memory KV 缓存 + 重建检索索引（改完 R2 文件后一键调用）。 */
 app.post('/api/admin/memory/reload', requireAuth, async (c) => {

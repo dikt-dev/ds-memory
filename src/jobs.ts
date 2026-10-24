@@ -18,7 +18,8 @@ import { attachDistillation, attachRelation, attachWeather, getOrCreateDayContex
 import { fetchWeather } from './weather';
 import { getMemory, putMemory } from './memory';
 import { reindexMemory } from './memory-index';
-import { replaceMemoryContext } from './memory-context-store';
+import { backfillMemoryProvenance, replaceMemoryContext, syncRollupSummaries } from './memory-context-store';
+import { enqueueMemoryJob, runMemoryJobs } from './memory-jobs';
 import { maybeGenerateRollups } from './memory-rollups';
 import { buildRelationStatus } from './attitude';
 import { distillDay } from './distill';
@@ -512,6 +513,23 @@ export async function archiveOneDay(
       if (rl.errors.length) console.error('[daily] rollup errors:', rl.errors.join(';'));
     } catch (e) {
       console.error('[daily] rollup error:', e);
+    }
+    // Phase 2B：摘要同步 + 来源回填走可重试任务；表未迁移时回退直接执行。
+    try {
+      await enqueueMemoryJob(env, 'sync_summaries', 'rollups', now.getTime());
+      await enqueueMemoryJob(env, 'backfill_provenance', 'memory', now.getTime());
+      const jobs = await runMemoryJobs(env, now, 2);
+      if (jobs.failed) console.error('[daily] memory jobs failed:', JSON.stringify(jobs.details));
+      else console.log(`[daily] memory jobs：${jobs.processed} 个完成`);
+    } catch (e) {
+      console.error('[daily] memory jobs unavailable, fallback direct:', e);
+      try {
+        const summaries = await syncRollupSummaries(env);
+        const linked = await backfillMemoryProvenance(env);
+        console.log(`[daily] memory context fallback：summaries=${summaries} provenance=${linked}`);
+      } catch (fallbackError) {
+        console.error('[daily] memory context fallback failed:', fallbackError);
+      }
     }
     // 当天已归档，清理滚动摘要（新的一天用新键）
     await deleteRuntimeState(env, summaryKey(target)).catch(() => {});

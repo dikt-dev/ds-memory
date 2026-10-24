@@ -16,6 +16,7 @@
 | 单测（Phase 0 后） | `bash scripts/verify.sh` | ✅ 46 files / 637 tests |
 | 单测（Phase 1 后） | `bash scripts/verify.sh` | ✅ 47 files / 645 tests |
 | 单测（Phase 2A 后） | `bash scripts/verify.sh` | ✅ 48 files / 653 tests |
+| 单测（Phase 2B 后） | `bash scripts/verify.sh` | ✅ 50 files / 659 tests |
 | 验证脚本 | `bash scripts/verify.sh` | ✅ tsc + vitest |
 
 > 注意：在当前 DSH 沙箱内，Vitest/Vite 需要启动子进程；若沙箱为 workspace-write 可能报 `spawn EPERM`。这不是代码失败。基线记录来自完整权限执行。

@@ -192,6 +192,22 @@ CREATE TABLE IF NOT EXISTS memory_chunks (
 CREATE INDEX IF NOT EXISTS idx_memory_chunks_source ON memory_chunks(source, source_id);
 CREATE INDEX IF NOT EXISTS idx_memory_chunks_date ON memory_chunks(date);
 
+-- 可重试的记忆任务（Phase 2B）：每日归档后异步补摘要/来源
+CREATE TABLE IF NOT EXISTS memory_jobs (
+  id          TEXT PRIMARY KEY,
+  type        TEXT NOT NULL,
+  target      TEXT NOT NULL DEFAULT '',
+  status      TEXT NOT NULL DEFAULT 'queued'
+              CHECK (status IN ('queued','running','done','failed')),
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  error       TEXT,
+  created_at  INTEGER NOT NULL,
+  started_at  INTEGER,
+  finished_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_memory_jobs_status ON memory_jobs(status, created_at);
+
 -- ---------- 记忆条目索引（可重建，memory.md/archive.md 是本体） ----------
 CREATE TABLE IF NOT EXISTS memory_entries (
   id          TEXT PRIMARY KEY,
