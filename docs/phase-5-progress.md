@@ -262,6 +262,19 @@ kill <main.py PID>
 如果 tmux 一起被杀，由 15 分钟 watchdog 负责；如果整个 Termux 被杀，
 则依赖 Termux JobScheduler（一次性 job 1002 已验证能执行）。
 
+进一步故障注入：只杀 `run-all.sh`：
+
+```text
+BEFORE_TMUX=no
+BEFORE_RUNALL=no
+sh watchdog.sh
+AFTER_TMUX=yes
+AFTER_RUNALL=yes
+CLIENT=yes
+```
+
+watchdog 现在还会检查 `run-all.sh` 是否在；tmux 会话在但 supervisor 死掉时也会重建。
+
 当前：
 
 ```text
