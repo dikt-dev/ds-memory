@@ -41,6 +41,8 @@ import {
   replaceMemoryContext,
   syncArchiveContext,
   syncRollupSummaries,
+  type MemoryContextStats,
+  type MemoryJobStats,
 } from './memory-context-store';
 import { enqueueMemoryJob, runMemoryJobs } from './memory-jobs';
 import { applyMemoryProjection, buildMemoryProjection } from './memory-projection';
@@ -402,6 +404,75 @@ app.post('/api/admin/memory/reindex', requireAuth, async (c) => {
 /** Phase 2：查看 Memory Context 表规模。 */
 app.get('/api/admin/memory/context-stats', requireAuth, async (c) => {
   return c.json({ ok: true, ...(await memoryContextStats(c.env)) });
+});
+/** Phase 5 预检：只读检查迁移/开关/密钥，不做任何写入。 */
+app.get('/api/admin/readiness', requireAuth, async (c) => {
+  const tables = [
+    'runtime_state',
+    'auth_revocations',
+    'memory_facts',
+    'memory_events',
+    'memory_summaries',
+    'memory_chunks',
+    'memory_jobs',
+    'affect_events',
+    'attitude_snapshots',
+  ];
+  const checks: Record<string, string> = {};
+  for (const table of tables) {
+    try {
+      await c.env.DB.prepare(`SELECT 1 FROM ${table} LIMIT 1`).first();
+      checks[table] = 'ok';
+    } catch {
+      checks[table] = 'missing';
+    }
+  }
+  let memoryBytes = 0;
+  try {
+    memoryBytes = byteLength(await getMemory(c.env));
+  } catch {
+    /* ignore */
+  }
+  let context: MemoryContextStats | null = null;
+  try {
+    context = await memoryContextStats(c.env);
+  } catch {
+    context = null;
+  }
+  let jobs: MemoryJobStats | null = null;
+  try {
+    jobs = await memoryJobStats(c.env);
+  } catch {
+    jobs = null;
+  }
+  const missing = tables.filter((t) => checks[t] !== 'ok');
+  const warnings: string[] = [];
+  if (!c.env.AUTH_SECRET) warnings.push('AUTH_SECRET 未设置（当前会回退口令哈希）');
+  if ((c.env.MEMORY_ENGINE ?? 'legacy') === 'legacy') warnings.push('MEMORY_ENGINE=legacy');
+  if ((c.env.AFFECT_ENGINE ?? 'legacy') === 'legacy') warnings.push('AFFECT_ENGINE=legacy');
+  if (context && context.embedded === 0) warnings.push('memory_chunks 尚无向量，当前走关键词');
+  const ready = missing.length === 0 && Boolean(c.env.AUTH_SECRET || c.env.ACCESS_PASSWORD_HASH);
+  return c.json(
+    {
+      ok: ready,
+      ready,
+      checks,
+      missing,
+      auth_mode: c.env.AUTH_MODE ?? 'signed',
+      memory_engine: c.env.MEMORY_ENGINE ?? 'legacy',
+      affect_engine: c.env.AFFECT_ENGINE ?? 'legacy',
+      memory_engine_qq: c.env.MEMORY_ENGINE_QQ ?? c.env.MEMORY_ENGINE ?? 'legacy',
+      memory_engine_web: c.env.MEMORY_ENGINE_WEB ?? c.env.MEMORY_ENGINE ?? 'legacy',
+      affect_engine_qq: c.env.AFFECT_ENGINE_QQ ?? c.env.AFFECT_ENGINE ?? 'legacy',
+      affect_engine_web: c.env.AFFECT_ENGINE_WEB ?? c.env.AFFECT_ENGINE ?? 'legacy',
+      auth_secret_configured: Boolean(c.env.AUTH_SECRET),
+      memory_bytes: memoryBytes,
+      context,
+      jobs,
+      warnings,
+    },
+    ready ? 200 : 503,
+  );
 });
 /** Phase 2：从 memory.md 重建 facts/events/chunks（幂等）。 */
 app.post('/api/admin/memory/rebuild-context', requireAuth, async (c) => {

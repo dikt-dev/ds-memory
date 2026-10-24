@@ -38,6 +38,7 @@ import { loadMemoryChunks } from './memory-context-store';
 import { formatMemoryChunks, rankMemoryChunks } from './memory-domain';
 import { buildAttitudePolicy } from './attitude-policy';
 import { packMemoryChunks } from './context-packer';
+import { affectEngineFor, memoryEngineFor } from './engine-flags';
 import { logTrace } from './trace';
 
 export interface ChatImage {
@@ -104,7 +105,7 @@ export async function streamChat(
   );
 
   // Phase 2：Memory Context 影子/新引擎。默认 legacy，不改变线上回复。
-  const memoryEngine = (env.MEMORY_ENGINE ?? 'legacy').toLowerCase();
+  const memoryEngine = memoryEngineFor(env, channel);
   if (memoryEngine === 'shadow' || memoryEngine === 'next') {
     const oldBytes = byteLength(recalledRaw);
     const startedAt = performance.now();
@@ -149,7 +150,7 @@ export async function streamChat(
     [...history.map((m) => m.content), recentMemo, promptMemory.text].filter(Boolean),
   );
 
-  const affectEngine = (env.AFFECT_ENGINE ?? 'legacy').toLowerCase();
+  const affectEngine = affectEngineFor(env, channel);
   // Phase 0 trace：只记录元信息，不记录正文/记忆内容。
   logTrace('chat.context', {
     requestId: requestId ?? 'none',

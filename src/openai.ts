@@ -44,6 +44,7 @@ import { loadMemoryChunks } from './memory-context-store';
 import { formatMemoryChunks, rankMemoryChunks } from './memory-domain';
 import { buildAttitudePolicy } from './attitude-policy';
 import { packMemoryChunks } from './context-packer';
+import { affectEngineFor, memoryEngineFor } from './engine-flags';
 import { logTrace, resolveRequestId } from './trace';
 import { recordFiles, recentFilesBlock } from './recent-files';
 
@@ -396,7 +397,7 @@ openaiApp.post('/chat/completions', async (c) => {
     wasIgnored: facts.wasIgnored,
   });
   // Phase 3：态度策略影子/新引擎。默认 legacy，不改变回复。
-  const affectEngine = (c.env.AFFECT_ENGINE ?? 'legacy').toLowerCase();
+  const affectEngine = affectEngineFor(c.env, channel);
   let attitude = emotion.snapshot;
   if (affectEngine === 'shadow' || affectEngine === 'next') {
     const startedAt = performance.now();
@@ -477,7 +478,7 @@ openaiApp.post('/chat/completions', async (c) => {
   });
 
   // Phase 2：Memory Context 影子/新引擎。默认 legacy，不改变线上回复。
-  const memoryEngine = (c.env.MEMORY_ENGINE ?? 'legacy').toLowerCase();
+  const memoryEngine = memoryEngineFor(c.env, channel);
   if (memoryEngine === 'shadow' || memoryEngine === 'next') {
     const oldBytes = byteLength(recalledRaw);
     const startedAt = performance.now();
