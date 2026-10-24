@@ -14,7 +14,7 @@ import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
 import { attachWeather, getOrCreateDayContext } from './context';
 import { getMemory } from './memory';
 import { fetchWeather } from './weather';
-import { insertUserMessage, insertAssistantReply, latestMessage, compactHistoryMessage } from './db';
+import { insertUserMessage, insertAssistantReply, latestMessage, compactHistoryMessage, historyTimeLabel } from './db';
 import { loadRecentHistory } from './recent-context';
 import { calcCost, loadPricing, type TokenUsage } from './pricing';
 import { completeDeepSeek, streamDeepSeek, type DeepSeekMessage } from './deepseek';
@@ -403,12 +403,14 @@ openaiApp.post('/chat/completions', async (c) => {
         role: m.role === 'assistant' ? 'assistant' : 'user',
         // 最近 4 条保留原文，更早的压缩到 400 字内省 token
         // ★ 带文件的消息放宽到 3000 字：压缩到 400 字后「那个表第三行」就对不上了。
+        // ★ 带时间标签：避免把 17 小时前导入的旧消息当成“刚刚的上一句”
         content:
-          i >= arr.length - 4
+          `[${historyTimeLabel(m.created_at)}] ` +
+          (i >= arr.length - 4
             ? m.content
             : m.content.includes('【文件：')
               ? compactHistoryMessage(m.content, 3000)
-              : compactHistoryMessage(m.content),
+              : compactHistoryMessage(m.content)),
       }));
   }
   const focus = [

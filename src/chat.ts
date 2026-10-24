@@ -10,7 +10,7 @@ import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
 import { attachWeather, getOrCreateDayContext } from './context';
 import { getMemory } from './memory';
 import { fetchWeather } from './weather';
-import { insertUserMessage, insertAssistantReply, compactHistoryMessage } from './db';
+import { insertUserMessage, insertAssistantReply, compactHistoryMessage, historyTimeLabel } from './db';
 import { loadRecentHistory } from './recent-context';
 import { calcCost, loadPricing } from './pricing';
 import { streamDeepSeek, type DeepSeekMessage } from './deepseek';
@@ -172,7 +172,9 @@ export async function streamChat(
     // 最近 4 条保留原文（保证接得住当前话题），更早的压缩到 400 字内省 token
     ...history.map((m, i) => ({
       role: m.role,
-      content: i >= history.length - 4 ? m.content : compactHistoryMessage(m.content),
+      content:
+        `[${historyTimeLabel(m.created_at)}] ` +
+        (i >= history.length - 4 ? m.content : compactHistoryMessage(m.content)),
     })),
     { role: 'user', content: userContent },
   ];

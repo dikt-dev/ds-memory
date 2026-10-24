@@ -141,7 +141,7 @@ export async function insertProactiveMessage(
 /** 最近 N 条消息（按时间正序返回）。 */
 export async function recentMessages(env: Env, limit = 12): Promise<MessageRow[]> {
   const result = await env.DB.prepare(
-    `SELECT ${SELECT_COLS} FROM messages ORDER BY id DESC LIMIT ?`,
+    `SELECT ${SELECT_COLS} FROM messages ORDER BY created_ms DESC, id DESC LIMIT ?`,
   )
     .bind(limit)
     .all<MessageRow>();
@@ -255,6 +255,12 @@ export async function messagesByDate(env: Env, dateKey: string): Promise<Message
     .bind(dateKey)
     .all<MessageRow>();
   return res.results ?? [];
+}
+
+/** 短期历史注入时的时间标签（月-日 时:分，北京时间）。 */
+export function historyTimeLabel(createdAt: string): string {
+  // createdAt 形如 2026-10-24T17:37:39+08:00
+  return (createdAt || '').slice(5, 16).replace('T', ' ') || '时间未知';
 }
 
 /** 某条用户消息对应的助手回复（可能落在下一天，归档补全用）。 */
