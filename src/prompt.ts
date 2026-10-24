@@ -176,7 +176,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     lines.push(
       '- 你可以发表情：写成 [face:表情名]，系统会换成 QQ 表情。' +
         (voiceReply
-          ? '也可以发语音：整条以 [语音] 开头，系统会合成一条语音。'
+          ? '也可以发语音：**要说的话必须用引号包起来**，写成 [语音]「要说的话」；系统只念引号里的内容，引号外照常当文字发。'
           : '') +
         '发不发、发哪种、发多长，都随你。',
     );

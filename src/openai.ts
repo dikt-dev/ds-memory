@@ -466,7 +466,7 @@ openaiApp.post('/chat/completions', async (c) => {
     if (channel === 'astrobot') {
       parts.push(
         '【可用】[face:表情名] → QQ 表情；' +
-          (voiceReply ? '[语音] 开头 → 一条语音。' : '') +
+          (voiceReply ? '发语音必须写成 [语音]「要说的话」（只念引号里）。' : '') +
           '用不用随你。',
       );
     }
