@@ -19,10 +19,10 @@ describe('casualness', () => {
 });
 
 describe('buildVoiceDirective', () => {
-  it('包含「日常回复要短」的硬约束', () => {
+  it('不设固定字数，长短交给语气决定', () => {
     const d = buildVoiceDirective(300);
-    expect(d).toContain('60 字');
-    expect(d).toContain('一次只说一件事');
+    expect(d).toContain('不设固定字数');
+    expect(d).toContain('第一句给结论');
   });
 
   it('禁用词表前置，且包含「您」这类客服腔', () => {

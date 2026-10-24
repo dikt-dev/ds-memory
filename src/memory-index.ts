@@ -29,6 +29,20 @@ import { loadRollups } from './memory-rollups';
 /** 永远常驻注入、不参与检索的分区（核心层）。 */
 export const CORE_SECTIONS = ['人物底色', '称呼与关系', '雷区与禁忌'];
 
+/** 各分区在召回里的重要度（越高越优先占 top-k 名额）。 */
+export const SECTION_IMPORTANCE: Record<string, number> = {
+  关于用户: 3,
+  偏好与习惯: 3,
+  进行中的事项: 3,
+  共同经历: 2,
+  近期动态: 1,
+  档案: 2,
+};
+
+export function sectionImportance(section: string): number {
+  return SECTION_IMPORTANCE[section] ?? 2;
+}
+
 /** 单次聊天注入的召回条数上限。 */
 export const RECALL_TOP_K = 6;
 
@@ -46,6 +60,8 @@ export interface MemoryEntryRow {
   /** 存储态向量：int8 量化 JSON（{min,max,b:base64}），或旧版 float 数组 JSON */
   vec: string | null;
   source: 'memory' | 'archive';
+  /** 语义去重：指向"内容更详细"的主条目；值为 null 表示自己就是主条目 */
+  dupOf: string | null;
 }
 
 interface ParsedEntry {
@@ -165,11 +181,12 @@ export async function reindexMemory(
         section: p.section,
         content: p.content,
         date: p.date,
-        importance: 2,
+        importance: sectionImportance(p.section),
         tags,
         keywords: [],
         vec: null,
         source: p.source,
+        dupOf: null,
       };
       if (isNew) {
         toEmbed.push({ id, text: `${p.section}：${p.content}` });
@@ -200,10 +217,43 @@ export async function reindexMemory(
       });
     }
 
+    // 语义去重（只发生在索引视图，不动本体）：同一分区里高度相似的条目，
+    // 只让"内容更详细"的那条参与召回，其余指向它。
+    {
+      const groups = new Map<string, MemoryEntryRow[]>();
+      for (const r of rows) {
+        const list = groups.get(r.section) ?? [];
+        list.push(r);
+        groups.set(r.section, list);
+      }
+      for (const list of groups.values()) {
+        list.sort((a, b) => b.content.length - a.content.length); // 长的优先当主条
+        const primaries: MemoryEntryRow[] = [];
+        for (const r of list) {
+          const rv = r.vec ? decodeVec(r.vec) : null;
+          let hit: MemoryEntryRow | null = null;
+          if (rv) {
+            for (const p of primaries) {
+              const pv = p.vec ? decodeVec(p.vec) : null;
+              if (!pv) continue;
+              const bothTagged = p.tags.length > 0 && r.tags.length > 0;
+              if (bothTagged && !p.tags.some((t) => r.tags.includes(t))) continue;
+              if (cosine(rv, pv) >= 0.9) {
+                hit = p;
+                break;
+              }
+            }
+          }
+          if (hit) r.dupOf = hit.id;
+          else primaries.push(r);
+        }
+      }
+    }
+
     const stmt = env.DB.prepare(
       `INSERT OR REPLACE INTO memory_entries
-       (id, section, content, date, importance, tags, keywords, vec, source, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, section, content, date, importance, tags, keywords, vec, source, dup_of, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     for (let i = 0; i < rows.length; i += 100) {
       const chunk = rows.slice(i, i + 100);
@@ -219,6 +269,7 @@ export async function reindexMemory(
             JSON.stringify(r.keywords),
             r.vec,
             r.source,
+            r.dupOf,
             now,
             now,
           ),
@@ -375,7 +426,7 @@ async function loadRows(env: Env): Promise<MemoryEntryRow[]> {
   const key = `${meta?.c ?? 0}|${meta?.m ?? 0}`;
   if (rowsCache && rowsCache.key === key) return rowsCache.rows;
   const all = await env.DB.prepare(
-    'SELECT id, section, content, date, importance, tags, keywords, vec, source FROM memory_entries ORDER BY updated_at DESC',
+    'SELECT id, section, content, date, importance, tags, keywords, vec, source, dup_of FROM memory_entries ORDER BY updated_at DESC',
   ).all<{
     id: string;
     section: string;
@@ -386,6 +437,7 @@ async function loadRows(env: Env): Promise<MemoryEntryRow[]> {
     keywords: string;
     vec: string | null;
     source: string;
+    dup_of: string | null;
   }>();
   const rows: MemoryEntryRow[] = (all.results ?? []).map((r) => ({
     id: r.id,
@@ -397,6 +449,7 @@ async function loadRows(env: Env): Promise<MemoryEntryRow[]> {
     keywords: safeJson(r.keywords),
     vec: r.vec,
     source: r.source === 'archive' ? 'archive' : 'memory',
+    dupOf: r.dup_of ?? null,
   }));
   rowsCache = { key, rows };
   memCache = { key, rows, at: Date.now() };
@@ -412,22 +465,107 @@ function safeJson<T>(s: string): T {
   }
 }
 
+/** 安全版字段缩写（只在注入视图生效，本体仍是完整键名）。 */
+const ABBREV_KEYS: Array<[string, string]> = [
+  ['城市', '城'],
+  ['职业', '职'],
+  ['喜好', '喜'],
+  ['颜色', '色'],
+  ['居住', '住'],
+];
+
+export function abbreviateKeys(text: string): string {
+  let out = text;
+  for (const [full, short] of ABBREV_KEYS) {
+    out = out.split(`${full}=`).join(`${short}=`);
+  }
+  return out;
+}
+
+/** 长条目只注入「命中的子句」；没命中任何子句就截取开头（保留出处可回溯）。 */
+export function clipMatchedClauses(
+  content: string,
+  qGrams: Set<string>,
+  qWords: Set<string>,
+  maxLen = 90,
+): string {
+  const text = stripTags(content);
+  if (text.length <= 70) return text;
+  const parts = text.split(/(?<=[。！？；!?;，,])/);
+  const picked: string[] = [];
+  for (const p of parts) {
+    const g = bigrams(p).filter((x) => qGrams.has(x)).length;
+    const w = [...qWords].filter((x) => p.toLowerCase().includes(x)).length;
+    if (g + w > 0) picked.push(p);
+  }
+  if (picked.length === 0) return `${text.slice(0, maxLen)}…`;
+  let out = '';
+  for (const p of picked) {
+    const next = out ? `${out}…${p}` : p;
+    if (next.length > maxLen + 40) {
+      out += '…';
+      break;
+    }
+    out = next;
+  }
+  return out.replace(/…+$/g, '…');
+}
+
+function clauseFingerprint(s: string): string {
+  return s
+    .replace(/^-\s*\[[^\]]+\]\s*/, '')
+    .toLowerCase()
+    .replace(/[\s\u3000，。、；：！？,.;:!?"'“”‘’（）()【】\[\]]/g, '');
+}
+
+export function clauseFingerprints(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const c of (text || '').split(/[。！？；!?;\n]/)) {
+    const fp = clauseFingerprint(c);
+    if (fp.length >= 8) out.add(fp);
+  }
+  return out;
+}
+
+/** 跨层去重：短期/中期已经带上的事实，从召回块里剔除（只删注入视图，不动本体）。 */
+export function stripDuplicateRecall(recalled: string, seen: string[]): string {
+  const seenSet = new Set<string>();
+  for (const s of seen) for (const fp of clauseFingerprints(s)) seenSet.add(fp);
+  const lines = (recalled || '').split('\n');
+  const out: string[] = [];
+  for (const line of lines) {
+    if (!line.startsWith('- ')) {
+      out.push(line);
+      continue;
+    }
+    const kept = line
+      .split(/[。！？；!?;\n]/)
+      .map((c) => c.trim())
+      .filter((c) => c && !seenSet.has(clauseFingerprint(c)));
+    if (kept.length === 0) continue; // 全部重复 → 整条删掉（更近的层里有完整版）
+    out.push(kept.join('…'));
+  }
+  return out.join('\n');
+}
+
 /** 按当前话题召回 top-k 条记忆（双路打分，无命中回退最近条目）。 */
 export async function recallMemoryForChat(
   env: Env,
   query: string,
   k = RECALL_TOP_K,
+  focus = '',
 ): Promise<string> {
   const q = (query || '').slice(-1000).trim();
   if (!q) return '';
   try {
-    const rows = await loadRows(env);
+    const rows = (await loadRows(env)).filter((r) => !r.dupOf);
     if (rows.length === 0) return '';
 
     const qGrams = new Set(bigrams(q));
     const qWords = new Set(strongWords(q).filter((w) => w.length >= 3));
     const aliases = new Set(aliasTerms(q));
     const tagCtx = expandQuery(q).toLowerCase();
+    const focusWords = new Set(strongWords(focus).filter((w) => w.length >= 3));
 
     let qVec: number[] | null = null;
     // 查询向量缓存：先内存，再 KV（1h），都没有才调 AI
@@ -462,10 +600,14 @@ export async function recallMemoryForChat(
       return decoded.get(r.id) ?? null;
     };
 
-    // 时间金字塔：60 天前的原始条目权重减半，让周/月摘要接管常规召回
+    // 时间金字塔：60 天前权重减半、90 天前再降一档，让周/月摘要接管常规召回
     const bjNow = new Date(Date.now() + 8 * 3600 * 1000);
-    const cutoff = new Date(bjNow.getTime() - 60 * 86400000);
-    const cutoffKey = `${cutoff.getUTCFullYear()}-${String(cutoff.getUTCMonth() + 1).padStart(2, '0')}-${String(cutoff.getUTCDate()).padStart(2, '0')}`;
+    const fmt = (ms: number) => {
+      const d = new Date(ms);
+      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    };
+    const cutoff60 = fmt(bjNow.getTime() - 60 * 86400000);
+    const cutoff90 = fmt(bjNow.getTime() - 90 * 86400000);
 
     const scored = rows.map((r) => {
       let score = 0;
@@ -473,17 +615,25 @@ export async function recallMemoryForChat(
       for (const t of r.tags) if (tagCtx.includes(t)) score += 3;
       for (const w of qWords) if (r.content.toLowerCase().includes(w)) score += 2;
       for (const a of aliases) if (r.content.toLowerCase().includes(a)) score += 2;
+      for (const w of focusWords) if (r.content.toLowerCase().includes(w)) score += 2;
       if (qVec) {
         const rv = vecOf(r);
         if (rv) score += cosine(qVec, rv) * 3;
       }
-      if (r.date && r.date < cutoffKey) score *= 0.5;
+      score += r.importance; // 分层重要性：稳定事实/进行中优先
+      if (r.date && r.date < cutoff90) score *= 0.25;
+      else if (r.date && r.date < cutoff60) score *= 0.5;
       return { r, score };
     });
 
     const sorted = scored
       .filter((x) => x.score > 0)
-      .sort((a, b) => b.score - a.score || (b.r.date ?? '').localeCompare(a.r.date ?? ''))
+      .sort(
+        (a, b) =>
+          b.score - a.score ||
+          b.r.importance - a.r.importance ||
+          (b.r.date ?? '').localeCompare(a.r.date ?? ''),
+      )
       .slice(0, k);
 
     let picked = sorted;
@@ -492,7 +642,10 @@ export async function recallMemoryForChat(
       picked = rows.slice(0, k).map((r) => ({ r, score: 0 }));
     }
     const lines = picked
-      .map((x) => `- ${x.r.date ? `[${x.r.date}] ` : ''}${stripTags(x.r.content)}`)
+      .map((x) => {
+        const body = abbreviateKeys(clipMatchedClauses(stripTags(x.r.content), qGrams, qWords));
+        return `- ${x.r.date ? `[${x.r.date}] ` : ''}${body}`;
+      })
       .filter(Boolean);
 
     // 周/月摘要也参与召回（关键词命中即注入，最多 2 条），让老记忆用更少字被想起

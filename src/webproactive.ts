@@ -21,6 +21,7 @@ import { getOrCreateDayContext, type DayContextFile } from './context';
 import { getTodaySummary } from './summary';
 import { recentMessages, recentProactiveMessages, insertProactiveMessage, updateMessageUsage } from './db';
 import { parseRelationValues } from './memory-maintenance';
+import { enqueueProactive } from './queue';
 import { completeDeepSeek } from './deepseek';
 import {
   decideProactive,
@@ -29,7 +30,7 @@ import {
   type EnvironmentSignal,
   type UserProfile,
 } from './proactive-engine';
-import { getCachedProfile, setCachedProfile } from './profile-cache';
+import { getCachedProfile, setCachedProfile, getHeartbeat, getOfflineAlertedAt, setOfflineAlertedAt } from './profile-cache';
 import { analyzeMood, moodToneHint } from './mood';
 import { analyzeMoodSmart } from './mood-ai';
 import { computeStreak, countMemoryEntries, detectMilestones, getFirstChatDate } from './milestone';
@@ -47,7 +48,7 @@ import {
 import { buildCharacterCard } from './character-card';
 import { buildVoiceDirective } from './voice';
 import { formatRecentMemoBlock, getRecentMemo } from './recent-memory';
-import { extractCoreMemory, recallMemoryForChat } from './memory-index';
+import { extractCoreMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 import { readSessionFacts } from './session-facts';
 import { facetsOf, processEmotionTurn } from './emotion-context';
 import { moodFromVector } from './emotion-vector';
@@ -217,12 +218,19 @@ async function generateProactive(
   });
   const cardText = charCard.cardText;
   // 主动消息也带上相关往事：用最近几条对话当检索词
-  const recalled = await recallMemoryForChat(
+  const focus = history.slice(-8).map((m) => m.content).join(' ');
+  const recalledRaw = await recallMemoryForChat(
     env,
     history
       .slice(-4)
       .map((m) => m.content)
       .join(' '),
+    undefined,
+    focus,
+  );
+  const recalled = stripDuplicateRecall(
+    recalledRaw,
+    [...history.map((m) => m.content), recentMemo].filter(Boolean),
   );
 
   const systemPrompt = buildBaseSystemPrompt({
@@ -541,6 +549,45 @@ export async function diagnoseProactive(env: Env, now: Date): Promise<ProactiveD
     decision,
     claimedToday: (claimed.results ?? []).map((r) => r.slot_key),
   };
+}
+
+/** 超过这么久没心跳才提醒（客户端 5 分钟一次）。 */
+export const OFFLINE_ALERT_HOURS = 3;
+
+export type OfflineCheckResult =
+  | 'no-heartbeat'
+  | 'online'
+  | 'already-alerted'
+  | 'alerted'
+  | 'enqueue-failed';
+
+/**
+ * QQ 通道掉线检查（由 cron 每 5 分钟调用一次）。
+ *
+ * 手机被 Android 杀掉后客户端会静默消失，只能从事后心跳看出来；
+ * 这里把它变成一条能送到你眼前的消息：入队一条运维提醒。
+ * 如果客户端确实已经死了，没人会拉这条队列——它会自然过期，不会污染记忆。
+ */
+export async function checkChannelOffline(env: Env, now: Date): Promise<OfflineCheckResult> {
+  const hb = await getHeartbeat(env);
+  if (!hb) return 'no-heartbeat';
+
+  const at = Date.parse(hb.at);
+  if (!Number.isFinite(at)) return 'no-heartbeat';
+  const hours = (now.getTime() - at) / 3600000;
+  if (hours < OFFLINE_ALERT_HOURS) return 'online';
+
+  const alertedAt = await getOfflineAlertedAt(env);
+  if (alertedAt === hb.at) return 'already-alerted';
+
+  const text =
+    `⚠️ QQ 通道已经 ${Math.round(hours)} 小时没有心跳了，手机上的客户端可能被系统停掉。` +
+    '重新打开 Termux、执行 bash ds.sh start 就能恢复。';
+  const id = await enqueueProactive(env, text, now).catch(() => 0);
+  if (!id) return 'enqueue-failed';
+
+  await setOfflineAlertedAt(env, hb.at);
+  return 'alerted';
 }
 
 export async function runWebProactiveSlot(env: Env, now: Date): Promise<ProactiveResult> {

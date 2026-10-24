@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { decodeVec, extractCoreMemory, parseMemoryEntries, quantizeVec } from './memory-index';
+import {
+  abbreviateKeys,
+  clipMatchedClauses,
+  decodeVec,
+  extractCoreMemory,
+  parseMemoryEntries,
+  quantizeVec,
+  sectionImportance,
+  stripDuplicateRecall,
+} from './memory-index';
 
 const SAMPLE = `# 长期记忆
 
@@ -55,5 +64,35 @@ describe('向量 int8 量化', () => {
     // 旧格式（float 数组 JSON）仍然可解码
     expect(decodeVec(JSON.stringify(orig))).toEqual(orig);
     expect(decodeVec(null)).toBeNull();
+  });
+});
+
+describe('密度视图工具', () => {
+  it('分层重要度：稳定事实与进行中优先', () => {
+    expect(sectionImportance('关于用户')).toBe(3);
+    expect(sectionImportance('近期动态')).toBe(1);
+    expect(sectionImportance('未知分区')).toBe(2);
+  });
+
+  it('字段缩写只在展示层生效', () => {
+    expect(abbreviateKeys('城市=深圳; 职业=C开发; 喜好=蓝色')).toBe('城=深圳; 职=C开发; 喜=蓝色');
+  });
+
+  it('长条目只保留命中的子句', () => {
+    const content =
+      '用户第一次在凌晨四点找AI聊天，从此认识，那天还聊到AI有没有自我意识，聊了很久很久。后来一起搭了Cloudflare Worker和D1记忆库。最近在弄QQ机器人和小米插座。';
+    const qGrams = new Set(['Cl', 'lo', 'ou', 'ud', 'df', 'fl', 'la', 'ar', 're']);
+    const clipped = clipMatchedClauses(content, qGrams, new Set(['cloudflare']));
+    expect(clipped).toContain('Cloudflare');
+    expect(clipped.length).toBeLessThan(content.length);
+  });
+
+  it('跨层去重：短期已说的事实从召回里剔除', () => {
+    const recalled =
+      '## 相关记忆\n- [26-10-21] 用户是写C的开发者，用epoll和timerfd。\n- [26-10-22] 一起搭了Worker。';
+    const seen = ['用户是写C的开发者，用epoll和timerfd。'];
+    const out = stripDuplicateRecall(recalled, seen);
+    expect(out).not.toContain('用户是写C的开发者');
+    expect(out).toContain('Worker');
   });
 });

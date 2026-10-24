@@ -24,9 +24,9 @@ import { readSessionFacts } from './session-facts';
 import { buildCharacterCard } from './character-card';
 import { facetsOf, processEmotionTurn } from './emotion-context';
 import { moodFromVector } from './emotion-vector';
-import { buildVoiceDirective, recentOpeners, replyTokenBudget } from './voice';
+import { buildVoiceDirective, recentOpeners } from './voice';
 import { formatRecentMemoBlock, getRecentMemo, maybeRefreshRecentMemo } from './recent-memory';
-import { extractCoreMemory, recallMemoryForChat } from './memory-index';
+import { extractCoreMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 import { recordFiles, recentFilesBlock } from './recent-files';
 
 type AppEnv = { Bindings: Env };
@@ -384,7 +384,41 @@ openaiApp.post('/chat/completions', async (c) => {
       .slice(-3, -1)
       .map((m) => contentToText(m.content)),
   ].join(' ');
-  const recalled = await recallMemoryForChat(c.env, recallQuery);
+  // QQ 客户端只发当前一条；inject_history=true 时从 D1 补最近 12 条短期原文。
+  // 当前消息尚未落库，所以不会重复；若历史末尾与当前文本相同，再主动去重一次。
+  let historyMessages: DeepSeekMessage[] = [];
+  if (body?.inject_history === true && !skipRecording) {
+    const rows = await recentMessages(c.env, 12);
+    historyMessages = rows
+      .filter(
+        (m, i) =>
+          !(i === rows.length - 1 && m.role === 'user' && m.content === lastUserCleaned),
+      )
+      .filter((m) => m.content.trim())
+      .map((m, i, arr) => ({
+        role: m.role === 'assistant' ? 'assistant' : 'user',
+        // 最近 4 条保留原文，更早的压缩到 400 字内省 token
+        // ★ 带文件的消息放宽到 3000 字：压缩到 400 字后「那个表第三行」就对不上了。
+        content:
+          i >= arr.length - 4
+            ? m.content
+            : m.content.includes('【文件：')
+              ? compactHistoryMessage(m.content, 3000)
+              : compactHistoryMessage(m.content),
+      }));
+  }
+  const focus = [
+    lastUserCleaned,
+    ...historyMessages.map((m) => m.content),
+  ].join(' ');
+  const recalledRaw = await recallMemoryForChat(c.env, recallQuery, undefined, focus);
+  const recalled = stripDuplicateRecall(
+    recalledRaw,
+    [
+      ...historyMessages.map((m) => (typeof m.content === 'string' ? m.content : contentToText(m.content))),
+      recentMemo,
+    ].filter(Boolean),
+  );
   const astrbotSystems = textMessages.filter((m) => m.role === 'system').map((m) => m.content);
   // 最近几条回复的开头：避免连续几轮用同一句开场白
   const avoidOpeners = recentOpeners(
@@ -411,29 +445,7 @@ openaiApp.post('/chat/completions', async (c) => {
       userAddress: c.env.USER_ADDRESS,
     }),
   ].join('\n\n');
-  // QQ 客户端只发当前一条；inject_history=true 时从 D1 补最近 8 条短期原文。
-  // 当前消息尚未落库，所以不会重复；若历史末尾与当前文本相同，再主动去重一次。
-  let historyMessages: DeepSeekMessage[] = [];
-  if (body?.inject_history === true && !skipRecording) {
-    const rows = await recentMessages(c.env, 8);
-    historyMessages = rows
-      .filter(
-        (m, i) =>
-          !(i === rows.length - 1 && m.role === 'user' && m.content === lastUserCleaned),
-      )
-      .filter((m) => m.content.trim())
-      .map((m, i, arr) => ({
-        role: m.role === 'assistant' ? 'assistant' : 'user',
-        // 最近 4 条保留原文，更早的压缩到 400 字内省 token
-        // ★ 带文件的消息放宽到 3000 字：压缩到 400 字后「那个表第三行」就对不上了。
-        content:
-          i >= arr.length - 4
-            ? m.content
-            : m.content.includes('【文件：')
-              ? compactHistoryMessage(m.content, 3000)
-              : compactHistoryMessage(m.content),
-      }));
-  }
+
   const upstream: DeepSeekMessage[] = [
     { role: 'system', content: mergedSystem },
     ...historyMessages,
@@ -526,15 +538,13 @@ openaiApp.post('/chat/completions', async (c) => {
     return cost;
   };
 
-  // ★ 客户端只能压低、不能抬高预算：如果客户端写死 4096，会把「按长度自适应」盖掉
-  const budget = replyTokenBudget(lastUserCleaned);
+  // 回复长度交给模型自己决定：完美复刻语气优先，不再按对方字数硬压
   const requested =
     typeof body?.max_tokens === 'number' && body.max_tokens > 0 ? Math.floor(body.max_tokens) : null;
-  const maxTokens = requested ? Math.min(requested, budget) : budget;
+  const maxTokens = requested ?? undefined;
 
   // 4) 流式 / 非流式
   if (body?.stream !== false) {
-    // ★ 流式也要带上预算，否则 QQ 客户端切到流式后又会变成长篇大论
     return streamDeepSeek(c.env, upstream, { appendUsageEvent: false, maxTokens, onFinish });
   }
 

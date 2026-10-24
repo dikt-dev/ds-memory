@@ -139,7 +139,7 @@ export async function insertProactiveMessage(
 }
 
 /** 最近 N 条消息（按时间正序返回）。 */
-export async function recentMessages(env: Env, limit = 20): Promise<MessageRow[]> {
+export async function recentMessages(env: Env, limit = 12): Promise<MessageRow[]> {
   const result = await env.DB.prepare(
     `SELECT ${SELECT_COLS} FROM messages ORDER BY id DESC LIMIT ?`,
   )

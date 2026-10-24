@@ -20,9 +20,9 @@ import { buildCharacterCard } from './character-card';
 import { facetsOf, processEmotionTurn } from './emotion-context';
 import { moodFromVector } from './emotion-vector';
 import { readSessionFacts } from './session-facts';
-import { buildVoiceDirective, recentOpeners, replyTokenBudget } from './voice';
+import { buildVoiceDirective, recentOpeners } from './voice';
 import { formatRecentMemoBlock, getRecentMemo } from './recent-memory';
-import { extractCoreMemory, recallMemoryForChat } from './memory-index';
+import { extractCoreMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 
 export interface ChatImage {
   key: string; // R2 对象键（images/日期/时间戳.jpg）
@@ -51,7 +51,7 @@ export async function streamChat(
     is_holiday: dayCtxFile.is_holiday,
     holiday_note: dayCtxFile.holiday_note,
   };
-  const history = await recentMessages(env, 20);
+  const history = await recentMessages(env, 12);
   // 最近几条回复的开头：避免连续几轮用同一句开场白
   const avoidOpeners = recentOpeners(history.filter((m) => m.role === 'assistant').map((m) => m.content));
   // ★ 中期记忆（最近 24 小时）优先：它存在时就不再注入今日摘要，避免同一段内容发两遍
@@ -66,7 +66,16 @@ export async function streamChat(
       .slice(-3)
       .map((m) => m.content),
   ].join(' ');
-  const recalled = await recallMemoryForChat(env, recallQuery);
+  const recalledRaw = await recallMemoryForChat(
+    env,
+    recallQuery,
+    undefined,
+    history.slice(-8).map((m) => m.content).join(' '),
+  );
+  const recalled = stripDuplicateRecall(
+    recalledRaw,
+    [...history.map((m) => m.content), recentMemo].filter(Boolean),
+  );
 
   // ★ 活人感：在落库本条前采集「距上次聊天间隔 + 今日轮数」
   const relationVals = parseRelationValues(memory);
@@ -149,10 +158,8 @@ export async function streamChat(
   ];
 
   // 4) 流式转发；流结束落库 + 计费
-  // ★ 回复预算按他这条的长度定：短消息就只给短额度，从硬约束上防「话太多」
   return streamDeepSeek(env, messages, {
     appendUsageEvent: true,
-    maxTokens: replyTokenBudget(content),
     onFinish: async (text, usage) => {
       let cost = 0;
       let assistantId: number | undefined;

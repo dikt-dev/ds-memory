@@ -131,3 +131,7 @@ CREATE TABLE IF NOT EXISTS memory_rollups (
 );
 
 CREATE INDEX IF NOT EXISTS idx_memory_rollups_period ON memory_rollups(period);
+
+-- 语义去重指针（召回视图用，本体不动）
+
+-- 语义去重指针（召回视图用，本体不动）
