@@ -69,7 +69,7 @@ export function sanitizeProactiveText(text: string): string {
     .replace(/^[“”"'‘’\s]+|[“”"'‘’\s]+$/g, '')
     .replace(/^(消息|内容|回复)[:：]\s*/, '')
     .trim()
-    .slice(0, 200);
+    .slice(0, 500);
 }
 
 /* ---------- 随机主动聊天的时段参数 ---------- */

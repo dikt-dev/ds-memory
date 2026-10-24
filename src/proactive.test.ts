@@ -78,8 +78,8 @@ describe('sanitizeProactiveText', () => {
     expect(sanitizeProactiveText('消息：今天降温了')).toBe('今天降温了');
   });
 
-  it('限制长度 200', () => {
-    expect(sanitizeProactiveText('a'.repeat(300)).length).toBe(200);
+  it('长度上限放宽到 500', () => {
+    expect(sanitizeProactiveText('a'.repeat(800)).length).toBe(500);
   });
 });
 
