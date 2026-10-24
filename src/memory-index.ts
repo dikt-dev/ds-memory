@@ -171,7 +171,7 @@ function hashId(section: string, date: string | null, content: string): string {
   return `me_${(h >>> 0).toString(36)}_${s.length}`;
 }
 
-async function embedTexts(env: Env, texts: string[]): Promise<number[][]> {
+export async function embedTexts(env: Env, texts: string[]): Promise<number[][]> {
   if (texts.length === 0) return [];
   const model = env.EMBEDDING_MODEL || DEFAULT_EMBEDDING_MODEL;
   try {
@@ -352,6 +352,10 @@ export async function reindexMemory(
     console.error('[memory-index] reindex failed:', e);
     return { entries: 0, withVec: 0, errors: e instanceof Error ? e.message : String(e) };
   }
+}
+
+export function cosineSimilarity(a: number[], b: number[]): number {
+  return cosine(a, b);
 }
 
 function cosine(a: number[], b: number[]): number {

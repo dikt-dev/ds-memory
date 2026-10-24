@@ -6,6 +6,7 @@
  */
 import type { Env } from './types';
 import { autoTags, bigrams } from './memory-archive';
+import { embedTexts, quantizeVec } from './memory-index';
 import {
   buildMemoryChunks,
   canonicalizeFacts,
@@ -22,6 +23,7 @@ export interface MemoryContextStats {
   events: number;
   summaries: number;
   chunks: number;
+  embedded: number;
 }
 
 export interface ReplaceMemoryContextResult extends MemoryContextStats {
@@ -344,19 +346,47 @@ export async function loadMemoryContext(env: Env): Promise<{ facts: MemoryFact[]
   return { facts, events };
 }
 
+/**
+ * 给还没有向量的 chunk 补 embedding（Phase 4）。
+ * 失败/数量不匹配时返回 0，不影响关键词召回。
+ */
+export async function embedMemoryChunks(env: Env, limit = 64): Promise<number> {
+  const rows = await env.DB.prepare(
+    `SELECT id, content FROM memory_chunks WHERE vec IS NULL LIMIT ?`,
+  )
+    .bind(Math.min(200, Math.max(1, limit)))
+    .all<{ id: string; content: string }>();
+  const items = rows.results ?? [];
+  if (items.length === 0) return 0;
+  const vecs = await embedTexts(env, items.map((r) => r.content));
+  if (vecs.length !== items.length) return 0;
+  let n = 0;
+  for (let i = 0; i < items.length; i++) {
+    const vec = quantizeVec(vecs[i]);
+    if (!vec) continue;
+    await env.DB.prepare(`UPDATE memory_chunks SET vec = ? WHERE id = ?`)
+      .bind(vec, items[i].id)
+      .run();
+    n += 1;
+  }
+  return n;
+}
+
 export async function memoryContextStats(env: Env): Promise<MemoryContextStats> {
   const row = await env.DB.prepare(
     `SELECT
        (SELECT COUNT(*) FROM memory_facts) AS facts,
        (SELECT COUNT(*) FROM memory_events) AS events,
        (SELECT COUNT(*) FROM memory_summaries) AS summaries,
-       (SELECT COUNT(*) FROM memory_chunks) AS chunks`,
-  ).first<{ facts: number; events: number; summaries: number; chunks: number }>();
+       (SELECT COUNT(*) FROM memory_chunks) AS chunks,
+       (SELECT COUNT(*) FROM memory_chunks WHERE vec IS NOT NULL) AS embedded`,
+  ).first<{ facts: number; events: number; summaries: number; chunks: number; embedded: number }>();
   return {
     facts: Number(row?.facts) || 0,
     events: Number(row?.events) || 0,
     summaries: Number(row?.summaries) || 0,
     chunks: Number(row?.chunks) || 0,
+    embedded: Number(row?.embedded) || 0,
   };
 }
 

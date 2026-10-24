@@ -11,6 +11,7 @@ import { getMemory } from './memory';
 import { getArchiveLines } from './memory-archive';
 import {
   backfillMemoryProvenance,
+  embedMemoryChunks,
   replaceMemoryContext,
   syncArchiveContext,
   syncRollupSummaries,
@@ -22,6 +23,7 @@ export type MemoryJobType =
   | 'rebuild_context'
   | 'sync_summaries'
   | 'sync_archive'
+  | 'embed_chunks'
   | 'backfill_provenance'
   | 'extract_conversation';
 
@@ -102,6 +104,8 @@ async function runOne(env: Env, job: MemoryJob): Promise<unknown> {
       const lines = await getArchiveLines(env);
       return { archived: await syncArchiveContext(env, lines) };
     }
+    case 'embed_chunks':
+      return { embedded: await embedMemoryChunks(env) };
     case 'backfill_provenance':
       return { linked: await backfillMemoryProvenance(env) };
     case 'extract_conversation': {

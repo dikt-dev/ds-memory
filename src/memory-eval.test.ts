@@ -58,6 +58,18 @@ describe('Memory Context golden set（合成夹具）', () => {
     }
   });
 
+  it('top-1 精确率 ≥ 0.75', () => {
+    let hit = 0;
+    let total = 0;
+    for (const c of cases) {
+      if (c.expect_no_recall) continue;
+      total += 1;
+      const top = rankMemoryChunks(c.query, chunks, 1)[0];
+      if (top && c.expected_any.some((x) => top.content.includes(x))) hit += 1;
+    }
+    expect(hit / Math.max(1, total)).toBeGreaterThanOrEqual(0.75);
+  });
+
   it('本地 p95 < 300ms，注入字节不超过全量 memory.md 的 120%', () => {
     const rounds: number[] = [];
     for (let i = 0; i < 50; i++) {

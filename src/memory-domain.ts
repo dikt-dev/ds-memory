@@ -10,6 +10,7 @@
  * 本文件不依赖 Cloudflare API，便于单测与回放。
  */
 import { aliasTerms, autoTags, bigrams, strongWords } from './memory-archive';
+import { cosineSimilarity, decodeVec } from './memory-index';
 
 export type MemoryChunkSource = 'fact' | 'event' | 'summary';
 export type MemorySummaryLevel = 'day' | 'week' | 'month';
@@ -363,15 +364,19 @@ export function projectMemoryContext(pinnedText: string, parsed: ParsedMemoryCon
   return parts.join('\n').trim() + '\n';
 }
 
-/** 关键词/标签/同义词排序（Phase 4 再接向量与 RRF）。 */
-export function rankMemoryChunks(
-  query: string,
-  chunks: MemoryChunk[],
-  k = 6,
-  focus = '',
-): MemoryChunk[] {
-  const q = (query || '').slice(-1000).trim();
-  if (!q || chunks.length === 0) return [];
+export interface RankOptions {
+  /** 查询向量；为空或没有 chunk 向量时自动退回关键词。 */
+  queryVec?: number[] | null;
+  /** MMR 多样性系数，0=纯分数，1=强去冗余。 */
+  mmrLambda?: number;
+}
+
+interface ScoredChunk {
+  chunk: MemoryChunk;
+  score: number;
+}
+
+function keywordScore(q: string, chunk: MemoryChunk, focus: string): number {
   const qGrams = new Set(bigrams(q));
   const qWords = new Set(strongWords(q).filter((w) => w.length >= 3));
   const aliases = new Set(aliasTerms(q));
@@ -380,30 +385,116 @@ export function rankMemoryChunks(
   const qChars = [...new Set(q)].filter(
     (c) => /[\u4e00-\u9fff]/.test(c) && !QUERY_STOP_CHARS.has(c),
   );
+  let score = 0;
+  for (const g of chunk.keywords) if (qGrams.has(g)) score += 1;
+  for (const g of bigrams(chunk.content)) if (qGrams.has(g)) score += 1;
+  for (const t of chunk.tags) if (q.toLowerCase().includes(t)) score += 3;
+  for (const w of qWords) if (chunk.content.toLowerCase().includes(w)) score += 2;
+  for (const a of aliases) if (chunk.content.toLowerCase().includes(a)) score += 2;
+  for (const w of focusWords) if (chunk.content.toLowerCase().includes(w)) score += 2;
+  for (const c of qChars) if (chunk.content.includes(c)) score += 1;
+  if (score > 0) score += chunk.importance;
   const oldCutoff = new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10);
-  const scored = chunks.map((chunk) => {
-    let score = 0;
-    for (const g of chunk.keywords) if (qGrams.has(g)) score += 1;
-    for (const g of bigrams(chunk.content)) if (qGrams.has(g)) score += 1;
-    for (const t of chunk.tags) if (q.toLowerCase().includes(t)) score += 3;
-    for (const w of qWords) if (chunk.content.toLowerCase().includes(w)) score += 2;
-    for (const a of aliases) if (chunk.content.toLowerCase().includes(a)) score += 2;
-    for (const w of focusWords) if (chunk.content.toLowerCase().includes(w)) score += 2;
-    for (const c of qChars) if (chunk.content.includes(c)) score += 1;
-    if (score > 0) score += chunk.importance;
-    if (chunk.date && chunk.date < oldCutoff) score *= 0.5;
-    return { chunk, score };
-  });
-  return scored
+  if (chunk.date && chunk.date < oldCutoff) score *= 0.5;
+  return score;
+}
+
+function chunkSimilarity(a: MemoryChunk, b: MemoryChunk): number {
+  const av = decodeVec(a.vec ?? null);
+  const bv = decodeVec(b.vec ?? null);
+  if (av && bv) return Math.max(0, cosineSimilarity(av, bv));
+  // 没有向量时用内容 bigram Jaccard 做去冗余兜底
+  const as = new Set(bigrams(a.content));
+  const bs = new Set(bigrams(b.content));
+  if (as.size === 0 || bs.size === 0) return 0;
+  let inter = 0;
+  for (const g of as) if (bs.has(g)) inter += 1;
+  return inter / Math.max(as.size, bs.size);
+}
+
+/** MMR：先取最高分，再逐步惩罚与已选条目相似的候选。 */
+export function mmrSelectChunks(
+  candidates: ScoredChunk[],
+  k: number,
+  lambda = 0.75,
+): MemoryChunk[] {
+  if (k <= 0 || candidates.length === 0) return [];
+  const pool = [...candidates].sort((a, b) => b.score - a.score);
+  const maxScore = Math.max(1, pool[0]?.score ?? 1);
+  const selected: ScoredChunk[] = [];
+  while (selected.length < k && pool.length > 0) {
+    let bestIdx = 0;
+    let bestVal = -Infinity;
+    for (let i = 0; i < pool.length; i++) {
+      let maxSim = 0;
+      for (const chosen of selected) {
+        maxSim = Math.max(maxSim, chunkSimilarity(pool[i].chunk, chosen.chunk));
+      }
+      // 归一化惩罚，避免不同 query 的绝对分数尺度影响多样性
+      const val = pool[i].score - (1 - lambda) * maxSim * maxScore;
+      if (val > bestVal) {
+        bestVal = val;
+        bestIdx = i;
+      }
+    }
+    selected.push(pool.splice(bestIdx, 1)[0]);
+  }
+  return selected.map((x) => x.chunk);
+}
+
+/**
+ * 关键词 + 向量混合召回（Phase 4）：
+ * - 两路各自排序，用 RRF 融合；
+ * - 有向量时 MMR 去冗余；无向量自动退回关键词；
+ * - 纯函数，便于 golden set / 延迟测试。
+ */
+export function rankMemoryChunks(
+  query: string,
+  chunks: MemoryChunk[],
+  k = 6,
+  focus = '',
+  options: RankOptions = {},
+): MemoryChunk[] {
+  const q = (query || '').slice(-1000).trim();
+  if (!q || chunks.length === 0) return [];
+  const scored = chunks
+    .map((chunk) => ({ chunk, score: keywordScore(q, chunk, focus) }))
     .filter((x) => x.score > 0)
     .sort(
       (a, b) =>
         b.score - a.score ||
         b.chunk.importance - a.chunk.importance ||
         dateOfChunk(b.chunk).localeCompare(dateOfChunk(a.chunk)),
-    )
-    .slice(0, Math.max(1, k))
-    .map((x) => x.chunk);
+    );
+
+  const qVec = options.queryVec;
+  const hasVectors = chunks.some((c) => Boolean(c.vec));
+  if (!qVec || !hasVectors) {
+    return mmrSelectChunks(scored, Math.max(1, k), options.mmrLambda ?? 0.9);
+  }
+
+  const vectorRanked = chunks
+    .map((chunk) => {
+      const vec = decodeVec(chunk.vec ?? null);
+      return { chunk, score: vec ? Math.max(0, cosineSimilarity(qVec, vec)) : 0 };
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+  if (vectorRanked.length === 0) {
+    return mmrSelectChunks(scored, Math.max(1, k), options.mmrLambda ?? 0.9);
+  }
+
+  const RRF_K = 60;
+  const fused = new Map<string, ScoredChunk>();
+  const add = (chunk: MemoryChunk, rank: number) => {
+    const cur = fused.get(chunk.id) ?? { chunk, score: 0 };
+    cur.score += 1 / (RRF_K + rank + 1);
+    fused.set(chunk.id, cur);
+  };
+  scored.slice(0, 30).forEach((x, i) => add(x.chunk, i));
+  vectorRanked.slice(0, 30).forEach((x, i) => add(x.chunk, i));
+  const merged = [...fused.values()].sort((a, b) => b.score - a.score);
+  return mmrSelectChunks(merged, Math.max(1, k), options.mmrLambda ?? 0.75);
 }
 
 export function formatMemoryChunks(chunks: MemoryChunk[]): string {

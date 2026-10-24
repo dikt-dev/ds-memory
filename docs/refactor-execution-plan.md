@@ -16,7 +16,7 @@
 | 1 | ✅ 完成（tagged） | `docs/phase-1-report.md` | `refactor-p1` |
 | 2 | ✅ 完成（工程门禁；7 天生产影子在 Phase 5 上线前） | `docs/phase-2-progress.md` | `refactor-p2` |
 | 3 | ✅ 完成（工程门禁；7 天生产影子在 Phase 5 上线前） | `docs/phase-3-progress.md` | `refactor-p3` |
-| 4 | ⏳ 待开始 | - | `refactor-p4` |
+| 4 | ✅ 完成（工程门禁；真实 embedding/生产 p95 在 Phase 5） | `docs/phase-4-progress.md` | `refactor-p4` |
 | 5 | ⏳ 待开始 | - | `refactor-p5` |
 
 ---

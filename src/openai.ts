@@ -39,10 +39,11 @@ import { facetsOf, processEmotionTurn } from './emotion-context';
 import { moodFromVector } from './emotion-vector';
 import { buildVoiceDirective, recentOpeners } from './voice';
 import { formatRecentMemoBlock, getRecentMemo, maybeRefreshRecentMemo } from './recent-memory';
-import { extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
+import { embedTexts, extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 import { loadMemoryChunks } from './memory-context-store';
 import { formatMemoryChunks, rankMemoryChunks } from './memory-domain';
 import { buildAttitudePolicy } from './attitude-policy';
+import { packMemoryChunks } from './context-packer';
 import { logTrace, resolveRequestId } from './trace';
 import { recordFiles, recentFilesBlock } from './recent-files';
 
@@ -482,15 +483,22 @@ openaiApp.post('/chat/completions', async (c) => {
     const startedAt = performance.now();
     try {
       const chunks = await loadMemoryChunks(c.env);
-      const picked = rankMemoryChunks(recallQuery, chunks, 6, focus);
-      const nextRaw = formatMemoryChunks(picked);
+      const hasVectors = chunks.some((chunk) => Boolean(chunk.vec));
+      const queryVec = hasVectors
+        ? ((await embedTexts(c.env, [recallQuery]))[0] ?? null)
+        : null;
+      const picked = rankMemoryChunks(recallQuery, chunks, 6, focus, { queryVec });
+      const packed = packMemoryChunks(picked);
+      const nextRaw = formatMemoryChunks(packed.chunks);
       logTrace('memory.engine', {
         requestId,
         engine: memoryEngine,
         oldItems: recalledRaw.split('\n').filter((line) => line.startsWith('- ')).length,
-        nextItems: picked.length,
+        nextItems: packed.chunks.length,
         oldBytes,
         nextBytes: byteLength(nextRaw),
+        packedDropped: packed.dropped,
+        hasVector: Boolean(queryVec),
         shadowMs: Math.round(performance.now() - startedAt),
       });
       if (memoryEngine === 'next' && nextRaw) recalledRaw = nextRaw;

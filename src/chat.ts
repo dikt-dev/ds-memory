@@ -33,10 +33,11 @@ import { moodFromVector } from './emotion-vector';
 import { readSessionFacts } from './session-facts';
 import { buildVoiceDirective, recentOpeners } from './voice';
 import { formatRecentMemoBlock, getRecentMemo } from './recent-memory';
-import { extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
+import { embedTexts, extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 import { loadMemoryChunks } from './memory-context-store';
 import { formatMemoryChunks, rankMemoryChunks } from './memory-domain';
 import { buildAttitudePolicy } from './attitude-policy';
+import { packMemoryChunks } from './context-packer';
 import { logTrace } from './trace';
 
 export interface ChatImage {
@@ -109,20 +110,28 @@ export async function streamChat(
     const startedAt = performance.now();
     try {
       const chunks = await loadMemoryChunks(env);
+      const hasVectors = chunks.some((chunk) => Boolean(chunk.vec));
+      const queryVec = hasVectors
+        ? ((await embedTexts(env, [recallQuery]))[0] ?? null)
+        : null;
       const picked = rankMemoryChunks(
         recallQuery,
         chunks,
         6,
         history.slice(-8).map((m) => m.content).join(' '),
+        { queryVec },
       );
-      const nextRaw = formatMemoryChunks(picked);
+      const packed = packMemoryChunks(picked);
+      const nextRaw = formatMemoryChunks(packed.chunks);
       logTrace('memory.engine', {
         requestId: requestId ?? 'none',
         engine: memoryEngine,
         oldItems: recalledRaw.split('\n').filter((line) => line.startsWith('- ')).length,
-        nextItems: picked.length,
+        nextItems: packed.chunks.length,
         oldBytes,
         nextBytes: byteLength(nextRaw),
+        packedDropped: packed.dropped,
+        hasVector: Boolean(queryVec),
         shadowMs: Math.round(performance.now() - startedAt),
       });
       if (memoryEngine === 'next' && nextRaw) recalledRaw = nextRaw;

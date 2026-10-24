@@ -35,6 +35,7 @@ import {
 } from './memory-index';
 import {
   backfillMemoryProvenance,
+  embedMemoryChunks,
   memoryContextStats,
   memoryJobStats,
   replaceMemoryContext,
@@ -418,6 +419,13 @@ app.post('/api/admin/memory/sync-archive', requireAuth, async (c) => {
   const lines = await getArchiveLines(c.env);
   const archived = await syncArchiveContext(c.env, lines);
   return c.json({ ok: true, archived });
+});
+/** Phase 4：给 chunk 补向量（bge-m3），失败自动回退关键词。 */
+app.post('/api/admin/memory/embed', requireAuth, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { limit?: unknown } | null;
+  const limit = Math.min(200, Math.max(1, Number(body?.limit ?? 64) || 64));
+  const embedded = await embedMemoryChunks(c.env, limit);
+  return c.json({ ok: true, embedded });
 });
 /** Phase 2B：用消息内容回填事实来源（近似回溯，最多 5 条/事实）。 */
 app.post('/api/admin/memory/backfill-provenance', requireAuth, async (c) => {
