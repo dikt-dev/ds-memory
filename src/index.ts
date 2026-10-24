@@ -38,6 +38,7 @@ import {
   memoryContextStats,
   memoryJobStats,
   replaceMemoryContext,
+  syncArchiveContext,
   syncRollupSummaries,
 } from './memory-context-store';
 import { enqueueMemoryJob, runMemoryJobs } from './memory-jobs';
@@ -407,6 +408,12 @@ app.post('/api/admin/memory/rebuild-context', requireAuth, async (c) => {
 app.post('/api/admin/memory/sync-summaries', requireAuth, async (c) => {
   const summaries = await syncRollupSummaries(c.env);
   return c.json({ ok: true, summaries });
+});
+/** Phase 2B：把 archive.md 的旧事导入 Memory Context。 */
+app.post('/api/admin/memory/sync-archive', requireAuth, async (c) => {
+  const lines = await getArchiveLines(c.env);
+  const archived = await syncArchiveContext(c.env, lines);
+  return c.json({ ok: true, archived });
 });
 /** Phase 2B：用消息内容回填事实来源（近似回溯，最多 5 条/事实）。 */
 app.post('/api/admin/memory/backfill-provenance', requireAuth, async (c) => {

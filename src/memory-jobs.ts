@@ -8,9 +8,11 @@
  */
 import type { Env } from './types';
 import { getMemory } from './memory';
+import { getArchiveLines } from './memory-archive';
 import {
   backfillMemoryProvenance,
   replaceMemoryContext,
+  syncArchiveContext,
   syncRollupSummaries,
   upsertConversationFacts,
 } from './memory-context-store';
@@ -19,6 +21,7 @@ import { extractFactsFromMessages } from './memory-extract';
 export type MemoryJobType =
   | 'rebuild_context'
   | 'sync_summaries'
+  | 'sync_archive'
   | 'backfill_provenance'
   | 'extract_conversation';
 
@@ -95,6 +98,10 @@ async function runOne(env: Env, job: MemoryJob): Promise<unknown> {
     }
     case 'sync_summaries':
       return { summaries: await syncRollupSummaries(env) };
+    case 'sync_archive': {
+      const lines = await getArchiveLines(env);
+      return { archived: await syncArchiveContext(env, lines) };
+    }
     case 'backfill_provenance':
       return { linked: await backfillMemoryProvenance(env) };
     case 'extract_conversation': {

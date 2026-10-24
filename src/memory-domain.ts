@@ -96,6 +96,7 @@ const IMPORTANCE: Record<string, number> = {
   进行中的事项: 3,
   共同经历: 2,
   近期动态: 1,
+  档案: 1,
   雷区与禁忌: 3,
 };
 
@@ -230,6 +231,30 @@ export function canonicalizeFacts(facts: MemoryFact[], atDate: string): MemoryFa
     }
   }
   return [...byKey.values()];
+}
+
+/** 把 archive.md 的行（`- [date] content`）解析成事件；不进入 memory.md 投影。 */
+export function parseArchiveContext(lines: string[], now = Date.now()): MemoryEvent[] {
+  const out: MemoryEvent[] = [];
+  for (const line of lines) {
+    const em = line.trim().match(ENTRY_RE);
+    if (!em) continue;
+    const date = normalizeDate(em[1]);
+    const summary = em[2].trim();
+    if (!summary) continue;
+    out.push({
+      id: eventId('档案', date, summary),
+      section: '档案',
+      dateKey: date,
+      summary,
+      participants: '',
+      emotions: '',
+      sourceMessageIds: [],
+      contentHash: stableHash(summary),
+      createdAt: now,
+    });
+  }
+  return out;
 }
 
 export function buildMemoryChunks(parsed: ParsedMemoryContext, now = Date.now()): MemoryChunk[] {

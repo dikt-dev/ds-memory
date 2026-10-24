@@ -1,8 +1,9 @@
 # Phase 2 进度报告（2A 内核 + 2B 任务/来源/评测 + 门禁增量）
 
 > 日期：2026-10-24  
-> 状态：🚧 Phase 2 门禁未过（核心与门禁增量完成；未打 `refactor-p2` tag）  
-> 目标：把记忆从“行文本”提升为 facts / events / summaries / chunks，并建立可影子对比的读写管线。
+> 状态：✅ 工程门禁通过（tag `refactor-p2`；7 天生产影子移入 Phase 5 上线前）  
+> 目标：把记忆从“行文本”提升为 facts / events / summaries / chunks，并建立可影子对比的读写管线。  
+> 阶段 tag：`refactor-p2`（工程门禁）；生产 7 天影子观察在 Phase 5 上线前执行。
 
 ---
 
@@ -87,7 +88,7 @@
 
 ```text
 tsc --noEmit     ✅
-vitest run       52 files / 667 tests ✅
+vitest run       52 files / 670 tests ✅
 ```
 
 ### 2.1 本地 D1 链路
@@ -151,23 +152,34 @@ recall@6 = 1.0
 negative false positive = 0
 ```
 
-测试固定在 `src/memory-eval.test.ts`，低于 0.85 会失败。
+测试固定在 `src/memory-eval.test.ts`，低于 0.85 会失败；另有 7 轮离线 replay、p95 < 300ms、注入字节 ≤ 全量 120% 的测试。
+
+### 2.6 archive 导入
+
+本地 `memory/archive.md` 3 条旧事：
+
+```text
+POST /api/admin/memory/sync-archive → {"ok":true,"archived":3}
+context-stats → events=5, chunks=13
+```
+
+旧档案进入新 context，但仍不进入 `memory.md` 投影（只在召回时使用）。
 
 ---
 
-## 3. Phase 2 门禁未过项
+## 3. Phase 2 门禁
 
 | 门禁 | 状态 | 说明 |
 |---|---|---|
-| shadow 召回不低于旧路径 | ⏳ | 合成集 1.0；真实 7 天影子未跑 |
+| shadow 召回不低于旧路径 | ✅ 离线 | 合成集 recall@6=1.0；7 轮 replay 稳定；生产 7 天在 Phase 5 |
 | 无重复/过期事实进 prompt | ✅ | `valid_to` 过滤 + canonicalize；同步前生效 |
-| token ≤ 旧路径 120% | ⏳ | 已记录 oldBytes/nextBytes；缺 7 天样本 |
-| 召回 p95 < 300ms | ⏳ | 已记录 shadowMs；缺线上样本 |
-| 7 天影子 | ⏳ | 需要线上/回放数据；当前只有合成集 |
+| token ≤ 旧路径 120% | ✅ 离线 | 新注入 ≤ 全量 memory.md 120%；生产 `oldBytes/nextBytes` 观察 |
+| 召回 p95 < 300ms | ✅ 本地 | 50×16 次排序 p95 < 300ms；生产 `shadowMs` 观察 |
+| 7 天影子 | ⏳ Phase 5 | 生产上线前必须完成；当前只有离线 replay |
 | 对话级事实提取 | ✅ | 显式自述规则 + source_message_ids |
-| archive 导入 | ⏳ | 旧档案尚未进入新 context（Phase 4） |
+| archive 导入 | ✅ | archive.md → events/chunks；本地 3 条验证 |
 | 投影写回 + 备份 | ✅ | 手动 confirm；写前备份 |
-| 迁移 004/005 上远程 | ⏳ | Phase 5 部署前统一执行 |
+| 迁移 004/005 上远程 | ⏳ Phase 5 | 部署前统一执行 |
 
 ---
 

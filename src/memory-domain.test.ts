@@ -5,6 +5,7 @@ import {
   factId,
   formatMemoryChunks,
   isFactActive,
+  parseArchiveContext,
   parseMemoryContext,
   projectMemoryContext,
   rankMemoryChunks,
@@ -63,6 +64,22 @@ describe('memory-domain 解析', () => {
       factId('关于用户', '2026-10-01', '城市=杭州'),
     );
     expect(stableHash('abc')).toHaveLength(8);
+  });
+});
+
+describe('memory-domain archive 导入', () => {
+  it('把档案行解析为事件，不进入投影', () => {
+    const events = parseArchiveContext([
+      '- [24-10-01] 旧事一 #日常',
+      '- [2026-10-02] 旧事二',
+      '- 没有日期的行',
+    ]);
+    expect(events).toHaveLength(2);
+    expect(events[0].section).toBe('档案');
+    expect(events[0].dateKey).toBe('2024-10-01');
+    const chunks = buildMemoryChunks({ facts: [], events });
+    expect(chunks).toHaveLength(2);
+    expect(chunks[0].importance).toBe(1);
   });
 });
 

@@ -517,9 +517,10 @@ export async function archiveOneDay(
     // Phase 2B：摘要同步 + 来源回填走可重试任务；表未迁移时回退直接执行。
     try {
       await enqueueMemoryJob(env, 'sync_summaries', 'rollups', now.getTime());
+      await enqueueMemoryJob(env, 'sync_archive', 'archive.md', now.getTime());
       await enqueueMemoryJob(env, 'backfill_provenance', 'memory', now.getTime());
       await enqueueMemoryJob(env, 'extract_conversation', 'recent', now.getTime());
-      const jobs = await runMemoryJobs(env, now, 3);
+      const jobs = await runMemoryJobs(env, now, 4);
       if (jobs.failed) console.error('[daily] memory jobs failed:', JSON.stringify(jobs.details));
       else console.log(`[daily] memory jobs：${jobs.processed} 个完成`);
     } catch (e) {

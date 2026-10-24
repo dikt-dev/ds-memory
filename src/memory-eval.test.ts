@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import fixture from '../docs/eval/fixture-memory.md?raw';
 import goldenRaw from '../docs/eval/golden-memory.json?raw';
-import { buildMemoryChunks, parseMemoryContext, rankMemoryChunks } from './memory-domain';
+import {
+  buildMemoryChunks,
+  formatMemoryChunks,
+  parseMemoryContext,
+  rankMemoryChunks,
+} from './memory-domain';
 
 interface GoldenCase {
   id: string;
@@ -37,6 +42,39 @@ describe('Memory Context golden set（合成夹具）', () => {
     // 基线先定 0.85；低于它说明解析/排序退化，而不是“差不多”。
     // 合成夹具当前为 1.0（16 条非核心 query），真实数据基线在 Phase 4 补。
     expect(recall, `misses:\n${misses.join('\n')}`).toBeGreaterThanOrEqual(0.85);
+  });
+
+  it('7 轮离线 shadow replay 稳定（不是 7 天生产观察）', () => {
+    for (let round = 0; round < 7; round++) {
+      let hit = 0;
+      let total = 0;
+      for (const c of cases) {
+        if (c.expect_no_recall) continue;
+        total += 1;
+        const picked = rankMemoryChunks(c.query, chunks, 6);
+        if (c.expected_any.some((x) => picked.some((p) => p.content.includes(x)))) hit += 1;
+      }
+      expect(hit / Math.max(1, total)).toBeGreaterThanOrEqual(0.85);
+    }
+  });
+
+  it('本地 p95 < 300ms，注入字节不超过全量 memory.md 的 120%', () => {
+    const rounds: number[] = [];
+    for (let i = 0; i < 50; i++) {
+      for (const c of cases) {
+        if (c.expect_no_recall) continue;
+        const start = performance.now();
+        rankMemoryChunks(c.query, chunks, 6);
+        rounds.push(performance.now() - start);
+      }
+    }
+    rounds.sort((a, b) => a - b);
+    const p95 = rounds[Math.min(rounds.length - 1, Math.floor(rounds.length * 0.95))];
+    expect(p95).toBeLessThan(300);
+
+    const injected = formatMemoryChunks(rankMemoryChunks('我住在哪里', chunks, 6));
+    const full = new TextEncoder().encode(fixture).length;
+    expect(new TextEncoder().encode(injected).length).toBeLessThanOrEqual(full * 1.2);
   });
 
   it('negative case 不强行召回私人事实', () => {

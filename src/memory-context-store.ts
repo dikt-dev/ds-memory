@@ -9,6 +9,7 @@ import { autoTags, bigrams } from './memory-archive';
 import {
   buildMemoryChunks,
   canonicalizeFacts,
+  parseArchiveContext,
   parseMemoryContext,
   stableHash,
   type MemoryChunk,
@@ -417,6 +418,25 @@ export async function syncRollupSummaries(env: Env, now = Date.now()): Promise<n
     .filter((id) => !keepSummaries.has(id));
   await deleteIds(env, 'memory_summaries', staleSummaries);
   return items.length;
+}
+
+/** 把 archive.md 的旧事同步成 events/chunks（origin=archive）。 */
+export async function syncArchiveContext(
+  env: Env,
+  lines: string[],
+  now = Date.now(),
+): Promise<number> {
+  const events = parseArchiveContext(lines.slice(-500), now);
+  const chunks = buildMemoryChunks({ facts: [], events }, now);
+  const ids = new Set(events.map((e) => e.id));
+  const chunkIds = new Set(chunks.map((c) => c.id));
+  const oldEvents = await staleIds(env, 'memory_events', 'archive', ids);
+  const oldChunks = await staleIds(env, 'memory_chunks', 'archive', chunkIds);
+  await insertEvents(env, events, 'archive');
+  await insertChunks(env, chunks, 'archive');
+  await deleteIds(env, 'memory_events', oldEvents);
+  await deleteIds(env, 'memory_chunks', oldChunks);
+  return events.length;
 }
 
 /** 从事实里提取一个用于消息回溯的检索词（对象优先）。 */
