@@ -175,7 +175,9 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     lines.push('- 对方在 QQ 这类聊天软件里看：不支持 Markdown，纯文本才能正常显示。');
     lines.push(
       '- 你可以发表情：写成 [face:表情名]，系统会换成 QQ 表情。' +
-        (voiceReply ? '也可以发语音：整条以 [语音] 开头，系统会合成一条语音。' : '') +
+        (voiceReply
+          ? '也可以发语音：把要说的话用引号包起来，比如 [语音]「主人晚安啦~」，系统只念引号里的内容；语音里只说话，别写（动作）或表情标记。'
+          : '') +
         '发不发、发哪种、发多长，都随你。',
     );
   }
@@ -238,16 +240,6 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   lines.push(
     '- 不管多困多烦，语气都要轻快、嘴硬、带笑：可以打哈欠，但不能丧、不能冷淡、不能一直抱怨累；先怼一句再关心，别一本正经解释。',
   );
-
-  // ── ⑧ 收尾：格式硬要求（放最后，避免被前面的长内容淹没）─────────
-  if (channel === 'astrobot') {
-    lines.push('');
-    lines.push('## 这一轮的格式（硬性）');
-    lines.push('- 回复结尾必须带一个 [face:情绪]，从上面那张表情清单里挑一个最贴当下心情的。');
-    if (voiceReply) {
-      lines.push('- 想发语音就单独发一条、以 [语音] 开头（长短都行）。');
-    }
-  }
 
   return lines.join('\n');
 }

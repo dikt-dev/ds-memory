@@ -465,7 +465,9 @@ openaiApp.post('/chat/completions', async (c) => {
     //   比系统提示词里靠前的位置有效得多。网页端不需要 QQ 表情/语音标记。
     if (channel === 'astrobot') {
       parts.push(
-        '【可用】[face:表情名] → QQ 表情；' + (voiceReply ? '[语音] 开头 → 一条语音。' : '') + '用不用随你。',
+        '【可用】[face:表情名] → QQ 表情；' +
+          (voiceReply ? '[语音]「要说的话」→ 一条语音（只念引号里）。' : '') +
+          '用不用随你。',
       );
     }
     if (isNowFactQuestion(lastUserCleaned)) {
