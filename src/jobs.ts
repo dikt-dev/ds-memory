@@ -175,12 +175,13 @@ export async function archiveOneDay(env: Env, target: string, now: Date): Promis
     let distilled = false;
     let distillCost = 0;
     let usedFallback = false;
-    if (rows.length > 0) {
+    // ★ 提炼只喂当天 date_key 的消息；跨天补上的 AI 回复只进归档日志，不参与当天提炼
+    if (dayRows.length > 0) {
       try {
         const daySummary = await getDaySummaryRaw(env, target).catch(() => null);
         // 主动消息（turn_type='proactive'）标注出来，避免提炼时误当成用户说过的话
         const conversation =
-          rows
+          dayRows
             .map((m) => {
               if (m.role === 'user') return `用户：${m.content}`;
               return m.turn_type === 'proactive'
@@ -242,7 +243,7 @@ export async function archiveOneDay(env: Env, target: string, now: Date): Promis
     try {
       const emotionState = await loadEmotionState(env, now.getTime());
       // Workers AI 只复核当天「有歧义」的消息（单日最多 8 条），补词典漏检
-      const dayUserTexts = rows.filter((r) => r.role === 'user').map((r) => r.content);
+      const dayUserTexts = dayRows.filter((r) => r.role === 'user').map((r) => r.content);
       const extraEvents = await reviewDayEvents(env, dayUserTexts, now.getTime());
 
       let vector = emotionState.vector;
