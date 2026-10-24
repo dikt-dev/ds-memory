@@ -600,7 +600,7 @@ export function needsLlmRerank(query: string, pool: Scored[]): boolean {
   if (/(那个|上次|之前|那件事|这事|它|他们)/.test(q)) return true;
   const top = pool[0]?.score ?? 0;
   const kth = pool[Math.min(RECALL_TOP_K, pool.length - 1)]?.score ?? 0;
-  return top < 6 || top - kth < 1.5;
+  return top < 4 || top - kth < 1;
 }
 
 /** 条件触发的 LLM 二次筛选：只输出候选序号，失败一律回退确定性排序。 */
@@ -724,7 +724,9 @@ export async function recallMemoryForChat(
         const rv = vecOf(r);
         if (rv) score += cosine(qVec, rv) * 3;
       }
-      score += r.importance; // 分层重要性：稳定事实/进行中优先
+      // ★ 重要度只在“确实相关”时加分：不能只靠 importance 让无关条目进候选池，
+      //   否则每轮都有 20 条候选、top 分数又接近，会频繁触发 LLM 重排拖慢回复。
+      if (score > 0) score += r.importance;
       if (r.date && r.date < cutoff90) score *= 0.25;
       else if (r.date && r.date < cutoff60) score *= 0.5;
       return { r, score };
@@ -743,9 +745,13 @@ export async function recallMemoryForChat(
 
     let picked = pool.slice(0, k);
     if (pool.length > k) picked = mmrSelect(pool, k);
-    if (needsLlmRerank(q, pool)) {
+    if (env.LLM_RERANK === '1' && needsLlmRerank(q, pool)) {
+      const t0 = Date.now();
       const llm = await llmRerank(env, q, pool, k);
       if (llm && llm.length > 0) picked = llm;
+      console.log(
+        `[recall] llm rerank q="${q.slice(0, 30)}" pool=${pool.length} top=${pool[0]?.score ?? 0} ms=${Date.now() - t0} picked=${picked.length}`,
+      );
     }
     picked = ensureOngoing(picked, pool, k);
     if (picked.length === 0) {
