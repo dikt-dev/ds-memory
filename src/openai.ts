@@ -14,7 +14,7 @@ import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
 import { attachWeather, getOrCreateDayContext } from './context';
 import { getMemory } from './memory';
 import { fetchWeather } from './weather';
-import { insertUserMessage, insertAssistantReply, latestMessage, compactHistoryMessage, historyTimeLabel } from './db';
+import { insertUserMessage, insertAssistantReply, latestMessage, compactHistoryMessage, historyRangeNote } from './db';
 import { loadRecentHistory } from './recent-context';
 import { calcCost, loadPricing, type TokenUsage } from './pricing';
 import { completeDeepSeek, streamDeepSeek, type DeepSeekMessage } from './deepseek';
@@ -213,11 +213,18 @@ export function buildLastUserContent(
  * （实时回复仍然带标记，客户端要拿它去合成语音。）
  */
 export function normalizeAssistantText(text: string): string {
-  return text
+  const TIME_LABEL =
+    /^\s*[\[【]\s*(?:(?:\d{2,4}[-/])?\d{1,2}[-/]\d{1,2}\s+)?\d{1,2}:\d{2}(?::\d{2})?\s*[\]】]\s*/;
+  let out = text
     .replace(/^\s*\[(?:语音|voice)\]\s*/i, '（语音）')
-    .replace(/\[face[:：][^\]]{1,12}\]/g, '')
-    .replace(/[ \t]{2,}/g, ' ')
-    .trim();
+    .replace(/\[face[:：][^\]]{1,12}\]/g, '');
+  // 模型偶尔会模仿历史时间标签，把回复开头的时间戳去掉
+  out = out.replace(TIME_LABEL, '').replace(TIME_LABEL, '').trim();
+  // 模型偶发孤立代理项（\ud83d 之类），落库/发送前清掉
+  out = out
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, '')
+    .replace(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
+  return out.replace(/[ \t]{2,}/g, ' ').trim();
 }
 
 /** 是否为主动/定时任务触发的请求（这类消息不进入聊天历史与记忆，只用于生成回复）。 */
@@ -391,8 +398,10 @@ openaiApp.post('/chat/completions', async (c) => {
   // QQ 客户端只发当前一条；inject_history=true 时从 D1 补最近 12 条短期原文。
   // 当前消息尚未落库，所以不会重复；若历史末尾与当前文本相同，再主动去重一次。
   let historyMessages: DeepSeekMessage[] = [];
+  let historyNote: string | null = null;
   if (body?.inject_history === true && !skipRecording) {
     const rows = await loadRecentHistory(c.env, 12, now);
+    historyNote = historyRangeNote(rows, now);
     historyMessages = rows
       .filter(
         (m, i) =>
@@ -403,14 +412,12 @@ openaiApp.post('/chat/completions', async (c) => {
         role: m.role === 'assistant' ? 'assistant' : 'user',
         // 最近 4 条保留原文，更早的压缩到 400 字内省 token
         // ★ 带文件的消息放宽到 3000 字：压缩到 400 字后「那个表第三行」就对不上了。
-        // ★ 带时间标签：避免把 17 小时前导入的旧消息当成“刚刚的上一句”
         content:
-          `[${historyTimeLabel(m.created_at)}] ` +
-          (i >= arr.length - 4
+          i >= arr.length - 4
             ? m.content
             : m.content.includes('【文件：')
               ? compactHistoryMessage(m.content, 3000)
-              : compactHistoryMessage(m.content)),
+              : compactHistoryMessage(m.content),
       }));
   }
   const focus = [
@@ -452,7 +459,7 @@ openaiApp.post('/chat/completions', async (c) => {
       characterName: c.env.CHARACTER_NAME,
       userAddress: c.env.USER_ADDRESS,
     }),
-  ].join('\n\n');
+  ].join('\n\n') + (historyNote ? `\n\n${historyNote}` : '');
 
   const upstream: DeepSeekMessage[] = [
     { role: 'system', content: mergedSystem },

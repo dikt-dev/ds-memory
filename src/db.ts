@@ -263,6 +263,19 @@ export function historyTimeLabel(createdAt: string): string {
   return (createdAt || '').slice(5, 16).replace('T', ' ') || '时间未知';
 }
 
+/** 给短期历史配一句时间范围说明（只说明，不逐条打标签，避免模型模仿）。 */
+export function historyRangeNote(rows: MessageRow[], now: Date): string | null {
+  if (rows.length === 0) return null;
+  const first = rows[0];
+  const last = rows[rows.length - 1];
+  const hours = Math.max(0, Math.round((now.getTime() - last.created_ms) / 3600000));
+  const gap = Math.max(0, Math.round((last.created_ms - first.created_ms) / 3600000));
+  return (
+    `【历史时间】以上短期历史最早 ${historyTimeLabel(first.created_at)}，最近 ${historyTimeLabel(last.created_at)}；` +
+    `距现在约 ${hours} 小时，跨度约 ${gap} 小时。时间只是背景，回复时不要输出任何时间标签。`
+  );
+}
+
 /** 某条用户消息对应的助手回复（可能落在下一天，归档补全用）。 */
 export async function assistantReplyTo(env: Env, userMessageId: number): Promise<MessageRow | null> {
   const res = await env.DB.prepare(
