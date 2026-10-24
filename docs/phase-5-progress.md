@@ -235,6 +235,11 @@ battery-not-low false
   - 23:09:27 `watchdog.log` 出现新的“检查完成”；
   - job 1002 已从 pending 消失；
   - 周期 job 1001 仍 pending。
+- 周期 job 1001 首次自动执行：
+  - 计划约 23:20，实际 23:21:00 写入 `watchdog.log`；
+  - Android JobScheduler 有约 1 分钟调度延迟，属正常范围；
+  - 后续继续每 15 分钟执行。
+- 网页登录已由用户确认正常；不需要重置口令。
 
 - `ds.sh start` 会额外触发 watchdog（会话存在但进程死掉时也能修）；
 - `ds.sh status` 改为 `pgrep` 检测，不再依赖旧 PID 文件；
