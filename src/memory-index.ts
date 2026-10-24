@@ -25,6 +25,7 @@ import {
 } from './memory-archive';
 import { DATE_PREFIX_RE, ENTRY_RE, normalizeDateKey } from './memory-maintenance';
 import { loadRollups } from './memory-rollups';
+import { distillText } from './distill';
 
 /** 永远常驻注入、不参与检索的分区（核心层）。 */
 export const CORE_SECTIONS = ['人物底色', '称呼与关系', '雷区与禁忌'];
@@ -45,6 +46,10 @@ export function sectionImportance(section: string): number {
 
 /** 单次聊天注入的召回条数上限。 */
 export const RECALL_TOP_K = 6;
+/** 先粗召回多少条候选，再做重排。 */
+export const CANDIDATE_TOP_K = 20;
+/** MMR 去冗余惩罚系数（越大越优先多样性）。 */
+const MMR_PENALTY = 6;
 
 /** 默认语义向量模型（多语言；失败自动降级关键词召回）。 */
 export const DEFAULT_EMBEDDING_MODEL = '@cf/baai/bge-m3';
@@ -548,6 +553,105 @@ export function stripDuplicateRecall(recalled: string, seen: string[]): string {
   return out.join('\n');
 }
 
+function bigramSet(text: string): Set<string> {
+  return new Set(bigrams(text));
+}
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  for (const x of a) if (b.has(x)) inter += 1;
+  return inter / (a.size + b.size - inter);
+}
+
+type Scored = { r: MemoryEntryRow; score: number };
+
+/** MMR 重排：在分数之外惩罚“和已选条目太像”的候选，避免 6 条都在说同一件事。 */
+export function mmrSelect(candidates: Scored[], k: number): Scored[] {
+  const pool = candidates.slice();
+  const sets = new Map<string, Set<string>>(pool.map((c) => [c.r.id, bigramSet(c.r.content)]));
+  const selected: Scored[] = [];
+  while (selected.length < k && pool.length > 0) {
+    let bestIdx = 0;
+    let bestVal = -Infinity;
+    for (let i = 0; i < pool.length; i++) {
+      const c = pool[i];
+      const cs = sets.get(c.r.id) ?? new Set<string>();
+      let maxSim = 0;
+      for (const s of selected) {
+        maxSim = Math.max(maxSim, jaccard(cs, sets.get(s.r.id) ?? new Set<string>()));
+      }
+      const val = c.score - MMR_PENALTY * maxSim;
+      if (val > bestVal) {
+        bestVal = val;
+        bestIdx = i;
+      }
+    }
+    selected.push(pool.splice(bestIdx, 1)[0]);
+  }
+  return selected;
+}
+
+/** 只有“低置信度/长消息/指代/候选接近”时才值得多调一次模型。 */
+export function needsLlmRerank(query: string, pool: Scored[]): boolean {
+  if (pool.length <= RECALL_TOP_K) return false;
+  const q = (query || '').trim();
+  if (q.length > 80) return true;
+  if (/(那个|上次|之前|那件事|这事|它|他们)/.test(q)) return true;
+  const top = pool[0]?.score ?? 0;
+  const kth = pool[Math.min(RECALL_TOP_K, pool.length - 1)]?.score ?? 0;
+  return top < 6 || top - kth < 1.5;
+}
+
+/** 条件触发的 LLM 二次筛选：只输出候选序号，失败一律回退确定性排序。 */
+async function llmRerank(
+  env: Env,
+  query: string,
+  pool: Scored[],
+  k: number,
+): Promise<Scored[] | null> {
+  try {
+    const lines = pool
+      .map((c, i) => `${i + 1}. [${c.r.section}] ${c.r.content.slice(0, 120)}`)
+      .join('\n');
+    const system =
+      '你是记忆检索重排器。只从候选里挑和用户这句话最相关的记忆，宁缺毋滥；' +
+      '优先稳定事实、正在做的事、雷区；不要选只靠一个泛词碰上的无关条目。' +
+      '只输出 JSON 数组，例如 [1,4,7]，不要解释。';
+    const user = `用户消息：${query}\n\n候选：\n${lines}\n\n最多选 ${k} 条，输出序号数组。`;
+    const res = await distillText(
+      env,
+      system,
+      user,
+      120,
+      env.SUMMARY_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL,
+    );
+    const nums = [...res.text.matchAll(/\d+/g)]
+      .map((m) => Number(m[0]))
+      .filter((n, i, arr) => n >= 1 && n <= pool.length && arr.indexOf(n) === i)
+      .slice(0, k);
+    if (nums.length === 0) return null;
+    return nums.map((n) => pool[n - 1]);
+  } catch (e) {
+    console.warn('[memory-index] llm rerank failed, fallback deterministic:', e);
+    return null;
+  }
+}
+
+/** 保证“进行中的事项”至少有一条进注入（它的重要度是 3，不能被挤掉）。 */
+function ensureOngoing(selected: Scored[], pool: Scored[], k: number): Scored[] {
+  const ongoing = pool.find((c) => c.r.section === '进行中的事项' && c.score > 0);
+  if (!ongoing || selected.some((c) => c.r.id === ongoing.r.id)) return selected;
+  if (selected.length < k) return [...selected, ongoing];
+  let worst = 0;
+  for (let i = 1; i < selected.length; i++) {
+    if (selected[i].score < selected[worst].score) worst = i;
+  }
+  const next = selected.slice();
+  next[worst] = ongoing;
+  return next;
+}
+
 /** 按当前话题召回 top-k 条记忆（双路打分，无命中回退最近条目）。 */
 export async function recallMemoryForChat(
   env: Env,
@@ -626,7 +730,8 @@ export async function recallMemoryForChat(
       return { r, score };
     });
 
-    const sorted = scored
+    // 粗召回 20 条候选 → MMR 去冗余 → 条件 LLM 重排 → 强保“进行中的事项”
+    const pool = scored
       .filter((x) => x.score > 0)
       .sort(
         (a, b) =>
@@ -634,9 +739,15 @@ export async function recallMemoryForChat(
           b.r.importance - a.r.importance ||
           (b.r.date ?? '').localeCompare(a.r.date ?? ''),
       )
-      .slice(0, k);
+      .slice(0, CANDIDATE_TOP_K);
 
-    let picked = sorted;
+    let picked = pool.slice(0, k);
+    if (pool.length > k) picked = mmrSelect(pool, k);
+    if (needsLlmRerank(q, pool)) {
+      const llm = await llmRerank(env, q, pool, k);
+      if (llm && llm.length > 0) picked = llm;
+    }
+    picked = ensureOngoing(picked, pool, k);
     if (picked.length === 0) {
       // 召回兜底：最近更新的几条（宁可有相关背景，也不能完全断片）
       picked = rows.slice(0, k).map((r) => ({ r, score: 0 }));

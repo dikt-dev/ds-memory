@@ -4,6 +4,8 @@ import {
   clipMatchedClauses,
   decodeVec,
   extractCoreMemory,
+  mmrSelect,
+  needsLlmRerank,
   parseMemoryEntries,
   quantizeVec,
   sectionImportance,
@@ -94,5 +96,41 @@ describe('密度视图工具', () => {
     const out = stripDuplicateRecall(recalled, seen);
     expect(out).not.toContain('用户是写C的开发者');
     expect(out).toContain('Worker');
+  });
+});
+
+describe('候选重排', () => {
+  const mk = (id: string, section: string, content: string, score: number) => ({
+    r: {
+      id,
+      section,
+      content,
+      date: null,
+      importance: 2,
+      tags: [] as string[],
+      keywords: [] as string[],
+      vec: null,
+      source: 'memory' as const,
+      dupOf: null,
+    },
+    score,
+  });
+
+  it('MMR 会避开和已选内容重复的候选', () => {
+    const a = mk('a', '共同经历', '一起搭了Cloudflare Worker和D1记忆库', 10);
+    const a2 = mk('a2', '共同经历', '一起搭了Cloudflare Worker和D1记忆库，还部署了', 9);
+    const b = mk('b', '偏好与习惯', '喜欢蓝色和奶茶', 5);
+    const picked = mmrSelect([a, a2, b], 2);
+    expect(picked.map((x) => x.r.id)).not.toEqual(['a', 'a2']);
+    expect(picked.map((x) => x.r.id)).toContain('b');
+  });
+
+  it('只在低置信度/长消息/指代时触发 LLM 重排', () => {
+    const pool = Array.from({ length: 10 }, (_, i) =>
+      mk(`x${i}`, '共同经历', `事件${i}`, i === 0 ? 2 : 1),
+    );
+    expect(needsLlmRerank('那个上次说的东西', pool)).toBe(true);
+    expect(needsLlmRerank('嗯', [mk('a', '共同经历', '一起搭了Worker', 10)])).toBe(false);
+    expect(needsLlmRerank('好的', pool)).toBe(true); // 候选分数接近
   });
 });
