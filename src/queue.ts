@@ -94,6 +94,20 @@ export async function ackSent(env: Env, ids: number[]): Promise<number> {
   )
     .bind(isoInBeijing(), ...ids)
     .run();
+  // ack 才代表 QQ 真的发出去了；同步把 proactive_log 从 queued 改成 sent，
+  // 否则运营/诊断看到永远是 queued，会误判自动消息没发。
+  await env.DB.prepare(
+    `UPDATE proactive_log
+        SET status = 'sent', detail = COALESCE(detail, '') || '; acked'
+      WHERE status != 'sent'
+        AND message_id IN (
+          SELECT message_id FROM proactive_queue
+           WHERE id IN (${placeholders}) AND message_id IS NOT NULL
+        )`,
+  )
+    .bind(...ids)
+    .run()
+    .catch(() => {});
   return res.meta.changes ?? 0;
 }
 

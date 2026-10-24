@@ -25,7 +25,15 @@ import { byteLength, memoryDensity } from './memory-maintenance';
 import { getCityConfig, setCity } from './settings';
 import { fetchWeather } from './weather';
 import { buildImageKey, saveImage } from './media';
-import { deleteObject, getObject, getStorageMode, listKeys, putObject, secondaryEnabled } from './storage';
+import {
+  deleteObject,
+  getObject,
+  getStorageMode,
+  listKeys,
+  probeSecondaryR2,
+  putObject,
+  secondaryEnabled,
+} from './storage';
 import { runDailyArchive, runContextRefresh, runMonthlyMerge, archiveOneDay } from './jobs';
 import {
   extractPromptMemory,
@@ -174,6 +182,15 @@ app.get('/api/health', async (c) => {
   checks.storage_mode = await getStorageMode(c.env);
   checks.secondary_r2 = secondaryEnabled(c.env) ? 'configured' : 'missing';
   return c.json({ status: 'ok', time: isoInBeijing(), checks });
+});
+
+/** 小号 R2 兜底诊断：只做一次 put/get/delete，不切换存储模式。 */
+app.get('/api/admin/storage-check', requireAuth, async (c) => {
+  return c.json({
+    mode: await getStorageMode(c.env),
+    secondary_enabled: secondaryEnabled(c.env),
+    probe: await probeSecondaryR2(c.env),
+  });
 });
 
 /** 当天上下文预览（含天气）。 */

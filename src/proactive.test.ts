@@ -27,14 +27,16 @@ describe('currentSlot', () => {
     expect(currentSlot(7 * 60 + 44)).toBeNull();
     expect(currentSlot(7 * 60 + 45)).toBe('morning');
     expect(currentSlot(8 * 60 + 14)).toBe('morning');
-    expect(currentSlot(8 * 60 + 15)).toBeNull();
+    expect(currentSlot(8 * 60 + 15)).toBe('morning'); // 含 end 的 5 分钟 tick
+    expect(currentSlot(8 * 60 + 16)).toBeNull();
   });
 
   it('深夜窗口 22:45–23:15', () => {
     expect(currentSlot(22 * 60 + 44)).toBeNull();
     expect(currentSlot(22 * 60 + 45)).toBe('evening');
     expect(currentSlot(23 * 60 + 14)).toBe('evening');
-    expect(currentSlot(23 * 60 + 15)).toBeNull();
+    expect(currentSlot(23 * 60 + 15)).toBe('evening'); // 23:12 目标可由 23:15 tick 补发
+    expect(currentSlot(23 * 60 + 16)).toBeNull();
   });
 
   it('白天不在窗口内', () => {
@@ -53,6 +55,20 @@ describe('seededRandom01 / targetMinutesFor', () => {
       expect(a).toBeGreaterThanOrEqual(w.start);
       expect(a).toBeLessThan(w.end);
     }
+  });
+
+  it('目标时间落在两个 5 分钟 tick 之间时，后一个 tick 仍在窗口内', () => {
+    for (const slot of ['morning', 'evening'] as const) {
+      for (let d = 1; d <= 31; d++) {
+        const target = targetMinutesFor(`2026-12-${String(d).padStart(2, '0')}`, slot);
+        const nextTick = Math.ceil(target / 5) * 5;
+        expect(nextTick).toBeLessThanOrEqual(PROACTIVE_WINDOWS[slot].end);
+        expect(currentSlot(nextTick)).toBe(slot);
+      }
+    }
+    // 2026-10-24 的目标是 23:12：23:10 未到，23:15 必须仍算窗口内
+    expect(targetMinutesFor('2026-10-24', 'evening')).toBe(23 * 60 + 12);
+    expect(currentSlot(23 * 60 + 15)).toBe('evening');
   });
 
   it('不同日期产生不同目标时间（浮动）', () => {

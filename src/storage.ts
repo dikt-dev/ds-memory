@@ -146,6 +146,45 @@ export async function headObject(env: Env, key: string): Promise<{ size: number 
   return { size: Number(res.headers.get('content-length') ?? 0) };
 }
 
+export interface SecondaryProbe {
+  configured: boolean;
+  put?: number;
+  get?: number;
+  delete?: number;
+  body?: string;
+  /** 主模式下的 getObject 兜底读取结果（应为 ok） */
+  fallback?: string;
+  error?: string;
+}
+
+/** 管理员诊断：不切换模式，直接对小号 R2 做一次 put/get/delete。 */
+export async function probeSecondaryR2(env: Env): Promise<SecondaryProbe> {
+  if (!secondaryEnabled(env)) return { configured: false };
+  const key = `_healthcheck/${Date.now()}.txt`;
+  try {
+    const put = await s3Client(env).fetch(s3Url(env, key), {
+      method: 'PUT',
+      body: 'ok',
+      headers: { 'content-type': 'text/plain' },
+    });
+    const get = await s3Client(env).fetch(s3Url(env, key));
+    const body = get.ok ? (await get.text()).slice(0, 20) : '';
+    const fallbackObj = await getObject(env, key).catch(() => null);
+    const fallback = fallbackObj ? (await fallbackObj.text()).slice(0, 20) : '';
+    const del = await s3Client(env).fetch(s3Url(env, key), { method: 'DELETE' });
+    return {
+      configured: true,
+      put: put.status,
+      get: get.status,
+      delete: del.status,
+      body,
+      fallback,
+    };
+  } catch (e) {
+    return { configured: true, error: e instanceof Error ? e.message.slice(0, 200) : String(e) };
+  }
+}
+
 /** 删除对象：两个桶都尝试删除（历史数据可能残留）。 */
 export async function deleteObject(env: Env, key: string): Promise<void> {
   await env.R2.delete(key).catch(() => {});

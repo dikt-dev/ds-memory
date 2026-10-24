@@ -30,11 +30,15 @@ export function beijingMinutes(now: Date): number {
   return (get('hour') % 24) * 60 + get('minute');
 }
 
-/** 当前处于哪个发送窗口（不在窗口内返回 null）。 */
+/** 当前处于哪个发送窗口（不在窗口内返回 null）。
+ *
+ * end 这一分钟也算在窗口内：cron 每 5 分钟触发一次，而目标时间是分钟级随机值，
+ * 例如 evening 目标 23:12 时，23:10 还没到、23:15 如果算窗口外就永远不会发。
+ */
 export function currentSlot(minutes: number): ProactiveSlot | null {
   for (const slot of ['morning', 'evening'] as const) {
     const w = PROACTIVE_WINDOWS[slot];
-    if (minutes >= w.start && minutes < w.end) return slot;
+    if (minutes >= w.start && minutes <= w.end) return slot;
   }
   return null;
 }
