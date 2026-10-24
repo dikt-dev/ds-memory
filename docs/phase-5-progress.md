@@ -196,11 +196,11 @@ wrangler deploy --dry-run
 ### 1.7 回滚演练（2026-10-24）
 
 ```text
-部署 QQ legacy
+部署 QQ legacy（Version 55acda14）
 → readiness: qq=legacy, affect_qq=legacy, web=legacy
 → POST /v1/chat/completions record=false: 200
 
-部署 QQ shadow
+部署 QQ shadow（Version 246fb099）
 → readiness: qq=shadow, affect_qq=shadow, web=legacy
 → POST /v1/chat/completions record=false: 200
 ```
