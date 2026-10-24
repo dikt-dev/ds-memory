@@ -25,6 +25,7 @@ import { archiveCompletedItems, byteLength, mergeMemoryEntry, parseRelationValue
 import { accumulateCandidates, formatAversionEntry, loadCandidates, mergeAversionEntries, saveCandidates, scanAversions } from './aversion';
 import { computeStreak, daysSinceLastUserMessage, countMemoryEntries } from './milestone';
 import { collectDayRelationStats } from './relation-stats';
+import { maybeReviewPersonaDrift } from './persona-drift';
 import {
   commitEmotionSettle,
   facetsOf,
@@ -416,6 +417,10 @@ export async function runDailyArchive(env: Env, now: Date): Promise<DailyArchive
 
   const target = previousDateKey(dateKeyInBeijing(now));
   const main = await archiveOneDay(env, target, now);
+  // 性格缓慢漂移：至少 7 天、15 条用户消息才结算一次，每次每维最多 ±2
+  await maybeReviewPersonaDrift(env, now).catch((e) =>
+    console.error('[persona] weekly review failed:', e),
+  );
   return {
     ...main,
     catchup_days: catchup,

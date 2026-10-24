@@ -9,6 +9,7 @@ import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { Env } from './types';
 import { buildBaseSystemPrompt, normalizeChannel, buildLiveFacts, isNowFactQuestion, STYLE_REMINDER } from './prompt';
+import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
 import { attachWeather, getOrCreateDayContext } from './context';
 import { getMemory } from './memory';
@@ -426,6 +427,7 @@ openaiApp.post('/chat/completions', async (c) => {
   const avoidOpeners = recentOpeners(
     textMessages.filter((m) => m.role === 'assistant').map((m) => contentToText(m.content)),
   );
+  const personaDrift = buildPersonaDriftLine(await loadPersonaState(c.env));
   const mergedSystem = [
     ...astrbotSystems,
     buildBaseSystemPrompt({
@@ -436,6 +438,7 @@ openaiApp.post('/chat/completions', async (c) => {
       todaySummary,
       recentMemo,
       recalled,
+      personaDrift,
       recentFiles,
       voiceReply,
       channel,

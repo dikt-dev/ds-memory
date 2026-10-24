@@ -5,6 +5,7 @@
  */
 import type { Env } from './types';
 import { buildSystemPrompt, type MessageChannel, buildLiveFacts, isNowFactQuestion, STYLE_REMINDER } from './prompt';
+import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
 import { attachWeather, getOrCreateDayContext } from './context';
 import { getMemory } from './memory';
@@ -58,6 +59,7 @@ export async function streamChat(
   // ★ 中期记忆（最近 24 小时）优先：它存在时就不再注入今日摘要，避免同一段内容发两遍
   const recentMemo = formatRecentMemoBlock(await getRecentMemo(env));
   const todaySummary = recentMemo ? null : await getTodaySummary(env, dateKey);
+  const personaDrift = buildPersonaDriftLine(await loadPersonaState(env));
 
   // ★ 按需检索：用当前消息 + 最近几条用户消息去档案里找相关往事（不命中就不占字节）
   const recallQuery = [
@@ -156,6 +158,7 @@ export async function streamChat(
         todaySummary,
         recentMemo,
         recalled,
+        personaDrift,
         channel,
         characterCard: cardTextWithMood,
         voice: buildVoiceDirective(relationVals.intimacy),

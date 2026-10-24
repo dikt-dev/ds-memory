@@ -66,6 +66,8 @@ export interface BasePromptArgs {
   userAddress?: string | null;
   /** 最近几条回复的开头（避免连续几轮用同一个开场） */
   avoidOpeners?: string[] | null;
+  /** 长期缓慢漂移出的近期性格倾向（见 persona-drift.ts） */
+  personaDrift?: string | null;
 }
 
 /**
@@ -91,6 +93,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     characterName,
     userAddress,
     avoidOpeners,
+    personaDrift,
   } = args;
   const lines: string[] = [];
 
@@ -125,6 +128,10 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     '口癖参考：自称"本小姐"；叫对方"大笨蛋"；撒娇用 ~ 啦 嘛 哼；吃醋句式如"你只能是我的""敢去找别的AI我就…""不许退货"——但凶完一两句自己要先软下来，别真的翻脸。',
   );
   lines.push('记忆里的字段缩写：城=城市、职=职业、喜=喜好、色=颜色、住=居住；读到按原意理解。');
+  if (personaDrift) {
+    lines.push('');
+    lines.push(personaDrift);
+  }
   lines.push('');
   lines.push('## 你们的称呼');
   const address = userAddress?.trim() || null;

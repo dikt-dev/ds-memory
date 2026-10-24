@@ -49,6 +49,7 @@ import { buildCharacterCard } from './character-card';
 import { buildVoiceDirective } from './voice';
 import { formatRecentMemoBlock, getRecentMemo } from './recent-memory';
 import { extractCoreMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
+import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { readSessionFacts } from './session-facts';
 import { facetsOf, processEmotionTurn } from './emotion-context';
 import { moodFromVector } from './emotion-vector';
@@ -217,6 +218,7 @@ async function generateProactive(
     ignoredMessage: facts.ignoredMessage,
   });
   const cardText = charCard.cardText;
+  const personaDrift = buildPersonaDriftLine(await loadPersonaState(env));
   // 主动消息也带上相关往事：用最近几条对话当检索词
   const focus = history.slice(-8).map((m) => m.content).join(' ');
   const recalledRaw = await recallMemoryForChat(
@@ -241,6 +243,7 @@ async function generateProactive(
     todaySummary,
     recentMemo,
     recalled,
+    personaDrift,
     channel: 'web',
     characterCard: cardText,
     voice: buildVoiceDirective(relation.intimacy),
