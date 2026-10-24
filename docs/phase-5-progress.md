@@ -231,6 +231,11 @@ persisted true
 battery-not-low false
 ```
 
+- 另建一次性 job 1002 验证调度器确实会执行：
+  - 23:09:27 `watchdog.log` 出现新的“检查完成”；
+  - job 1002 已从 pending 消失；
+  - 周期 job 1001 仍 pending。
+
 - `ds.sh start` 会额外触发 watchdog（会话存在但进程死掉时也能修）；
 - `ds.sh status` 改为 `pgrep` 检测，不再依赖旧 PID 文件；
 - `run-all.sh` 启动 client/NapCat 时更新 `.run/*.pid`。
