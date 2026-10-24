@@ -166,13 +166,14 @@ R2 根目录/
 ```
 用户输入 → POST /api/chat
     ↓
-① 鉴权（Cookie → KV）
+① 鉴权（signed Cookie；`AUTH_MODE=kv` 时回退 KV）
 ② 组装上下文：
    - memory.md（KV→R2 兜底；小记忆全量，大记忆核心+稳定画像）
    - 当天 context（日期/星期/节假日/天气）
-   - 今日摘要（KV，仅当 memo:24h 不存在时）
+   - 今日摘要（D1 runtime_state，仅当 memo:24h 不存在时）
    - 最近 **10 轮**消息（D1，按 turn_id 分组、时间从旧到新、每条带时间戳）
    - 按话题召回的 memory_entries top-k（关键词优先，必要时补向量）
+   - Phase 2：Memory Context（`MEMORY_ENGINE=shadow` 只记录对比，`next` 使用 facts/chunks 召回）
    - 情感快照（5 轴关系原型 + 8 维情绪 + 未化解事件 → 行为指令）
 ③ 落 user 消息（D1，带 channel）
 ④ 调 DeepSeek（流式，thinking=disabled）

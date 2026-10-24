@@ -18,6 +18,7 @@ import { attachDistillation, attachRelation, attachWeather, getOrCreateDayContex
 import { fetchWeather } from './weather';
 import { getMemory, putMemory } from './memory';
 import { reindexMemory } from './memory-index';
+import { replaceMemoryContext } from './memory-context-store';
 import { maybeGenerateRollups } from './memory-rollups';
 import { buildRelationStatus } from './attitude';
 import { distillDay } from './distill';
@@ -494,6 +495,15 @@ export async function archiveOneDay(
       else console.log(`[daily] 记忆索引重建：${idx.entries} 条，含向量 ${idx.withVec} 条`);
     } catch (e) {
       console.error('[daily] memory reindex error:', e);
+    }
+    // Phase 2：同步 Memory Context（facts/events/chunks）；表未迁移时只记录，不影响归档。
+    try {
+      const ctx = await replaceMemoryContext(env, memory, 'memory');
+      console.log(
+        `[daily] memory context：facts=${ctx.facts} events=${ctx.events} chunks=${ctx.chunks}`,
+      );
+    } catch (e) {
+      console.error('[daily] memory context sync failed:', e);
     }
     // 时间金字塔：周一滚上周摘要、每月 1 日滚上月摘要（幂等，失败不影响归档）
     try {

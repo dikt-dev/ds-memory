@@ -33,6 +33,7 @@ import {
   SEMANTIC_DUP_COSINE,
   reindexMemory,
 } from './memory-index';
+import { memoryContextStats, replaceMemoryContext } from './memory-context-store';
 import { generateRollup, previousPeriods } from './memory-rollups';
 import { getOrCreateDayContext } from './context';
 import { parseRelationValues, reportSectionBudgets } from './memory-maintenance';
@@ -382,6 +383,16 @@ app.post('/api/admin/memory/refresh', requireAuth, async (c) => {
 /** 从 R2 的 memory.md + archive.md 重建 D1 记忆检索索引（幂等）。 */
 app.post('/api/admin/memory/reindex', requireAuth, async (c) => {
   const result = await reindexMemory(c.env);
+  return c.json({ ok: true, ...result });
+});
+/** Phase 2：查看 Memory Context 表规模。 */
+app.get('/api/admin/memory/context-stats', requireAuth, async (c) => {
+  return c.json({ ok: true, ...(await memoryContextStats(c.env)) });
+});
+/** Phase 2：从 memory.md 重建 facts/events/chunks（幂等）。 */
+app.post('/api/admin/memory/rebuild-context', requireAuth, async (c) => {
+  const memory = await getMemory(c.env);
+  const result = await replaceMemoryContext(c.env, memory, 'memory');
   return c.json({ ok: true, ...result });
 });
 /** 合并版：刷新 memory KV 缓存 + 重建检索索引（改完 R2 文件后一键调用）。 */

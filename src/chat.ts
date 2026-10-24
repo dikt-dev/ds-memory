@@ -34,6 +34,8 @@ import { readSessionFacts } from './session-facts';
 import { buildVoiceDirective, recentOpeners } from './voice';
 import { formatRecentMemoBlock, getRecentMemo } from './recent-memory';
 import { extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
+import { loadMemoryChunks } from './memory-context-store';
+import { formatMemoryChunks, rankMemoryChunks } from './memory-domain';
 import { logTrace } from './trace';
 
 export interface ChatImage {
@@ -90,7 +92,7 @@ export async function streamChat(
       .slice(-3)
       .map((m) => m.content),
   ].join(' ');
-  const recalledRaw = await recallMemoryForChat(
+  let recalledRaw = await recallMemoryForChat(
     env,
     recallQuery,
     undefined,
@@ -98,6 +100,36 @@ export async function streamChat(
     // 全量记忆已经带上所有 memory 条目，召回只补档案层的旧事
     { skipMemorySource: promptMemory.mode === 'full' },
   );
+
+  // Phase 2：Memory Context 影子/新引擎。默认 legacy，不改变线上回复。
+  const memoryEngine = (env.MEMORY_ENGINE ?? 'legacy').toLowerCase();
+  if (memoryEngine === 'shadow' || memoryEngine === 'next') {
+    try {
+      const chunks = await loadMemoryChunks(env);
+      const picked = rankMemoryChunks(
+        recallQuery,
+        chunks,
+        6,
+        history.slice(-8).map((m) => m.content).join(' '),
+      );
+      const nextRaw = formatMemoryChunks(picked);
+      logTrace('memory.engine', {
+        requestId: requestId ?? 'none',
+        engine: memoryEngine,
+        oldItems: recalledRaw.split('\n').filter((line) => line.startsWith('- ')).length,
+        nextItems: picked.length,
+        nextBytes: byteLength(nextRaw),
+      });
+      if (memoryEngine === 'next' && nextRaw) recalledRaw = nextRaw;
+    } catch (e) {
+      logTrace('memory.engine.error', {
+        requestId: requestId ?? 'none',
+        engine: memoryEngine,
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
   const recalled = stripDuplicateRecall(
     recalledRaw,
     [...history.map((m) => m.content), recentMemo, promptMemory.text].filter(Boolean),

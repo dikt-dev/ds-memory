@@ -40,6 +40,8 @@ import { moodFromVector } from './emotion-vector';
 import { buildVoiceDirective, recentOpeners } from './voice';
 import { formatRecentMemoBlock, getRecentMemo, maybeRefreshRecentMemo } from './recent-memory';
 import { extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
+import { loadMemoryChunks } from './memory-context-store';
+import { formatMemoryChunks, rankMemoryChunks } from './memory-domain';
 import { logTrace, resolveRequestId } from './trace';
 import { recordFiles, recentFilesBlock } from './recent-files';
 
@@ -445,9 +447,34 @@ openaiApp.post('/chat/completions', async (c) => {
     lastUserCleaned,
     ...historyMessages.map((m) => (typeof m.content === 'string' ? m.content : contentToText(m.content))),
   ].join(' ');
-  const recalledRaw = await recallMemoryForChat(c.env, recallQuery, undefined, focus, {
+  let recalledRaw = await recallMemoryForChat(c.env, recallQuery, undefined, focus, {
     skipMemorySource: promptMemory.mode === 'full',
   });
+
+  // Phase 2：Memory Context 影子/新引擎。默认 legacy，不改变线上回复。
+  const memoryEngine = (c.env.MEMORY_ENGINE ?? 'legacy').toLowerCase();
+  if (memoryEngine === 'shadow' || memoryEngine === 'next') {
+    try {
+      const chunks = await loadMemoryChunks(c.env);
+      const picked = rankMemoryChunks(recallQuery, chunks, 6, focus);
+      const nextRaw = formatMemoryChunks(picked);
+      logTrace('memory.engine', {
+        requestId,
+        engine: memoryEngine,
+        oldItems: recalledRaw.split('\n').filter((line) => line.startsWith('- ')).length,
+        nextItems: picked.length,
+        nextBytes: byteLength(nextRaw),
+      });
+      if (memoryEngine === 'next' && nextRaw) recalledRaw = nextRaw;
+    } catch (e) {
+      logTrace('memory.engine.error', {
+        requestId,
+        engine: memoryEngine,
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
   const recalled = stripDuplicateRecall(
     recalledRaw,
     [...historyRaw.map((m) => m.content), recentMemo, promptMemory.text].filter(Boolean),
@@ -458,6 +485,7 @@ openaiApp.post('/chat/completions', async (c) => {
     memoryMode: promptMemory.mode,
     promptBytes: byteLength(promptMemory.text),
     historyRounds: groupTurns(historyRaw).length,
+    memoryEngine,
     recalledItems: recalled.split('\n').filter((line) => line.startsWith('- ')).length,
     hasMemo: Boolean(recentMemo),
     hasSummary: Boolean(todaySummary),

@@ -17,6 +17,13 @@ describe('schema.sql 与索引代码保持一致', () => {
     expect(schemaSql).toContain('CREATE TABLE IF NOT EXISTS auth_revocations');
   });
 
+  it('包含 Phase 2 的 Memory Context 表', () => {
+    expect(schemaSql).toContain('CREATE TABLE IF NOT EXISTS memory_facts');
+    expect(schemaSql).toContain('CREATE TABLE IF NOT EXISTS memory_events');
+    expect(schemaSql).toContain('CREATE TABLE IF NOT EXISTS memory_summaries');
+    expect(schemaSql).toContain('CREATE TABLE IF NOT EXISTS memory_chunks');
+  });
+
   it('存在 dup_of 的迁移脚本（已有库升级用）', () => {
     expect(migrationSql).toContain('ADD COLUMN dup_of');
   });

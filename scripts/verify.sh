@@ -8,12 +8,15 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# WSL 里的 node 可能太旧；在 Windows 工作区可传 NODE_BIN=... 指定新版 Node。
+NODE_BIN="${NODE_BIN:-node}"
+
 echo "[verify] tsc --noEmit"
-node node_modules/typescript/bin/tsc --noEmit
+"$NODE_BIN" node_modules/typescript/bin/tsc --noEmit
 
 echo "[verify] vitest"
 if [ "$#" -gt 0 ]; then
-  node node_modules/vitest/vitest.mjs run "$@"
+  "$NODE_BIN" node_modules/vitest/vitest.mjs run "$@"
 else
-  node node_modules/vitest/vitest.mjs run
+  "$NODE_BIN" node_modules/vitest/vitest.mjs run
 fi

@@ -14,7 +14,7 @@
 |---|---|---|---|
 | 0 | ✅ 完成（tagged） | `docs/phase-0-report.md` | `refactor-p0` |
 | 1 | ✅ 完成（tagged） | `docs/phase-1-report.md` | `refactor-p1` |
-| 2 | ⏳ 待开始 | - | `refactor-p2` |
+| 2 | 🚧 进行中（2A） | `docs/phase-2-progress.md` | `refactor-p2` |
 | 3 | ⏳ 待开始 | - | `refactor-p3` |
 | 4 | ⏳ 待开始 | - | `refactor-p4` |
 | 5 | ⏳ 待开始 | - | `refactor-p5` |
