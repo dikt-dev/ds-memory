@@ -132,7 +132,8 @@ AFFECT_ENGINE_QQ = "next"
 
 1. `MEMORY_ENGINE_WEB=shadow` → `next`；
 2. `AFFECT_ENGINE_WEB=shadow` → `next`；
-3. 主动消息最后切（`webproactive` 仍走 legacy 召回/快照，Phase 5 后续再接）。
+3. 主动消息最后切：已加独立 `PROACTIVE_ENGINE=legacy|shadow|next`，
+   `next` 时使用 Memory Context 检索 + attitude policy；默认 legacy。
 
 每一步观察 1–2 周。
 

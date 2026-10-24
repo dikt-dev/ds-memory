@@ -517,6 +517,7 @@ app.get('/api/admin/readiness', requireAuth, async (c) => {
       memory_engine_web: c.env.MEMORY_ENGINE_WEB ?? c.env.MEMORY_ENGINE ?? 'legacy',
       affect_engine_qq: c.env.AFFECT_ENGINE_QQ ?? c.env.AFFECT_ENGINE ?? 'legacy',
       affect_engine_web: c.env.AFFECT_ENGINE_WEB ?? c.env.AFFECT_ENGINE ?? 'legacy',
+      proactive_engine: c.env.PROACTIVE_ENGINE ?? 'legacy',
       auth_secret_configured: Boolean(c.env.AUTH_SECRET),
       memory_bytes: memoryBytes,
       context,

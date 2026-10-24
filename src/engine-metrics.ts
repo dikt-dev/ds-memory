@@ -1,5 +1,5 @@
 /**
- * Phase 5 观察指标：按天聚合 memory/affect 的 shadow/next 行为。
+ * Phase 5 观察指标：按天聚合 memory/affect/proactive 的 shadow/next 行为。
  *
  * 只记录计数、字节、耗时；不记录 query/回复正文。
  * 写入失败静默；legacy 不写。
@@ -7,7 +7,7 @@
 import type { Env } from './types';
 import { dateKeyInBeijing } from './date';
 
-export type EngineMetricKind = 'memory' | 'affect';
+export type EngineMetricKind = 'memory' | 'affect' | 'proactive';
 export type EngineMetricMode = 'shadow' | 'next';
 
 export interface EngineMetricInput {

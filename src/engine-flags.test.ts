@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Env } from './types';
-import { affectEngineFor, memoryEngineFor, normalizeEngine } from './engine-flags';
+import { affectEngineFor, memoryEngineFor, normalizeEngine, proactiveEngineFor } from './engine-flags';
 
 const base = {} as Env;
 
@@ -25,5 +25,11 @@ describe('engine flags', () => {
     const env = { AFFECT_ENGINE: 'shadow' } as Env;
     expect(affectEngineFor(env, 'astrobot')).toBe('shadow');
     expect(affectEngineFor(env, 'web')).toBe('shadow');
+  });
+
+  it('主动消息有独立开关，默认 legacy', () => {
+    expect(proactiveEngineFor(base)).toBe('legacy');
+    expect(proactiveEngineFor({ PROACTIVE_ENGINE: 'next' } as Env)).toBe('next');
+    expect(proactiveEngineFor({ PROACTIVE_ENGINE: 'wat' } as Env)).toBe('legacy');
   });
 });

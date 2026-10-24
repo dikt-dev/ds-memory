@@ -17,11 +17,17 @@ import { dateKeyInBeijing, isoInBeijing } from './date';
 import { buildBaseSystemPrompt } from './prompt';
 import { getMemory } from './memory';
 import { fetchWeather } from './weather';
+import { loadMemoryChunks } from './memory-context-store';
+import { formatMemoryChunks, rankMemoryChunks, shouldRecallMemory } from './memory-domain';
+import { packMemoryChunks } from './context-packer';
+import { buildAttitudePolicy } from './attitude-policy';
+import { proactiveEngineFor } from './engine-flags';
+import { recordEngineMetric } from './engine-metrics';
 import { getOrCreateDayContext, type DayContextFile } from './context';
 import { getTodaySummary } from './summary';
 import { historyTimeLabel, recentProactiveMessages, insertProactiveMessage, updateMessageUsage } from './db';
 import { loadRecentRounds, RECENT_ROUNDS } from './recent-context';
-import { parseRelationValues } from './memory-maintenance';
+import { byteLength, parseRelationValues } from './memory-maintenance';
 import { enqueueProactive } from './queue';
 import { completeDeepSeek } from './deepseek';
 import {
@@ -239,6 +245,55 @@ async function generateProactive(
     [...history.map((m) => m.content), recentMemo, promptMemory.text].filter(Boolean),
   );
 
+  // Phase 5：主动消息最后切。shadow 只计算新上下文，next 才真正替换 prompt。
+  const proactiveEngine = proactiveEngineFor(env);
+  let nextRecalled = '';
+  let nextAttitude = '';
+  if (proactiveEngine !== 'legacy') {
+    const focusQuery = [
+      ...decision.topics,
+      ...history
+        .filter((m) => m.role === 'user')
+        .slice(-4)
+        .map((m) => m.content),
+    ]
+      .join(' ')
+      .trim();
+    if (focusQuery && shouldRecallMemory(focusQuery)) {
+      try {
+        const chunks = await loadMemoryChunks(env);
+        const picked = rankMemoryChunks(focusQuery, chunks, 6, focus);
+        const packed = packMemoryChunks(picked);
+        nextRecalled = formatMemoryChunks(packed.chunks);
+      } catch (e) {
+        console.warn('[proactive] 新记忆检索失败，回退 legacy:', e);
+      }
+    }
+    try {
+      nextAttitude = buildAttitudePolicy({
+        facets: emotion.facets,
+        vector: emotion.state.vector,
+        events: emotion.state.events,
+        now: now.getTime(),
+        wasIgnored: facts.wasIgnored,
+      }).text;
+    } catch (e) {
+      console.warn('[proactive] 新态度策略失败，回退 legacy:', e);
+    }
+    await recordEngineMetric(env, {
+      channel: 'web',
+      kind: 'proactive',
+      mode: proactiveEngine,
+      oldItems: recalled.split('\n').filter((line) => line.startsWith('- ')).length,
+      newItems: nextRecalled.split('\n').filter((line) => line.startsWith('- ')).length,
+      oldBytes: byteLength(recalled),
+      newBytes: byteLength(nextRecalled),
+      ms: 0,
+      now: now.getTime(),
+    }).catch((e) => console.warn('[proactive] 指标写入失败:', e));
+  }
+  const useNextProactive = proactiveEngine === 'next';
+
   const systemPrompt = buildBaseSystemPrompt({
     now,
     ctx,
@@ -247,12 +302,12 @@ async function generateProactive(
     weather,
     todaySummary,
     recentMemo,
-    recalled,
+    recalled: useNextProactive && nextRecalled ? nextRecalled : recalled,
     personaDrift,
     channel: 'web',
     characterCard: cardText,
     voice: buildVoiceDirective(relation.intimacy),
-    attitude: emotion.snapshot,
+    attitude: useNextProactive && nextAttitude ? nextAttitude : emotion.snapshot,
   });
 
   const historyText =

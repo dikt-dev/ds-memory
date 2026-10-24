@@ -35,3 +35,8 @@ export function affectEngineFor(env: Env, channel: string): EngineMode {
     channelOverride(env, channel, 'AFFECT_ENGINE_QQ', 'AFFECT_ENGINE_WEB') ?? env.AFFECT_ENGINE,
   );
 }
+
+/** 主动消息是最后一条链路，单独开关，避免和 QQ/网页切流耦合。 */
+export function proactiveEngineFor(env: Env): EngineMode {
+  return normalizeEngine(env.PROACTIVE_ENGINE);
+}

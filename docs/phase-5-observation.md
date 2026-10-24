@@ -27,6 +27,7 @@ backup/p5-observation/YYYY-MM-DD.json
 ## 7 天 QQ shadow 通过条件
 
 - `readiness.ready=true`；`memory_engine_qq=shadow`；
+- `readiness.proactive_engine` 在切主动消息前应为 `legacy`，切 shadow 后确认指标出现；
 - `engine_metrics` 里 `kind=memory` 有稳定请求量，`new_bytes` 不为 0；
 - 无 5xx / 超时 / `memory.engine.error`；
 - `old_items`/`old_bytes` 允许为 0（说明本轮 legacy 召回本身为空，不是新引擎失败）；

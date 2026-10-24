@@ -87,6 +87,7 @@ node scripts/try-chat.mjs "在干嘛"   # 命令行试聊，输出字数/行数/
 | `AFFECT_ENGINE` | 全局关系/情绪引擎：`legacy` / `shadow` / `next` |
 | `MEMORY_ENGINE_QQ` / `MEMORY_ENGINE_WEB` | 按渠道覆盖记忆引擎（Phase 5 切流用） |
 | `AFFECT_ENGINE_QQ` / `AFFECT_ENGINE_WEB` | 按渠道覆盖关系引擎（Phase 5 切流用） |
+| `PROACTIVE_ENGINE` | 主动消息引擎：`legacy` / `shadow` / `next`（最后切） |
 | `ASTRBOT_BASE_URL` / `ASTRBOT_UMO` | AstrBot 直连推送地址与会话 UMO；留空则走队列模式 |
 | `CHARACTER_NAME` | 角色自称，缺省「小忆」；同时作用于系统提示词、状态卡和网页标题 |
 | `USER_ADDRESS` | 角色怎么称呼你，缺省按记忆自然称呼；填了就会固定用它 |
@@ -228,7 +229,7 @@ src/
 
 ```bash
 pnpm build   # tsc --noEmit
-pnpm test    # vitest（57 个测试文件 / 692 用例）
+pnpm test    # vitest（57 个测试文件 / 693 用例）
 ```
 
 ## 隐私与免责

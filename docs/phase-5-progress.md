@@ -143,7 +143,7 @@ runtime_state / auth_revocations / memory_* / memory_jobs / affect_* / attitude_
 
 ```text
 tsc --noEmit     ✅
-vitest run       57 files / 692 tests ✅
+vitest run       57 files / 693 tests ✅
 scripts/verify.sh ✅ exit 0
 ```
 
@@ -221,6 +221,25 @@ health=200 readiness=200 metrics=200 storage=200
 
 快照写入 `backup/p5-observation/YYYY-MM-DD.json`，包含 readiness、7 天指标、
 小号 R2 put/get/delete + 回源结果，作为 7 天/2 周门禁的逐日证据。
+
+---
+
+### 1.9 主动消息新引擎（代码就绪，默认 legacy）
+
+新增 `PROACTIVE_ENGINE=legacy|shadow|next`：
+
+- `shadow`：计算新 Memory Context + attitude policy，只记录 `engine_metrics(kind=proactive)`；
+- `next`：用新检索结果替换 `recalled`，用 `buildAttitudePolicy().text` 替换旧快照；
+- 默认 `legacy`，线上行为不变；
+- `readiness` 增加 `proactive_engine` 字段。
+
+当前生产：
+
+```text
+proactive_engine=legacy
+```
+
+等 QQ/网页 next 稳定后再按 `legacy → shadow → next` 切换。
 
 ---
 
@@ -360,7 +379,7 @@ Phase 5 工程侧已完成，剩余是时间门禁：
 1. 每天跑 `node scripts/p5-observe.mjs`，快照写入 `backup/p5-observation/`；
 2. QQ shadow 连续观察 ≥7 天：看 `engine_metrics`、错误率、延迟、事实/情绪条目；
 3. 无 P0 后切 `MEMORY_ENGINE_QQ=next` / `AFFECT_ENGINE_QQ=next`，再观察 ≥7 天；
-4. 网页与主动消息按同样的 legacy → shadow → next 顺序切换；
+4. 网页按 legacy → shadow → next 切换；主动消息代码已就绪，最后按 `PROACTIVE_ENGINE` 切换；
 5. 2 周稳定后执行旧表/旧代码清理，再打 `refactor-p5`。
 
 在那之前：
