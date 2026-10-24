@@ -4,7 +4,7 @@
  * 图片：已压缩存入 R2（images/日期/时间戳.jpg），发给 DeepSeek 时从 R2 读回；D1 只记录 R2 路径。
  */
 import type { Env } from './types';
-import { buildSystemPrompt, type MessageChannel } from './prompt';
+import { buildSystemPrompt, type MessageChannel, buildLiveFacts, isNowFactQuestion } from './prompt';
 import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
 import { attachWeather, getOrCreateDayContext } from './context';
 import { getMemory } from './memory';
@@ -42,9 +42,10 @@ export async function streamChat(
   const dateKey = dateKeyInBeijing(now);
   const memory = await getMemory(env);
   const dayCtxFile = await getOrCreateDayContext(env, dateKey);
-  const weather = await fetchWeather(env);
-  // 传入刚读到的 dayCtxFile：attachWeather 可省掉一次 R2 读，且天气没变就不写
-  if (weather) await attachWeather(env, dateKey, weather, dayCtxFile);
+  const fetchedWeather = await fetchWeather(env);
+  // 拉取失败时回退到当天缓存，避免提示词里直接没有天气、让模型去翻旧记忆
+  const weather = fetchedWeather ?? dayCtxFile.weather ?? null;
+  if (fetchedWeather) await attachWeather(env, dateKey, fetchedWeather, dayCtxFile);
   const ctx = {
     date: dayCtxFile.date,
     weekday: dayCtxFile.weekday,
@@ -127,6 +128,15 @@ export async function streamChat(
       { type: 'text', text: content || '请看看这张图片。' },
       ...(loaded ? [{ type: 'image_url' as const, image_url: { url: loaded.dataUrl } }] : []),
     ];
+  }
+
+  // 实时类问题：把准确事实贴到用户消息最前面（不写入 D1，只用于本轮回答）
+  if (isNowFactQuestion(content)) {
+    const facts = `【系统实时事实（最高优先级，不要复述这段格式）】${buildLiveFacts(now, ctx, weather)}。回答时间/天气/节假日时只以此为准，不要用历史或记忆里的旧值。\n\n`;
+    userContent =
+      typeof userContent === 'string'
+        ? facts + userContent
+        : [{ type: 'text', text: facts }, ...userContent];
   }
 
   const messages: DeepSeekMessage[] = [

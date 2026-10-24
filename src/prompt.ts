@@ -215,7 +215,37 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     lines.push(todaySummary);
   }
 
+  // ── ⑧ 最后再钉一次实时事实：离用户消息最近，防止模型翻旧账 ──
+  lines.push('');
+  lines.push('## 实时事实（最高优先级）');
+  lines.push(buildLiveFacts(now, ctx, weather));
+  lines.push(
+    '- 被问“现在/今天/几点/几号/星期/天气/节假日”时，只认本节；历史消息、长期记忆、memo、你自己上一句里的时间/天气都是往事或旧话，禁止拿来回答现在。',
+  );
+  lines.push('- 找不到就直说“我这边没拿到”，不要猜；周末≠法定节假日。历史时间为导入推断，仅供顺序参考。');
+
   return lines.join('\n');
+}
+
+/** 是否为“现在/时间/天气/日期/节假日”类问题：命中时把实时事实贴到用户消息前。 */
+export function isNowFactQuestion(text: string): boolean {
+  const t = text || '';
+  return (
+    /(几点|几号|日期|星期|周几|天气|气温|下雨|下雪|冷不冷|热不热|节假日|什么节|放假)/i.test(t) ||
+    /现在.{0,4}(时间|几点)/i.test(t) ||
+    /今天.{0,4}(几号|星期|周几|天气|节日)/i.test(t)
+  );
+}
+
+/** 实时事实（给 prompt 末尾和“实时问题”前缀共用）。 */
+export function buildLiveFacts(now: Date, ctx: DayContext, weather?: WeatherInfo | null): string {
+  const w = weather
+    ? `${weather.city} ${weather.desc}，${weather.temp_c}°C（本次请求获取）`
+    : '未获取到（不要猜）';
+  return [
+    `现在=${isoInBeijing(now)}（${ctx.date} ${ctx.weekday}，${ctx.holiday_note}）`,
+    `天气=${w}`,
+  ].join('；');
 }
 
 /**

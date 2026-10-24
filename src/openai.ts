@@ -8,7 +8,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { Env } from './types';
-import { buildBaseSystemPrompt, normalizeChannel } from './prompt';
+import { buildBaseSystemPrompt, normalizeChannel, buildLiveFacts, isNowFactQuestion } from './prompt';
 import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
 import { attachWeather, getOrCreateDayContext } from './context';
 import { getMemory } from './memory';
@@ -322,8 +322,10 @@ openaiApp.post('/chat/completions', async (c) => {
   c.executionCtx.waitUntil(maybeRefreshRecentMemo(c.env, now)); // 异步刷新中期记忆（最近 24h）
   const memory = await getMemory(c.env);
   const dayCtx = await getOrCreateDayContext(c.env, dateKey);
-  const weather = await fetchWeather(c.env);
-  if (weather) await attachWeather(c.env, dateKey, weather, dayCtx);
+  const fetchedWeather = await fetchWeather(c.env);
+  // 拉取失败时回退当天缓存，避免“没有天气”时模型去翻旧记忆
+  const weather = fetchedWeather ?? dayCtx.weather ?? null;
+  if (fetchedWeather) await attachWeather(c.env, dateKey, fetchedWeather, dayCtx);
   const ctx = {
     date: dayCtx.date,
     weekday: dayCtx.weekday,
@@ -451,6 +453,15 @@ openaiApp.post('/chat/completions', async (c) => {
     ...historyMessages,
     ...textMessages.filter((m) => m.role !== 'system'),
   ];
+
+  // 实时类问题：把准确事实贴到本轮用户消息最前面（只改发给模型的内容，不写 D1）
+  if (lastUser && isNowFactQuestion(lastUserCleaned)) {
+    const facts = `【系统实时事实（最高优先级，不要复述这段格式）】${buildLiveFacts(now, ctx, weather)}。回答时间/天气/节假日时只以此为准，不要用历史或记忆里的旧值。\n\n`;
+    lastUser.content =
+      typeof lastUser.content === 'string'
+        ? facts + lastUser.content
+        : [{ type: 'text' as const, text: facts }, ...lastUser.content];
+  }
 
   // 3) 图片：普通图片先压缩存 R2；带 #__transient 的（视频帧/拼图）只给模型看，不落 R2。
   //    带 #__store_only 的（GIF 原图）存 R2 后从模型请求里移除。
