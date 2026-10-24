@@ -25,6 +25,9 @@ AFFECT_ENGINE=legacy
 # AFFECT_ENGINE_QQ=shadow
 # AFFECT_ENGINE_WEB=legacy
 
+# 主动消息引擎（最后切）：legacy（默认）| shadow（只计算）| next（使用新检索/态度）
+# PROACTIVE_ENGINE=legacy
+
 # OpenAI 兼容端点（AstrBot 等）的 Bearer 密钥：node -e "console.log(require('crypto').randomBytes(32).toString('hex'))" 生成
 ASTROBOT_API_KEY=REPLACE_ME
 
