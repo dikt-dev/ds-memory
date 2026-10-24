@@ -55,9 +55,28 @@ import {
 import { applyEventsToVector, extractEmotionEvents, reconcileWithApology, type EmotionEvent } from './emotion-events';
 import { buildEmotionSnapshot, describeEmotionState } from './emotion-snapshot';
 import { decayEmotion, emptyEmotionVector, type EmotionVector } from './emotion-vector';
+import { elapsedMs, logTrace, REQUEST_ID_HEADER, shouldLogHttp, startTrace } from './trace';
 
-type AppEnv = { Bindings: Env };
+type AppEnv = { Bindings: Env; Variables: { requestId: string } };
 const app = new Hono<AppEnv>();
+
+// Phase 0 可观测性：每个请求带 request-id；只记录关键路径/错误，避免轮询刷屏。
+app.use('*', async (c, next) => {
+  const trace = startTrace(c.req.header(REQUEST_ID_HEADER));
+  c.set('requestId', trace.requestId);
+  c.header(REQUEST_ID_HEADER, trace.requestId);
+  await next();
+  const status = c.res.status;
+  if (shouldLogHttp(c.req.path, status)) {
+    logTrace('http', {
+      requestId: trace.requestId,
+      method: c.req.method,
+      path: c.req.path,
+      status,
+      ms: elapsedMs(trace),
+    });
+  }
+});
 
 const AUTH_KV_PREFIX = 'auth:';
 const AUTH_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -247,7 +266,7 @@ app.post('/api/chat', requireAuth, async (c) => {
     if (!saved) return c.json({ error: '图片格式不支持或超过 8MB 限制' }, 400);
     image = { key: saved.key };
   }
-  return streamChat(c.env, content, now, image, channel);
+  return streamChat(c.env, content, now, image, channel, c.get('requestId'));
 });
 
 /** 聊天图片回放（需登录；图片存在 R2 images/ 下，主账号优先、小号兜底）。 */

@@ -26,3 +26,7 @@ Thumbs.db
 
 # 本地真实绑定（含账号/资源 id，绝不提交）
 wrangler.local.toml
+
+# 评估用真实记忆/对话（绝不提交）
+docs/eval/*.local.json
+docs/eval/*.local.md

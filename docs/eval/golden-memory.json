@@ -1,0 +1,149 @@
+{
+  "version": 1,
+  "fixture": "fixture-memory.md",
+  "description": "合成记忆夹具上的检索 golden set；真实数据请用 *.local.json，不要提交。",
+  "cases": [
+    {
+      "id": "m01",
+      "query": "我住在哪个城市？",
+      "expected_any": ["杭州"],
+      "section": "关于用户",
+      "notes": "直接事实"
+    },
+    {
+      "id": "m02",
+      "query": "我的职业是什么？",
+      "expected_any": ["后端开发"],
+      "section": "关于用户",
+      "notes": "直接事实"
+    },
+    {
+      "id": "m03",
+      "query": "我的猫叫什么？",
+      "expected_any": ["团子", "橘猫"],
+      "section": "关于用户",
+      "notes": "实体召回"
+    },
+    {
+      "id": "m04",
+      "query": "我的博客域名是什么？",
+      "expected_any": ["example.com"],
+      "section": "关于用户",
+      "notes": "英文强词"
+    },
+    {
+      "id": "m05",
+      "query": "我喜欢什么颜色？",
+      "expected_any": ["蓝"],
+      "section": "偏好与习惯",
+      "notes": "偏好"
+    },
+    {
+      "id": "m06",
+      "query": "我平时作息怎么样？",
+      "expected_any": ["熬夜"],
+      "section": "偏好与习惯",
+      "notes": "同义词：作息/熬夜"
+    },
+    {
+      "id": "m07",
+      "query": "我那个叫星海的项目是什么？",
+      "expected_any": ["星海", "记忆系统"],
+      "section": "进行中的事项",
+      "notes": "项目实体"
+    },
+    {
+      "id": "m08",
+      "query": "桌宠还在做吗？",
+      "expected_any": ["桌宠", "搁置"],
+      "section": "进行中的事项",
+      "notes": "状态"
+    },
+    {
+      "id": "m09",
+      "query": "我们第一次聊天聊到几点？",
+      "expected_any": ["凌晨"],
+      "section": "共同经历",
+      "notes": "事件"
+    },
+    {
+      "id": "m10",
+      "query": "我们一起调通过什么？",
+      "expected_any": ["AstrBot"],
+      "section": "共同经历",
+      "notes": "英文强词"
+    },
+    {
+      "id": "m11",
+      "query": "不能拿你做什么？",
+      "expected_any": ["和别的 AI 比较"],
+      "section": "雷区与禁忌",
+      "notes": "雷区"
+    },
+    {
+      "id": "m12",
+      "query": "我最近在整理什么？",
+      "expected_any": ["记忆架构"],
+      "section": "近期动态",
+      "notes": "近期"
+    },
+    {
+      "id": "m13",
+      "query": "我平时喜欢长句还是短句？",
+      "expected_any": ["短句"],
+      "section": "偏好与习惯",
+      "notes": "沟通偏好"
+    },
+    {
+      "id": "m14",
+      "query": "我的 AI 叫什么？",
+      "expected_any": ["阿澈"],
+      "section": "称呼与关系",
+      "notes": "核心/稳定"
+    },
+    {
+      "id": "m15",
+      "query": "团子是什么？",
+      "expected_any": ["猫", "橘猫"],
+      "section": "关于用户",
+      "notes": "反向实体"
+    },
+    {
+      "id": "m16",
+      "query": "example.com 是什么？",
+      "expected_any": ["博客"],
+      "section": "关于用户",
+      "notes": "反向实体"
+    },
+    {
+      "id": "m17",
+      "query": "我喜欢什么沟通方式？",
+      "expected_any": ["短句"],
+      "section": "偏好与习惯",
+      "notes": "偏好"
+    },
+    {
+      "id": "m18",
+      "query": "我那个在整理的东西是什么？",
+      "expected_any": ["记忆架构", "星海"],
+      "section": "近期动态",
+      "notes": "指代/多跳"
+    },
+    {
+      "id": "m19",
+      "query": "我今天吃了什么？",
+      "expected_any": [],
+      "expect_no_recall": true,
+      "section": "negative",
+      "notes": "夹具里没有，错误召回应为 0"
+    },
+    {
+      "id": "m20",
+      "query": "帮我写一段快速排序",
+      "expected_any": [],
+      "expect_no_recall": true,
+      "section": "negative",
+      "notes": "技术请求，不应强行召回私人事实"
+    }
+  ]
+}

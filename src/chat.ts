@@ -14,6 +14,7 @@ import {
   insertUserMessage,
   insertAssistantReply,
   compactHistoryMessage,
+  groupTurns,
   historyRangeNote,
   withHistoryTimestamp,
   HISTORY_FILE_MAX_CHARS,
@@ -24,7 +25,7 @@ import { calcCost, loadPricing } from './pricing';
 import { streamDeepSeek, type DeepSeekMessage } from './deepseek';
 import { getTodaySummary } from './summary';
 import { loadImageDataUrl } from './media';
-import { parseRelationValues } from './memory-maintenance';
+import { byteLength, parseRelationValues } from './memory-maintenance';
 import { markProfileDirty } from './profile-cache';
 import { buildCharacterCard } from './character-card';
 import { facetsOf, processEmotionTurn } from './emotion-context';
@@ -33,6 +34,7 @@ import { readSessionFacts } from './session-facts';
 import { buildVoiceDirective, recentOpeners } from './voice';
 import { formatRecentMemoBlock, getRecentMemo } from './recent-memory';
 import { extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
+import { logTrace } from './trace';
 
 export interface ChatImage {
   key: string; // R2 对象键（images/日期/时间戳.jpg）
@@ -44,6 +46,7 @@ export async function streamChat(
   now: Date,
   image?: ChatImage,
   channel: MessageChannel = 'web',
+  requestId?: string,
 ): Promise<Response> {
   const apiKey = env.DEEPSEEK_API_KEY;
   if (!apiKey) return Response.json({ error: 'DEEPSEEK_API_KEY 未配置' }, { status: 500 });
@@ -99,6 +102,18 @@ export async function streamChat(
     recalledRaw,
     [...history.map((m) => m.content), recentMemo, promptMemory.text].filter(Boolean),
   );
+
+  // Phase 0 trace：只记录元信息，不记录正文/记忆内容。
+  logTrace('chat.context', {
+    requestId: requestId ?? 'none',
+    channel,
+    memoryMode: promptMemory.mode,
+    promptBytes: byteLength(promptMemory.text),
+    historyRounds: groupTurns(history).length,
+    recalledItems: recalled.split('\n').filter((line) => line.startsWith('- ')).length,
+    hasMemo: Boolean(recentMemo),
+    hasSummary: Boolean(todaySummary),
+  });
 
   // ★ 活人感：在落库本条前采集「距上次聊天间隔 + 今日轮数」
   const relationVals = parseRelationValues(memory);

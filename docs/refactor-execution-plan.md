@@ -8,6 +8,19 @@
 
 ---
 
+## 0. 执行状态
+
+| Phase | 状态 | 报告/证据 | 提交/tag |
+|---|---|---|---|
+| 0 | ✅ 完成（tagged） | `docs/phase-0-report.md` | `refactor-p0` |
+| 1 | ⏳ 待开始 | - | `refactor-p1` |
+| 2 | ⏳ 待开始 | - | `refactor-p2` |
+| 3 | ⏳ 待开始 | - | `refactor-p3` |
+| 4 | ⏳ 待开始 | - | `refactor-p4` |
+| 5 | ⏳ 待开始 | - | `refactor-p5` |
+
+---
+
 ## 1. 执行目标
 
 把 master plan 中的阶段拆成可执行、可验收、可提交的工作包：

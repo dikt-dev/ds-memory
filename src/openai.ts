@@ -19,6 +19,7 @@ import {
   insertAssistantReply,
   latestMessage,
   compactHistoryMessage,
+  groupTurns,
   historyRangeNote,
   withHistoryTimestamp,
   HISTORY_FILE_MAX_CHARS,
@@ -30,7 +31,7 @@ import { calcCost, loadPricing, type TokenUsage } from './pricing';
 import { completeDeepSeek, streamDeepSeek, type DeepSeekMessage } from './deepseek';
 import { getTodaySummary, maybeSummarizeToday } from './summary';
 import { loadImageDataUrl, saveImageFromSource } from './media';
-import { parseRelationValues } from './memory-maintenance';
+import { byteLength, parseRelationValues } from './memory-maintenance';
 import { markProfileDirty } from './profile-cache';
 import { readSessionFacts } from './session-facts';
 import { buildCharacterCard } from './character-card';
@@ -39,9 +40,10 @@ import { moodFromVector } from './emotion-vector';
 import { buildVoiceDirective, recentOpeners } from './voice';
 import { formatRecentMemoBlock, getRecentMemo, maybeRefreshRecentMemo } from './recent-memory';
 import { extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
+import { logTrace, resolveRequestId } from './trace';
 import { recordFiles, recentFilesBlock } from './recent-files';
 
-type AppEnv = { Bindings: Env };
+type AppEnv = { Bindings: Env; Variables: { requestId: string } };
 export const openaiApp = new Hono<AppEnv>();
 
 function openaiError(c: Context<AppEnv>, status: number, message: string) {
@@ -270,6 +272,7 @@ openaiApp.get('/models', async (c) => {
 
 openaiApp.post('/chat/completions', async (c) => {
   if (!(await checkBearer(c))) return openaiError(c, 401, '无效的 API Key');
+  const requestId = c.get('requestId') || resolveRequestId(c.req.header('x-request-id'));
   const body = (await c.req.json().catch(() => null)) as {
     messages?: unknown;
     stream?: unknown;
@@ -449,6 +452,17 @@ openaiApp.post('/chat/completions', async (c) => {
     recalledRaw,
     [...historyRaw.map((m) => m.content), recentMemo, promptMemory.text].filter(Boolean),
   );
+  logTrace('openai.context', {
+    requestId,
+    channel,
+    memoryMode: promptMemory.mode,
+    promptBytes: byteLength(promptMemory.text),
+    historyRounds: groupTurns(historyRaw).length,
+    recalledItems: recalled.split('\n').filter((line) => line.startsWith('- ')).length,
+    hasMemo: Boolean(recentMemo),
+    hasSummary: Boolean(todaySummary),
+    stream: body?.stream === true,
+  });
   const astrbotSystems = textMessages.filter((m) => m.role === 'system').map((m) => m.content);
   // 最近几条回复的开头：避免连续几轮用同一句开场白
   const avoidOpeners = recentOpeners([
