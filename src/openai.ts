@@ -14,7 +14,8 @@ import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
 import { attachWeather, getOrCreateDayContext } from './context';
 import { getMemory } from './memory';
 import { fetchWeather } from './weather';
-import { insertUserMessage, insertAssistantReply, latestMessage, recentMessages, compactHistoryMessage } from './db';
+import { insertUserMessage, insertAssistantReply, latestMessage, compactHistoryMessage } from './db';
+import { loadRecentHistory } from './recent-context';
 import { calcCost, loadPricing, type TokenUsage } from './pricing';
 import { completeDeepSeek, streamDeepSeek, type DeepSeekMessage } from './deepseek';
 import { getTodaySummary, maybeSummarizeToday } from './summary';
@@ -391,7 +392,7 @@ openaiApp.post('/chat/completions', async (c) => {
   // 当前消息尚未落库，所以不会重复；若历史末尾与当前文本相同，再主动去重一次。
   let historyMessages: DeepSeekMessage[] = [];
   if (body?.inject_history === true && !skipRecording) {
-    const rows = await recentMessages(c.env, 12);
+    const rows = await loadRecentHistory(c.env, 12, now);
     historyMessages = rows
       .filter(
         (m, i) =>

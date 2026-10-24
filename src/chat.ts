@@ -10,7 +10,8 @@ import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
 import { attachWeather, getOrCreateDayContext } from './context';
 import { getMemory } from './memory';
 import { fetchWeather } from './weather';
-import { insertUserMessage, insertAssistantReply, recentMessages, compactHistoryMessage } from './db';
+import { insertUserMessage, insertAssistantReply, compactHistoryMessage } from './db';
+import { loadRecentHistory } from './recent-context';
 import { calcCost, loadPricing } from './pricing';
 import { streamDeepSeek, type DeepSeekMessage } from './deepseek';
 import { getTodaySummary } from './summary';
@@ -53,7 +54,7 @@ export async function streamChat(
     is_holiday: dayCtxFile.is_holiday,
     holiday_note: dayCtxFile.holiday_note,
   };
-  const history = await recentMessages(env, 12);
+  const history = await loadRecentHistory(env, 12, now);
   // 最近几条回复的开头：避免连续几轮用同一句开场白
   const avoidOpeners = recentOpeners(history.filter((m) => m.role === 'assistant').map((m) => m.content));
   // ★ 中期记忆（最近 24 小时）优先：它存在时就不再注入今日摘要，避免同一段内容发两遍
