@@ -36,6 +36,8 @@ export interface Env {
   AUTH_MODE?: string;
   /** 记忆引擎：legacy（默认）| shadow（只记录）| next（使用新召回）。 */
   MEMORY_ENGINE?: string;
+  /** 态度引擎：legacy（默认）| shadow（只记录）| next（使用 attitude policy）。 */
+  AFFECT_ENGINE?: string;
   ASTROBOT_API_KEY?: string; // OpenAI 兼容端点（AstrBot 等）的 Bearer 密钥
   // 小号 R2（S3 兼容 API）：主账号容量达到阈值后，新数据写入小号
   SECONDARY_R2_ACCOUNT_ID?: string;

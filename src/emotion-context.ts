@@ -12,6 +12,7 @@
 
 import type { Env } from './types';
 import { deleteRuntimeState, getRuntimeState, putRuntimeState } from './runtime-store';
+import { recordEmotionEvents, recordFacetDelta } from './affect-store';
 import {
   applyEnvironmentToEmotion,
   decayEmotion,
@@ -215,7 +216,13 @@ export async function processEmotionTurn(input: EmotionTurnInput): Promise<Emoti
 
   // ③ 5 轴轮级增量
   const facetDelta = { ...state.facetDelta };
-  if (newEvents.length > 0) addFacetDelta(facetDelta, sumFacetDelta(newEvents));
+  if (newEvents.length > 0) {
+    const turnDelta = sumFacetDelta(newEvents);
+    addFacetDelta(facetDelta, turnDelta);
+    // Phase 3：事件与关系增量写入 D1 账本；失败不影响聊天。
+    await recordEmotionEvents(input.env, newEvents);
+    await recordFacetDelta(input.env, turnDelta, newEvents[0]?.evidence ?? '', now);
+  }
 
   const nextState: EmotionState = {
     vector,

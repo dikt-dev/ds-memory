@@ -42,6 +42,7 @@ import { formatRecentMemoBlock, getRecentMemo, maybeRefreshRecentMemo } from './
 import { extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 import { loadMemoryChunks } from './memory-context-store';
 import { formatMemoryChunks, rankMemoryChunks } from './memory-domain';
+import { buildAttitudePolicy } from './attitude-policy';
 import { logTrace, resolveRequestId } from './trace';
 import { recordFiles, recentFilesBlock } from './recent-files';
 
@@ -393,6 +394,29 @@ openaiApp.post('/chat/completions', async (c) => {
     },
     wasIgnored: facts.wasIgnored,
   });
+  // Phase 3：态度策略影子/新引擎。默认 legacy，不改变回复。
+  const affectEngine = (c.env.AFFECT_ENGINE ?? 'legacy').toLowerCase();
+  let attitude = emotion.snapshot;
+  if (affectEngine === 'shadow' || affectEngine === 'next') {
+    const startedAt = performance.now();
+    const policy = buildAttitudePolicy({
+      facets: emotion.facets,
+      vector: emotion.state.vector,
+      events: emotion.state.events,
+      now: now.getTime(),
+      wasIgnored: facts.wasIgnored,
+    });
+    logTrace('affect.policy', {
+      requestId,
+      engine: affectEngine,
+      archetype: policy.archetype,
+      tone: policy.tone,
+      directives: policy.directives.length,
+      policyMs: Math.round(performance.now() - startedAt),
+    });
+    if (affectEngine === 'next') attitude = policy.text;
+  }
+
   // ★ 心情值不再单独维护：由情绪向量派生，保证只有一份真相
   const effectiveMood = moodFromVector(emotion.state.vector);
   // ★ 活人感：状态卡 + 口语化（AstrBot 落库在 send 之前，故此处查询的是落库前的状态）
@@ -490,6 +514,7 @@ openaiApp.post('/chat/completions', async (c) => {
     promptBytes: byteLength(promptMemory.text),
     historyRounds: groupTurns(historyRaw).length,
     memoryEngine,
+    affectEngine,
     recalledItems: recalled.split('\n').filter((line) => line.startsWith('- ')).length,
     hasMemo: Boolean(recentMemo),
     hasSummary: Boolean(todaySummary),
@@ -520,7 +545,7 @@ openaiApp.post('/chat/completions', async (c) => {
       characterCard: cardTextWithMood,
       voice: buildVoiceDirective(relation.intimacy),
       avoidOpeners,
-      attitude: emotion.snapshot,
+      attitude,
       characterName: c.env.CHARACTER_NAME,
       userAddress: c.env.USER_ADDRESS,
     }),

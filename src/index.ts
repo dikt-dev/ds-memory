@@ -19,7 +19,7 @@ import {
 } from './auth';
 import { streamChat } from './chat';
 import { messagesPage, usageByDay, messagesByDate, assistantReplyTo } from './db';
-import { getMemory, MEMORY_KV_KEY } from './memory';
+import { getMemory, MEMORY_KV_KEY, putMemory } from './memory';
 import { messagesSince } from './db';
 import { byteLength, memoryDensity } from './memory-maintenance';
 import { getCityConfig, setCity } from './settings';
@@ -45,7 +45,7 @@ import { enqueueMemoryJob, runMemoryJobs } from './memory-jobs';
 import { applyMemoryProjection, buildMemoryProjection } from './memory-projection';
 import { generateRollup, previousPeriods } from './memory-rollups';
 import { getOrCreateDayContext } from './context';
-import { parseRelationValues, reportSectionBudgets } from './memory-maintenance';
+import { parseRelationValues, reportSectionBudgets, setRelationValues } from './memory-maintenance';
 import { analyzeMood } from './mood';
 import { mergeMood, needsAiVerification, verifyMoodWithAI } from './mood-ai';
 import {
@@ -68,8 +68,12 @@ import {
   facetsOf,
   listOpenGrievances,
   loadEmotionState,
+  processEmotionTurn,
+  resetEmotionState,
   simulateEmotion,
 } from './emotion-context';
+import { explainAttitude } from './attitude-policy';
+import { listAffectTimeline, recordAttitudeSnapshot } from './affect-store';
 import { applyEventsToVector, extractEmotionEvents, reconcileWithApology, type EmotionEvent } from './emotion-events';
 import { buildEmotionSnapshot, describeEmotionState } from './emotion-snapshot';
 import { decayEmotion, emptyEmotionVector, type EmotionVector } from './emotion-vector';
@@ -648,7 +652,61 @@ app.get('/api/admin/relation', requireAuth, async (c) => {
       at: e.at,
     })),
     snapshot: buildEmotionSnapshot({ facets, vector: state.vector, events: state.events, now }),
+    affect_engine: c.env.AFFECT_ENGINE ?? 'legacy',
+    policy: explainAttitude({
+      facets,
+      vector: state.vector,
+      events: state.events,
+      now,
+    }),
+    timeline: await listAffectTimeline(c.env, 30),
   });
+});
+
+/** Phase 3：解释当前态度（结构化原因 + 未化解事件）。 */
+app.get('/api/admin/affect/explain', requireAuth, async (c) => {
+  const now = Date.now();
+  const memory = await getMemory(c.env);
+  const state = await loadEmotionState(c.env, now);
+  const facets = effectiveFacets(facetsOf(parseRelationValues(memory)), state.facetDelta);
+  const policy = explainAttitude({ facets, vector: state.vector, events: state.events, now });
+  const snapshotId = await recordAttitudeSnapshot(c.env, policy, facets, state.vector, now);
+  return c.json({
+    ok: true,
+    policy,
+    snapshot_id: snapshotId,
+    timeline: await listAffectTimeline(c.env, 50),
+  });
+});
+
+/** Phase 3：重置情绪；关系重置会先备份 memory.md。必须 confirm。 */
+app.post('/api/admin/affect/reset', requireAuth, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as {
+    confirm?: unknown;
+    scope?: unknown;
+  } | null;
+  if (body?.confirm !== true) return c.json({ error: '需要 body.confirm=true' }, 400);
+  const scope = body.scope === 'relationship' ? 'relationship' : body.scope === 'all' ? 'all' : 'emotion';
+  let backupKey: string | null = null;
+  if (scope === 'relationship' || scope === 'all') {
+    const memory = await getMemory(c.env);
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    backupKey = `memory/backup/reset-${stamp}.md`;
+    await putObject(c.env, backupKey, memory, { contentType: 'text/markdown' });
+    await putMemory(
+      c.env,
+      setRelationValues(memory, {
+        affinity: 500,
+        intimacy: 300,
+        mood: 500,
+        trust: 600,
+        respect: 650,
+        attraction: 300,
+      }),
+    );
+  }
+  if (scope === 'emotion' || scope === 'all') await resetEmotionState(c.env);
+  return c.json({ ok: true, scope, backupKey });
 });
 
 /** 调试：喂一段对话，看会生成什么情绪快照（不写入 KV，不影响线上状态）。 */
@@ -666,6 +724,34 @@ app.post('/api/admin/emotion/simulate', requireAuth, async (c) => {
   const facets = facetsOf(parseRelationValues(memory));
   const result = simulateEmotion(texts, facets, now);
   return c.json({ ok: true, ...result });
+});
+
+/** Phase 3：喂一条消息，真实写入情绪/关系账本（管理端调试用）。 */
+app.post('/api/admin/affect/ingest', requireAuth, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { text?: unknown } | null;
+  const text = typeof body?.text === 'string' ? body.text.trim().slice(0, 2000) : '';
+  if (!text) return c.json({ error: 'missing text' }, 400);
+  const now = Date.now();
+  const memory = await getMemory(c.env);
+  const result = await processEmotionTurn({
+    env: c.env,
+    now,
+    base: facetsOf(parseRelationValues(memory)),
+    userText: text,
+  });
+  const policy = explainAttitude({
+    facets: result.facets,
+    vector: result.state.vector,
+    events: result.state.events,
+    now,
+  });
+  return c.json({
+    ok: true,
+    facets: result.facets,
+    snapshot: result.snapshot,
+    policy,
+    timeline: await listAffectTimeline(c.env, 20),
+  });
 });
 
 /** 手动触发上下文刷新（天气 + 心情环境漂移 + 关系快照），用于调试环境心情。 */

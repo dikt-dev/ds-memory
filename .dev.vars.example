@@ -16,6 +16,9 @@ AUTH_MODE=signed
 # 记忆引擎：legacy（默认）| shadow（只记录对比）| next（使用新召回）
 MEMORY_ENGINE=legacy
 
+# 态度引擎：legacy（默认）| shadow（只记录对比）| next（使用 attitude policy）
+AFFECT_ENGINE=legacy
+
 # OpenAI 兼容端点（AstrBot 等）的 Bearer 密钥：node -e "console.log(require('crypto').randomBytes(32).toString('hex'))" 生成
 ASTROBOT_API_KEY=REPLACE_ME
 

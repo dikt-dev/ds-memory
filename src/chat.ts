@@ -36,6 +36,7 @@ import { formatRecentMemoBlock, getRecentMemo } from './recent-memory';
 import { extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 import { loadMemoryChunks } from './memory-context-store';
 import { formatMemoryChunks, rankMemoryChunks } from './memory-domain';
+import { buildAttitudePolicy } from './attitude-policy';
 import { logTrace } from './trace';
 
 export interface ChatImage {
@@ -139,12 +140,14 @@ export async function streamChat(
     [...history.map((m) => m.content), recentMemo, promptMemory.text].filter(Boolean),
   );
 
+  const affectEngine = (env.AFFECT_ENGINE ?? 'legacy').toLowerCase();
   // Phase 0 trace：只记录元信息，不记录正文/记忆内容。
   logTrace('chat.context', {
     requestId: requestId ?? 'none',
     channel,
     memoryMode: promptMemory.mode,
     memoryEngine,
+    affectEngine,
     promptBytes: byteLength(promptMemory.text),
     historyRounds: groupTurns(history).length,
     recalledItems: recalled.split('\n').filter((line) => line.startsWith('- ')).length,
@@ -171,6 +174,28 @@ export async function streamChat(
     },
     wasIgnored: facts.wasIgnored,
   });
+
+  // Phase 3：态度策略影子/新引擎。默认 legacy，不改变回复。
+  let attitude = emotion.snapshot;
+  if (affectEngine === 'shadow' || affectEngine === 'next') {
+    const startedAt = performance.now();
+    const policy = buildAttitudePolicy({
+      facets: emotion.facets,
+      vector: emotion.state.vector,
+      events: emotion.state.events,
+      now: now.getTime(),
+      wasIgnored: facts.wasIgnored,
+    });
+    logTrace('affect.policy', {
+      requestId: requestId ?? 'none',
+      engine: affectEngine,
+      archetype: policy.archetype,
+      tone: policy.tone,
+      directives: policy.directives.length,
+      policyMs: Math.round(performance.now() - startedAt),
+    });
+    if (affectEngine === 'next') attitude = policy.text;
+  }
 
   // ★ 心情值不再单独维护：由情绪向量派生，保证只有一份真相
   const effectiveMood = moodFromVector(emotion.state.vector);
@@ -237,7 +262,7 @@ export async function streamChat(
         characterCard: cardTextWithMood,
         voice: buildVoiceDirective(relationVals.intimacy),
         avoidOpeners,
-        attitude: emotion.snapshot,
+        attitude,
         characterName: env.CHARACTER_NAME,
         userAddress: env.USER_ADDRESS,
       }) + (historyNote ? `\n\n${historyNote}` : ''),
