@@ -17,7 +17,7 @@
 | 2 | ✅ 完成（工程门禁；7 天生产影子在 Phase 5 上线前） | `docs/phase-2-progress.md` | `refactor-p2` |
 | 3 | ✅ 完成（工程门禁；7 天生产影子在 Phase 5 上线前） | `docs/phase-3-progress.md` | `refactor-p3` |
 | 4 | ✅ 完成（工程门禁；真实 embedding/生产 p95 在 Phase 5） | `docs/phase-4-progress.md` | `refactor-p4` |
-| 5 | 🚧 预检完成，待生产迁移/部署与 2 周观察 | `docs/phase-5-progress.md`、`docs/phase-5-cutover.md` | `refactor-p5` |
+| 5 | 🚧 生产已部署，QQ shadow 观察中；7 天/2 周门禁未完成 | `docs/phase-5-progress.md`、`docs/phase-5-cutover.md` | `refactor-p5` |
 
 ---
 

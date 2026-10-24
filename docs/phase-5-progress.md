@@ -1,8 +1,81 @@
-# Phase 5 进度报告：切换预检与 QQ 先行准备
+# Phase 5 进度报告：生产切换与 QQ shadow
 
 > 日期：2026-10-24  
-> 状态：🚧 进行中（**未执行生产迁移/部署**；等待确认与手机连接信息）  
+> 状态：🚧 进行中（**生产已迁移/部署；QQ shadow 观察中；7 天/2 周门禁未完成**）  
 > runbook：[phase-5-cutover.md](ds-memory/docs/phase-5-cutover.md)
+
+---
+
+## 0. 生产执行记录
+
+### 0.1 备份
+
+```text
+backup/pre-p5/d1.sql          784,476 bytes
+backup/pre-p5/memory.md         6,491 bytes
+```
+
+### 0.2 迁移
+
+003 → 007 已依次执行；只读校验 10 张新表全部存在：
+
+```text
+runtime_state, auth_revocations,
+memory_facts, memory_events, memory_summaries, memory_chunks, memory_jobs,
+affect_events, attitude_snapshots, engine_metrics
+```
+
+### 0.3 部署
+
+- `AUTH_SECRET` 已写入生产（不落 repo/文档）；
+- Worker 已部署，默认 `MEMORY_ENGINE=legacy` / `AFFECT_ENGINE=legacy`；
+- 生产 `GET /api/health` 200；
+- `GET /api/admin/readiness` 200：`ready=true`、`missing=[]`。
+
+### 0.4 Memory Context 回填
+
+```text
+POST /api/admin/memory/rebuild-context → facts=21 events=13 chunks=34
+POST /api/admin/memory/sync-summaries  → summaries=2
+POST /api/admin/memory/extract         → ok
+POST /api/admin/memory/embed           → embedded=38
+context-stats → facts=23 events=13 summaries=2 chunks=38 embedded=38
+```
+
+`backfill-provenance` 首次 500：
+`D1_ERROR: LIKE or GLOB pattern too complex`。  
+已改为 `instr(content, ?) > 0`，重新部署后返回 200（本次 linked=0，已有部分来源保留）。
+
+### 0.5 QQ shadow
+
+生产变量：
+
+```text
+MEMORY_ENGINE_QQ=shadow
+AFFECT_ENGINE_QQ=shadow
+MEMORY_ENGINE_WEB=legacy
+AFFECT_ENGINE_WEB=legacy
+```
+
+手机客户端已重新拉起：
+
+```text
+python3 main.py        运行中
+NapCat                 已连接 QQ 2219827501
+22:59 连接就绪
+```
+
+`record=false` 测试请求（不落聊天记录）：
+
+```text
+POST /v1/chat/completions → 200
+memory shadow: 2 requests, new_bytes=1949, avg_ms=287
+affect shadow: 3 requests, new_bytes=585, avg_ms=0
+```
+
+---
+
+## 1. 预检代码/文档
 
 ---
 
@@ -70,7 +143,7 @@ runtime_state / auth_revocations / memory_* / memory_jobs / affect_* / attitude_
 
 ```text
 tsc --noEmit     ✅
-vitest run       57 files / 690 tests ✅
+vitest run       57 files / 691 tests ✅
 scripts/verify.sh ✅ exit 0
 ```
 
@@ -120,14 +193,14 @@ wrangler deploy --dry-run
 
 ---
 
-## 3. 未执行（需要确认/等待）
+## 3. 未执行（观察/门禁）
 
 | 项 | 状态 | 说明 |
 |---|---|---|
-| 远程迁移 003–006 | ⏳ | 写生产 D1，需确认 |
-| `AUTH_SECRET` 生产设置 | ⏳ | `wrangler secret put` |
-| Worker 部署 | ⏳ | 默认 legacy 首部署 |
-| QQ shadow 7 天 | ⏳ | 需部署 + 手机端观察 |
+| 远程迁移 003–007 | ✅ | 已执行并校验 10 表 |
+| `AUTH_SECRET` 生产设置 | ✅ | 已写入，不回显 |
+| Worker 部署 | ✅ | 默认 legacy；当前版本 QQ shadow |
+| QQ shadow 7 天 | ⏳ | 已开始，需持续观察 |
 | QQ next | ⏳ | shadow 通过后 |
 | 网页/主动消息切换 | ⏳ | 最后 |
 | 2 周稳定门禁 | ⏳ | Phase 5 tag 前 |
@@ -136,9 +209,10 @@ wrangler deploy --dry-run
 
 ## 4. 手机连接与安全
 
-- 手机 SSH 已连通，只做了只读检查；
-- 未启动客户端、未改配置、未重启 NapCat；
-- 手机电量低且未充电，启动前需要确认是否接电源；
+- 手机 SSH 已连通；
+- 客户端已停止/重启过一次，当前 `python3 main.py` 运行、NapCat 已连接；
+- 手机已插电（PLUGGED_AC/CHARGING）；
+- 之前 6MB 图片导致的 `SSLV3_ALERT_BAD_RECORD_MAC` 尚未复现，继续观察；
 - **安全提示**：`ds-qq-client/tests/_ssh_exec.sh` 等辅助脚本包含明文手机凭据，建议轮换手机密码并改为从环境变量读取；本次不会把凭据写入仓库或文档。
 
 ---

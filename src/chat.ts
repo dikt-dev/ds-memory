@@ -35,7 +35,7 @@ import { buildVoiceDirective, recentOpeners } from './voice';
 import { formatRecentMemoBlock, getRecentMemo } from './recent-memory';
 import { embedTexts, extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 import { loadMemoryChunks } from './memory-context-store';
-import { formatMemoryChunks, rankMemoryChunks } from './memory-domain';
+import { formatMemoryChunks, rankMemoryChunks, shouldRecallMemory } from './memory-domain';
 import { buildAttitudePolicy } from './attitude-policy';
 import { packMemoryChunks } from './context-packer';
 import { affectEngineFor, memoryEngineFor } from './engine-flags';
@@ -108,21 +108,29 @@ export async function streamChat(
   // Phase 2：Memory Context 影子/新引擎。默认 legacy，不改变线上回复。
   const memoryEngine = memoryEngineFor(env, channel);
   if (memoryEngine === 'shadow' || memoryEngine === 'next') {
+    if (!shouldRecallMemory(recallQuery)) {
+      logTrace('memory.engine.skip', {
+        requestId: requestId ?? 'none',
+        engine: memoryEngine,
+        reason: 'low_signal_query',
+      });
+    } else {
     const oldBytes = byteLength(recalledRaw);
     const startedAt = performance.now();
     try {
       const chunks = await loadMemoryChunks(env);
+      const focus = history.slice(-8).map((m) => m.content).join(' ');
+      const keywordPicked = rankMemoryChunks(recallQuery, chunks, 6, focus);
+      // 关键词已经够强时不再付 query embedding 延迟；弱召回才走向量。
       const hasVectors = chunks.some((chunk) => Boolean(chunk.vec));
-      const queryVec = hasVectors
-        ? ((await embedTexts(env, [recallQuery]))[0] ?? null)
-        : null;
-      const picked = rankMemoryChunks(
-        recallQuery,
-        chunks,
-        6,
-        history.slice(-8).map((m) => m.content).join(' '),
-        { queryVec },
-      );
+      const queryVec =
+        hasVectors && keywordPicked.length < 3
+          ? ((await embedTexts(env, [recallQuery]))[0] ?? null)
+          : null;
+      const picked =
+        queryVec !== null
+          ? rankMemoryChunks(recallQuery, chunks, 6, focus, { queryVec })
+          : keywordPicked;
       const packed = packMemoryChunks(picked);
       const nextRaw = formatMemoryChunks(packed.chunks);
       const shadowMs = Math.round(performance.now() - startedAt);
@@ -156,6 +164,7 @@ export async function streamChat(
         engine: memoryEngine,
         message: e instanceof Error ? e.message : String(e),
       });
+    }
     }
   }
 

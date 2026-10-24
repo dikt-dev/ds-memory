@@ -6,6 +6,7 @@ import {
   formatMemoryChunks,
   parseMemoryContext,
   rankMemoryChunks,
+  shouldRecallMemory,
 } from './memory-domain';
 
 interface GoldenCase {
@@ -21,6 +22,16 @@ const golden = JSON.parse(goldenRaw) as { cases: GoldenCase[] };
 const CORE = new Set(['人物底色', '称呼与关系', '雷区与禁忌']);
 const cases = golden.cases.filter((c) => !CORE.has(c.section));
 const chunks = buildMemoryChunks(parseMemoryContext(fixture));
+
+describe('query planning', () => {
+  it('寒暄/纯技术请求不触发，记忆标记触发', () => {
+    expect(shouldRecallMemory('在吗')).toBe(false);
+    expect(shouldRecallMemory('你好')).toBe(false);
+    expect(shouldRecallMemory('帮我写一段快速排序')).toBe(false);
+    expect(shouldRecallMemory('上次说的那个项目')).toBe(true);
+    expect(shouldRecallMemory('我住在哪里')).toBe(true);
+  });
+});
 
 describe('Memory Context golden set（合成夹具）', () => {
   it('核心区不参与召回，避免和 pinned 重复评测', () => {

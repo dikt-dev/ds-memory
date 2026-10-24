@@ -1,21 +1,22 @@
 # Phase 5 切换 runbook（QQ → 网页 → 主动消息）
 
-> 状态：**就绪检查已准备，未执行任何线上写操作**  
+> 状态：**已备份、已迁移 003–007、已部署；QQ shadow 观察中，未切 next**  
 > 原则：先只读预检 → 备份 → 迁移 → 部署（默认 legacy）→ QQ shadow → QQ next → 网页 → 主动消息 → 2 周观察。
 
 ---
 
-## 0. 当前只读预检结果
+## 0. 执行结果（2026-10-24）
 
-2026-10-24 对远程 D1 执行只读 `sqlite_master` 查询：
+- 备份：`backup/pre-p5/d1.sql`、`backup/pre-p5/memory.md`；
+- 远程迁移 003–007：已完成，10 张新表存在；
+- `AUTH_SECRET`：已设置；
+- Worker：已部署，默认 legacy；
+- Memory Context：23 facts / 13 events / 2 summaries / 38 chunks / 38 embedded；
+- QQ：`MEMORY_ENGINE_QQ=shadow`、`AFFECT_ENGINE_QQ=shadow`；
+- 网页：`MEMORY_ENGINE_WEB=legacy`、`AFFECT_ENGINE_WEB=legacy`；
+- 手机客户端：已启动，NapCat 已连接。
 
-```text
-runtime_state / auth_revocations / memory_* / affect_* / attitude_snapshots / engine_metrics
-→ 0 张存在
-```
-
-说明：生产仍是旧 schema，迁移 003–006 尚未执行。  
-本地已执行 003–006，`/api/admin/readiness` 返回 `ready=true`，`embedded=0`（本地 AI 不可用）。
+下一步观察 QQ shadow ≥7 天，再切 `next`。
 
 ---
 

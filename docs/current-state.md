@@ -18,7 +18,7 @@
 | 存储 | D1 + R2（主/小号）+ KV + Workers AI |
 | 模型 | DeepSeek `deepseek-flash`（对话）、`deepseek-v4-pro`（每日提炼）、Workers AI 兜底 |
 | 手机端 | `../ds-qq-client`，Python + NapCat/OneBot 11 |
-| 测试 | 57 个测试文件、690 个用例（Phase 5 指标后；基线为 45/631） |
+| 测试 | 57 个测试文件、691 个用例（Phase 5 生产 shadow 后；基线为 45/631） |
 | 构建检查 | `tsc --noEmit` |
 
 ---
@@ -211,7 +211,7 @@ KV auth / memory cache / memo / summary / emotion / heartbeat / ...
 | 项 | 值 |
 |---|---|
 | 测试文件 | 57（基线 45；Phase 0 trace，Phase 1 auth/runtime，Phase 2 memory，Phase 3 affect，Phase 4 retrieval，Phase 5 flags/metrics） |
-| 测试用例 | 690（基线 631；Phase 0 +6，Phase 1 +8，Phase 2 +25，Phase 3 +7，Phase 4 +7，Phase 5 +6） |
+| 测试用例 | 691（基线 631；Phase 0 +6，Phase 1 +8，Phase 2 +25，Phase 3 +7，Phase 4 +7，Phase 5 +7） |
 | 类型检查 | `node node_modules/typescript/bin/tsc --noEmit` |
 | 测试命令 | `node node_modules/vitest/vitest.mjs run` |
 | 关键测试 | 10 轮历史、记忆合并/去重、摘要触发、召回、关系/情绪、归档、队列、API 解析 |

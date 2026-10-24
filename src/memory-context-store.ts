@@ -497,9 +497,9 @@ export async function backfillMemoryProvenance(env: Env, limit = 80): Promise<nu
     const term = provenanceSearchTerm(fact);
     if (term.length < 2) continue;
     const found = await env.DB.prepare(
-      `SELECT id FROM messages WHERE content LIKE ? ORDER BY id DESC LIMIT 5`,
+      `SELECT id FROM messages WHERE instr(content, ?) > 0 ORDER BY id DESC LIMIT 5`,
     )
-      .bind(`%${term}%`)
+      .bind(term)
       .all<{ id: number }>();
     const ids = (found.results ?? []).map((r) => r.id);
     if (ids.length === 0) continue;

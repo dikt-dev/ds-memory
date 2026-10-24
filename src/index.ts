@@ -509,8 +509,12 @@ app.post('/api/admin/memory/embed', requireAuth, async (c) => {
 });
 /** Phase 2B：用消息内容回填事实来源（近似回溯，最多 5 条/事实）。 */
 app.post('/api/admin/memory/backfill-provenance', requireAuth, async (c) => {
-  const linked = await backfillMemoryProvenance(c.env);
-  return c.json({ ok: true, linked });
+  try {
+    const linked = await backfillMemoryProvenance(c.env);
+    return c.json({ ok: true, linked });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
+  }
 });
 /** Phase 2B：从最近用户消息抽取显式事实（入队并立即跑 1 个）。 */
 app.post('/api/admin/memory/extract', requireAuth, async (c) => {

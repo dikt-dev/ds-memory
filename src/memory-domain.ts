@@ -442,6 +442,23 @@ export function mmrSelectChunks(
   return selected.map((x) => x.chunk);
 }
 
+const GREETING_RE = /^(你好|在吗|早安|晚安|哈哈|嘿嘿|谢谢|好的|嗯+|哦+|ok|hi|hello|在不在)[!！。,.，\s]*$/i;
+const TECH_RE = /^(帮我|写|解释|翻译|计算|生成|做个|怎么|code|写个)/i;
+const MEMORY_MARK_RE = /(上次|之前|以前|记得|我说过|那次|昨天|前天|还记得|我说|曾经)/;
+
+/**
+ * Query 规划：明显是寒暄/纯技术请求时不触发个人记忆检索。
+ * 有“上次/之前/记得”等记忆标记时始终触发。
+ */
+export function shouldRecallMemory(query: string): boolean {
+  const q = (query ?? '').trim();
+  if (!q) return false;
+  if (MEMORY_MARK_RE.test(q)) return true;
+  if (GREETING_RE.test(q)) return false;
+  if (TECH_RE.test(q)) return false;
+  return q.length >= 3;
+}
+
 /**
  * 关键词 + 向量混合召回（Phase 4）：
  * - 两路各自排序，用 RRF 融合；
