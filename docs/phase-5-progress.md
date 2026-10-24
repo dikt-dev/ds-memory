@@ -236,10 +236,11 @@ health=200 readiness=200 metrics=200 storage=200
 当前生产：
 
 ```text
-proactive_engine=legacy
+proactive_engine=shadow（Version b7a8cb71）
 ```
 
-等 QQ/网页 next 稳定后再按 `legacy → shadow → next` 切换。
+shadow 只计算新上下文和态度策略并写 `engine_metrics(kind=proactive)`，
+发出的内容仍走 legacy。等 QQ/网页 next 稳定后再切 `next`。
 
 ---
 
