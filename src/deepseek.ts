@@ -64,10 +64,10 @@ export async function streamDeepSeek(
         stream: true,
         stream_options: { include_usage: true },
         ...(opts.maxTokens ? { max_tokens: opts.maxTokens } : {}),
-        // 活人感：稍高的温度 + 轻微重复惩罚，避免每轮用同一套句式
-        temperature: 1.2,
-        frequency_penalty: 0.3,
-        presence_penalty: 0.2,
+        // 温度别再拉满：1.2 容易造词/漏词，0.85 仍活泼但句子更通顺
+        temperature: 0.85,
+        frequency_penalty: 0.15,
+        presence_penalty: 0.1,
         // deepseek-flash/v4-pro 默认开启思考模式（effort=high），这里关闭：回复更快、成本可预期
         thinking: { type: 'disabled' },
       }),
@@ -169,9 +169,9 @@ export async function completeDeepSeek(
         model: env.DEEPSEEK_MODEL,
         messages,
         max_tokens: maxTokens,
-        temperature: 1.2,
-        frequency_penalty: 0.3,
-        presence_penalty: 0.2,
+        temperature: 0.85,
+        frequency_penalty: 0.15,
+        presence_penalty: 0.1,
         // 关闭思考模式（默认开启 effort=high，会额外消耗按输出计费的 reasoning tokens）
         thinking: { type: 'disabled' },
       }),

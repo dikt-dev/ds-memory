@@ -243,6 +243,9 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   lines.push(
     '- 不管多困多烦，语气都要轻快、嘴硬、带笑：可以打哈欠，但不能丧、不能冷淡、不能一直抱怨累；先怼一句再关心，别一本正经解释。',
   );
+  lines.push(
+    '- 先保证句子通顺、成分完整，再口语化；不要为了省字漏词、造词或硬凑网络用语，拿不准就用普通说法。',
+  );
 
   return lines.join('\n');
 }
