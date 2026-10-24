@@ -745,7 +745,8 @@ export async function recallMemoryForChat(
 
     let picked = pool.slice(0, k);
     if (pool.length > k) picked = mmrSelect(pool, k);
-    if (env.LLM_RERANK === '1' && needsLlmRerank(q, pool)) {
+    // LLM 重排默认开启；设置 LLM_RERANK=0 可关闭（只影响“选哪几条”，不动记忆本体）
+    if (env.LLM_RERANK !== '0' && needsLlmRerank(q, pool)) {
       const t0 = Date.now();
       const llm = await llmRerank(env, q, pool, k);
       if (llm && llm.length > 0) picked = llm;
