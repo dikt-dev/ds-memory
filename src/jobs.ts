@@ -518,7 +518,8 @@ export async function archiveOneDay(
     try {
       await enqueueMemoryJob(env, 'sync_summaries', 'rollups', now.getTime());
       await enqueueMemoryJob(env, 'backfill_provenance', 'memory', now.getTime());
-      const jobs = await runMemoryJobs(env, now, 2);
+      await enqueueMemoryJob(env, 'extract_conversation', 'recent', now.getTime());
+      const jobs = await runMemoryJobs(env, now, 3);
       if (jobs.failed) console.error('[daily] memory jobs failed:', JSON.stringify(jobs.details));
       else console.log(`[daily] memory jobs：${jobs.processed} 个完成`);
     } catch (e) {

@@ -191,6 +191,47 @@ export function parseMemoryContext(text: string, now = Date.now()): ParsedMemory
   return { facts, events };
 }
 
+/** 事实在 atDate（YYYY-MM-DD）是否有效。 */
+export function isFactActive(fact: MemoryFact, atDate: string): boolean {
+  if (fact.validFrom && fact.validFrom > atDate) return false;
+  if (fact.validTo && fact.validTo <= atDate) return false;
+  return true;
+}
+
+/** 合并来源 ID（去重、稳定排序）。 */
+function mergeIds(a: number[], b: number[]): number[] {
+  return [...new Set([...a, ...b])].sort((x, y) => x - y);
+}
+
+/**
+ * 过滤过期事实，并按「section + subject/predicate」或 contentHash 去重。
+ * 同一槽位保留 validFrom 更新的一条；来源 ID 合并，避免冲突时丢证据。
+ */
+export function canonicalizeFacts(facts: MemoryFact[], atDate: string): MemoryFact[] {
+  const byKey = new Map<string, MemoryFact>();
+  for (const original of facts) {
+    if (!isFactActive(original, atDate)) continue;
+    const fact: MemoryFact = { ...original, sourceMessageIds: [...original.sourceMessageIds] };
+    const slot = fact.predicate
+      ? `${fact.section}|${fact.subject ?? ''}|${fact.predicate}`
+      : `${fact.section}|${fact.contentHash}`;
+    const prev = byKey.get(slot);
+    if (!prev) {
+      byKey.set(slot, fact);
+      continue;
+    }
+    const prevDate = prev.validFrom ?? '';
+    const nextDate = fact.validFrom ?? '';
+    if (nextDate >= prevDate) {
+      fact.sourceMessageIds = mergeIds(prev.sourceMessageIds, fact.sourceMessageIds);
+      byKey.set(slot, fact);
+    } else {
+      prev.sourceMessageIds = mergeIds(prev.sourceMessageIds, fact.sourceMessageIds);
+    }
+  }
+  return [...byKey.values()];
+}
+
 export function buildMemoryChunks(parsed: ParsedMemoryContext, now = Date.now()): MemoryChunk[] {
   const chunks: MemoryChunk[] = [];
   for (const fact of parsed.facts) {

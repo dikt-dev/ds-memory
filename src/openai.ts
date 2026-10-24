@@ -454,6 +454,8 @@ openaiApp.post('/chat/completions', async (c) => {
   // Phase 2：Memory Context 影子/新引擎。默认 legacy，不改变线上回复。
   const memoryEngine = (c.env.MEMORY_ENGINE ?? 'legacy').toLowerCase();
   if (memoryEngine === 'shadow' || memoryEngine === 'next') {
+    const oldBytes = byteLength(recalledRaw);
+    const startedAt = performance.now();
     try {
       const chunks = await loadMemoryChunks(c.env);
       const picked = rankMemoryChunks(recallQuery, chunks, 6, focus);
@@ -463,7 +465,9 @@ openaiApp.post('/chat/completions', async (c) => {
         engine: memoryEngine,
         oldItems: recalledRaw.split('\n').filter((line) => line.startsWith('- ')).length,
         nextItems: picked.length,
+        oldBytes,
         nextBytes: byteLength(nextRaw),
+        shadowMs: Math.round(performance.now() - startedAt),
       });
       if (memoryEngine === 'next' && nextRaw) recalledRaw = nextRaw;
     } catch (e) {

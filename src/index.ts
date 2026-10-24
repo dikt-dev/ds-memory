@@ -41,7 +41,7 @@ import {
   syncRollupSummaries,
 } from './memory-context-store';
 import { enqueueMemoryJob, runMemoryJobs } from './memory-jobs';
-import { parseMemoryContext, projectMemoryContext } from './memory-domain';
+import { applyMemoryProjection, buildMemoryProjection } from './memory-projection';
 import { generateRollup, previousPeriods } from './memory-rollups';
 import { getOrCreateDayContext } from './context';
 import { parseRelationValues, reportSectionBudgets } from './memory-maintenance';
@@ -413,6 +413,12 @@ app.post('/api/admin/memory/backfill-provenance', requireAuth, async (c) => {
   const linked = await backfillMemoryProvenance(c.env);
   return c.json({ ok: true, linked });
 });
+/** Phase 2B：从最近用户消息抽取显式事实（入队并立即跑 1 个）。 */
+app.post('/api/admin/memory/extract', requireAuth, async (c) => {
+  const id = await enqueueMemoryJob(c.env, 'extract_conversation', 'recent');
+  const result = await runMemoryJobs(c.env, new Date(), 1);
+  return c.json({ ok: true, id, ...result });
+});
 /** Phase 2B：手动处理 queued 记忆任务。 */
 app.post('/api/admin/memory/jobs/run', requireAuth, async (c) => {
   const body = (await c.req.json().catch(() => null)) as { limit?: unknown } | null;
@@ -426,9 +432,7 @@ app.get('/api/admin/memory/jobs', requireAuth, async (c) => {
 });
 /** Phase 2B：投影预览（只读，不写回 memory.md）。 */
 app.get('/api/admin/memory/projection', requireAuth, async (c) => {
-  const memory = await getMemory(c.env);
-  const parsed = parseMemoryContext(memory);
-  const projection = projectMemoryContext(memory, parsed);
+  const { parsed, projection } = await buildMemoryProjection(c.env);
   return c.json({
     ok: true,
     bytes: byteLength(projection),
@@ -436,6 +440,15 @@ app.get('/api/admin/memory/projection', requireAuth, async (c) => {
     events: parsed.events.length,
     preview: projection.length > 4000 ? `${projection.slice(0, 4000)}\n…` : projection,
   });
+});
+/** Phase 2B：投影写回 + 旧文件备份。必须显式 confirm，默认不自动跑。 */
+app.post('/api/admin/memory/project', requireAuth, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { confirm?: unknown } | null;
+  if (body?.confirm !== true) {
+    return c.json({ error: '需要 body.confirm=true 才会写回 memory.md' }, 400);
+  }
+  const result = await applyMemoryProjection(c.env);
+  return c.json({ ok: true, ...result });
 });
 /** 把一条重建任务放入队列（异步；供 cron/手动调用）。 */
 app.post('/api/admin/memory/enqueue-rebuild', requireAuth, async (c) => {

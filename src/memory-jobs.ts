@@ -12,10 +12,15 @@ import {
   backfillMemoryProvenance,
   replaceMemoryContext,
   syncRollupSummaries,
-  type MemoryContextStats,
+  upsertConversationFacts,
 } from './memory-context-store';
+import { extractFactsFromMessages } from './memory-extract';
 
-export type MemoryJobType = 'rebuild_context' | 'sync_summaries' | 'backfill_provenance';
+export type MemoryJobType =
+  | 'rebuild_context'
+  | 'sync_summaries'
+  | 'backfill_provenance'
+  | 'extract_conversation';
 
 export interface MemoryJob {
   id: string;
@@ -82,7 +87,7 @@ export async function finishMemoryJob(
     .run();
 }
 
-async function runOne(env: Env, job: MemoryJob): Promise<MemoryContextStats | { summaries: number } | { linked: number }> {
+async function runOne(env: Env, job: MemoryJob): Promise<unknown> {
   switch (job.type) {
     case 'rebuild_context': {
       const memory = await getMemory(env);
@@ -92,6 +97,33 @@ async function runOne(env: Env, job: MemoryJob): Promise<MemoryContextStats | { 
       return { summaries: await syncRollupSummaries(env) };
     case 'backfill_provenance':
       return { linked: await backfillMemoryProvenance(env) };
+    case 'extract_conversation': {
+      const since = Date.now() - 3 * 86400000;
+      const rows = await env.DB.prepare(
+        `SELECT id, role, content, date_key, created_ms
+         FROM messages
+         WHERE role = 'user' AND created_ms >= ?
+         ORDER BY id DESC LIMIT 300`,
+      )
+        .bind(since)
+        .all<{
+          id: number;
+          role: 'user' | 'assistant';
+          content: string;
+          date_key: string;
+          created_ms: number;
+        }>();
+      const facts = extractFactsFromMessages(
+        (rows.results ?? []).map((r) => ({
+          id: r.id,
+          role: r.role,
+          content: r.content,
+          dateKey: r.date_key,
+          createdAt: r.created_ms,
+        })),
+      );
+      return { extracted: await upsertConversationFacts(env, facts) };
+    }
     default:
       throw new Error(`unknown memory job type: ${job.type}`);
   }

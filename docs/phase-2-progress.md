@@ -1,7 +1,7 @@
-# Phase 2 进度报告（2A 内核 + 2B 任务/来源/评测）
+# Phase 2 进度报告（2A 内核 + 2B 任务/来源/评测 + 门禁增量）
 
 > 日期：2026-10-24  
-> 状态：🚧 Phase 2 门禁未过（2A/2B 内核完成；未打 `refactor-p2` tag）  
+> 状态：🚧 Phase 2 门禁未过（核心与门禁增量完成；未打 `refactor-p2` tag）  
 > 目标：把记忆从“行文本”提升为 facts / events / summaries / chunks，并建立可影子对比的读写管线。
 
 ---
@@ -65,13 +65,29 @@
   - `GET /api/admin/memory/jobs`
   - `GET /api/admin/memory/projection`（只读预览）
 
+### 1.5 有效期 / 冲突 / 去重
+
+`memory-domain.ts` 新增：
+
+- `isFactActive`：`valid_from`/`valid_to` 过滤；
+- `canonicalizeFacts`：同 `section+subject+predicate` 保留较新事实，合并来源 ID；
+- `replaceMemoryContext` 同步前先 canonicalize，过期/重复事实不进入 chunk。
+
+### 1.6 对话抽取与投影写回
+
+- `memory-extract.ts`：从用户显式自述抽取事实（我住在/我叫/我的猫叫/我喜欢/我讨厌/我在做/我用的是），带 `source_message_ids`；
+- `memory_jobs` 新增 `extract_conversation`；
+- `POST /api/admin/memory/project`：必须 `confirm=true`，写回前备份到 `memory/backup/`；
+- 投影改为优先读 D1 facts/events，因此对话抽取的新事实会进入 `memory.md`；
+- `shadow` trace 增加 `oldBytes/nextBytes/shadowMs`，供 token 与 p95 统计。
+
 ---
 
 ## 2. 验证
 
 ```text
 tsc --noEmit     ✅
-vitest run       50 files / 659 tests ✅
+vitest run       52 files / 667 tests ✅
 ```
 
 ### 2.1 本地 D1 链路
@@ -86,8 +102,10 @@ POST /api/admin/memory/sync-summaries
 → {"ok":true,"summaries":1}
 
 GET /api/admin/memory/context-stats
-→ {"ok":true,"facts":6,"events":2,"summaries":1,"chunks":9}
+→ {"ok":true,"facts":7,"events":2,"summaries":1,"chunks":10}
 ```
+
+对话抽取新增一条 `origin=conversation` 的 `城市=杭州`；投影时 canonicalize 后与旧事实合并，保留较新来源。
 
 ### 2.2 任务队列
 
@@ -110,12 +128,17 @@ content=城市=杭州
 source_message_ids=[1]
 ```
 
-### 2.4 投影预览
+### 2.4 投影预览与写回
 
 ```text
-GET /api/admin/memory/projection
+GET  /api/admin/memory/projection
 → bytes=783, facts=6, events=2
 → 核心区保留，关于用户/偏好/事项/共同经历/近期动态重建
+→ 对话抽取的 [26-10-24] 城市=杭州 已进入投影
+
+POST /api/admin/memory/project {"confirm":true}
+→ beforeBytes=783, afterBytes=783
+→ backupKey=memory/backup/memory-2026-10-24T14-22-03-255Z.md
 ```
 
 ### 2.5 Golden set
@@ -137,13 +160,13 @@ negative false positive = 0
 | 门禁 | 状态 | 说明 |
 |---|---|---|
 | shadow 召回不低于旧路径 | ⏳ | 合成集 1.0；真实 7 天影子未跑 |
-| 无重复/过期事实进 prompt | ⏳ | `valid_to` 字段已建，有效期/冲突纯函数未完成 |
-| token ≤ 旧路径 120% | ⏳ | 尚未对比真实注入字节 |
-| 召回 p95 < 300ms | ⏳ | 本地未压测 |
-| 7 天影子 | ⏳ | 需要线上/回放数据 |
-| 对话级 ArchiveDay 提取 | ⏳ | 目前只从 memory.md 导入，来源靠近似回填 |
-| archive 导入 | ⏳ | 旧档案尚未进入新 context |
-| 投影写回 + 备份 | ⏳ | 当前只读预览，Phase 5 切投影 |
+| 无重复/过期事实进 prompt | ✅ | `valid_to` 过滤 + canonicalize；同步前生效 |
+| token ≤ 旧路径 120% | ⏳ | 已记录 oldBytes/nextBytes；缺 7 天样本 |
+| 召回 p95 < 300ms | ⏳ | 已记录 shadowMs；缺线上样本 |
+| 7 天影子 | ⏳ | 需要线上/回放数据；当前只有合成集 |
+| 对话级事实提取 | ✅ | 显式自述规则 + source_message_ids |
+| archive 导入 | ⏳ | 旧档案尚未进入新 context（Phase 4） |
+| 投影写回 + 备份 | ✅ | 手动 confirm；写前备份 |
 | 迁移 004/005 上远程 | ⏳ | Phase 5 部署前统一执行 |
 
 ---

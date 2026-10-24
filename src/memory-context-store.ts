@@ -8,6 +8,7 @@ import type { Env } from './types';
 import { autoTags, bigrams } from './memory-archive';
 import {
   buildMemoryChunks,
+  canonicalizeFacts,
   parseMemoryContext,
   stableHash,
   type MemoryChunk,
@@ -150,6 +151,27 @@ async function deleteIds(env: Env, table: string, ids: string[]): Promise<void> 
 }
 
 /**
+ * 写入从对话抽取的事实（origin=conversation）。
+ * 同一 fact 重复出现时合并 source_message_ids，而不是覆盖丢证据。
+ */
+export async function upsertConversationFacts(env: Env, facts: MemoryFact[]): Promise<number> {
+  if (facts.length === 0) return 0;
+  const existing = await env.DB.prepare(
+    `SELECT id, source_message_ids FROM memory_facts WHERE origin = 'conversation'`,
+  ).all<{ id: string; source_message_ids: string }>();
+  const old = new Map(
+    (existing.results ?? []).map((r) => [r.id, parseArray<number>(r.source_message_ids)]),
+  );
+  for (const fact of facts) {
+    const previous = old.get(fact.id) ?? [];
+    fact.sourceMessageIds = [...new Set([...previous, ...fact.sourceMessageIds])].sort((a, b) => a - b);
+  }
+  await insertFacts(env, facts, 'conversation');
+  await insertChunks(env, buildMemoryChunks({ facts, events: [] }), 'conversation');
+  return facts.length;
+}
+
+/**
  * 用一份 memory.md 覆盖指定 origin 的 facts/events/chunks。
  *
  * 先 upsert 当前行，再删除旧行；如果中途失败，旧数据仍在（不会先清空）。
@@ -161,6 +183,9 @@ export async function replaceMemoryContext(
   now = Date.now(),
 ): Promise<ReplaceMemoryContextResult> {
   const parsed = parseMemoryContext(text, now);
+  // 过滤过期事实 + 同槽位去重；保留较新事实并合并来源。
+  const today = new Date(now + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  parsed.facts = canonicalizeFacts(parsed.facts, today);
   const chunks = buildMemoryChunks(parsed, now);
 
   // 保留已回填的来源：reparse 出来的 fact 默认 source_message_ids=[]，
@@ -238,6 +263,84 @@ export async function loadMemoryChunks(env: Env, limit = 1000): Promise<MemoryCh
     contentHash: r.content_hash,
     updatedAt: r.updated_at,
   }));
+}
+
+/** 读取 D1 里的全部事实（投影/评测用；当前规模小）。 */
+export async function loadMemoryFacts(env: Env, limit = 2000): Promise<MemoryFact[]> {
+  const rows = await env.DB.prepare(
+    `SELECT id, section, content, subject, predicate, object, valid_from, valid_to,
+            confidence, source_message_ids, tags, content_hash, created_at, updated_at
+     FROM memory_facts ORDER BY section, valid_from, id LIMIT ?`,
+  )
+    .bind(limit)
+    .all<{
+      id: string;
+      section: string;
+      content: string;
+      subject: string | null;
+      predicate: string | null;
+      object: string | null;
+      valid_from: string | null;
+      valid_to: string | null;
+      confidence: number;
+      source_message_ids: string;
+      tags: string;
+      content_hash: string;
+      created_at: number;
+      updated_at: number;
+    }>();
+  return (rows.results ?? []).map((r) => ({
+    id: r.id,
+    section: r.section,
+    content: r.content,
+    subject: r.subject,
+    predicate: r.predicate,
+    object: r.object,
+    validFrom: r.valid_from,
+    validTo: r.valid_to,
+    confidence: r.confidence,
+    sourceMessageIds: parseArray<number>(r.source_message_ids),
+    tags: parseArray<string>(r.tags),
+    contentHash: r.content_hash,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }));
+}
+
+export async function loadMemoryEvents(env: Env, limit = 2000): Promise<MemoryEvent[]> {
+  const rows = await env.DB.prepare(
+    `SELECT id, section, date_key, summary, participants, emotions,
+            source_message_ids, content_hash, created_at
+     FROM memory_events ORDER BY date_key DESC, id LIMIT ?`,
+  )
+    .bind(limit)
+    .all<{
+      id: string;
+      section: string;
+      date_key: string;
+      summary: string;
+      participants: string;
+      emotions: string;
+      source_message_ids: string;
+      content_hash: string;
+      created_at: number;
+    }>();
+  return (rows.results ?? []).map((r) => ({
+    id: r.id,
+    section: r.section,
+    dateKey: r.date_key,
+    summary: r.summary,
+    participants: r.participants,
+    emotions: r.emotions,
+    sourceMessageIds: parseArray<number>(r.source_message_ids),
+    contentHash: r.content_hash,
+    createdAt: r.created_at,
+  }));
+}
+
+export async function loadMemoryContext(env: Env): Promise<{ facts: MemoryFact[]; events: MemoryEvent[] }> {
+  const [facts, events] = await Promise.all([loadMemoryFacts(env), loadMemoryEvents(env)]);
+  return { facts, events };
 }
 
 export async function memoryContextStats(env: Env): Promise<MemoryContextStats> {

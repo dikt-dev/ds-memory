@@ -104,6 +104,8 @@ export async function streamChat(
   // Phase 2：Memory Context 影子/新引擎。默认 legacy，不改变线上回复。
   const memoryEngine = (env.MEMORY_ENGINE ?? 'legacy').toLowerCase();
   if (memoryEngine === 'shadow' || memoryEngine === 'next') {
+    const oldBytes = byteLength(recalledRaw);
+    const startedAt = performance.now();
     try {
       const chunks = await loadMemoryChunks(env);
       const picked = rankMemoryChunks(
@@ -118,7 +120,9 @@ export async function streamChat(
         engine: memoryEngine,
         oldItems: recalledRaw.split('\n').filter((line) => line.startsWith('- ')).length,
         nextItems: picked.length,
+        oldBytes,
         nextBytes: byteLength(nextRaw),
+        shadowMs: Math.round(performance.now() - startedAt),
       });
       if (memoryEngine === 'next' && nextRaw) recalledRaw = nextRaw;
     } catch (e) {
@@ -140,6 +144,7 @@ export async function streamChat(
     requestId: requestId ?? 'none',
     channel,
     memoryMode: promptMemory.mode,
+    memoryEngine,
     promptBytes: byteLength(promptMemory.text),
     historyRounds: groupTurns(history).length,
     recalledItems: recalled.split('\n').filter((line) => line.startsWith('- ')).length,

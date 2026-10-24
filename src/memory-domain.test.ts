@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildMemoryChunks,
+  canonicalizeFacts,
   factId,
   formatMemoryChunks,
+  isFactActive,
   parseMemoryContext,
   projectMemoryContext,
   rankMemoryChunks,
   stableHash,
+  type MemoryFact,
 } from './memory-domain';
 
 const SAMPLE = `# 长期记忆
@@ -75,6 +78,55 @@ describe('memory-domain 投影', () => {
     expect(out).toContain('- [26-10-01] 第一次聊天聊到凌晨');
     expect(out).toContain('## 近期动态');
     expect(out).toContain('好感度：620');
+  });
+});
+
+function fact(overrides: Partial<MemoryFact> = {}): MemoryFact {
+  return {
+    id: factId('关于用户', '2026-10-01', '城市=杭州'),
+    section: '关于用户',
+    content: '城市=杭州',
+    subject: '城市',
+    predicate: '城市',
+    object: '杭州',
+    validFrom: '2026-10-01',
+    validTo: null,
+    confidence: 1,
+    sourceMessageIds: [],
+    tags: [],
+    contentHash: stableHash('城市=杭州'),
+    createdAt: 1,
+    updatedAt: 1,
+    ...overrides,
+  };
+}
+
+describe('memory-domain 有效期/冲突', () => {
+  it('valid_to 之后失效', () => {
+    expect(isFactActive(fact(), '2026-10-24')).toBe(true);
+    expect(isFactActive(fact({ validTo: '2026-10-20' }), '2026-10-24')).toBe(false);
+    expect(isFactActive(fact({ validFrom: '2026-10-25' }), '2026-10-24')).toBe(false);
+  });
+
+  it('同一 predicate 保留较新事实并合并来源', () => {
+    const old = fact({ validFrom: '2026-10-01', sourceMessageIds: [1] });
+    const newer = fact({
+      id: factId('关于用户', '2026-10-20', '城市=上海'),
+      content: '城市=上海',
+      object: '上海',
+      validFrom: '2026-10-20',
+      contentHash: stableHash('城市=上海'),
+      sourceMessageIds: [2],
+    });
+    const out = canonicalizeFacts([old, newer], '2026-10-24');
+    expect(out).toHaveLength(1);
+    expect(out[0].object).toBe('上海');
+    expect(out[0].sourceMessageIds).toEqual([1, 2]);
+  });
+
+  it('过期事实不进入 canonical 集合', () => {
+    const out = canonicalizeFacts([fact({ validTo: '2026-10-01' })], '2026-10-24');
+    expect(out).toHaveLength(0);
   });
 });
 

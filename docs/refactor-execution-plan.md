@@ -14,7 +14,7 @@
 |---|---|---|---|
 | 0 | ✅ 完成（tagged） | `docs/phase-0-report.md` | `refactor-p0` |
 | 1 | ✅ 完成（tagged） | `docs/phase-1-report.md` | `refactor-p1` |
-| 2 | 🚧 2B 完成，门禁待跑 | `docs/phase-2-progress.md` | `refactor-p2` |
+| 2 | 🚧 门禁增量完成，7 天影子待跑 | `docs/phase-2-progress.md` | `refactor-p2` |
 | 3 | ⏳ 待开始 | - | `refactor-p3` |
 | 4 | ⏳ 待开始 | - | `refactor-p4` |
 | 5 | ⏳ 待开始 | - | `refactor-p5` |
