@@ -286,6 +286,8 @@ openaiApp.post('/chat/completions', async (c) => {
     tools?: unknown;
     inject_history?: unknown;
     files?: unknown;
+    /** 客户端已直传 R2 的原图 key（如大 GIF），只记录不重复上传 */
+    image_keys?: unknown;
     /** false = 这轮不要写进聊天记录（指令类消息） */
     record?: unknown;
   } | null;
@@ -634,6 +636,13 @@ openaiApp.post('/chat/completions', async (c) => {
   //    带 #__store_only 的（GIF 原图）存 R2 后从模型请求里移除。
   const imageKeys: string[] = [];
   let transientImages = 0;
+  if (!skipRecording && Array.isArray(body?.image_keys)) {
+    for (const raw of body.image_keys) {
+      if (typeof raw === 'string' && raw.startsWith('images/') && raw.length <= 200) {
+        imageKeys.push(raw);
+      }
+    }
+  }
   if (!skipRecording && lastUser && Array.isArray(lastUser.content)) {
     for (const part of lastUser.content) {
       if (part.type !== 'image_url') continue;
