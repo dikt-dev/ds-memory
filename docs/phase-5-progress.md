@@ -220,6 +220,7 @@ wrangler deploy --dry-run
 | QQ shadow 7 天 | ⏳ | 已开始，需持续观察 |
 | QQ next | ⏳ | shadow 通过后 |
 | 网页/主动消息切换 | ⏳ | 最后 |
+| D1/R2 免费额度 | ✅ | D1 1.23MB；R2 1.14MB / 13 objects |
 | 2 周稳定门禁 | ⏳ | Phase 5 tag 前 |
 
 ---
