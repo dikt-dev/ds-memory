@@ -10,15 +10,15 @@ import { buildDayContext, hasHolidayTable } from './holidays';
 import { addDays, dateKeyInBeijing, isoInBeijing } from './date';
 import { randomHex, verifyPassword } from './auth';
 import { streamChat } from './chat';
-import { messagesPage, usageByDay } from './db';
+import { messagesPage, usageByDay, messagesByDate, assistantReplyTo } from './db';
 import { getMemory, MEMORY_KV_KEY } from './memory';
 import { messagesSince } from './db';
 import { byteLength } from './memory-maintenance';
 import { getCityConfig, setCity } from './settings';
 import { fetchWeather } from './weather';
 import { saveImage } from './media';
-import { deleteObject, getObject, getStorageMode, listKeys, secondaryEnabled } from './storage';
-import { runDailyArchive, runContextRefresh, runMonthlyMerge } from './jobs';
+import { deleteObject, getObject, getStorageMode, listKeys, putObject, secondaryEnabled } from './storage';
+import { runDailyArchive, runContextRefresh, runMonthlyMerge, archiveOneDay } from './jobs';
 import { reindexMemory } from './memory-index';
 import { generateRollup, previousPeriods } from './memory-rollups';
 import { getOrCreateDayContext } from './context';
@@ -26,6 +26,7 @@ import { parseRelationValues, reportSectionBudgets } from './memory-maintenance'
 import { analyzeMood } from './mood';
 import { mergeMood, needsAiVerification, verifyMoodWithAI } from './mood-ai';
 import {
+  checkChannelOffline,
   diagnoseProactive,
   runProactiveNow,
   runWebProactiveRandom,
@@ -345,7 +346,7 @@ app.post('/api/admin/memory/rollup', requireAuth, async (c) => {
 });
 /** 危险操作：清空 D1 全部业务表 + R2 全部对象（主/小号）+ 记忆相关 KV，仅测试期使用。 */
 app.post('/api/admin/wipe-data', requireAuth, async (c) => {
-  const tables = ['messages', 'proactive_feedback', 'proactive_log', 'proactive_queue', 'cron_runs', 'memory_entries'];
+  const tables = ['messages', 'proactive_feedback', 'proactive_log', 'proactive_queue', 'cron_runs', 'memory_entries', 'memory_rollups'];
   const d1 = { tables: 0, rows: 0 };
   for (const t of tables) {
     const r = await c.env.DB.prepare(`DELETE FROM ${t}`).run();
@@ -363,7 +364,7 @@ app.post('/api/admin/wipe-data', requireAuth, async (c) => {
     'profile:user', 'profile:dirty', 'proactive:heartbeat',
     'summary:2026-10-23', 'summary:2026-10-24',
     'mood:usage:2026-10-23', 'mood:usage:2026-10-24',
-    'memory:index',
+    'memory:index', 'emotion:state',
   ];
   for (const k of kvKeys) await c.env.KV.delete(k).catch(() => {});
   return c.json({ ok: true, d1, r2_deleted: r2, kv_cleared: kvKeys.length });
@@ -371,6 +372,39 @@ app.post('/api/admin/wipe-data', requireAuth, async (c) => {
 app.post('/api/admin/run-daily', requireAuth, async (c) => {
   const result = await runDailyArchive(c.env, new Date());
   return c.json({ ok: true, ...result });
+});
+/**
+ * 重建日归档（重写 R2 chat_logs 并重新提炼当天记忆；D1 消息不动）。
+ * body: { dates?: string[] }，不传则按 D1 里出现的所有 date_key 逐天重建。
+ */
+app.post('/api/admin/rearchive-logs', requireAuth, async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { dates?: string[] };
+  let dates = Array.isArray(body.dates) ? body.dates : [];
+  if (dates.length === 0) {
+    const rows = await c.env.DB.prepare(
+      'SELECT DISTINCT date_key FROM messages ORDER BY date_key ASC',
+    ).all<{ date_key: string }>();
+    dates = (rows.results ?? []).map((r) => r.date_key).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
+  }
+  const done: Array<{ date: string; messages: number; distilled: boolean; memory_bytes: number }> = [];
+  for (const date of dates) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    // 允许重跑：清掉该日的归档锁，并删除旧日志（archiveOneDay 会重新写入）
+    await c.env.DB.prepare(
+      "DELETE FROM cron_runs WHERE job_type = 'daily_archive' AND target = ?",
+    )
+      .bind(date)
+      .run();
+    await deleteObject(c.env, `chat_logs/${date}.log`).catch(() => {});
+    const r = await archiveOneDay(c.env, date, new Date());
+    done.push({
+      date,
+      messages: r.messages,
+      distilled: r.distilled,
+      memory_bytes: r.memory_bytes_after,
+    });
+  }
+  return c.json({ ok: true, dates: done });
 });
 app.post('/api/admin/run-monthly', requireAuth, async (c) => {
   const result = await runMonthlyMerge(c.env, new Date());
@@ -702,6 +736,11 @@ async function maybeRefreshContext(env: Env, now: Date): Promise<void> {
   await runContextRefresh(env, now);
 }
 
+async function runChannelCheck(env: Env, now: Date): Promise<void> {
+  const result = await checkChannelOffline(env, now).catch(() => 'skip' as const);
+  if (result === 'alerted') console.warn('[cron] QQ 通道掉线，已入队提醒');
+}
+
 export default {
   fetch: app.fetch,
   /**
@@ -730,6 +769,8 @@ export default {
     }
 
     if (cron === '*/5 1-14 * * *') {
+      // QQ 通道掉线检查：与主动消息是否暂停无关，每次 tick 都查
+      ctx.waitUntil(runChannelCheck(env, now));
       // 白天随机主动消息：打分决策 + 落库 + 推送 QQ（直连或队列）
       ctx.waitUntil(runWebProactiveRandom(env, now));
       // 这条 cron 实际覆盖 UTC 8 点 → 北京 16:00 的 context 刷新
@@ -738,6 +779,8 @@ export default {
     }
 
     if (cron === '*/5 23,0,14,15,16 * * *') {
+      // QQ 通道掉线检查（同上）
+      ctx.waitUntil(runChannelCheck(env, now));
       // 早晚固定主动消息：打分决策 + 落库 + 推送 QQ（直连或队列）
       ctx.waitUntil(runWebProactiveSlot(env, now));
       // 这条 cron 覆盖 UTC 0 / 16 点 → 北京 08:00 / 24:00 的 context 刷新

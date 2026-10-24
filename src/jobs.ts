@@ -113,7 +113,7 @@ async function finishJob(env: Env, jobType: string, target: string, detail: stri
 }
 
 /** 归档单个自然日：消息 → 上下文+天气 → R2 .log → AI 提炼 → 大小维护 → 刷新记忆缓存。 */
-async function archiveOneDay(env: Env, target: string, now: Date): Promise<DailyArchiveResult> {
+export async function archiveOneDay(env: Env, target: string, now: Date): Promise<DailyArchiveResult> {
   const base: DailyArchiveResult = {
     target,
     messages: 0,
