@@ -10,7 +10,8 @@
     "test": "vitest run",
     "deploy": "wrangler deploy",
     "db:init": "wrangler d1 execute ds-memory-db --remote --file=./schema.sql",
-    "password:hash": "node scripts/hash-password.mjs"
+    "password:hash": "node scripts/hash-password.mjs",
+    "observe:p5": "node scripts/p5-observe.mjs"
   },
   "dependencies": {
     "aws4fetch": "^1.0.20",

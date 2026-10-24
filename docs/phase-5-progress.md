@@ -343,10 +343,11 @@ Connection reset by peer
 
 Phase 5 工程侧已完成，剩余是时间门禁：
 
-1. QQ shadow 连续观察 ≥7 天：看 `engine_metrics`、错误率、延迟、事实/情绪条目；
-2. 无 P0 后切 `MEMORY_ENGINE_QQ=next` / `AFFECT_ENGINE_QQ=next`，再观察 ≥7 天；
-3. 网页与主动消息按同样的 legacy → shadow → next 顺序切换；
-4. 2 周稳定后执行旧表/旧代码清理，再打 `refactor-p5`。
+1. 每天跑 `node scripts/p5-observe.mjs`，快照写入 `backup/p5-observation/`；
+2. QQ shadow 连续观察 ≥7 天：看 `engine_metrics`、错误率、延迟、事实/情绪条目；
+3. 无 P0 后切 `MEMORY_ENGINE_QQ=next` / `AFFECT_ENGINE_QQ=next`，再观察 ≥7 天；
+4. 网页与主动消息按同样的 legacy → shadow → next 顺序切换；
+5. 2 周稳定后执行旧表/旧代码清理，再打 `refactor-p5`。
 
 在那之前：
 - 不回滚/不删除旧表；
