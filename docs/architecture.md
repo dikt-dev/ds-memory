@@ -173,7 +173,7 @@ R2 根目录/
    - 今日摘要（D1 runtime_state，仅当 memo:24h 不存在时）
    - 最近 **10 轮**消息（D1，按 turn_id 分组、时间从旧到新、每条带时间戳）
    - 按话题召回的 memory_entries top-k（关键词优先，必要时补向量）
-   - Phase 2：Memory Context（`MEMORY_ENGINE=shadow` 只记录对比，`next` 使用 facts/chunks 召回）
+   - Phase 2/5：Memory Context（`MEMORY_ENGINE[_QQ|_WEB]=shadow|next`；shadow 只记录对比，next 使用 facts/chunks 召回）
    - 情感快照（5 轴关系原型 + 8 维情绪 + 未化解事件 → 行为指令）
 ③ 落 user 消息（D1，带 channel）
 ④ 调 DeepSeek（流式，thinking=disabled）
@@ -189,7 +189,8 @@ POST /v1/chat/completions（Bearer 鉴权）
     ↓
 ① 解析 OpenAI 格式消息（支持文本+图片数组）
 ② 清洗 AstrBot 的 <system_reminder> 和 [Image N: ...] 内部路径
-③ 图片：压缩存 R2 → 从 R2 读回 base64 → 发给 DeepSeek
+③ 图片：普通图压缩存 R2；大 GIF 走 `POST /api/upload/image` raw binary 原样存 R2，
+   客户端抽帧后用 `image_keys` 只记录原图 key → 发给 DeepSeek 的是帧拼图
 ④ 组装上下文（同上；inject_history=true 时从 D1/R2 补最近 10 轮并带时间戳）
 ⑤ 落 user 消息（channel=astrobot，增量去重）
 ⑥ 流式/非流式返回 + 落 assistant + 计费

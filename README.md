@@ -13,7 +13,7 @@
 
 - **四层记忆**：长期（memory.md）/ 档案（R2，按需检索）/ 中期（最近 24 小时）/ 短期（最近 N 条原文）
 - **每天自动提炼**：04:00 归档前一天对话，提炼成条目合并进 `memory.md`，超阈值自动压缩
-- **关系数值**：好感度 / 亲密度 / 心情值三维独立演化，决定回复态度
+- **关系数值**：好感度 / 信任 / 尊重 / 吸引 / 亲密度 5 轴，叠加 8 维情绪与态度策略
 - **活人感**：口语化风格、情绪残留、疲劳度、时段状态、反 AI 套话兜底
 - **主动消息**：早晚两档 + 白天随机，按打分决策是否真的发；支持队列或直连推送
 - **多端接入**：网页 SSE 聊天、OpenAI 兼容端点（AstrBot 等）、图片、文件
@@ -82,6 +82,11 @@ node scripts/try-chat.mjs "在干嘛"   # 命令行试聊，输出字数/行数/
 | `PRICE_*` | 计费单价（元/百万 tokens，高峰价；闲时自动减半） |
 | `PROACTIVE_LEVEL` | 主动消息强度：`quiet` / `normal` / `active` |
 | `STORAGE_THRESHOLD_BYTES` | 主账号 R2 容量阈值，超过后新写入切小号（默认 8.5GB） |
+| `AUTH_MODE` | `signed`（默认，HMAC Cookie）或 `kv`（旧会话，回滚用） |
+| `MEMORY_ENGINE` | 全局记忆引擎：`legacy` / `shadow` / `next` |
+| `AFFECT_ENGINE` | 全局关系/情绪引擎：`legacy` / `shadow` / `next` |
+| `MEMORY_ENGINE_QQ` / `MEMORY_ENGINE_WEB` | 按渠道覆盖记忆引擎（Phase 5 切流用） |
+| `AFFECT_ENGINE_QQ` / `AFFECT_ENGINE_WEB` | 按渠道覆盖关系引擎（Phase 5 切流用） |
 | `ASTRBOT_BASE_URL` / `ASTRBOT_UMO` | AstrBot 直连推送地址与会话 UMO；留空则走队列模式 |
 | `CHARACTER_NAME` | 角色自称，缺省「小忆」；同时作用于系统提示词、状态卡和网页标题 |
 | `USER_ADDRESS` | 角色怎么称呼你，缺省按记忆自然称呼；填了就会固定用它 |
@@ -121,12 +126,13 @@ USER_ADDRESS   = "主人"     # 它怎么称呼你（可删，改用记忆里的
 | 长期档案 | R2 `memory/archive.md` | 永久 | **按需检索**，命中才注入 |
 | 中期 | KV `memo:24h` | 最近 24 小时 | 每 3 小时或 15 条消息滚动 |
 | 短期 | D1 最近 **10 轮**原文 | 当下 | 每轮按时间从旧到新注入，每条带 `[MM-DD HH:mm]` |
+| 结构化记忆 | D1 `memory_facts/events/summaries/chunks` | 长期 | validity + provenance；Phase 5 以 shadow 投影/检索验证 |
 
 - **密度优先**：条目用「电报体」（去虚词、单条 ≤50 字），稳定事实用 `键=值`（同键原地覆盖）
 - **每日去重**：归档时只合「关于用户/偏好与习惯」的同键/同内容，以及其它分区同一天同内容的重复；受保护分区一行不动
 - **注入策略**：小记忆全量带上（稳定前缀、命中缓存、不依赖召回）；大记忆只带核心+稳定画像，其余走召回
 - **分层**：`memory.md` 超过 24KB 时，把「共同经历/近期动态/进行中的事项」最旧条目无损搬进档案（仍可被索引召回）
-- **召回**：先关键词/标签/同义词打分，只有候选不足或分数太低时才补向量；最多注入 6 条，无命中不强行塞无关记忆
+- **召回**：关键词/双字/标签/同义词 + `bge-m3` 向量，RRF 融合 + MMR 去重；按 2400 字节预算装包，无命中不强行塞无关记忆
 - **归档可靠性**：提炼失败不会把当天标记为完成；第二天自动补跑；D1 清理只删「归档+提炼都成功」的日期
 
 > 已有部署升级：先执行 `migrations/002-memory-index-dup-of.sql`（补 `memory_entries.dup_of`），否则检索索引无法写入。
@@ -136,6 +142,21 @@ USER_ADDRESS   = "主人"     # 它怎么称呼你（可删，改用记忆里的
 - 早晚两个时段（北京时间 07:45–08:15 / 22:45–23:15）+ 白天 09:00–22:30 随机 0~2 条
 - **打分决策**：待跟进事项、天气变化、特殊日期、互动缺口、活跃时段；静默期与冷却期是否决项
 - 投递两种模式：队列（客户端轮询 `proactive_queue`，无需公网入口，推荐）或直连 AstrBot HTTP API
+
+## 引擎切换与回滚（Phase 5）
+
+按渠道独立开关，改完重新 deploy 即可：
+
+```toml
+MEMORY_ENGINE_QQ = "shadow" # legacy | shadow | next
+AFFECT_ENGINE_QQ = "shadow"
+MEMORY_ENGINE_WEB = "legacy"
+AFFECT_ENGINE_WEB = "legacy"
+```
+
+- `legacy`：旧路径；`shadow`：新引擎只计算、不改变回复；`next`：新引擎接管。
+- 回滚：把对应变量改回 `legacy` 并 deploy。
+- 切换前先看 `GET /api/admin/readiness` 和 `GET /api/admin/engine-metrics?days=7`。
 
 ## AstrBot 接入
 
@@ -162,7 +183,11 @@ Worker 提供 OpenAI 兼容端点，AstrBot 作为「OpenAI Compatible」服务�
 | GET | `/api/history`、`/api/history/since` | Cookie | 历史分页 / 增量拉取 |
 | GET | `/api/usage` | Cookie | 计费统计（含提炼费用） |
 | GET/POST | `/v1/models`、`/v1/chat/completions` | Bearer | OpenAI 兼容端点 |
+| POST | `/api/upload/image` | Bearer | 原图 raw binary 直传 R2（大 GIF，不压缩） |
 | GET/POST | `/api/proactive/pending`、`/ack` | Bearer | 主动消息队列 |
+| GET | `/api/admin/readiness` | Cookie | Phase 5 就绪检查（迁移/上下文/渠道引擎） |
+| GET | `/api/admin/engine-metrics?days=7` | Cookie | shadow/next 按天指标 |
+| GET | `/api/admin/storage-check` | Cookie | 小号 R2 的 put/get/delete + 主模式回源探针 |
 | POST | `/api/admin/*` | Cookie | 手动归档 / 合并 / 触发主动消息 / 刷新 memory 缓存 |
 | POST | `/api/admin/memory/refresh` | Cookie | 手动改完 R2 memory.md 后强制刷新 KV 缓存 |
 | POST | `/api/admin/memory/reload` | Cookie | 刷新 KV 缓存 + 重建记忆检索索引 |
@@ -203,7 +228,7 @@ src/
 
 ```bash
 pnpm build   # tsc --noEmit
-pnpm test    # vitest（45 个测试文件）
+pnpm test    # vitest（57 个测试文件 / 692 用例）
 ```
 
 ## 隐私与免责
