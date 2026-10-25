@@ -57,6 +57,11 @@ export function buildImageKey(dateKey: string, ms: number, ext: string): string 
   return `images/${dateKey}/${ms}.${ext}`;
 }
 
+/** 生成语音对象键：audio/{日期}/{时间戳}.{ext}。 */
+export function buildAudioKey(dateKey: string, ms: number, ext: string): string {
+  return `audio/${dateKey}/${ms}.${ext}`;
+}
+
 /** 最近邻区域平均缩放（RGBA）。 */
 function downscaleRGBA(src: Uint8Array, sw: number, sh: number, dw: number, dh: number): Uint8Array {
   const out = new Uint8Array(dw * dh * 4);

@@ -228,6 +228,7 @@
   .bubble h1, .bubble h2, .bubble h3, .bubble h4 { font-size: 1em; margin: .6em 0 .25em; font-weight: 650; }
   .bubble hr { border: none; border-top: 1px solid var(--border); margin: .7em 0; }
   .bubble img.msg-img { max-width: 100%; max-height: 320px; border-radius: 10px; margin-top: .5rem; display: block; object-fit: contain; }
+  .msg-audio { width: min(100%, 320px); height: 34px; margin-top: .45rem; display: block; }
   .img-missing {
     display: inline-block; font-size: .78rem; color: var(--muted);
     background: var(--chip-bg); border: 1px dashed var(--border-strong);
@@ -250,6 +251,20 @@
   .msg:hover .voice-btn, .voice-btn:focus-visible { opacity: 1; }
   .voice-btn:hover { background: var(--hover); }
   .voice-btn.speaking { opacity: 1; color: #fff; background: var(--accent); }
+  .voice-card {
+    display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+    margin: .45rem 0; padding: .45rem .6rem; border: 1px solid var(--border);
+    border-radius: 10px; background: var(--chip-bg);
+  }
+  .voice-tag { font-size: .72rem; color: var(--accent); white-space: nowrap; }
+  .voice-text { flex: 1; min-width: 120px; font-size: .82rem; color: var(--text-soft); }
+  .voice-segment-play {
+    background: none; border: 1px solid var(--border-strong); color: var(--text-soft);
+    font-size: .7rem; cursor: pointer; padding: .15rem .45rem; border-radius: 6px;
+  }
+  .voice-segment-play:hover { background: var(--hover); color: var(--text); }
+  .voice-segment-play.speaking { color: #fff; background: var(--accent); border-color: var(--accent); }
+  .voice-audio { width: min(100%, 260px); height: 32px; }
 
   /* ---------- 输入区 ---------- */
   #composer {
@@ -444,6 +459,16 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const messagesEl = $('messages');
+// 语音卡里的单段播放按钮走事件委托：流式重绘后按钮也不会丢监听
+messagesEl.addEventListener('click', (event) => {
+  const btn = event.target.closest('.voice-segment-play');
+  if (!btn) return;
+  const bubble = btn.closest('.bubble');
+  let voices = [];
+  try { voices = JSON.parse(bubble && bubble.dataset.voices || '[]'); } catch { voices = []; }
+  const text = voices[Number(btn.dataset.index)];
+  if (text) speakVoice([text], btn);
+});
 
 /* ---------- 主题（跟随系统 / 深色 / 浅色，默认跟随系统） ---------- */
 const THEME_KEY = 'ds-memory-theme';
@@ -526,7 +551,7 @@ function pickChineseVoice() {
 function resetVoiceButton(btn) {
   if (!btn) return;
   btn.classList.remove('speaking');
-  btn.textContent = '🔊 朗读';
+  btn.textContent = btn.dataset.label || '🔊 朗读';
 }
 function cleanSpeakText(src) {
   return String(src || '')
@@ -542,7 +567,7 @@ function cleanSpeakText(src) {
 }
 function stopVoice(btn) {
   if (window.speechSynthesis) window.speechSynthesis.cancel();
-  document.querySelectorAll('.voice-btn.speaking').forEach(resetVoiceButton);
+  document.querySelectorAll('.voice-btn.speaking, .voice-segment-play.speaking').forEach(resetVoiceButton);
   resetVoiceButton(btn);
 }
 function speakVoice(texts, btn) {
@@ -553,7 +578,7 @@ function speakVoice(texts, btn) {
   }
   if (btn.classList.contains('speaking')) { stopVoice(btn); return; }
   window.speechSynthesis.cancel();
-  document.querySelectorAll('.voice-btn.speaking').forEach(resetVoiceButton);
+  document.querySelectorAll('.voice-btn.speaking, .voice-segment-play.speaking').forEach(resetVoiceButton);
   btn.classList.add('speaking');
   btn.textContent = '⏹ 停止';
   const voice = pickChineseVoice();
@@ -572,6 +597,92 @@ function speakVoice(texts, btn) {
   });
   utterances.forEach((u) => window.speechSynthesis.speak(u));
 }
+const VOICE_BLOCK_RE = /(?:\[\s*(?:语音消息|语音|voice)\s*\]\s*[「“]([^」”]*)[」”])|(?:[（(]\s*[【\[]\s*语音消息\s*[】\]]\s*发送\s*[：:]\s*([^）)\n]+)[）)])|(?:[【\[]\s*语音消息\s*[】\]]\s*发送\s*[：:]\s*([^\n）)]+))|(?:[【\[]\s*语音(?:消息)?\s*[】\]]\s*(?!(?:发送\s*[：:]|[「“]))([^\n]+))|(?:^（语音）\s*(.+)$)/gmi;
+function voiceCardHtml(text, index, audioKey) {
+  const play = audioKey
+    ? '<audio class="voice-audio" controls preload="metadata" src="/api/audio/' + audioKey + '"></audio>'
+    : '<button type="button" class="voice-segment-play" data-index="' + index + '" data-label="▶ 播放">▶ 播放</button>';
+  return '<div class="voice-card">'
+    + '<span class="voice-tag">🎤 语音</span>'
+    + '<span class="voice-text">' + escapeHtml(text) + '</span>'
+    + play
+    + '</div>';
+}
+function renderAssistantContent(raw, audioKeys = []) {
+  const src = String(raw || '');
+  const voices = [];
+  let html = '';
+  let last = 0;
+  let m;
+  VOICE_BLOCK_RE.lastIndex = 0;
+  while ((m = VOICE_BLOCK_RE.exec(src))) {
+    const before = src.slice(last, m.index);
+    if (before.trim()) html += renderMarkdown(before);
+    const spoken = cleanSpeakText(m[1] || m[2] || m[3] || m[4] || m[5] || '');
+    if (spoken) {
+      html += voiceCardHtml(spoken, voices.length, audioKeys[voices.length] || '');
+      voices.push(spoken);
+    }
+    last = m.index + m[0].length;
+  }
+  if (!voices.length) return { html: renderMarkdown(src), voices: [] };
+  const rest = src.slice(last);
+  if (rest.trim()) html += renderMarkdown(rest);
+  return { html, voices };
+}
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+async function fetchTtsKey(text) {
+  try {
+    const create = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    if (!create.ok) return '';
+    const created = await create.json();
+    const jobId = Number(created.job_id || 0);
+    if (!jobId) return '';
+    const deadline = Date.now() + 8000;
+    while (Date.now() < deadline) {
+      await sleep(500);
+      const res = await fetch('/api/tts/jobs/' + jobId);
+      if (!res.ok) return '';
+      const job = await res.json();
+      if (job.status === 'done' && typeof job.audio_key === 'string' && job.audio_key) {
+        return job.audio_key;
+      }
+      if (job.status === 'failed') break;
+    }
+    // 手机 8 秒内没完成/不在线 → Worker MeloTTS 兜底
+    const fb = await fetch('/api/tts/jobs/' + jobId + '/fallback', { method: 'POST' });
+    if (!fb.ok) return '';
+    const data = await fb.json();
+    return typeof data.audio_key === 'string' ? data.audio_key : '';
+  } catch {
+    return '';
+  }
+}
+async function finalizeAssistantBubble(bubble) {
+  if (!bubble) return;
+  const raw = bubble.dataset.raw || '';
+  if (!raw) return;
+  const parsed = renderAssistantContent(raw);
+  bubble.innerHTML = parsed.html;
+  bubble.dataset.voices = JSON.stringify(parsed.voices);
+  if (parsed.voices.length) {
+    // 手机 TTS 优先；超时由 /fallback 用 MeloTTS 生成；失败保留浏览器朗读按钮
+    const keys = await Promise.all(parsed.voices.map((text) => fetchTtsKey(text)));
+    if (keys.some(Boolean)) {
+      const withAudio = renderAssistantContent(raw, keys);
+      bubble.innerHTML = withAudio.html;
+      bubble.dataset.voices = JSON.stringify(withAudio.voices);
+    }
+  }
+  refreshVoiceButton(bubble);
+}
+
 function speakTextsForBubble(bubble) {
   const raw = bubble.dataset.raw || '';
   const voices = extractVoiceTexts(raw).map(cleanSpeakText).filter(Boolean);
@@ -594,6 +705,7 @@ function refreshVoiceButton(bubble) {
     btn = document.createElement('button');
     btn.className = 'voice-btn';
     btn.type = 'button';
+    btn.dataset.label = '🔊 朗读';
     btn.textContent = '🔊 朗读';
     btn.addEventListener('click', () => {
       speakVoice(speakTextsForBubble(bubble), btn);
@@ -678,6 +790,11 @@ function buildBubbleEl(role, html, raw) {
   bubble.className = 'bubble';
   bubble.innerHTML = html;
   if (raw != null) bubble.dataset.raw = raw;
+  if (role !== 'user' && raw) {
+    const parsed = renderAssistantContent(raw);
+    bubble.innerHTML = parsed.html;
+    bubble.dataset.voices = JSON.stringify(parsed.voices);
+  }
   body.appendChild(bubble);
 
   const foot = document.createElement('div');
@@ -712,14 +829,18 @@ function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
 
 /* 用户消息渲染：处理 [图片:images/…] 标记与换行；无路径的 [图片] 显示占位提示 */
 function renderUserContent(content) {
-  const re = /\[图片:(images\/[^\]\s]+)\]/g;
+  const re = /\[(图片|语音):((?:images|audio)\/[^\]\s]+)\]/g;
   let html = '';
   let last = 0;
   let m;
   while ((m = re.exec(content))) {
     html += escapeHtml(content.slice(last, m.index));
-    html += '<img class="msg-img" src="/api/image/' + m[1] + '" alt="图片" loading="lazy"'
-          + ' onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'img-missing\',textContent:\'[图片加载失败]\'}))">';
+    if (m[1] === '图片') {
+      html += '<img class="msg-img" src="/api/image/' + m[2] + '" alt="图片" loading="lazy"'
+            + ' onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'img-missing\',textContent:\'[图片加载失败]\'}))">';
+    } else {
+      html += '<audio class="msg-audio" controls preload="metadata" src="/api/audio/' + m[2] + '"></audio>';
+    }
     last = m.index + m[0].length;
   }
   html += escapeHtml(content.slice(last));
@@ -1373,6 +1494,10 @@ async function send() {
     sending = false;
     $('send').disabled = false;
     input.focus();
+    // 流结束后把语音段从正文里拆出来，按“文字 → 语音卡 → 文字”重排
+    if (!bubble.parentElement?.parentElement?.classList.contains('error')) {
+      finalizeAssistantBubble(bubble);
+    }
     // 流结束后补一次拉取，兼顾这期间从 QQ 发来的消息
     pollNewMessages();
   }

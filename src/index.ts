@@ -24,7 +24,7 @@ import { messagesSince } from './db';
 import { byteLength, memoryDensity } from './memory-maintenance';
 import { getCityConfig, setCity } from './settings';
 import { fetchWeather } from './weather';
-import { buildImageKey, saveImage } from './media';
+import { buildAudioKey, buildImageKey, saveImage } from './media';
 import {
   deleteObject,
   getObject,
@@ -86,6 +86,14 @@ import {
 import { explainAttitude } from './attitude-policy';
 import { listAffectTimeline, recordAttitudeSnapshot } from './affect-store';
 import { readEngineMetrics } from './engine-metrics';
+import {
+  ackTtsJob,
+  claimTtsJob,
+  createTtsJob,
+  fallbackTtsJob,
+  getTtsJob,
+  nackTtsJob,
+} from './tts';
 import { applyEventsToVector, extractEmotionEvents, reconcileWithApology, type EmotionEvent } from './emotion-events';
 import { buildEmotionSnapshot, describeEmotionState } from './emotion-snapshot';
 import { decayEmotion, emptyEmotionVector, type EmotionVector } from './emotion-vector';
@@ -371,6 +379,108 @@ app.post('/api/upload/image', async (c) => {
   const key = buildImageKey(dateKey, Date.now(), ext);
   await putObject(c.env, key, buf, { contentType: mime });
   return c.json({ ok: true, key, mime, bytes: buf.length });
+});
+
+/** 语音直传（手机端收到 QQ 语音后转码 MP3，再上传）。 */
+app.post('/api/upload/audio', async (c) => {
+  if (!(await checkQueueAuth(c))) return c.json({ error: 'unauthorized' }, 401);
+  const mime = (c.req.header('content-type') ?? '').split(';')[0].trim().toLowerCase();
+  const allowed: Record<string, string> = {
+    'audio/mpeg': 'mp3',
+    'audio/mp3': 'mp3',
+    'audio/ogg': 'ogg',
+    'audio/opus': 'opus',
+    'audio/wav': 'wav',
+    'audio/x-wav': 'wav',
+    'audio/mp4': 'm4a',
+    'audio/aac': 'aac',
+    'audio/webm': 'webm',
+  };
+  const ext = allowed[mime];
+  if (!ext) return c.json({ error: 'unsupported audio type' }, 415);
+  const maxBytes = 10 * 1024 * 1024;
+  const declared = Number(c.req.header('content-length') ?? '0');
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    return c.json({ error: 'audio too large' }, 413);
+  }
+  const buf = new Uint8Array(await c.req.arrayBuffer());
+  if (buf.length === 0 || buf.length > maxBytes) {
+    return c.json({ error: 'audio too large' }, 413);
+  }
+  const key = buildAudioKey(dateKeyInBeijing(new Date()), Date.now(), ext);
+  await putObject(c.env, key, buf, { contentType: mime });
+  return c.json({ ok: true, key, mime, bytes: buf.length });
+});
+
+/** 网页创建 TTS 任务：手机优先，网页轮询；超时走 fallback。 */
+app.post('/api/tts', requireAuth, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { text?: unknown } | null;
+  const text = typeof body?.text === 'string' ? body.text.trim().slice(0, 300) : '';
+  if (!text) return c.json({ error: 'text 不能为空' }, 400);
+  const jobId = await createTtsJob(c.env, text);
+  if (!jobId) return c.json({ error: '创建任务失败' }, 500);
+  return c.json({ ok: true, job_id: jobId, status: 'pending' });
+});
+
+/** 网页轮询 TTS 任务。 */
+app.get('/api/tts/jobs/:id', requireAuth, async (c) => {
+  const id = Number(c.req.param('id'));
+  if (!Number.isFinite(id)) return c.json({ error: 'invalid id' }, 400);
+  const job = await getTtsJob(c.env, id);
+  if (!job) return c.json({ error: 'not found' }, 404);
+  return c.json({ ok: true, id: job.id, status: job.status, audio_key: job.audio_key });
+});
+
+/** 手机超时后由网页触发 MeloTTS 兜底。 */
+app.post('/api/tts/jobs/:id/fallback', requireAuth, async (c) => {
+  const id = Number(c.req.param('id'));
+  if (!Number.isFinite(id)) return c.json({ error: 'invalid id' }, 400);
+  const key = await fallbackTtsJob(c.env, id).catch(() => null);
+  if (!key) return c.json({ error: 'TTS 兜底失败' }, 502);
+  return c.json({ ok: true, id, status: 'done', audio_key: key });
+});
+
+/** 手机拉取一个待合成任务。 */
+app.get('/api/tts/pending', async (c) => {
+  if (!(await checkQueueAuth(c))) return c.json({ error: 'unauthorized' }, 401);
+  const job = await claimTtsJob(c.env);
+  return c.json({ ok: true, job });
+});
+
+/** 手机合成完成：回传 R2 key。 */
+app.post('/api/tts/ack', async (c) => {
+  if (!(await checkQueueAuth(c))) return c.json({ error: 'unauthorized' }, 401);
+  const body = (await c.req.json().catch(() => null)) as { id?: unknown; audio_key?: unknown } | null;
+  const id = Number(body?.id);
+  const key = typeof body?.audio_key === 'string' ? body.audio_key : '';
+  if (!Number.isFinite(id) || !key) return c.json({ error: 'bad request' }, 400);
+  await ackTtsJob(c.env, id, key);
+  return c.json({ ok: true });
+});
+
+/** 手机合成失败：重试或让网页走兜底。 */
+app.post('/api/tts/nack', async (c) => {
+  if (!(await checkQueueAuth(c))) return c.json({ error: 'unauthorized' }, 401);
+  const body = (await c.req.json().catch(() => null)) as { id?: unknown } | null;
+  const id = Number(body?.id);
+  if (!Number.isFinite(id)) return c.json({ error: 'bad request' }, 400);
+  await nackTtsJob(c.env, id);
+  return c.json({ ok: true });
+});
+
+/** 聊天语音回放（需登录；audio/ 下，主账号优先、小号兜底）。 */
+app.get('/api/audio/*', requireAuth, async (c) => {
+  const key = decodeURIComponent(c.req.path.replace(/^\/api\/audio\//, ''));
+  if (!key.startsWith('audio/')) return c.json({ error: 'not found' }, 404);
+  const obj = await getObject(c.env, key);
+  if (!obj) return c.json({ error: 'not found' }, 404);
+  return new Response(await obj.arrayBuffer(), {
+    headers: {
+      'content-type': obj.httpMetadata?.contentType ?? 'audio/mpeg',
+      'cache-control': 'private, max-age=86400',
+      'accept-ranges': 'bytes',
+    },
+  });
 });
 
 /** 聊天图片回放（需登录；图片存在 R2 images/ 下，主账号优先、小号兜底）。 */

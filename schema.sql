@@ -257,6 +257,20 @@ CREATE TABLE IF NOT EXISTS engine_metrics (
 
 CREATE INDEX IF NOT EXISTS idx_engine_metrics_day ON engine_metrics(day_key);
 
+-- 网页 TTS 任务：手机客户端优先合成，Worker MeloTTS 兜底
+CREATE TABLE IF NOT EXISTS tts_jobs (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  text        TEXT NOT NULL,
+  status      TEXT NOT NULL DEFAULT 'pending',
+  audio_key   TEXT,
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  lease_until TEXT,
+  created_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_tts_jobs_status ON tts_jobs(status, id);
+
 -- ---------- 记忆条目索引（可重建，memory.md/archive.md 是本体） ----------
 CREATE TABLE IF NOT EXISTS memory_entries (
   id          TEXT PRIMARY KEY,

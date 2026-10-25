@@ -288,6 +288,8 @@ openaiApp.post('/chat/completions', async (c) => {
     files?: unknown;
     /** 客户端已直传 R2 的原图 key（如大 GIF），只记录不重复上传 */
     image_keys?: unknown;
+    /** 客户端已直传 R2 的语音 key（QQ 语音转 MP3） */
+    audio_keys?: unknown;
     /** false = 这轮不要写进聊天记录（指令类消息） */
     record?: unknown;
   } | null;
@@ -635,11 +637,19 @@ openaiApp.post('/chat/completions', async (c) => {
   // 3) 图片：普通图片先压缩存 R2；带 #__transient 的（视频帧/拼图）只给模型看，不落 R2。
   //    带 #__store_only 的（GIF 原图）存 R2 后从模型请求里移除。
   const imageKeys: string[] = [];
+  const audioKeys: string[] = [];
   let transientImages = 0;
   if (!skipRecording && Array.isArray(body?.image_keys)) {
     for (const raw of body.image_keys) {
       if (typeof raw === 'string' && raw.startsWith('images/') && raw.length <= 200) {
         imageKeys.push(raw);
+      }
+    }
+  }
+  if (!skipRecording && Array.isArray(body?.audio_keys)) {
+    for (const raw of body.audio_keys) {
+      if (typeof raw === 'string' && raw.startsWith('audio/') && raw.length <= 200) {
+        audioKeys.push(raw);
       }
     }
   }
@@ -698,6 +708,7 @@ openaiApp.post('/chat/completions', async (c) => {
         : lastUserHasImage
           ? ['[图片]']
           : []),
+    ...(audioKeys.length > 0 ? audioKeys.map((k) => `[语音:${k}]`) : []),
   ]
     .filter(Boolean)
     .join('\n');
