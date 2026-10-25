@@ -418,6 +418,7 @@ async function emit(
   slotKey: string,
   kind: 'morning' | 'evening' | 'random',
   scene: string,
+  force = false,
 ): Promise<ProactiveResult> {
   if (!(await claimSlot(env, dateKey, slotKey, kind))) {
     return { skipped: '该时段今天已发送', kind };
@@ -464,7 +465,7 @@ async function emit(
     feedbackMultiplier,
     slot: kind === 'morning' || kind === 'evening' ? kind : 'random',
   });
-  if (!decision.shouldSend) {
+  if (!force && !decision.shouldSend) {
     await releaseSlot(env, dateKey, slotKey);
     return {
       skipped: `分数 ${decision.score} 未达阈值`,
@@ -676,9 +677,10 @@ export async function runProactiveNow(
   env: Env,
   now: Date,
   kind: 'morning' | 'evening' = 'evening',
+  force = false,
 ): Promise<ProactiveResult> {
   const dateKey = dateKeyInBeijing(now);
-  return emit(env, now, dateKey, kind, kind, kind === 'evening' ? '睡前' : '早安');
+  return emit(env, now, dateKey, kind, kind, kind === 'evening' ? '睡前' : '早安', force);
 }
 
 /** 白天随机主动消息（0~2 条，仍受打分约束）。 */

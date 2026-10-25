@@ -1689,9 +1689,9 @@ app.post('/api/proactive/drop', async (c) => {
 /** 手动补发一条固定时段主动消息（Bearer 鉴权，调试/补偿用）。 */
 app.post('/api/admin/proactive-send-now', async (c) => {
   if (!(await checkQueueAuth(c))) return c.json({ error: 'unauthorized' }, 401);
-  const body = (await c.req.json().catch(() => null)) as { kind?: unknown } | null;
+  const body = (await c.req.json().catch(() => null)) as { kind?: unknown; force?: unknown } | null;
   const kind = body?.kind === 'morning' ? 'morning' : 'evening';
-  return c.json(await runProactiveNow(c.env, new Date(), kind));
+  return c.json(await runProactiveNow(c.env, new Date(), kind, body?.force === true));
 });
 
 /** 诊断：为什么现在（没）会发主动消息。只读，不发送、不写库。 */
