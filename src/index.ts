@@ -547,6 +547,57 @@ app.get('/api/audio/*', requireAuth, async (c) => {
   });
 });
 
+/** 普通网页/抖音链接预览：只抓标题和描述，限制内网地址。 */
+app.get('/api/app/web-preview', requireApp, async (c) => {
+  const raw = c.req.query('url') ?? '';
+  let target: URL;
+  try {
+    target = new URL(raw);
+  } catch {
+    return c.json({ error: 'invalid url' }, 400);
+  }
+  if (!/^https?:$/.test(target.protocol)) return c.json({ error: 'invalid protocol' }, 400);
+  const host = target.hostname.toLowerCase();
+  if (
+    host === 'localhost' || host.endsWith('.local') ||
+    /^(?:127\.|10\.|192\.168\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(host) ||
+    host === '[::1]'
+  ) {
+    return c.json({ error: 'private host' }, 400);
+  }
+  try {
+    const ua = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/125.0 Mobile Safari/537.36';
+    const response = await fetch(target.toString(), {
+      headers: { 'User-Agent': ua, Accept: 'text/html,application/xhtml+xml' },
+      redirect: 'follow',
+    });
+    const html = (await response.text()).slice(0, 2_000_000);
+    const meta = (name: string): string => {
+      const a = html.match(new RegExp(
+        `<meta[^>]+(?:property|name)=["']${name}["'][^>]+content=["']([^"']*)`,
+        'i',
+      ));
+      const b = html.match(new RegExp(
+        `<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']${name}["']`,
+        'i',
+      ));
+      return a?.[1] ?? b?.[1] ?? '';
+    };
+    const title = (meta('og:title') || html.match(/<title>([^<]+)<\/title>/i)?.[1] || '')
+      .replace(/\s+/g, ' ').trim().slice(0, 200);
+    const description = (meta('og:description') || meta('description') || '')
+      .replace(/\s+/g, ' ').trim().slice(0, 500);
+    return c.json({
+      title,
+      description,
+      site: target.hostname,
+      douyin: /douyin\.com$/i.test(host),
+    });
+  } catch {
+    return c.json({ error: 'preview failed' }, 502);
+  }
+});
+
 /** B 站短链/视频链接预览：只允许 B 站域名，避免变 SSRF。 */
 app.get('/api/app/link-preview', requireApp, async (c) => {
   try {
@@ -568,7 +619,7 @@ app.get('/api/app/link-preview', requireApp, async (c) => {
     let owner = '';
     let duration = 0;
     let desc = '';
-    const cookie = c.env.BILIBILI_SESSDATA
+    const cookie: Record<string, string> = c.env.BILIBILI_SESSDATA
       ? { Cookie: `SESSDATA=${c.env.BILIBILI_SESSDATA}` }
       : {};
     try {
