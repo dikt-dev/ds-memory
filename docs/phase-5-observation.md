@@ -24,17 +24,20 @@ backup/p5-observation/YYYY-MM-DD.json
 
 `backup/` 已在 `.gitignore`，快照不会进仓库。
 
-## 7 天 QQ shadow 通过条件
+## 7 天 App shadow 通过条件
 
-- `readiness.ready=true`；`memory_engine_qq=shadow`；
-- `readiness.proactive_engine` 当前应为 `shadow`；确认 `engine_metrics` 出现 `kind=proactive` 行；
+> 观察起点：2026-10-25 19:38（Asia/Shanghai）；今日测试消息/情绪/指标已清空。
+> 当前入口为 DS-Mobile，旧的 QQ shadow 阶段不再作为主验收数据。
+
+- `readiness.ready=true`；`memory_engine_mobile=shadow`、`affect_engine_mobile=shadow`；
+- `readiness.proactive_engine` 当前应为 `shadow`；确认 `engine_metrics.channel='mobile'` 出现 memory/affect 行；
 - `engine_metrics` 里 `kind=memory` 有稳定请求量，`new_bytes` 不为 0；
 - 无 5xx / 超时 / `memory.engine.error`；
 - `old_items`/`old_bytes` 允许为 0（说明本轮 legacy 召回本身为空，不是新引擎失败）；
-- 手机 `heartbeat_age_seconds < 180`，`channel_online=true`；
+- App `heartbeat_age_seconds < 180`，通道在线；
 - 用户没有反馈“记错/重复/答非所问”。
 
-## 7 天 QQ next 通过条件
+## 7 天 App next 通过条件
 
 - 回复不再出现空召回、重复记忆、越界关系数值；
 - `attitude-v1` 不出现数值泄露、真实意识宣称、愧疚施压；
@@ -43,7 +46,7 @@ backup/p5-observation/YYYY-MM-DD.json
 
 ## 2 周门禁
 
-- QQ、网页均 `next`，主动消息接新引擎；
+- App 为 `next`，网页保持 legacy 或单独切；主动消息接新引擎；
 - 连续 2 周无 P0；
 - `readiness` 全绿；D1/R2 在免费额度；
 - 回滚演练通过；

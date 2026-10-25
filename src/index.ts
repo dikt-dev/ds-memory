@@ -1625,21 +1625,28 @@ app.route('/v1', openaiApp);
 
 /* ---------- 主动消息队列（反向轮询：客户端拉取） ---------- */
 
-/** Bearer 鉴权（复用 ASTROBOT_API_KEY）。 */
+/** Bearer 鉴权（复用 ASTROBOT_API_KEY；管理端/上传/TTS 只认这个）。 */
 async function checkQueueAuth(c: Context<AppEnv>): Promise<boolean> {
   const auth = c.req.header('authorization') ?? '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   if (!token) return false;
   const expected = c.env.ASTROBOT_API_KEY;
-  if (expected && token === expected) return true;
-  // App 设备 Token 也可以拉主动消息/ACK，避免把 ASTROBOT_API_KEY 打进 APK
+  return Boolean(expected) && token === expected;
+}
+
+/** 只给主动消息 pending/ack/nack 使用：允许设备 Token，避免把 API Key 打进 APK。 */
+async function checkAppOrQueueAuth(c: Context<AppEnv>): Promise<boolean> {
+  if (await checkQueueAuth(c)) return true;
+  const auth = c.req.header('authorization') ?? '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  if (!token) return false;
   const device = await c.env.KV.get(`app:device:${token}`).catch(() => null);
   return device !== null;
 }
 
 /** 拉取待发送的主动消息。 */
 app.get('/api/proactive/pending', async (c) => {
-  if (!(await checkQueueAuth(c))) return c.json({ error: 'unauthorized' }, 401);
+  if (!(await checkAppOrQueueAuth(c))) return c.json({ error: 'unauthorized' }, 401);
   const limitRaw = Number(c.req.query('limit') ?? '5');
   const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 5, 1), 20);
   const messages = await takePending(c.env, limit);
@@ -1650,7 +1657,7 @@ app.get('/api/proactive/pending', async (c) => {
 
 /** 上报发送失败（插件调用）：attempts+1，5 次后不再下发。 */
 app.post('/api/proactive/nack', async (c) => {
-  if (!(await checkQueueAuth(c))) return c.json({ error: 'unauthorized' }, 401);
+  if (!(await checkAppOrQueueAuth(c))) return c.json({ error: 'unauthorized' }, 401);
   const body = await c.req.json().catch(() => null);
   const ids = body && Array.isArray(body.ids) ? body.ids.filter((x: unknown) => typeof x === 'number') : [];
   await markAttempt(c.env, ids);
@@ -1659,7 +1666,7 @@ app.post('/api/proactive/nack', async (c) => {
 
 /** 确认已发送。 */
 app.post('/api/proactive/ack', async (c) => {
-  if (!(await checkQueueAuth(c))) return c.json({ error: 'unauthorized' }, 401);
+  if (!(await checkAppOrQueueAuth(c))) return c.json({ error: 'unauthorized' }, 401);
   const body = await c.req.json().catch(() => null);
   const ids = body && Array.isArray(body.ids) ? body.ids.filter((x: unknown) => typeof x === 'number') : [];
   const acked = await ackSent(c.env, ids);

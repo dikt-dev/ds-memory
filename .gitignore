@@ -12,6 +12,7 @@ coverage/
 memory.md
 chat_logs/
 backup/
+backups/
 *.local
 
 # 系统/编辑器
