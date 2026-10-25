@@ -193,15 +193,19 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   lines.push(`- 现在：${isoInBeijing(now)}（${ctx.date} ${ctx.weekday}）`);
   lines.push(`- 消息来源：${CHANNEL_LABELS[channel]}`);
   // ★ 聊天软件不渲染 Markdown：只对这类渠道加约束，网页端保持原样
+  const voiceRule =
+    '也可以发语音：**要说的话必须用引号包起来**，写成 [语音]「要说的话」；系统只念引号里的内容，引号外照常当文字发。' +
+    '语音里也要带标点：问句用？、强调/惊讶用！、停顿/迟疑用……、拖音用～，TTS 会靠这些停顿和变调，别把标点删光。' +
+    '语音句子必须通顺完整、能直接念出来；不要重复主语（比如“为你本小姐只是…”），不要写到一半转折，写完先在心里读一遍。';
   if (channel === 'astrobot') {
     lines.push('- 对方在 QQ 这类聊天软件里看：不支持 Markdown，纯文本才能正常显示。');
     lines.push(
       '- 你可以发表情：写成 [face:表情名]，系统会换成 QQ 表情。' +
-        (voiceReply
-          ? '也可以发语音：**要说的话必须用引号包起来**，写成 [语音]「要说的话」；系统只念引号里的内容，引号外照常当文字发。语音里也要带标点：问句用？、强调/惊讶用！、停顿/迟疑用……、拖音用～，TTS 会靠这些停顿和变调，别把标点删光。'
-          : '') +
+        (voiceReply ? voiceRule : '') +
         '发不发、发哪种、发多长，都随你。',
     );
+  } else if (voiceReply) {
+    lines.push('- ' + voiceRule);
   }
   lines.push(`- 节假日：${ctx.holiday_note}`);
   if (weather) {

@@ -460,14 +460,31 @@
 const $ = (id) => document.getElementById(id);
 const messagesEl = $('messages');
 // 语音卡里的单段播放按钮走事件委托：流式重绘后按钮也不会丢监听
-messagesEl.addEventListener('click', (event) => {
+messagesEl.addEventListener('click', async (event) => {
   const btn = event.target.closest('.voice-segment-play');
-  if (!btn) return;
+  if (!btn || btn.disabled) return;
   const bubble = btn.closest('.bubble');
   let voices = [];
   try { voices = JSON.parse(bubble && bubble.dataset.voices || '[]'); } catch { voices = []; }
   const text = voices[Number(btn.dataset.index)];
-  if (text) speakVoice([text], btn);
+  if (!text) return;
+  // 历史语音没有存好的 R2 key：点播放时再走一次手机/MeloTTS 队列
+  btn.disabled = true;
+  const label = btn.dataset.label || '▶ 播放';
+  btn.textContent = '生成中…';
+  const key = await fetchTtsKey(text);
+  if (key) {
+    const audio = document.createElement('audio');
+    audio.className = 'voice-audio';
+    audio.controls = true;
+    audio.preload = 'metadata';
+    audio.src = '/api/audio/' + key;
+    btn.replaceWith(audio);
+    return;
+  }
+  btn.disabled = false;
+  btn.textContent = label;
+  speakVoice([text], btn);
 });
 
 /* ---------- 主题（跟随系统 / 深色 / 浅色，默认跟随系统） ---------- */
@@ -510,7 +527,7 @@ function inline(s) {
 }
 /* ---------- 网页语音播放（浏览器 TTS） ---------- */
 const VOICE_TEXT_PATTERNS = [
-  /\[\s*(?:语音消息|语音|voice)\s*\]\s*[「“]([^」”]*)[」”]/gi,
+  /[\[【［]\s*(?:语音消息|语音|voice)\s*[\]】］]\s*[「“]([^」”]*)[」”]/gi,
   /[（(]\s*[【\[]\s*语音消息\s*[】\]]\s*发送\s*[：:]\s*([^）)\n]+)[）)]/gi,
   /[【\[]\s*语音消息\s*[】\]]\s*发送\s*[：:]\s*([^\n）)]+)/gi,
   /[【\[]\s*语音(?:消息)?\s*[】\]]\s*(?!(?:发送\s*[：:]|[「“]))([^\n]+)/gi,
@@ -597,7 +614,7 @@ function speakVoice(texts, btn) {
   });
   utterances.forEach((u) => window.speechSynthesis.speak(u));
 }
-const VOICE_BLOCK_RE = /(?:\[\s*(?:语音消息|语音|voice)\s*\]\s*[「“]([^」”]*)[」”])|(?:[（(]\s*[【\[]\s*语音消息\s*[】\]]\s*发送\s*[：:]\s*([^）)\n]+)[）)])|(?:[【\[]\s*语音消息\s*[】\]]\s*发送\s*[：:]\s*([^\n）)]+))|(?:[【\[]\s*语音(?:消息)?\s*[】\]]\s*(?!(?:发送\s*[：:]|[「“]))([^\n]+))|(?:^（语音）\s*(.+)$)/gmi;
+const VOICE_BLOCK_RE = /(?:[\[【［]\s*(?:语音消息|语音|voice)\s*[\]】］]\s*[「“]([^」”]*)[」”])|(?:[（(]\s*[【\[［]\s*语音消息\s*[】\]］]\s*发送\s*[：:]\s*([^）)\n]+)[）)])|(?:[【\[［]\s*语音消息\s*[】\]］]\s*发送\s*[：:]\s*([^\n）)]+))|(?:[【\[［]\s*语音(?:消息)?\s*[】\]］]\s*(?!(?:发送\s*[：:]|[「“]))([^\n]+))|(?:^（语音）\s*(.+)$)/gmi;
 function voiceCardHtml(text, index, audioKey) {
   const play = audioKey
     ? '<audio class="voice-audio" controls preload="metadata" src="/api/audio/' + audioKey + '"></audio>'
@@ -720,7 +737,7 @@ function renderMarkdown(src) {
   // 语音标记不直接暴露给用户：显示成 🎤 + 原话，标点保留
   src = String(src || '')
     .replace(/^（语音）/, '🎤 ')
-    .replace(/\[\s*(?:语音消息|语音|voice)\s*\]\s*[「“]([^」”]*)[」”]/gi, '🎤 $1')
+    .replace(/[\[【［]\s*(?:语音消息|语音|voice)\s*[\]】］]\s*[「“]([^」”]*)[」”]/gi, '🎤 $1')
     .replace(/[（(]\s*[【\[]\s*语音消息\s*[】\]]\s*发送\s*[：:]\s*([^）)\n]+)[）)]/gi, '🎤 $1')
     .replace(/[【\[]\s*语音消息\s*[】\]]\s*发送\s*[：:]\s*([^\n）)]+)/gi, '🎤 $1')
     .replace(/[【\[]\s*语音(?:消息)?\s*[】\]]\s*(?!(?:发送\s*[：:]|[「“]))/gi, '🎤 ');

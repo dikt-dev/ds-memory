@@ -120,7 +120,7 @@ describe('buildSystemPrompt', () => {
     expect(withoutVoice).not.toContain('[语音]');
   });
 
-  it('网页渠道不会提示语音', () => {
+  it('网页渠道支持语音时也提示 [语音]', () => {
     const prompt = buildSystemPrompt({
       now: new Date('2026-10-21T01:00:00Z'),
       ctx,
@@ -128,7 +128,8 @@ describe('buildSystemPrompt', () => {
       channel: 'web',
       voiceReply: true,
     });
-    expect(prompt).not.toContain('[语音]');
+    expect(prompt).toContain('[语音]');
+    expect(prompt).toContain('语音句子必须通顺完整');
   });
 
   it('网页渠道不加 Markdown 约束', () => {
