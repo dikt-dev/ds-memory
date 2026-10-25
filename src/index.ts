@@ -547,7 +547,92 @@ app.get('/api/audio/*', requireAuth, async (c) => {
   });
 });
 
-/** App 图片回放：设备 Token 鉴权，只允许 images/ 前缀。 */
+/** B 站短链/视频链接预览：只允许 B 站域名，避免变 SSRF。 */
+app.get('/api/app/link-preview', requireApp, async (c) => {
+  try {
+    const raw = c.req.query('url') ?? '';
+    if (!/^https?:\/\/(?:b23\.tv|(?:www\.)?bilibili\.com)\//i.test(raw)) {
+      return c.json({ error: 'unsupported url' }, 400);
+    }
+    const ua = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/125.0 Mobile Safari/537.36';
+    let target = raw;
+    if (/b23\.tv/i.test(raw)) {
+      const redirect = await fetch(raw, { redirect: 'follow', headers: { 'User-Agent': ua } });
+      target = redirect.url;
+    }
+    const m = target.match(/\/video\/(BV[0-9A-Za-z]+)/i) ??
+      target.match(/[?&]bvid=(BV[0-9A-Za-z]+)/i);
+    if (!m) return c.json({ error: 'not a video url', target }, 404);
+    const bvid = m[1];
+    let title = '';
+    let owner = '';
+    let duration = 0;
+    try {
+      const api = await fetch(
+        `https://api.bilibili.com/x/web-interface/view?bvid=${encodeURIComponent(bvid)}`,
+        {
+          headers: {
+            'User-Agent': ua,
+            Referer: 'https://www.bilibili.com/',
+            Accept: 'application/json',
+          },
+        },
+      );
+      const text = await api.text();
+      if (text.trim().startsWith('{')) {
+        const json = JSON.parse(text) as {
+          code?: number;
+          data?: { title?: string; duration?: number; owner?: { name?: string } };
+        };
+        if (json.code === 0 && json.data) {
+          title = json.data.title || '';
+          owner = json.data.owner?.name || '';
+          duration = json.data.duration || 0;
+        }
+      }
+    } catch {
+      // API 被 WAF 拦截时走页面 meta 兜底
+    }
+    if (!title) {
+      try {
+        const page = await fetch(target, {
+          headers: { 'User-Agent': ua, Referer: 'https://www.bilibili.com/' },
+        });
+        const html = await page.text();
+        const meta = (name: string): string => {
+          const a = html.match(new RegExp(
+            `<meta[^>]+(?:property|name)=["']${name}["'][^>]+content=["']([^"']*)`,
+            'i',
+          ));
+          const b = html.match(new RegExp(
+            `<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']${name}["']`,
+            'i',
+          ));
+          return a?.[1] ?? b?.[1] ?? '';
+        };
+        title = meta('og:title') || meta('title');
+        owner = meta('author') || meta('og:site_name') || '';
+        duration = Number(html.match(/"duration":(\d+)/)?.[1] ?? 0) || 0;
+        if (!title) {
+          const t = html.match(/<title>([^<]+)<\/title>/i)?.[1] ?? '';
+          title = t.replace(/_哔哩哔哩.*$/i, '').trim();
+        }
+      } catch {
+        // 保留空标题，App 显示短链兜底
+      }
+    }
+    if (!title || /出错啦|页面不存在|404/i.test(title)) {
+      return c.json({ error: 'preview unavailable', bvid }, 502);
+    }
+    return c.json({ bvid, title, owner, duration });
+  } catch (e) {
+    return c.json({ error: 'link preview failed', detail: String(e).slice(0, 200) }, 500);
+  }
+});
+
+/**
+ * App 图片回放：设备 Token 鉴权，只允许 images/ 前缀。
+ */
 app.get('/api/app/image', requireApp, async (c) => {
   const key = c.req.query('key') ?? '';
   if (!key.startsWith('images/') || key.length > 200) return c.json({ error: 'not found' }, 404);
