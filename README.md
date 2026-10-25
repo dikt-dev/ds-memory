@@ -17,7 +17,7 @@
 - **活人感**：口语化风格、情绪残留、疲劳度、时段状态、反 AI 套话兜底
 - **主动消息**：早晚两档 + 白天随机，按打分决策是否真的发；支持队列或直连推送
 - **多端接入**：网页 SSE 聊天、OpenAI 兼容端点（AstrBot 等）、图片、文件
-- **网页朗读**：助手消息可一键用浏览器 TTS 朗读；`[语音]` 段只读台词，问号/感叹号/省略号会调语速和音高
+- **语音**：手机收到的 QQ 语音转 MP3 存 R2；网页 AI 语音由手机 TTS 优先、MeloTTS 兜底；按“正文 → 语音卡”顺序显示，语音卡保留原话
 - **计费**：按 token 精确计算，含提炼/摘要费用；页头显示今日与近 7 天花费
 - **全链路降级**：记忆/天气/提炼失败都不影响聊天主流程
 
@@ -186,6 +186,11 @@ Worker 提供 OpenAI 兼容端点，AstrBot 作为「OpenAI Compatible」服务�
 | GET | `/api/usage` | Cookie | 计费统计（含提炼费用） |
 | GET/POST | `/v1/models`、`/v1/chat/completions` | Bearer | OpenAI 兼容端点 |
 | POST | `/api/upload/image` | Bearer | 原图 raw binary 直传 R2（大 GIF，不压缩） |
+| POST | `/api/upload/audio` | Bearer | 语音 raw binary 直传 R2（手机已转 MP3） |
+| GET | `/api/audio/*` | Cookie | 网页语音回放（R2 audio/） |
+| POST/GET | `/api/tts`、`/api/tts/jobs/:id` | Cookie | 创建/轮询网页 TTS 任务（手机优先） |
+| GET/POST | `/api/tts/pending`、`/ack`、`/nack` | Bearer | 手机 TTS 队列 |
+| POST | `/api/tts/jobs/:id/fallback` | Cookie | MeloTTS 兜底生成 |
 | GET/POST | `/api/proactive/pending`、`/ack` | Bearer | 主动消息队列 |
 | GET | `/api/admin/readiness` | Cookie | Phase 5 就绪检查（迁移/上下文/渠道引擎） |
 | GET | `/api/admin/engine-metrics?days=7` | Cookie | shadow/next 按天指标 |
