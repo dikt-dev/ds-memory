@@ -48,6 +48,8 @@ export interface Env {
   /** Azure Speech TTS；App 通过 Worker 代理避免手机直连 Azure 的高延迟 */
   AZURE_SPEECH_KEY?: string;
   AZURE_SPEECH_REGION?: string;
+  /** B 站登录 Cookie 里的 SESSDATA；用于取视频简介/总结 */
+  BILIBILI_SESSDATA?: string;
   /** DS-Mobile 一次性配对码；留空则临时复用 ASTROBOT_API_KEY */
   APP_PAIR_CODE?: string;
   // 小号 R2（S3 兼容 API）：主账号容量达到阈值后，新数据写入小号

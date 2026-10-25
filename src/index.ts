@@ -567,6 +567,10 @@ app.get('/api/app/link-preview', requireApp, async (c) => {
     let title = '';
     let owner = '';
     let duration = 0;
+    let desc = '';
+    const cookie = c.env.BILIBILI_SESSDATA
+      ? { Cookie: `SESSDATA=${c.env.BILIBILI_SESSDATA}` }
+      : {};
     try {
       const api = await fetch(
         `https://api.bilibili.com/x/web-interface/view?bvid=${encodeURIComponent(bvid)}`,
@@ -575,6 +579,7 @@ app.get('/api/app/link-preview', requireApp, async (c) => {
             'User-Agent': ua,
             Referer: 'https://www.bilibili.com/',
             Accept: 'application/json',
+            ...cookie,
           },
         },
       );
@@ -582,12 +587,18 @@ app.get('/api/app/link-preview', requireApp, async (c) => {
       if (text.trim().startsWith('{')) {
         const json = JSON.parse(text) as {
           code?: number;
-          data?: { title?: string; duration?: number; owner?: { name?: string } };
+          data?: {
+            title?: string;
+            desc?: string;
+            duration?: number;
+            owner?: { name?: string };
+          };
         };
         if (json.code === 0 && json.data) {
           title = json.data.title || '';
           owner = json.data.owner?.name || '';
           duration = json.data.duration || 0;
+          desc = (json.data.desc || '').replace(/\s+/g, ' ').trim().slice(0, 500);
         }
       }
     } catch {
@@ -612,6 +623,7 @@ app.get('/api/app/link-preview', requireApp, async (c) => {
         };
         title = meta('og:title') || meta('title');
         owner = meta('author') || meta('og:site_name') || '';
+        desc = (meta('og:description') || meta('description')).replace(/\s+/g, ' ').trim().slice(0, 500);
         duration = Number(html.match(/"duration":(\d+)/)?.[1] ?? 0) || 0;
         if (!title) {
           const t = html.match(/<title>([^<]+)<\/title>/i)?.[1] ?? '';
@@ -624,7 +636,7 @@ app.get('/api/app/link-preview', requireApp, async (c) => {
     if (!title || /出错啦|页面不存在|404/i.test(title)) {
       return c.json({ error: 'preview unavailable', bvid }, 502);
     }
-    return c.json({ bvid, title, owner, duration });
+    return c.json({ bvid, title, owner, duration, desc });
   } catch (e) {
     return c.json({ error: 'link preview failed', detail: String(e).slice(0, 200) }, 500);
   }
@@ -633,6 +645,48 @@ app.get('/api/app/link-preview', requireApp, async (c) => {
 /**
  * App 图片回放：设备 Token 鉴权，只允许 images/ 前缀。
  */
+/** App 视频/GIF 上传：原文件进 R2，聊天里只存 [视频:key]/[GIF:key]。 */
+app.post('/api/app/upload/video', requireApp, async (c) => {
+  const mime = (c.req.header('content-type') ?? '').split(';')[0].trim().toLowerCase();
+  const allowed: Record<string, string> = {
+    'video/mp4': 'mp4',
+    'video/webm': 'webm',
+    'video/quicktime': 'mov',
+    'video/3gpp': '3gp',
+    'image/gif': 'gif',
+  };
+  const ext = allowed[mime];
+  if (!ext) return c.json({ error: 'unsupported media type' }, 415);
+  const length = Number(c.req.header('content-length') ?? 0);
+  if (!length || length > 60 * 1024 * 1024) return c.json({ error: 'media too large' }, 413);
+  const kind = ext === 'gif' ? 'gifs' : 'videos';
+  const date = new Date().toISOString().slice(0, 10);
+  const key = `${kind}/${date}/${crypto.randomUUID()}.${ext}`;
+  const bytes = await c.req.arrayBuffer();
+  await c.env.R2.put(key, bytes, {
+    httpMetadata: { contentType: mime, cacheControl: 'private, max-age=31536000' },
+  });
+  return c.json({ key, contentType: mime, size: bytes.byteLength });
+});
+
+/** App 视频/GIF 回放：设备 Token 鉴权，只允许 videos/、gifs/。 */
+app.get('/api/app/media', requireApp, async (c) => {
+  const key = c.req.query('key') ?? '';
+  if (!/^(videos|gifs)\//.test(key) || key.length > 200 || key.includes('..')) {
+    return c.json({ error: 'not found' }, 404);
+  }
+  const obj = await c.env.R2.get(key);
+  if (!obj) return c.json({ error: 'not found' }, 404);
+  return new Response(obj.body, {
+    headers: {
+      'content-type': obj.httpMetadata?.contentType ?? 'application/octet-stream',
+      'content-length': String(obj.size),
+      'accept-ranges': 'bytes',
+      'cache-control': 'private, max-age=86400',
+    },
+  });
+});
+
 app.get('/api/app/image', requireApp, async (c) => {
   const key = c.req.query('key') ?? '';
   if (!key.startsWith('images/') || key.length > 200) return c.json({ error: 'not found' }, 404);
