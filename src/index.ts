@@ -547,6 +547,20 @@ app.get('/api/audio/*', requireAuth, async (c) => {
   });
 });
 
+/** App 图片回放：设备 Token 鉴权，只允许 images/ 前缀。 */
+app.get('/api/app/image', requireApp, async (c) => {
+  const key = c.req.query('key') ?? '';
+  if (!key.startsWith('images/') || key.length > 200) return c.json({ error: 'not found' }, 404);
+  const obj = await getObject(c.env, key);
+  if (!obj) return c.json({ error: 'not found' }, 404);
+  return new Response(await obj.arrayBuffer(), {
+    headers: {
+      'content-type': obj.httpMetadata?.contentType ?? 'application/octet-stream',
+      'cache-control': 'private, max-age=86400',
+    },
+  });
+});
+
 /** 聊天图片回放（需登录；图片存在 R2 images/ 下，主账号优先、小号兜底）。 */
 app.get('/api/image/*', requireAuth, async (c) => {
   const key = decodeURIComponent(c.req.path.replace(/^\/api\/image\//, ''));
