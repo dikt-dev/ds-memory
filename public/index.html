@@ -242,6 +242,14 @@
   }
   .msg:hover .copy-btn, .copy-btn:focus-visible { opacity: 1; }
   .copy-btn:hover { color: var(--text-soft); background: var(--hover); }
+  .voice-btn {
+    background: none; border: none; color: var(--accent); font-size: .7rem;
+    cursor: pointer; padding: .1rem .3rem; border-radius: 5px; opacity: 0;
+    transition: opacity .15s ease, background .15s ease;
+  }
+  .msg:hover .voice-btn, .voice-btn:focus-visible { opacity: 1; }
+  .voice-btn:hover { background: var(--hover); }
+  .voice-btn.speaking { opacity: 1; color: #fff; background: var(--accent); }
 
   /* ---------- 输入区 ---------- */
   #composer {
@@ -362,7 +370,7 @@
     .msg-body { max-width: 84%; }
     .bubble { font-size: .92rem; padding: .6rem .82rem; border-radius: 14px; }
     .msg-avatar { width: 26px; height: 26px; font-size: .82rem; }
-    .copy-btn { opacity: 1; }
+    .copy-btn, .voice-btn { opacity: 1; }
     #composer { padding: .6rem .7rem calc(.7rem + env(safe-area-inset-bottom, 0px)); }
     #input { font-size: 16px; min-height: 42px; }
     #send { height: 42px; padding: 0 1.05rem; }
@@ -475,10 +483,133 @@ function inline(s) {
     .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
       '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
 }
+/* ---------- 网页语音播放（浏览器 TTS） ---------- */
+const VOICE_TEXT_PATTERNS = [
+  /\[\s*(?:语音消息|语音|voice)\s*\]\s*[「“]([^」”]*)[」”]/gi,
+  /[（(]\s*[【\[]\s*语音消息\s*[】\]]\s*发送\s*[：:]\s*([^）)\n]+)[）)]/gi,
+  /[【\[]\s*语音消息\s*[】\]]\s*发送\s*[：:]\s*([^\n）)]+)/gi,
+  /^（语音）\s*(.+)$/gm,
+];
+function extractVoiceTexts(src) {
+  const text = String(src || '');
+  const found = [];
+  for (const re of VOICE_TEXT_PATTERNS) {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(text))) {
+      const t = (m[1] || '').trim();
+      if (t) found.push(t);
+    }
+  }
+  return [...new Set(found)];
+}
+function voiceTone(text) {
+  let rate = 1;
+  let pitch = 1;
+  if (/[！!]/.test(text)) { rate += 0.08; pitch += 0.06; }
+  if (/[？?]/.test(text)) { rate += 0.03; pitch += 0.08; }
+  if (/……|\.\.\./.test(text)) { rate -= 0.08; }
+  if (/[～~]/.test(text)) { pitch += 0.04; }
+  return {
+    rate: Math.max(0.75, Math.min(1.3, rate)),
+    pitch: Math.max(0.8, Math.min(1.25, pitch)),
+  };
+}
+function pickChineseVoice() {
+  if (!window.speechSynthesis) return null;
+  const voices = window.speechSynthesis.getVoices() || [];
+  return voices.find((v) => /zh[-_]?CN|Chinese|Xiaoxiao|Yunxi|Huihui|Xiaoyi/i.test(`${v.lang} ${v.name}`))
+    || voices.find((v) => /^zh/i.test(v.lang))
+    || null;
+}
+function resetVoiceButton(btn) {
+  if (!btn) return;
+  btn.classList.remove('speaking');
+  btn.textContent = '🔊 朗读';
+}
+function cleanSpeakText(src) {
+  return String(src || '')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/\[face[:：][^\]]{1,12}\]/gi, '')
+    .replace(/\[(?:图片|文件|语音|voice)[^\]]*\]/gi, '')
+    .replace(/[（(][^（）()]{0,80}[）)]/g, '')
+    .replace(/[#*_>`~]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+function stopVoice(btn) {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  document.querySelectorAll('.voice-btn.speaking').forEach(resetVoiceButton);
+  resetVoiceButton(btn);
+}
+function speakVoice(texts, btn) {
+  if (!texts.length) return;
+  if (!('speechSynthesis' in window)) {
+    alert('当前浏览器不支持语音播放，请换 Chrome/Edge/Safari 试试');
+    return;
+  }
+  if (btn.classList.contains('speaking')) { stopVoice(btn); return; }
+  window.speechSynthesis.cancel();
+  document.querySelectorAll('.voice-btn.speaking').forEach(resetVoiceButton);
+  btn.classList.add('speaking');
+  btn.textContent = '⏹ 停止';
+  const voice = pickChineseVoice();
+  const utterances = texts.map((text, idx) => {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'zh-CN';
+    if (voice) u.voice = voice;
+    const tone = voiceTone(text);
+    u.rate = tone.rate;
+    u.pitch = tone.pitch;
+    if (idx === texts.length - 1) {
+      u.onend = () => resetVoiceButton(btn);
+      u.onerror = () => resetVoiceButton(btn);
+    }
+    return u;
+  });
+  utterances.forEach((u) => window.speechSynthesis.speak(u));
+}
+function speakTextsForBubble(bubble) {
+  const raw = bubble.dataset.raw || '';
+  const voices = extractVoiceTexts(raw);
+  if (voices.length) return voices;
+  const plain = cleanSpeakText(raw);
+  return plain ? [plain] : [];
+}
+function refreshVoiceButton(bubble) {
+  if (!bubble) return;
+  const body = bubble.closest('.msg-body');
+  const foot = body && body.querySelector('.msg-foot');
+  if (!foot) return;
+  let btn = foot.querySelector('.voice-btn');
+  const texts = speakTextsForBubble(bubble);
+  if (!texts.length) {
+    if (btn) btn.remove();
+    return;
+  }
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.className = 'voice-btn';
+    btn.type = 'button';
+    btn.textContent = '🔊 朗读';
+    btn.addEventListener('click', () => {
+      speakVoice(speakTextsForBubble(bubble), btn);
+    });
+    foot.insertBefore(btn, foot.firstChild);
+  }
+  btn.hidden = false;
+}
+
 function renderMarkdown(src) {
   const blocks = [];
-  // 归档时语音被记成「（语音）…」，网页上换成一个话筒图标更好读
-  src = String(src || '').replace(/^（语音）/, '🎤 ');
+  // 语音标记不直接暴露给用户：显示成 🎤 + 原话，标点保留
+  src = String(src || '')
+    .replace(/^（语音）/, '🎤 ')
+    .replace(/\[\s*(?:语音消息|语音|voice)\s*\]\s*[「“]([^」”]*)[」”]/gi, '🎤 $1')
+    .replace(/[（(]\s*[【\[]\s*语音消息\s*[】\]]\s*发送\s*[：:]\s*([^）)\n]+)[）)]/gi, '🎤 $1')
+    .replace(/[【\[]\s*语音消息\s*[】\]]\s*发送\s*[：:]\s*([^\n）)]+)/gi, '🎤 $1');
   let s = escapeHtml(src);
   s = s.replace(/```([\s\S]*?)```/g, (_, code) => {
     blocks.push('<pre><code>' + code.trim() + '</code></pre>');
@@ -564,6 +695,8 @@ function buildBubbleEl(role, html, raw) {
   body.appendChild(foot);
 
   wrap.appendChild(body);
+  // 历史消息里的 [语音]/（语音）在插入后再挂播放按钮
+  if (role !== 'user') queueMicrotask(() => refreshVoiceButton(bubble));
   return wrap;
 }
 
@@ -1169,6 +1302,7 @@ async function send() {
       frame = 0;
       bubble.innerHTML = renderMarkdown(text) || (firstToken ? '' : '<span class="typing">正在输入<span class="dot">…</span></span>');
       bubble.dataset.raw = text;
+      refreshVoiceButton(bubble);
       scrollToBottom();
     });
   };
