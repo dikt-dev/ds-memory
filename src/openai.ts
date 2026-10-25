@@ -664,7 +664,7 @@ openaiApp.post('/chat/completions', async (c) => {
     const parts = [STYLE_REMINDER];
     // ★ 格式要求放在这里：这是模型看到的最后一段指令（紧跟用户这句话），
     //   比系统提示词里靠前的位置有效得多。网页端不需要 QQ 表情/语音标记。
-    if (channel === 'astrobot') {
+    if (channel === 'astrobot' || channel === 'mobile') {
       parts.push(
         '【可用】[face:表情名] → QQ 表情；' +
           (voiceReply ? '发语音必须写成 [语音]「要说的话」（只念引号里）。' : '') +
