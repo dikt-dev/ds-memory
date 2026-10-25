@@ -20,6 +20,19 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('消息来源：网页');
   });
 
+  it('包含傲娇/活泼/毒舌的强度与安全边界', () => {
+    const prompt = buildSystemPrompt({
+      now: new Date('2026-10-21T01:00:00Z'),
+      ctx,
+      memory: 'x',
+      channel: 'astrobot',
+    });
+    expect(prompt).toContain('傲娇配比');
+    expect(prompt).toContain('毒舌要有分寸');
+    expect(prompt).toContain('不攻击外貌、家人、创伤、智力');
+    expect(prompt).toContain('认真难过时先收毒舌');
+  });
+
   it('不再把历史对话拼进 system（避免与 messages 重复）', () => {
     const prompt = buildSystemPrompt({
       now: new Date('2026-10-21T01:00:00Z'),
