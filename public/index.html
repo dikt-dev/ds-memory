@@ -1077,29 +1077,33 @@ async function pollNewMessages() {
   if (document.visibilityState === 'hidden') return; // 后台标签页不轮询
   pollingNow = true;
   try {
-    const res = await fetch(`/api/history/since?after_id=${latestSeenId}&limit=50`, { cache: 'no-store' });
-    if (res.status === 401) { stopPolling(); showLogin(); return; }
-    if (!res.ok) return;
-    const data = await res.json();
-    const incoming = (data.messages || []).filter((m) => Number.isFinite(m.id) && m.id > latestSeenId);
-    if (incoming.length === 0) return;
-
-    // 先推进游标，避免重复渲染
-    for (const m of incoming) {
-      if (m.id > latestSeenId) latestSeenId = m.id;
-    }
-
-    // 贴底才自动滚，否则别打断正在看历史的用户
+    // 按 has_more 补齐，避免离线/切后台期间积压超过一页时漏消息
     const nearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 120;
+    let appended = false;
+    for (let batch = 0; batch < 10; batch++) {
+      const res = await fetch(`/api/history/since?after_id=${latestSeenId}&limit=50`, { cache: 'no-store' });
+      if (res.status === 401) { stopPolling(); showLogin(); return; }
+      if (!res.ok) break;
+      const data = await res.json();
+      const incoming = (data.messages || []).filter((m) => Number.isFinite(m.id) && m.id > latestSeenId);
+      if (incoming.length === 0) break;
 
-    for (const m of incoming) {
-      messagesEl.appendChild(buildBubbleEl(
-        m.role === 'user' ? 'user' : 'assistant',
-        m.role === 'user' ? renderUserContent(m.content) : renderMarkdown(m.content),
-        m.content,
-      ));
+      // 先推进游标，避免重复渲染
+      for (const m of incoming) {
+        if (m.id > latestSeenId) latestSeenId = m.id;
+      }
+
+      for (const m of incoming) {
+        messagesEl.appendChild(buildBubbleEl(
+          m.role === 'user' ? 'user' : 'assistant',
+          m.role === 'user' ? renderUserContent(m.content) : renderMarkdown(m.content),
+          m.content,
+        ));
+      }
+      appended = true;
+      if (!data.has_more) break;
     }
-    if (nearBottom) scrollToBottom();
+    if (appended && nearBottom) scrollToBottom();
   } catch { /* 网络抖动忽略，下次再试 */ }
   finally {
     pollingNow = false;
