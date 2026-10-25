@@ -1,22 +1,25 @@
-# 当前状态清单（Phase 0 基线�?
-> 日期�?026-10-24  
-> 基线提交：`9155038`（pre-refactor checkpoint�? 
-> 用途：Phase 0�? 重构的现状快照；后续变更需同步本文�? 
-> 范围：`ds-memory`；`ds-qq-client` 只记录接口契�?
+# 当前状态清单（Phase 0 基线）
+
+> 日期：2026-10-24  
+> 基线提交：`9155038`（pre-refactor checkpoint）  
+> 用途：Phase 0–5 重构的现状快照；后续变更需同步本文件  
+> 范围：`ds-memory`；`ds-qq-client` 只记录接口契约
+
 ---
 
-## 1. 代码与运行形�?
-| �?| 当前�?|
+## 1. 代码与运行形态
+
+| 项 | 当前值 |
 |---|---|
 | Cloudflare Worker | `ds-memory`，Hono + TypeScript |
 | 入口 | `src/index.ts` |
 | 前端 | `public/index.html`，单页、零构建 |
-| 运行�?| Cloudflare Workers（免费计划） |
-| 存储 | D1 + R2（主/小号�? KV + Workers AI |
+| 运行时 | Cloudflare Workers（免费计划） |
+| 存储 | D1 + R2（主/小号）+ KV + Workers AI |
 | 模型 | DeepSeek `deepseek-flash`（对话）、`deepseek-v4-pro`（每日提炼）、Workers AI 兜底 |
-| 手机�?| `../ds-qq-client`，Python + NapCat/OneBot 11 |
-| 测试 | 57 个测试文件�?93 个用例（Phase 5 生产 shadow 后；基线�?45/631�?|
-| 构建检�?| `tsc --noEmit` |
+| 手机端 | `../ds-qq-client`，Python + NapCat/OneBot 11 |
+| 测试 | 57 个测试文件、694 个用例（Phase 5 生产 shadow 后；基线为 45/631） |
+| 构建检查 | `tsc --noEmit` |
 
 ---
 
@@ -24,12 +27,15 @@
 
 ```text
 网页 / QQ / AstrBot
-        �?Worker
-  ├─ 鉴权（KV cookie / Bearer�?  ├─ 记忆：memory.md + archive + memo + 10 轮历�?+ 召回
-  ├─ 关系/情绪：memory.md 数�?+ KV emotion:state
+        ↓
+Worker
+  ├─ 鉴权（KV cookie / Bearer）
+  ├─ 记忆：memory.md + archive + memo + 10 轮历史 + 召回
+  ├─ 关系/情绪：memory.md 数值 + KV emotion:state
   ├─ 人设：prompt.ts + character-card + persona-drift
   └─ DeepSeek
-        �?D1 messages / cron_runs / proactive_* / memory_entries
+        ↓
+D1 messages / cron_runs / proactive_* / memory_entries
 R2 memory.md / archive / chat_logs / context / images
 KV auth / memory cache / memo / summary / emotion / heartbeat / ...
 ```
@@ -40,30 +46,30 @@ KV auth / memory cache / memo / summary / emotion / heartbeat / ...
 
 ### 3.1 网页 / 管理
 
-| 方法 | 路径 | 鉴权 | 用�?|
+| 方法 | 路径 | 鉴权 | 用途 |
 |---|---|---|---|
 | GET | `/` | - | 聊天页面（Worker 注入角色名） |
-| GET | `/api/health` | - | 资源连通�?|
-| GET | `/api/day` | - | 当天上下�?|
+| GET | `/api/health` | - | 资源连通性 |
+| GET | `/api/day` | - | 当天上下文 |
 | GET | `/api/balance` | Cookie | DeepSeek 余额 |
 | GET | `/api/settings` | - | 城市配置 |
 | POST | `/api/admin/settings` | Cookie | 修改城市 |
 | POST | `/api/login` | - | 口令登录 |
-| POST | `/api/logout` | - | 退�?|
+| POST | `/api/logout` | - | 退出 |
 | POST | `/api/chat` | Cookie | SSE 聊天 |
 | GET | `/api/image/*` | Cookie | 图片回放 |
-| GET | `/api/history/since` | Cookie | 增量历史（网�?3s 轮询�?|
+| GET | `/api/history/since` | Cookie | 增量历史（网页 3s 轮询） |
 | GET | `/api/history` | Cookie | 历史分页 |
 | GET | `/api/usage` | Cookie | 计费统计 |
 
 ### 3.2 管理 / 维护
 
-| 方法 | 路径 | 用�?|
+| 方法 | 路径 | 用途 |
 |---|---|---|
-| POST | `/api/admin/memory/refresh` | �?KV memory 缓存并回�?|
+| POST | `/api/admin/memory/refresh` | 清 KV memory 缓存并回源 |
 | POST | `/api/admin/memory/reindex` | 重建 D1 记忆索引 |
 | POST | `/api/admin/memory/reload` | 刷新缓存 + 重建索引 |
-| POST | `/api/admin/memory/rollup` | 生成�?月摘�?|
+| POST | `/api/admin/memory/rollup` | 生成周/月摘要 |
 | POST | `/api/admin/wipe-data` | 清空 D1/R2/KV（危险） |
 | POST | `/api/admin/run-daily` | 手动归档 |
 | POST | `/api/admin/rearchive-logs` | 重建 R2 日志（默认不再提炼） |
@@ -79,138 +85,158 @@ KV auth / memory cache / memo / summary / emotion / heartbeat / ...
 
 ### 3.3 OpenAI 兼容 / 队列
 
-| 方法 | 路径 | 鉴权 | 用�?|
+| 方法 | 路径 | 鉴权 | 用途 |
 |---|---|---|---|
 | GET | `/v1/models` | Bearer | 模型列表 |
 | POST | `/v1/chat/completions` | Bearer | QQ/AstrBot 聊天 |
 | GET | `/api/proactive/pending` | Bearer | 拉取主动消息 |
 | POST | `/api/proactive/ack` | Bearer | 确认送达 |
-| POST | `/api/proactive/nack` | Bearer | 发送失�?|
+| POST | `/api/proactive/nack` | Bearer | 发送失败 |
 | GET | `/api/proactive/stats` | Cookie | 队列统计 |
 | POST | `/api/proactive/drop` | Bearer | 丢弃积压 |
-| POST | `/api/proactive/pause` | Bearer | 退�?|
+| POST | `/api/proactive/pause` | Bearer | 退订 |
 | POST | `/api/proactive/heartbeat` | Bearer | 手机心跳 |
 
 ---
 
 ## 4. Cron
 
-| Cron（UTC�?| 北京时间 | 内容 |
+| Cron（UTC） | 北京时间 | 内容 |
 |---|---|---|
-| `0 20 * * *` | 04:00 | 每日归档前一天；每月 1 日再跑月度合�?|
-| `*/5 1-14 * * *` | 09:00�?2:30 | 随机主动消息 + 16:00 context 刷新 + 通道检�?|
-| `*/5 23,0,14,15,16 * * *` | 07:45�?8:15 / 22:45�?3:15 | 早晚主动消息 + 08:00/24:00 context 刷新 + 通道检�?|
+| `0 20 * * *` | 04:00 | 每日归档前一天；每月 1 日再跑月度合并 |
+| `*/5 1-14 * * *` | 09:00–22:30 | 随机主动消息 + 16:00 context 刷新 + 通道检查 |
+| `*/5 23,0,14,15,16 * * *` | 07:45–08:15 / 22:45–23:15 | 早晚主动消息 + 08:00/24:00 context 刷新 + 通道检查 |
 
 ---
 
-## 5. D1 �?
-| �?| 用�?| 关键字段/约束 |
+## 5. D1 表
+
+| 表 | 用途 | 关键字段/约束 |
 |---|---|---|
-| `messages` | 逐条消息 | `turn_id`、`turn_type`、`reply_to_id`、`channel`、`date_key`、`created_ms`、费�?token |
+| `messages` | 逐条消息 | `turn_id`、`turn_type`、`reply_to_id`、`channel`、`date_key`、`created_ms`、费用/token |
 | `cron_runs` | 定时任务幂等 | `UNIQUE(job_type,target)`、`status` |
 | `proactive_log` | 主动消息幂等 | `UNIQUE(date_key,slot_key)` |
 | `proactive_feedback` | 主动消息反馈 | `UNIQUE(message_id)` |
 | `proactive_queue` | 外发队列 | `leased_at`、`attempts`、`sent_at` |
-| `memory_entries` | 记忆检索索�?| `vec`、`keywords`、`tags`、`dup_of`、`source` |
-| `memory_rollups` | �?月摘�?| `id=level:period` |
+| `memory_entries` | 记忆检索索引 | `vec`、`keywords`、`tags`、`dup_of`、`source` |
+| `memory_rollups` | 周/月摘要 | `id=level:period` |
 
-> `memory_entries.dup_of` 已在 schema 与线上库存在；迁�?002 用于其他环境�?
+> `memory_entries.dup_of` 已在 schema 与线上库存在；迁移 002 用于其他环境。
+
 ---
 
 ## 6. R2 对象
 
-| Key | 用�?| 清理策略 |
+| Key | 用途 | 清理策略 |
 |---|---|---|
 | `memory.md` | 长期记忆核心/快照 | 不自动删 |
 | `memory/archive.md` | 长期档案 | 不自动删 |
-| `memory/backups/*.md` | 重新提炼前备�?| 手动 |
-| `context/YYYY-MM-DD.json` | 当天上下文（天气/关系/提炼�?| 90 �?|
-| `chat_logs/YYYY-MM-DD.log` | 单日归档（JSON�?| 月度合并后删单日 |
+| `memory/backups/*.md` | 重新提炼前备份 | 手动 |
+| `context/YYYY-MM-DD.json` | 当天上下文（天气/关系/提炼） | 90 天 |
+| `chat_logs/YYYY-MM-DD.log` | 单日归档（JSON） | 月度合并后删单日 |
 | `chat_logs/YYYY-MM.json` | 月度归档 | 保留 |
 | `images/YYYY-MM-DD/*.jpg` | 聊天图片 | 不自动删 |
 
-双账号：�?R2 达阈值后新写入切小号；读取按存储模式（Phase 1 前主账号优先）�?
+双账号：主 R2 达阈值后新写入切小号；读取按存储模式（Phase 1 前主账号优先）。
+
 ---
 
 ## 7. KV Key
 
-| Key | 用�?| TTL | 频率 | 目标 |
+| Key | 用途 | TTL | 频率 | 目标 |
 |---|---|---|---|---|
-| `auth:*` | 网页登录�?| 7 �?| 每次网页请求�?| 无状�?Cookie |
-| `login:fail:*` | 登录失败限流 | 10 分钟 | 登录�?| 可保�?D1 |
-| `memory:cache` | memory.md 缓存 | 24h | 每轮�?| isolate/D1 |
-| `memory:index` | 记忆索引大对�?| 1h | 冷启动读 | isolate/D1 |
+| `auth:*` | 网页登录态 | 7 天 | 每次网页请求读 | 无状态 Cookie |
+| `login:fail:*` | 登录失败限流 | 10 分钟 | 登录时 | 可保留/D1 |
+| `memory:cache` | memory.md 缓存 | 24h | 每轮读 | isolate/D1 |
+| `memory:index` | 记忆索引大对象 | 1h | 冷启动读 | isolate/D1 |
 | `memory:qvec:*` | query 向量缓存 | 1h | 每新 query 读写 | 删除，isolate LRU |
-| `archive:cache` | 档案缓存 | 5 分钟 | 召回�?| isolate/R2 |
-| `memo:24h` | 24h 纪要 | 48h | 每轮�?| D1 |
-| `memo:lock` | 纪要�?| 120s | 刷新�?| D1 |
-| `summary:*` | 今日摘要 | 36h | 每轮�?| D1 |
-| `summary:lock:*` | 摘要�?| 120s | 生成�?| D1 |
-| `emotion:state` | 情绪向量/事件 | 90 �?| 每轮读写 | D1 |
-| `profile:user` | 用户画像 | 6h | 主动消息�?| D1 |
-| `profile:dirty` | 画像脏标�?| 24h | 每轮可能�?| D1 |
-| `proactive:heartbeat` | 手机心跳 | 7 �?| �?5 分钟�?| D1 |
-| `proactive:offline_alert` | 掉线提醒 | 7 �?| 少量 | D1 |
-| `proactive:paused_until` | 退订截�?| �?| 少量 | D1 |
-| `weather:*` | 天气缓存 | 30 分钟 | 每轮�?| D1/isolate |
-| `cost:llm:*` | 非聊天费�?| 8 �?| 摘要/提炼 | D1 |
-| `files:recent` | 最近文�?| 7 �?| 每轮�?| D1（可选） |
-| `persona:state` | 性格漂移 | �?| 每轮�?周写 | 可保�?|
-| `relation:active_days` | 累计天数 | �?| 日读/�?| D1（可选） |
-| `aversion:candidates` | 雷区候�?| 30 �?| 日读/�?| D1（可选） |
-| `storage:mode` | �?小号 R2 | �?| 写时�?| isolate 缓存 |
-| `storage:usage` | R2 用量 | 6h | 日检�?| D1（可选） |
-| `config:city` | 城市配置 | �?| 每轮�?| isolate + KV/D1 |
+| `archive:cache` | 档案缓存 | 5 分钟 | 召回读 | isolate/R2 |
+| `memo:24h` | 24h 纪要 | 48h | 每轮读 | D1 |
+| `memo:lock` | 纪要锁 | 120s | 刷新时 | D1 |
+| `summary:*` | 今日摘要 | 36h | 每轮读 | D1 |
+| `summary:lock:*` | 摘要锁 | 120s | 生成时 | D1 |
+| `emotion:state` | 情绪向量/事件 | 90 天 | 每轮读写 | D1 |
+| `profile:user` | 用户画像 | 6h | 主动消息读 | D1 |
+| `profile:dirty` | 画像脏标记 | 24h | 每轮可能写 | D1 |
+| `proactive:heartbeat` | 手机心跳 | 7 天 | 每 5 分钟写 | D1 |
+| `proactive:offline_alert` | 掉线提醒 | 7 天 | 少量 | D1 |
+| `proactive:paused_until` | 退订截止 | 无 | 少量 | D1 |
+| `weather:*` | 天气缓存 | 30 分钟 | 每轮读 | D1/isolate |
+| `cost:llm:*` | 非聊天费用 | 8 天 | 摘要/提炼 | D1 |
+| `files:recent` | 最近文件 | 7 天 | 每轮读 | D1（可选） |
+| `persona:state` | 性格漂移 | 无 | 每轮读/周写 | 可保留 |
+| `relation:active_days` | 累计天数 | 无 | 日读/写 | D1（可选） |
+| `aversion:candidates` | 雷区候选 | 30 天 | 日读/写 | D1（可选） |
+| `storage:mode` | 主/小号 R2 | 无 | 写时读 | isolate 缓存 |
+| `storage:usage` | R2 用量 | 6h | 日检查 | D1（可选） |
+| `config:city` | 城市配置 | 无 | 每轮读 | isolate + KV/D1 |
 
-> **Phase 1 更新**：`auth` 改为无状态签�?Cookie；`proactive:heartbeat`、`emotion:state`、`profile:*`、`memo/summary` 内容与锁、`weather:*`、`cost:llm:*`、`files:recent`、`persona:state` 已迁�?D1 `runtime_state`；`memory:qvec:*` �?`archive:cache` 已删�?KV 路径。仍保留 KV 的主要是 `memory:cache`、`memory:index`、`relation:active_days`、`aversion:candidates`、`config:city`、`storage:*` 等低�?大对象�?
-> 当前免费额度：KV �?100,000/天、写 1,000/天、删 1,000/天�?
+> **Phase 1 更新**：`auth` 改为无状态签名 Cookie；`proactive:heartbeat`、`emotion:state`、`profile:*`、`memo/summary` 内容与锁、`weather:*`、`cost:llm:*`、`files:recent`、`persona:state` 已迁到 D1 `runtime_state`；`memory:qvec:*` 与 `archive:cache` 已删除 KV 路径。仍保留 KV 的主要是 `memory:cache`、`memory:index`、`relation:active_days`、`aversion:candidates`、`config:city`、`storage:*` 等低频/大对象。
+
+> 当前免费额度：KV 读 100,000/天、写 1,000/天、删 1,000/天。
+
 ---
 
 ## 8. 当前记忆/关系链路
 
 ### 8.1 每轮聊天
 
-1. 鉴权（Cookie/KV �?Bearer）；
+1. 鉴权（Cookie/KV 或 Bearer）；
 2. `getMemory`（KV→R2）；
-3. `extractPromptMemory`（≤16KB 全量；否则核�?稳定画像）；
-4. `loadRecentRounds`�?0 轮，D1 + R2 补）�?5. `getRecentMemo` / 今日摘要�?6. `recallMemoryForChat`（关键词优先，必要时向量）；
-7. `processEmotionTurn`（读 KV `emotion:state`，可能写回）�?8. 组装 prompt（核�?+ 历史 + memo + 召回 + 角色�?+ 态度）；
-9. DeepSeek；落 D1；异步摘�?memo�?
+3. `extractPromptMemory`（≤16KB 全量；否则核心+稳定画像）；
+4. `loadRecentRounds`（10 轮，D1 + R2 补）；
+5. `getRecentMemo` / 今日摘要；
+6. `recallMemoryForChat`（关键词优先，必要时向量）；
+7. `processEmotionTurn`（读 KV `emotion:state`，可能写回）；
+8. 组装 prompt（核心 + 历史 + memo + 召回 + 角色卡 + 态度）；
+9. DeepSeek；落 D1；异步摘要/memo。
+
 ### 8.2 每日归档
 
 1. 存储容量检查；
-2. 反馈回填、队列清理、R2 context 清理�?3. 补跑 failed/stale/D1 未归档日期；
-4. �?`chat_logs/日期.log`�?5. 提炼 `memory.md`；失败标 failed�?6. 情绪/关系结算�?7. 近期动态归档、已完成事项、雷区学习；
-8. 去重、超 24KB 无损分层�?9. 写回 `memory.md` + 重建索引 + 周月摘要�?10. 清理 D1（只删已归档且提炼成功的日期）�?
+2. 反馈回填、队列清理、R2 context 清理；
+3. 补跑 failed/stale/D1 未归档日期；
+4. 写 `chat_logs/日期.log`；
+5. 提炼 `memory.md`；失败标 failed；
+6. 情绪/关系结算；
+7. 近期动态归档、已完成事项、雷区学习；
+8. 去重、超 24KB 无损分层；
+9. 写回 `memory.md` + 重建索引 + 周月摘要；
+10. 清理 D1（只删已归档且提炼成功的日期）。
+
 ---
 
-## 9. 当前测试与基�?
-| �?| �?|
+## 9. 当前测试与基线
+
+| 项 | 值 |
 |---|---|
-| 测试文件 | 57（基�?45；Phase 0 trace，Phase 1 auth/runtime，Phase 2 memory，Phase 3 affect，Phase 4 retrieval，Phase 5 flags/metrics�?|
-| 测试用例 | 693（基�?631；Phase 0 +6，Phase 1 +8，Phase 2 +25，Phase 3 +7，Phase 4 +7，Phase 5 +9�?|
-| 类型检�?| `node node_modules/typescript/bin/tsc --noEmit` |
+| 测试文件 | 57（基线 45；Phase 0 trace，Phase 1 auth/runtime，Phase 2 memory，Phase 3 affect，Phase 4 retrieval，Phase 5 flags/metrics） |
+| 测试用例 | 694（基线 631；Phase 0 +6，Phase 1 +8，Phase 2 +25，Phase 3 +7，Phase 4 +7，Phase 5 +10） |
+| 类型检查 | `node node_modules/typescript/bin/tsc --noEmit` |
 | 测试命令 | `node node_modules/vitest/vitest.mjs run` |
-| 关键测试 | 10 轮历史、记忆合�?去重、摘要触发、召回、关�?情绪、归档、队列、API 解析 |
+| 关键测试 | 10 轮历史、记忆合并/去重、摘要触发、召回、关系/情绪、归档、队列、API 解析 |
 
 ---
 
-## 10. 已知问题与重构目�?
+## 10. 已知问题与重构目标
+
 | 问题 | 目标阶段 |
 |---|---|
 | KV 承担高频状态，免费额度易耗尽 | Phase 1 |
-| 鉴权每次轮询�?KV | Phase 1 |
-| 网页 3s 轮询，请求量�?| Phase 1 |
-| emotion/profile/summary/weather 分散�?KV | Phase 1 |
-| memory.md 同时承担真相/投影/关系�?| Phase 2/3 |
-| 记忆按行索引，缺来源/有效�?置信�?| Phase 2/4 |
-| 关系/情绪无数值事件账本，难解�?回放 | Phase 3 |
-| 检索单�?query、分数直接相�?| Phase 4 |
-| 缺少 golden set、trace、评估体�?| Phase 0 |
+| 鉴权每次轮询读 KV | Phase 1 |
+| 网页 3s 轮询，请求量大 | Phase 1 |
+| emotion/profile/summary/weather 分散在 KV | Phase 1 |
+| memory.md 同时承担真相/投影/关系值 | Phase 2/3 |
+| 记忆按行索引，缺来源/有效期/置信度 | Phase 2/4 |
+| 关系/情绪无数值事件账本，难解释/回放 | Phase 3 |
+| 检索单路 query、分数直接相加 | Phase 4 |
+| 缺少 golden set、trace、评估体系 | Phase 0 |
 
 ---
 
-## 11. 本轮重构不动的部�?
-- `ds-qq-client` �?NapCat/proot/媒体/TTS 实现�?- `/api/chat`、`/v1/chat/completions`、`/api/proactive/*` 的外部契约；
+## 11. 本轮重构不动的部分
+
+- `ds-qq-client` 的 NapCat/proot/媒体/TTS 实现；
+- `/api/chat`、`/v1/chat/completions`、`/api/proactive/*` 的外部契约；
 - `memory.md` 作为导出/快照的兼容性；
-- 单用户模型（不引入多租户）�?
+- 单用户模型（不引入多租户）。
