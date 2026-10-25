@@ -129,7 +129,7 @@ describe('buildSystemPrompt', () => {
       voiceReply: true,
     });
     expect(prompt).toContain('[语音]');
-    expect(prompt).toContain('语音句子必须通顺完整');
+    expect(prompt).toContain('想发语音时');
   });
 
   it('网页渠道不加 Markdown 约束', () => {
