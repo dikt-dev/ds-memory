@@ -657,6 +657,7 @@ app.get('/api/app/link-preview', requireApp, async (c) => {
     let aid = 0;
     let cid = 0;
     let upMid = 0;
+    let cover = '';
     const cookie: Record<string, string> = c.env.BILIBILI_SESSDATA
       ? { Cookie: `SESSDATA=${c.env.BILIBILI_SESSDATA}` }
       : {};
@@ -682,6 +683,7 @@ app.get('/api/app/link-preview', requireApp, async (c) => {
             duration?: number;
             aid?: number;
             cid?: number;
+            pic?: string;
             owner?: { name?: string; mid?: number };
             pages?: Array<{ cid?: number }>;
           };
@@ -694,6 +696,7 @@ app.get('/api/app/link-preview', requireApp, async (c) => {
           aid = Number(json.data.aid || 0);
           cid = Number(json.data.cid || json.data.pages?.[0]?.cid || 0);
           upMid = Number(json.data.owner?.mid || 0);
+          cover = (json.data.pic || '').replace(/^http:/, 'https:');
         }
       }
     } catch {
@@ -807,6 +810,7 @@ app.get('/api/app/link-preview', requireApp, async (c) => {
       outline,
       subtitle,
       subtitle_count: subtitleCount,
+      cover,
     });
   } catch (e) {
     return c.json({ error: 'link preview failed', detail: String(e).slice(0, 200) }, 500);
