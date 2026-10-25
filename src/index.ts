@@ -232,6 +232,24 @@ app.post('/api/app/pair', async (c) => {
   });
 });
 
+/** App 心跳：让 Worker 知道移动端在线，避免误发“QQ 通道掉线”。 */
+app.post('/api/app/heartbeat', requireApp, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as {
+    connected?: unknown;
+    version?: unknown;
+    last_error?: unknown;
+  } | null;
+  const payload = {
+    at: new Date().toISOString(),
+    connected: body?.connected !== false,
+    queue_depth: 0,
+    version: typeof body?.version === 'string' ? body.version.slice(0, 40) : 'ds-mobile',
+    last_error: typeof body?.last_error === 'string' ? body.last_error.slice(0, 200) : null,
+  };
+  await putRuntimeState(c.env, HEARTBEAT_KV_KEY, JSON.stringify(payload), HEARTBEAT_TTL_SECONDS);
+  return c.json({ ok: true });
+});
+
 /** App 增量消息：所有渠道，按 id 升序；客户端自己按 id 去重。 */
 app.get('/api/app/events', requireApp, async (c) => {
   const rawAfter = Number(c.req.query('after_id') ?? '');
@@ -1103,10 +1121,13 @@ app.get('/api/admin/readiness', requireAuth, async (c) => {
       memory_engine: c.env.MEMORY_ENGINE ?? 'legacy',
       affect_engine: c.env.AFFECT_ENGINE ?? 'legacy',
       memory_engine_qq: c.env.MEMORY_ENGINE_QQ ?? c.env.MEMORY_ENGINE ?? 'legacy',
+      memory_engine_mobile: c.env.MEMORY_ENGINE_MOBILE ?? c.env.MEMORY_ENGINE ?? 'legacy',
       memory_engine_web: c.env.MEMORY_ENGINE_WEB ?? c.env.MEMORY_ENGINE ?? 'legacy',
       affect_engine_qq: c.env.AFFECT_ENGINE_QQ ?? c.env.AFFECT_ENGINE ?? 'legacy',
+      affect_engine_mobile: c.env.AFFECT_ENGINE_MOBILE ?? c.env.AFFECT_ENGINE ?? 'legacy',
       affect_engine_web: c.env.AFFECT_ENGINE_WEB ?? c.env.AFFECT_ENGINE ?? 'legacy',
       proactive_engine: c.env.PROACTIVE_ENGINE ?? 'legacy',
+      proactive_delivery: c.env.PROACTIVE_DELIVERY ?? 'queue',
       auth_secret_configured: Boolean(c.env.AUTH_SECRET),
       memory_bytes: memoryBytes,
       context,
@@ -1602,11 +1623,14 @@ app.route('/v1', openaiApp);
 
 /** Bearer 鉴权（复用 ASTROBOT_API_KEY）。 */
 async function checkQueueAuth(c: Context<AppEnv>): Promise<boolean> {
-  const expected = c.env.ASTROBOT_API_KEY;
-  if (!expected) return false;
   const auth = c.req.header('authorization') ?? '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
-  return token.length > 0 && token === expected;
+  if (!token) return false;
+  const expected = c.env.ASTROBOT_API_KEY;
+  if (expected && token === expected) return true;
+  // App 设备 Token 也可以拉主动消息/ACK，避免把 ASTROBOT_API_KEY 打进 APK
+  const device = await c.env.KV.get(`app:device:${token}`).catch(() => null);
+  return device !== null;
 }
 
 /** 拉取待发送的主动消息。 */
@@ -1775,7 +1799,7 @@ async function maybeRefreshContext(env: Env, now: Date): Promise<void> {
 
 async function runChannelCheck(env: Env, now: Date): Promise<void> {
   const result = await checkChannelOffline(env, now).catch(() => 'skip' as const);
-  if (result === 'alerted') console.warn('[cron] QQ 通道掉线，已入队提醒');
+  if (result === 'alerted') console.warn('[cron] 聊天通道掉线，已生成提醒');
 }
 
 export default {

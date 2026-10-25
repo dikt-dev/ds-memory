@@ -117,7 +117,7 @@ export function randomTargetMinutes(dateKey: string, index: number): number {
 
 export interface DeliveryResult {
   ok: boolean;
-  mode: 'direct' | 'queue';
+  mode: 'direct' | 'queue' | 'events';
   /**
    * 实际状态：
    * - `sent`：直连模式，AstrBot 已确认收到 → 确实送达
@@ -144,6 +144,10 @@ export async function deliverProactive(
   now: Date,
   messageId?: number,
 ): Promise<DeliveryResult> {
+  // App 直接轮询 /api/app/events；消息已先落 messages，不需要再入队
+  if ((env.PROACTIVE_DELIVERY ?? '').toLowerCase() === 'events') {
+    return { ok: true, mode: 'events', status: 'sent' };
+  }
   if (env.ASTRBOT_BASE_URL && env.ASTROBOT_OPENAPI_KEY && env.ASTRBOT_UMO) {
     const ok = await sendToAstrBot(env, text);
     return { ok, mode: 'direct', status: ok ? 'sent' : 'failed' };

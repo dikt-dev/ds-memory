@@ -86,9 +86,10 @@ node scripts/try-chat.mjs "在干嘛"   # 命令行试聊，输出字数/行数/
 | `AUTH_MODE` | `signed`（默认，HMAC Cookie）或 `kv`（旧会话，回滚用） |
 | `MEMORY_ENGINE` | 全局记忆引擎：`legacy` / `shadow` / `next` |
 | `AFFECT_ENGINE` | 全局关系/情绪引擎：`legacy` / `shadow` / `next` |
-| `MEMORY_ENGINE_QQ` / `MEMORY_ENGINE_WEB` | 按渠道覆盖记忆引擎（Phase 5 切流用） |
-| `AFFECT_ENGINE_QQ` / `AFFECT_ENGINE_WEB` | 按渠道覆盖关系引擎（Phase 5 切流用） |
+| `MEMORY_ENGINE_MOBILE` / `MEMORY_ENGINE_WEB` | 按渠道覆盖记忆引擎（Phase 5 切流用；QQ 旧键仍兼容） |
+| `AFFECT_ENGINE_MOBILE` / `AFFECT_ENGINE_WEB` | 按渠道覆盖关系引擎（Phase 5 切流用；QQ 旧键仍兼容） |
 | `PROACTIVE_ENGINE` | 主动消息引擎：`legacy` / `shadow` / `next`（最后切） |
+| `PROACTIVE_DELIVERY` | `queue`（默认；App 轮询并 ACK）/ `events`（仅调试） |
 | `ASTRBOT_BASE_URL` / `ASTRBOT_UMO` | AstrBot 直连推送地址与会话 UMO；留空则走队列模式 |
 | `CHARACTER_NAME` | 角色自称，缺省「小忆」；同时作用于系统提示词、状态卡和网页标题 |
 | `USER_ADDRESS` | 角色怎么称呼你，缺省按记忆自然称呼；填了就会固定用它 |
@@ -191,7 +192,12 @@ Worker 提供 OpenAI 兼容端点，AstrBot 作为「OpenAI Compatible」服务�
 | POST/GET | `/api/tts`、`/api/tts/jobs/:id` | Cookie | 创建/轮询网页 TTS 任务（手机优先） |
 | GET/POST | `/api/tts/pending`、`/ack`、`/nack` | Bearer | 手机 TTS 队列 |
 | POST | `/api/tts/jobs/:id/fallback` | Cookie | MeloTTS 兜底生成 |
-| GET/POST | `/api/proactive/pending`、`/ack` | Bearer | 主动消息队列 |
+| POST | `/api/app/pair` | - | App 配对，换设备 Token |
+| GET | `/api/app/events` | Device Token | App 增量消息（所有渠道） |
+| POST | `/api/app/heartbeat` | Device Token | App 心跳（避免误报通道掉线） |
+| POST | `/api/app/tts` | Device Token | App Azure TTS 代理 |
+| GET | `/api/app/image`、`/api/app/media` | Device Token | App 图片/视频/GIF 回放 |
+| GET/POST | `/api/proactive/pending`、`/ack` | Bearer | 主动消息队列（App 设备 Token 也接受） |
 | GET | `/api/admin/readiness` | Cookie | Phase 5 就绪检查（迁移/上下文/渠道引擎） |
 | GET | `/api/admin/engine-metrics?days=7` | Cookie | shadow/next 按天指标 |
 | GET | `/api/admin/storage-check` | Cookie | 小号 R2 的 put/get/delete + 主模式回源探针 |

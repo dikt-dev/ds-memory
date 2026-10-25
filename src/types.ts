@@ -40,10 +40,14 @@ export interface Env {
   AFFECT_ENGINE?: string;
   MEMORY_ENGINE_QQ?: string;
   MEMORY_ENGINE_WEB?: string;
+  MEMORY_ENGINE_MOBILE?: string;
   AFFECT_ENGINE_QQ?: string;
   AFFECT_ENGINE_WEB?: string;
+  AFFECT_ENGINE_MOBILE?: string;
   /** 主动消息引擎：legacy（默认）| shadow（只记录）| next（使用新记忆/态度）。 */
   PROACTIVE_ENGINE?: string;
+  /** 主动消息投递：queue（旧）| events（App 从 /api/app/events 收） */
+  PROACTIVE_DELIVERY?: string;
   ASTROBOT_API_KEY?: string; // OpenAI 兼容端点（AstrBot 等）的 Bearer 密钥
   /** Azure Speech TTS；App 通过 Worker 代理避免手机直连 Azure 的高延迟 */
   AZURE_SPEECH_KEY?: string;

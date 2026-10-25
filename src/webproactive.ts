@@ -649,8 +649,8 @@ export async function checkChannelOffline(env: Env, now: Date): Promise<OfflineC
   if (alertedAt === hb.at) return 'already-alerted';
 
   const text =
-    `⚠️ QQ 通道已经 ${Math.round(hours)} 小时没有心跳了，手机上的客户端可能被系统停掉。` +
-    '重新打开 Termux、执行 bash ds.sh start 就能恢复。';
+    `⚠️ 聊天通道已经 ${Math.round(hours)} 小时没有心跳了，手机上的客户端可能被系统停掉。` +
+    '重新打开 DS-Mobile，或检查后台运行权限即可恢复。';
   const id = await enqueueProactive(env, text, now).catch(() => 0);
   if (!id) return 'enqueue-failed';
 

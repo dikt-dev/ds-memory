@@ -19,14 +19,19 @@ MEMORY_ENGINE=legacy
 # 态度引擎：legacy（默认）| shadow（只记录对比）| next（使用 attitude policy）
 AFFECT_ENGINE=legacy
 
-# 渠道级覆盖（Phase 5：QQ 先切、网页后切）
-# MEMORY_ENGINE_QQ=shadow
+# 渠道级覆盖（Phase 5：App 先切、网页后切）
+# MEMORY_ENGINE_MOBILE=shadow
 # MEMORY_ENGINE_WEB=legacy
-# AFFECT_ENGINE_QQ=shadow
+# AFFECT_ENGINE_MOBILE=shadow
 # AFFECT_ENGINE_WEB=legacy
+# 旧 QQ 入口保留兼容
+# MEMORY_ENGINE_QQ=shadow
+# AFFECT_ENGINE_QQ=shadow
 
 # 主动消息引擎（最后切）：legacy（默认）| shadow（只计算）| next（使用新检索/态度）
 # PROACTIVE_ENGINE=legacy
+# 主动消息投递：queue（默认，App 轮询并 ACK）| events（不再入队，仅调试）
+# PROACTIVE_DELIVERY=queue
 
 # OpenAI 兼容端点（AstrBot 等）的 Bearer 密钥：node -e "console.log(require('crypto').randomBytes(32).toString('hex'))" 生成
 ASTROBOT_API_KEY=REPLACE_ME

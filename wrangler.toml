@@ -45,15 +45,19 @@ STORAGE_THRESHOLD_BYTES = "9126805504"
 # 主动消息强度：quiet（少说）/ normal（正常）/ active（活跃）
 PROACTIVE_LEVEL = "normal"
 
-# Phase 5 切换开关（默认 legacy；按 QQ → 网页 → 主动消息顺序改）
+# Phase 5 切换开关（默认 legacy；按 App → 网页 → 主动消息顺序改）
 AUTH_MODE = "signed"
 MEMORY_ENGINE = "legacy"
 AFFECT_ENGINE = "legacy"
-# 渠道级覆盖：QQ 先切，网页后切；未设置回退上面的全局值
-MEMORY_ENGINE_QQ = "legacy"
+# 渠道级覆盖：App 先切，网页后切；旧 QQ 键保留兼容
+MEMORY_ENGINE_MOBILE = "legacy"
 MEMORY_ENGINE_WEB = "legacy"
-AFFECT_ENGINE_QQ = "legacy"
+MEMORY_ENGINE_QQ = "legacy"
+AFFECT_ENGINE_MOBILE = "legacy"
 AFFECT_ENGINE_WEB = "legacy"
+AFFECT_ENGINE_QQ = "legacy"
+# App 轮询并 ACK；events 仅调试
+PROACTIVE_DELIVERY = "queue"
 
 # ── 角色身份（可选）──────────────────────────────────────────
 # 不填则用开源默认值：角色名「小忆」、按记忆自然称呼对方。

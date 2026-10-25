@@ -16,6 +16,8 @@ export interface QueuedMessage {
   id: number;
   content: string;
   created_at: string;
+  /** 关联的 messages.id；App 用它做通知去重 */
+  message_id: number | null;
 }
 
 /** 单条消息最多被尝试投递的次数（配合下面的时间窗口一起判断）。 */
@@ -75,7 +77,7 @@ export async function takePending(env: Env, limit = 5): Promise<QueuedMessage[]>
          ORDER BY id ASC
          LIMIT ?
       )
-      RETURNING id, content, created_at`,
+      RETURNING id, content, created_at, message_id`,
   )
     .bind(isoInBeijing(now), MAX_ATTEMPTS, retryCutoff, leaseCutoff, limit)
     .all<QueuedMessage>();
