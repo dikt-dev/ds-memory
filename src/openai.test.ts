@@ -238,4 +238,11 @@ describe('normalizeAssistantText（落库前归一化）', () => {
   it('只有标记时剩下「（语音）」', () => {
     expect(normalizeAssistantText('[语音]')).toBe('（语音）');
   });
+
+  it('删掉模型模仿的历史时间标签（有/无空格都处理）', () => {
+    expect(normalizeAssistantText('[10-25 11:23] 哼，才不是等你')).toBe('哼，才不是等你');
+    expect(normalizeAssistantText('[10-2511:23] 哼，才不是等你')).toBe('哼，才不是等你');
+    expect(normalizeAssistantText('[11:23] 在的')).toBe('在的');
+    expect(normalizeAssistantText('[2026-10-25 11:23] 在的')).toBe('在的');
+  });
 });

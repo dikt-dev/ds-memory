@@ -20,7 +20,7 @@ import {
 import { streamChat } from './chat';
 import { messagesPage, usageByDay, messagesByDate, assistantReplyTo } from './db';
 import { getMemory, MEMORY_KV_KEY, putMemory } from './memory';
-import { messagesSince } from './db';
+import { messagesSince, webMessagesSince, latestWebMessageId } from './db';
 import { byteLength, memoryDensity } from './memory-maintenance';
 import { getCityConfig, setCity } from './settings';
 import { fetchWeather } from './weather';
@@ -67,7 +67,7 @@ import {
   runWebProactiveSlot,
 } from './webproactive';
 import { ackSent, dropMessages, markAttempt, queueStats, takePending } from './queue';
-import { openaiApp, stripAttachmentWrapper } from './openai';
+import { openaiApp, stripAttachmentWrapper, checkBearer } from './openai';
 import { getLlmCost } from './llm-cost';
 import { getRecentMemo } from './recent-memory';
 import { CORE_TARGET_BYTES, getArchiveLines } from './memory-archive';
@@ -159,6 +159,70 @@ async function requireAuth(c: Context<AppEnv>, next: Next) {
   }
   await next();
 }
+
+/** DS-Mobile 设备 Token 鉴权：只允许访问 App 自己的消息事件接口。 */
+async function requireApp(c: Context<AppEnv>, next: Next) {
+  const auth = c.req.header('authorization') ?? '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  if (!token) return c.json({ error: 'invalid_token' }, 401);
+  const device = await c.env.KV.get(`app:device:${token}`).catch(() => null);
+  if (!device) return c.json({ error: 'invalid_token' }, 401);
+  await next();
+}
+
+/** 一次性配对码换设备 Token；配对码优先 APP_PAIR_CODE，未配置时临时复用 ASTROBOT_API_KEY。 */
+app.post('/api/app/pair', async (c) => {
+  const body = await c.req.json().catch(() => null) as {
+    pair_code?: unknown;
+    device_name?: unknown;
+    device_id?: unknown;
+  } | null;
+  const pairCode = body && typeof body.pair_code === 'string' ? body.pair_code : '';
+  const expected = c.env.APP_PAIR_CODE || c.env.ASTROBOT_API_KEY;
+  if (!expected) return c.json({ error: 'pair_not_configured' }, 503);
+  if (!pairCode || pairCode !== expected) return c.json({ error: 'invalid_pair_code' }, 401);
+
+  const token = randomHex(32);
+  const deviceName = body && typeof body.device_name === 'string' ? body.device_name.slice(0, 80) : '';
+  const deviceId = body && typeof body.device_id === 'string' ? body.device_id.slice(0, 120) : '';
+  await c.env.KV.put(
+    `app:device:${token}`,
+    JSON.stringify({ device_name: deviceName, device_id: deviceId, created_at: isoInBeijing() }),
+    { expirationTtl: 365 * 24 * 3600 },
+  );
+  return c.json({
+    ok: true,
+    token,
+    expires_at: new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString(),
+  });
+});
+
+/** App 增量消息：所有渠道，按 id 升序；客户端自己按 id 去重。 */
+app.get('/api/app/events', requireApp, async (c) => {
+  const rawAfter = Number(c.req.query('after_id') ?? '');
+  const afterId = Number.isFinite(rawAfter) && rawAfter >= 0 ? Math.floor(rawAfter) : 0;
+  const rawLimit = Number(c.req.query('limit') ?? '50');
+  const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 50, 1), 100);
+  const latest = c.req.query('latest') === '1';
+  const result = latest
+    ? await messagesPage(c.env, { limit })
+    : await messagesSince(c.env, afterId, limit);
+  const { messages, hasMore } = result;
+  const payload = messages.map((m) => ({
+    id: m.id,
+    role: m.role,
+    content: m.content,
+    channel: m.channel,
+    created_at: m.created_at,
+    turn_id: m.turn_id,
+    proactive_kind: m.proactive_kind,
+  }));
+  return c.json({
+    messages: sanitizeStoredMessages(payload),
+    latest_id: messages.length > 0 ? messages[messages.length - 1].id : afterId,
+    has_more: hasMore,
+  });
+});
 
 /** 资源连通性检查（阶段 0 验收项）。 */
 app.get('/api/health', async (c) => {
@@ -508,6 +572,30 @@ app.get('/api/history/since', requireAuth, async (c) => {
   const { messages, hasMore } = await messagesSince(c.env, afterId, limit);
   return c.json({
     messages: sanitizeStoredMessages(messages),
+    has_more: hasMore,
+    latest_id: messages.length > 0 ? messages[messages.length - 1].id : afterId,
+  });
+});
+
+/** 网页 → QQ 同步：只返回 channel='web' 的普通聊天，Bearer (ASTROBOT_API_KEY) 鉴权。 */
+app.get('/api/qq/outbox', async (c) => {
+  if (!(await checkBearer(c))) return c.json({ error: '无效的 API Key' }, 401);
+  if (c.req.query('baseline') === '1') {
+    return c.json({ messages: [], latest_id: await latestWebMessageId(c.env), has_more: false });
+  }
+  const rawAfter = Number(c.req.query('after_id') ?? '');
+  const afterId = Number.isFinite(rawAfter) && rawAfter >= 0 ? Math.floor(rawAfter) : 0;
+  const rawLimit = Number(c.req.query('limit') ?? '20');
+  const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 20, 1), 50);
+  const { messages, hasMore } = await webMessagesSince(c.env, afterId, limit);
+  const payload = messages.map((m) => ({
+    id: m.id,
+    role: m.role,
+    content: m.content,
+    created_at: m.created_at,
+  }));
+  return c.json({
+    messages: sanitizeStoredMessages(payload),
     has_more: hasMore,
     latest_id: messages.length > 0 ? messages[messages.length - 1].id : afterId,
   });

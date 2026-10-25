@@ -358,6 +358,33 @@ export function historyRangeNote(rows: MessageRow[], now: Date): string | null {
   );
 }
 
+/** 网页 → QQ 同步：只取网页渠道的普通聊天，按 id 增量。 */
+export async function webMessagesSince(
+  env: Env,
+  afterId: number,
+  limit: number,
+): Promise<{ messages: MessageRow[]; hasMore: boolean }> {
+  const results = await env.DB.prepare(
+    `SELECT ${SELECT_COLS} FROM messages
+     WHERE id > ? AND channel = 'web' AND proactive_kind IS NULL
+     ORDER BY id ASC LIMIT ?`,
+  )
+    .bind(afterId, limit + 1)
+    .all<MessageRow>();
+  const rows = results.results ?? [];
+  const hasMore = rows.length > limit;
+  return { messages: rows.slice(0, limit), hasMore };
+}
+
+/** 网页渠道当前最大 id；客户端首次启动用这个做基线，避免重放历史。 */
+export async function latestWebMessageId(env: Env): Promise<number> {
+  const row = await env.DB.prepare(
+    `SELECT COALESCE(MAX(id), 0) AS id FROM messages
+     WHERE channel = 'web' AND proactive_kind IS NULL`,
+  ).first<{ id: number }>();
+  return Number(row?.id ?? 0);
+}
+
 /** 某条用户消息对应的助手回复（可能落在下一天，归档补全用）。 */
 export async function assistantReplyTo(env: Env, userMessageId: number): Promise<MessageRow | null> {
   const res = await env.DB.prepare(

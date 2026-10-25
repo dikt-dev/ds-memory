@@ -61,12 +61,15 @@ function openaiError(c: Context<AppEnv>, status: number, message: string) {
   );
 }
 
-async function checkBearer(c: Context<AppEnv>): Promise<boolean> {
+export async function checkBearer(c: Context<AppEnv>): Promise<boolean> {
   const expected = c.env.ASTROBOT_API_KEY;
-  if (!expected) return false;
   const auth = c.req.header('authorization') ?? '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
-  return token.length > 0 && token === expected;
+  if (!token) return false;
+  if (expected && token === expected) return true;
+  // DS-Mobile 设备 Token：配对后写入 KV，允许调用 OpenAI 兼容端点
+  const device = await c.env.KV.get(`app:device:${token}`).catch(() => null);
+  return device !== null;
 }
 
 /** 提取消息中的纯文本（content 为 string，或 [{type:'text',text}] 数组）。 */
@@ -232,7 +235,7 @@ export function buildLastUserContent(
  */
 export function normalizeAssistantText(text: string): string {
   const TIME_LABEL =
-    /^\s*[\[【]\s*(?:(?:\d{2,4}[-/])?\d{1,2}[-/]\d{1,2}\s+)?\d{1,2}:\d{2}(?::\d{2})?\s*[\]】]\s*/;
+    /^\s*[\[【]\s*(?:(?:\d{2,4}[-/])?\d{1,2}[-/]\d{1,2}\s*)?\d{1,2}:\d{2}(?::\d{2})?\s*[\]】]\s*/;
   let out = text
     .replace(/^\s*\[(?:语音|voice)\]\s*/i, '（语音）')
     .replace(/\[face[:：][^\]]{1,12}\]/g, '');
