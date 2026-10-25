@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { mergeDailyLogs, missingDatesInMonth, completeConversationRows } from './jobs';
+import {
+  completeConversationRows,
+  isProvisionalArchiveRun,
+  mergeDailyLogs,
+  missingDatesInMonth,
+} from './jobs';
 import { daysInMonth, subtractMonths } from './date';
 import type { MessageRow } from './db';
 
@@ -41,6 +46,14 @@ describe('mergeDailyLogs', () => {
 
   it('空日志返回空结果', () => {
     expect(mergeDailyLogs([])).toEqual({ merged: [], expected: 0 });
+  });
+});
+
+describe('isProvisionalArchiveRun', () => {
+  it('目标当天白天跑完的归档视为临时，次日可重跑', () => {
+    expect(isProvisionalArchiveRun('2026-10-24T13:54:22+08:00', '2026-10-24')).toBe(true);
+    expect(isProvisionalArchiveRun('2026-10-25T04:00:05+08:00', '2026-10-24')).toBe(false);
+    expect(isProvisionalArchiveRun('2026-10-25T09:17:10+08:00', '2026-10-24')).toBe(false);
   });
 });
 

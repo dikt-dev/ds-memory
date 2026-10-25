@@ -243,7 +243,7 @@ CREATE INDEX IF NOT EXISTS idx_attitude_snapshots_time ON attitude_snapshots(cre
 CREATE TABLE IF NOT EXISTS engine_metrics (
   day_key    TEXT NOT NULL,
   channel    TEXT NOT NULL,
-  kind       TEXT NOT NULL CHECK (kind IN ('memory','affect')),
+  kind       TEXT NOT NULL CHECK (kind IN ('memory','affect','proactive')),
   mode       TEXT NOT NULL,
   requests   INTEGER NOT NULL DEFAULT 0,
   old_items  INTEGER NOT NULL DEFAULT 0,

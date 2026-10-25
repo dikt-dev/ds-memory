@@ -88,13 +88,23 @@ export interface MonthlyMergeResult {
 
 const STALE_RUNNING_MS = 2 * 60 * 60 * 1000; // running 超过 2 小时视为可接管（防卡死）
 
+/** 归档目标当天跑完的 done 只是临时快照，次日 04:00 必须允许重跑。 */
+export function isProvisionalArchiveRun(runAt: string, target: string): boolean {
+  return dateKeyInBeijing(new Date(runAt)) <= target;
+}
+
 async function claimJob(env: Env, jobType: string, target: string): Promise<boolean> {
   const row = await env.DB.prepare(
     'SELECT status, run_at FROM cron_runs WHERE job_type = ? AND target = ?',
   )
     .bind(jobType, target)
     .first<{ status: string; run_at: string }>();
-  if (row?.status === 'done') return false;
+  if (row?.status === 'done') {
+    // 白天（尤其归档目标当天）跑的归档只覆盖当时已有的消息，不能算最终完成。
+    // 次日 04:00 必须允许重跑；否则后半天的消息会永久漏归档。
+    if (!isProvisionalArchiveRun(row.run_at, target)) return false;
+    console.warn(`[daily] ${target} 的 done 记录是当天 ${row.run_at} 跑的，视为临时归档，允许重跑`);
+  }
   if (row?.status === 'running') {
     const age = Date.now() - new Date(row.run_at).getTime();
     if (Number.isFinite(age) && age < STALE_RUNNING_MS) return false;
