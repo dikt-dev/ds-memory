@@ -1065,7 +1065,7 @@ async function resetAndLoadHistory() {
 }
 
 /* ---------- 实时刷新：定时增量拉取（让 QQ / 其它渠道的消息即时出现）---------- */
-const POLL_INTERVAL_MS = 20000;
+const POLL_INTERVAL_MS = 5000;
 let pollTimer = null;
 let pollingNow = false;
 let sending = false;
@@ -1077,7 +1077,7 @@ async function pollNewMessages() {
   if (document.visibilityState === 'hidden') return; // 后台标签页不轮询
   pollingNow = true;
   try {
-    const res = await fetch(`/api/history/since?after_id=${latestSeenId}&limit=50`);
+    const res = await fetch(`/api/history/since?after_id=${latestSeenId}&limit=50`, { cache: 'no-store' });
     if (res.status === 401) { stopPolling(); showLogin(); return; }
     if (!res.ok) return;
     const data = await res.json();
