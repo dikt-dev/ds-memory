@@ -45,6 +45,9 @@ export interface Env {
   /** 主动消息引擎：legacy（默认）| shadow（只记录）| next（使用新记忆/态度）。 */
   PROACTIVE_ENGINE?: string;
   ASTROBOT_API_KEY?: string; // OpenAI 兼容端点（AstrBot 等）的 Bearer 密钥
+  /** Azure Speech TTS；App 通过 Worker 代理避免手机直连 Azure 的高延迟 */
+  AZURE_SPEECH_KEY?: string;
+  AZURE_SPEECH_REGION?: string;
   /** DS-Mobile 一次性配对码；留空则临时复用 ASTROBOT_API_KEY */
   APP_PAIR_CODE?: string;
   // 小号 R2（S3 兼容 API）：主账号容量达到阈值后，新数据写入小号

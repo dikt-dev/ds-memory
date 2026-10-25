@@ -561,6 +561,69 @@ app.get('/api/app/image', requireApp, async (c) => {
   });
 });
 
+/**
+ * App TTS 代理：手机直连 eastus 实测 20s+，改走 Worker 边缘节点。
+ * 设备 Token 鉴权；只接受短文本，避免变成公开 TTS。
+ */
+app.post('/api/app/tts', requireApp, async (c) => {
+  const body = await c.req.json().catch(() => null) as {
+    text?: unknown;
+    voice?: unknown;
+    rate?: unknown;
+    pitch?: unknown;
+    style?: unknown;
+    style_degree?: unknown;
+  } | null;
+  const text = typeof body?.text === 'string' ? body.text.trim() : '';
+  if (!text || text.length > 2000) return c.json({ error: 'text invalid' }, 400);
+  const key = c.env.AZURE_SPEECH_KEY;
+  if (!key) return c.json({ error: 'tts not configured' }, 503);
+  const region = (c.env.AZURE_SPEECH_REGION || 'eastus').replace(/[^a-z0-9-]/gi, '');
+  const voice = typeof body?.voice === 'string' && /^[A-Za-z0-9-]+$/.test(body.voice)
+    ? body.voice
+    : 'zh-CN-XiaoyiNeural';
+  const rate = typeof body?.rate === 'string' ? body.rate.replace(/[^0-9%+-]/g, '') : '+5%';
+  const pitch = typeof body?.pitch === 'string' ? body.pitch.replace(/[^0-9%+\-Hz]/g, '') : '+3Hz';
+  const style = typeof body?.style === 'string' ? body.style.replace(/[^a-z]/gi, '') : '';
+  const degree = typeof body?.style_degree === 'string'
+    ? body.style_degree.replace(/[^0-9.]/g, '')
+    : '1.2';
+  const escape = (s: string) => s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/'/g, '&apos;')
+    .replace(/"/g, '&quot;');
+  const inner = `<prosody rate='${escape(rate)}' pitch='${escape(pitch)}'>${escape(text)}</prosody>`;
+  const content = style
+    ? `<mstts:express-as style='${style}' styledegree='${escape(degree)}'>${inner}</mstts:express-as>`
+    : inner;
+  const ssml = `<speak version='1.0' xml:lang='zh-CN' xmlns:mstts='https://www.w3.org/2001/mstts'><voice xml:lang='zh-CN' name='${escape(voice)}'>${content}</voice></speak>`;
+  const upstream = await fetch(
+    `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`,
+    {
+      method: 'POST',
+      headers: {
+        'Ocp-Apim-Subscription-Key': key,
+        'Content-Type': 'application/ssml+xml',
+        'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3',
+        'User-Agent': 'DS-Mobile-Worker',
+      },
+      body: ssml,
+    },
+  );
+  if (!upstream.ok) {
+    const detail = (await upstream.text()).slice(0, 300);
+    return c.json({ error: 'tts upstream failed', status: upstream.status, detail }, 502);
+  }
+  return new Response(await upstream.arrayBuffer(), {
+    headers: {
+      'content-type': 'audio/mpeg',
+      'cache-control': 'no-store',
+    },
+  });
+});
+
 /** 聊天图片回放（需登录；图片存在 R2 images/ 下，主账号优先、小号兜底）。 */
 app.get('/api/image/*', requireAuth, async (c) => {
   const key = decodeURIComponent(c.req.path.replace(/^\/api\/image\//, ''));
