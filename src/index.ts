@@ -25,6 +25,7 @@ import { byteLength, memoryDensity } from './memory-maintenance';
 import { getCityConfig, setCity } from './settings';
 import { fetchWeather } from './weather';
 import { buildAudioKey, buildImageKey, saveImage } from './media';
+import SparkMD5 from 'spark-md5';
 import {
   deleteObject,
   getObject,
@@ -102,6 +103,40 @@ import { deleteRuntimeState, getRuntimeState, putRuntimeState } from './runtime-
 import { getHeartbeat } from './profile-cache';
 
 type AppEnv = { Bindings: Env; Variables: { requestId: string } };
+
+const BILI_MIXIN_TAB = [
+  46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35,
+  27, 43, 5, 49, 33, 9, 42, 19, 29, 28, 14, 39, 12, 38, 41, 13,
+  37, 48, 7, 16, 24, 55, 40, 61, 26, 17, 0, 1, 60, 51, 30, 4,
+  22, 25, 54, 21, 56, 59, 6, 63, 57, 62, 11, 36, 20, 34, 44, 52,
+];
+
+function biliSign(params: Record<string, string | number>, mixinKey: string) {
+  const signed: Record<string, string | number> = { ...params, wts: Math.floor(Date.now() / 1000) };
+  const cleaned: Record<string, string> = {};
+  for (const [k, v] of Object.entries(signed)) {
+    cleaned[k] = String(v).replace(/[!'()*]/g, '');
+  }
+  const query = Object.keys(cleaned).sort().map((k) =>
+    `${encodeURIComponent(k)}=${encodeURIComponent(cleaned[k])}`
+  ).join('&');
+  return `${query}&w_rid=${SparkMD5.hash(query + mixinKey)}`;
+}
+
+async function biliMixinKey(headers: Record<string, string>): Promise<string | null> {
+  try {
+    const nav = await fetch('https://api.bilibili.com/x/web-interface/nav', { headers });
+    const json = await nav.json() as { data?: { wbi_img?: { img_url?: string; sub_url?: string } } };
+    const wbi = json.data?.wbi_img;
+    if (!wbi?.img_url || !wbi.sub_url) return null;
+    const img = wbi.img_url.split('/').pop()?.split('.')[0] ?? '';
+    const sub = wbi.sub_url.split('/').pop()?.split('.')[0] ?? '';
+    const orig = img + sub;
+    return BILI_MIXIN_TAB.map((i) => orig[i] ?? '').join('').slice(0, 32);
+  } catch {
+    return null;
+  }
+}
 const app = new Hono<AppEnv>();
 
 // Phase 0 可观测性：每个请求带 request-id；只记录关键路径/错误，避免轮询刷屏。
@@ -619,6 +654,9 @@ app.get('/api/app/link-preview', requireApp, async (c) => {
     let owner = '';
     let duration = 0;
     let desc = '';
+    let aid = 0;
+    let cid = 0;
+    let upMid = 0;
     const cookie: Record<string, string> = c.env.BILIBILI_SESSDATA
       ? { Cookie: `SESSDATA=${c.env.BILIBILI_SESSDATA}` }
       : {};
@@ -642,7 +680,10 @@ app.get('/api/app/link-preview', requireApp, async (c) => {
             title?: string;
             desc?: string;
             duration?: number;
-            owner?: { name?: string };
+            aid?: number;
+            cid?: number;
+            owner?: { name?: string; mid?: number };
+            pages?: Array<{ cid?: number }>;
           };
         };
         if (json.code === 0 && json.data) {
@@ -650,6 +691,9 @@ app.get('/api/app/link-preview', requireApp, async (c) => {
           owner = json.data.owner?.name || '';
           duration = json.data.duration || 0;
           desc = (json.data.desc || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+          aid = Number(json.data.aid || 0);
+          cid = Number(json.data.cid || json.data.pages?.[0]?.cid || 0);
+          upMid = Number(json.data.owner?.mid || 0);
         }
       }
     } catch {
@@ -687,7 +731,83 @@ app.get('/api/app/link-preview', requireApp, async (c) => {
     if (!title || /出错啦|页面不存在|404/i.test(title)) {
       return c.json({ error: 'preview unavailable', bvid }, 502);
     }
-    return c.json({ bvid, title, owner, duration, desc });
+
+    let summary = '';
+    let outline: string[] = [];
+    let subtitle = '';
+    let subtitleCount = 0;
+    if (cookie.Cookie && cid) {
+      const headers = {
+        'User-Agent': ua,
+        Referer: 'https://www.bilibili.com/',
+        Accept: 'application/json',
+        ...cookie,
+      };
+      const mixinKey = await biliMixinKey(headers);
+      if (mixinKey) {
+        try {
+          const params = biliSign({ aid, cid }, mixinKey);
+          const player = await fetch(
+            `https://api.bilibili.com/x/player/wbi/v2?${params}`,
+            { headers },
+          );
+          const pj = await player.json() as {
+            data?: { subtitle?: { subtitles?: Array<{ lan?: string; subtitle_url?: string }> } };
+          };
+          const subs = pj.data?.subtitle?.subtitles ?? [];
+          const zh = subs.find((s) => /^(zh|ai)/i.test(s.lan ?? '')) ?? subs[0];
+          if (zh?.subtitle_url) {
+            const url = zh.subtitle_url.startsWith('//') ? `https:${zh.subtitle_url}` : zh.subtitle_url;
+            const sr = await fetch(url, { headers });
+            const sj = await sr.json() as { body?: Array<{ content?: string }> };
+            const lines = (sj.body ?? []).map((x) => (x.content ?? '').trim()).filter(Boolean);
+            subtitleCount = lines.length;
+            subtitle = lines.join('\n').slice(0, 4000);
+          }
+        } catch {
+          // 字幕不可用时继续
+        }
+        try {
+          const params = biliSign({ bvid, cid, up_mid: upMid }, mixinKey);
+          const conclusion = await fetch(
+            `https://api.bilibili.com/x/web-interface/view/conclusion/get?${params}`,
+            { headers },
+          );
+          const cj = await conclusion.json() as {
+            data?: {
+              model_result?: {
+                summary?: string;
+                outline?: Array<{ title?: string; part_outline?: string[] }>;
+              };
+            };
+          };
+          const model = cj.data?.model_result;
+          summary = (model?.summary ?? '').trim();
+          for (const item of model?.outline ?? []) {
+            const t = (item.title ?? '').trim();
+            if (t) outline.push(t);
+            for (const p of (item.part_outline ?? []).slice(0, 4)) {
+              if (p.trim()) outline.push(`  · ${p.trim()}`);
+            }
+            if (outline.length >= 12) break;
+          }
+          outline = outline.slice(0, 12);
+        } catch {
+          // 官方总结不可用时用简介兜底
+        }
+      }
+    }
+    return c.json({
+      bvid,
+      title,
+      owner,
+      duration,
+      desc,
+      summary: summary || desc,
+      outline,
+      subtitle,
+      subtitle_count: subtitleCount,
+    });
   } catch (e) {
     return c.json({ error: 'link preview failed', detail: String(e).slice(0, 200) }, 500);
   }
