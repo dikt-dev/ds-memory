@@ -26,7 +26,7 @@ backup/p5-observation/YYYY-MM-DD.json
 
 ## 7 天 App shadow 通过条件
 
-> 观察起点：2026-10-25 19:50（Asia/Shanghai）；今日测试消息/情绪/指标已清空。
+> 观察起点：2026-10-25 20:05（Asia/Shanghai）；今日测试消息/情绪/指标已清空。
 > 当前入口为 DS-Mobile，旧的 QQ shadow 阶段不再作为主验收数据。
 
 - `readiness.ready=true`；`memory_engine_mobile=shadow`、`affect_engine_mobile=shadow`；
