@@ -257,9 +257,13 @@ app.get('/api/app/events', requireApp, async (c) => {
   const rawLimit = Number(c.req.query('limit') ?? '50');
   const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 50, 1), 100);
   const latest = c.req.query('latest') === '1';
+  const rawBefore = Number(c.req.query('before_id') ?? '');
+  const beforeId = Number.isFinite(rawBefore) && rawBefore > 0 ? Math.floor(rawBefore) : 0;
   const result = latest
     ? await messagesPage(c.env, { limit })
-    : await messagesSince(c.env, afterId, limit);
+    : beforeId > 0
+      ? await messagesPage(c.env, { beforeId, limit })
+      : await messagesSince(c.env, afterId, limit);
   const { messages, hasMore } = result;
   const payload = messages.map((m) => ({
     id: m.id,
