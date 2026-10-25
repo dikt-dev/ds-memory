@@ -488,6 +488,7 @@ const VOICE_TEXT_PATTERNS = [
   /\[\s*(?:语音消息|语音|voice)\s*\]\s*[「“]([^」”]*)[」”]/gi,
   /[（(]\s*[【\[]\s*语音消息\s*[】\]]\s*发送\s*[：:]\s*([^）)\n]+)[）)]/gi,
   /[【\[]\s*语音消息\s*[】\]]\s*发送\s*[：:]\s*([^\n）)]+)/gi,
+  /[【\[]\s*语音(?:消息)?\s*[】\]]\s*(?!(?:发送\s*[：:]|[「“]))([^\n]+)/gi,
   /^（语音）\s*(.+)$/gm,
 ];
 function extractVoiceTexts(src) {
@@ -573,7 +574,7 @@ function speakVoice(texts, btn) {
 }
 function speakTextsForBubble(bubble) {
   const raw = bubble.dataset.raw || '';
-  const voices = extractVoiceTexts(raw);
+  const voices = extractVoiceTexts(raw).map(cleanSpeakText).filter(Boolean);
   if (voices.length) return voices;
   const plain = cleanSpeakText(raw);
   return plain ? [plain] : [];
@@ -609,7 +610,8 @@ function renderMarkdown(src) {
     .replace(/^（语音）/, '🎤 ')
     .replace(/\[\s*(?:语音消息|语音|voice)\s*\]\s*[「“]([^」”]*)[」”]/gi, '🎤 $1')
     .replace(/[（(]\s*[【\[]\s*语音消息\s*[】\]]\s*发送\s*[：:]\s*([^）)\n]+)[）)]/gi, '🎤 $1')
-    .replace(/[【\[]\s*语音消息\s*[】\]]\s*发送\s*[：:]\s*([^\n）)]+)/gi, '🎤 $1');
+    .replace(/[【\[]\s*语音消息\s*[】\]]\s*发送\s*[：:]\s*([^\n）)]+)/gi, '🎤 $1')
+    .replace(/[【\[]\s*语音(?:消息)?\s*[】\]]\s*(?!(?:发送\s*[：:]|[「“]))/gi, '🎤 ');
   let s = escapeHtml(src);
   s = s.replace(/```([\s\S]*?)```/g, (_, code) => {
     blocks.push('<pre><code>' + code.trim() + '</code></pre>');

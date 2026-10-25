@@ -306,6 +306,8 @@ export async function streamChat(
         channel,
         characterCard: cardTextWithMood,
         voice: buildVoiceDirective(relationVals.intimacy),
+        // 网页端已用浏览器 speechSynthesis 播放，允许模型输出 [语音] 段
+        voiceReply: true,
         avoidOpeners,
         attitude,
         characterName: env.CHARACTER_NAME,
