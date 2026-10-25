@@ -89,8 +89,11 @@ if (readiness.body && typeof readiness.body === 'object') {
   console.log(
     JSON.stringify({
       ready: readiness.body.ready,
-      qq: readiness.body.memory_engine_qq,
+      mobile: readiness.body.memory_engine_mobile,
+      affect_mobile: readiness.body.affect_engine_mobile,
       web: readiness.body.memory_engine_web,
+      proactive: readiness.body.proactive_engine,
+      proactive_delivery: readiness.body.proactive_delivery,
       facts: readiness.body.context?.facts,
       chunks: readiness.body.context?.chunks,
     }),
