@@ -61,6 +61,37 @@ function openaiError(c: Context<AppEnv>, status: number, message: string) {
   );
 }
 
+type CachedTurn = {
+  content: string;
+  user_message_id?: number;
+  assistant_message_id?: number;
+  created_at?: string;
+};
+
+/** 同一个 client_message_id 的重试：直接回放上次结果，不再落库/计费。 */
+function cachedTurnResponse(c: Context<AppEnv>, content: string, stream: boolean) {
+  if (stream) {
+    const payload =
+      `data: ${JSON.stringify({
+        choices: [{ index: 0, delta: { content }, finish_reason: null }],
+      })}\n\n` + 'data: [DONE]\n\n';
+    return c.body(payload, 200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache',
+    });
+  }
+  return c.json({
+    id: `cached-${Date.now()}`,
+    object: 'chat.completion',
+    created: Math.floor(Date.now() / 1000),
+    model: c.env.DEEPSEEK_MODEL,
+    choices: [
+      { index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' },
+    ],
+    usage: null,
+  });
+}
+
 export async function checkBearer(c: Context<AppEnv>): Promise<boolean> {
   const expected = c.env.ASTROBOT_API_KEY;
   const auth = c.req.header('authorization') ?? '';
@@ -295,10 +326,25 @@ openaiApp.post('/chat/completions', async (c) => {
     audio_keys?: unknown;
     /** false = 这轮不要写进聊天记录（指令类消息） */
     record?: unknown;
+    /** App 幂等键；同一 id 的重试直接回放上次回复 */
+    client_message_id?: unknown;
   } | null;
   const rawMessages = body?.messages;
   if (!Array.isArray(rawMessages) || rawMessages.length === 0) {
     return openaiError(c, 400, 'messages 不能为空');
+  }
+  const clientMessageId =
+    typeof body?.client_message_id === 'string' &&
+    body.client_message_id.trim().length > 0 &&
+    body.client_message_id.trim().length <= 100
+      ? body.client_message_id.trim()
+      : '';
+  const cmidKey = clientMessageId ? `app:cmid:${clientMessageId}` : '';
+  if (cmidKey) {
+    const cached = await c.env.KV.get<CachedTurn>(cmidKey, 'json').catch(() => null);
+    if (cached && typeof cached.content === 'string' && cached.content) {
+      return cachedTurnResponse(c, cached.content, body?.stream !== false);
+    }
   }
 
   // 1) 转消息（保留文本与图片；图片以 OpenAI image_url 原样透传，deepseek-flash 支持图像理解）
@@ -742,6 +788,18 @@ openaiApp.post('/chat/completions', async (c) => {
         completionTokens: usage?.completion_tokens ?? 0,
       });
       cost = saved.cost_rmb;
+      if (cmidKey) {
+        await c.env.KV.put(
+          cmidKey,
+          JSON.stringify({
+            content: stored,
+            user_message_id: userMessageId,
+            assistant_message_id: saved.id,
+            created_at: new Date().toISOString(),
+          }),
+          { expirationTtl: 7 * 24 * 3600 },
+        ).catch(() => {});
+      }
     }
     return cost;
   };
@@ -759,13 +817,26 @@ openaiApp.post('/chat/completions', async (c) => {
 
   const result = await completeDeepSeek(c.env, upstream, now, maxTokens);
   if ('error' in result) return openaiError(c, result.status, result.error);
-  if (!skipRecording && normalizeAssistantText(result.text) && userMessageId) {
-    await insertAssistantReply(c.env, normalizeAssistantText(result.text), userMessageId, now, {
+  const stored = normalizeAssistantText(result.text);
+  if (!skipRecording && stored && userMessageId) {
+    const saved = await insertAssistantReply(c.env, stored, userMessageId, now, {
       channel,
       cost: result.cost,
       promptTokens: (result.usage?.prompt_cache_hit_tokens ?? 0) + (result.usage?.prompt_cache_miss_tokens ?? 0),
       completionTokens: result.usage?.completion_tokens ?? 0,
     });
+    if (cmidKey) {
+      await c.env.KV.put(
+        cmidKey,
+        JSON.stringify({
+          content: stored,
+          user_message_id: userMessageId,
+          assistant_message_id: saved.id,
+          created_at: new Date().toISOString(),
+        }),
+        { expirationTtl: 7 * 24 * 3600 },
+      ).catch(() => {});
+    }
   }
   // 非流式回复也已经过 completeDeepSeek 的 AI 味清洗
   const promptTokens = (result.usage?.prompt_cache_hit_tokens ?? 0) + (result.usage?.prompt_cache_miss_tokens ?? 0);
