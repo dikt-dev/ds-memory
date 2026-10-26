@@ -710,7 +710,8 @@ export function archiveCompletedItems(
     // 去掉 [已完成] 之类的标记
     content = content.replace(DONE_RE, '').trim();
     titles.push(content.slice(0, 20));
-    return `- [${date}] 完成了：${content}`;
+    // 共同经历里直接保留原事项，不再加“完成了：”前缀。
+    return `- [${date}] ${content}`;
   });
 
   const next = sections.map((sec) => {

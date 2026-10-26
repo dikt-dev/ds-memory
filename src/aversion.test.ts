@@ -36,7 +36,8 @@ describe('archiveCompletedItems —— 已完成事项自动归档', () => {
     const r = archiveCompletedItems(text, '2026-10-22'); // 12 天前完成
     expect(r.moved).toBe(1);
     expect(r.text).toContain('## 共同经历');
-    expect(r.text).toContain('完成了：写完需求文档');
+    expect(r.text).toContain('写完需求文档');
+    expect(r.text).not.toContain('完成了：');
     // 原分区里已移除
     expect(r.text).not.toContain('[已完成] 写完需求文档');
   });
@@ -44,8 +45,9 @@ describe('archiveCompletedItems —— 已完成事项自动归档', () => {
   it('归档时去掉 [已完成] 标记', () => {
     const text = withPending(['- [2026-10-01] [已完成] 修完 bug']);
     const r = archiveCompletedItems(text, '2026-10-22');
-    expect(r.text).toContain('完成了：修完 bug');
-    expect(r.text).not.toMatch(/完成了：.*\[已完成\]/);
+    expect(r.text).toContain('修完 bug');
+    expect(r.text).not.toContain('完成了：');
+    expect(r.text).not.toContain('[已完成]');
   });
 
   it('进行中的条目不受影响', () => {
