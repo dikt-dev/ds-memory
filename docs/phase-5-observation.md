@@ -44,6 +44,10 @@ backup/p5-observation/YYYY-MM-DD.json
 - 错误率/首字延迟/费用与 shadow 期相比无明显上升；
 - 回滚演练仍可执行：`next → legacy` 后 `record=false` 200。
 
+## 每日问题记录
+
+- [Day 1：2026-10-26](phase-5-observation-day1.md)
+
 ## 2 周门禁
 
 - App 为 `next`，网页保持 legacy 或单独切；主动消息接新引擎；
