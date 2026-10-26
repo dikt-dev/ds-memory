@@ -10,8 +10,9 @@
 import type { Env } from './types';
 import { getMemory, putMemory } from './memory';
 import { dateKeyInBeijing } from './date';
-import { replaceMemoryContext } from './memory-context-store';
+import { embedMemoryChunks, replaceMemoryContext, syncRollupSummaries } from './memory-context-store';
 import { reindexMemory } from './memory-index';
+import { generateRollup, weekStartKey } from './memory-rollups';
 
 const CORRECTION_HEADER = '## 用户更正（最高优先级）';
 const MAX_LEN = 500;
@@ -86,6 +87,23 @@ export async function applyMemoryCorrection(
   await reindexMemory(env).catch((e) => {
     console.error('[memory] correction reindex failed:', e);
   });
+
+  // 摘要也是记忆的派生缓存：纠正后让当前周/月 rollup 重新生成，
+  // 否则旧月摘要可能在下次 syncRollupSummaries 时把旧事实带回来。
+  try {
+    const today = dateKeyInBeijing(now);
+    const week = weekStartKey(today);
+    const month = today.slice(0, 7);
+    await env.DB.prepare('DELETE FROM memory_rollups WHERE id IN (?, ?)')
+      .bind(`week:${week}`, `month:${month}`)
+      .run();
+    await generateRollup(env, 'week', week, { fresh: true });
+    await generateRollup(env, 'month', month, { fresh: true });
+    await syncRollupSummaries(env);
+    await embedMemoryChunks(env, 200);
+  } catch (e) {
+    console.error('[memory] correction rollup refresh failed:', e);
+  }
 
   return {
     ok: true,

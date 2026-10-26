@@ -61,6 +61,7 @@ export async function generateRollup(
   env: Env,
   level: 'week' | 'month',
   period: string,
+  opts: { fresh?: boolean } = {},
 ): Promise<MemoryRollup | null> {
   const { start, end } = dateRangeOf(level, period);
   const rows = await env.DB.prepare(
@@ -74,7 +75,7 @@ export async function generateRollup(
   const existing = await env.DB.prepare('SELECT content FROM memory_rollups WHERE id = ?')
     .bind(`${level}:${period}`)
     .first<{ content: string }>();
-  const input = `${existing?.content ? `【现有摘要】\n${existing.content}\n\n` : ''}【该周期记忆条目 ${items.length} 条】\n${items
+  const input = `${!opts.fresh && existing?.content ? `【现有摘要】\n${existing.content}\n\n` : ''}【该周期记忆条目 ${items.length} 条】\n${items
     .map((r) => `- ${r.date ? `[${r.date}] ` : ''}${r.content}`)
     .join('\n')
     // 条目多时保留最新的部分；旧内容已经在【现有摘要】里

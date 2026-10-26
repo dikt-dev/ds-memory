@@ -18,9 +18,10 @@ import {
   verifyPassword,
 } from './auth';
 import { streamChat } from './chat';
-import { messagesPage, usageByDay, messagesByDate, assistantReplyTo } from './db';
+import { messagesPage, usageByDay, messagesByDate, assistantReplyTo, type MessageRow } from './db';
 import { getMemory, MEMORY_KV_KEY, putMemory } from './memory';
 import { applyMemoryCorrection } from './memory-correction';
+import { archivedMessagesBefore } from './archive';
 import { messagesSince, webMessagesSince, latestWebMessageId } from './db';
 import { byteLength, memoryDensity } from './memory-maintenance';
 import { getCityConfig, setCity } from './settings';
@@ -273,12 +274,38 @@ app.get('/api/app/events', requireApp, async (c) => {
   const latest = c.req.query('latest') === '1';
   const rawBefore = Number(c.req.query('before_id') ?? '');
   const beforeId = Number.isFinite(rawBefore) && rawBefore > 0 ? Math.floor(rawBefore) : 0;
-  const result = latest
-    ? await messagesPage(c.env, { limit })
-    : beforeId > 0
-      ? await messagesPage(c.env, { beforeId, limit })
-      : await messagesSince(c.env, afterId, limit);
-  const { messages, hasMore } = result;
+  let messages: MessageRow[] = [];
+  let hasMore = false;
+  if (latest) {
+    const page = await messagesPage(c.env, { limit });
+    messages = page.messages;
+    hasMore = page.hasMore;
+  } else if (beforeId > 0) {
+    const minRow = await c.env.DB.prepare('SELECT MIN(id) AS id FROM messages').first<{ id: number | null }>();
+    const minId = Number(minRow?.id) || 0;
+    if (!minId || beforeId < minId) {
+      // 请求已经越过 D1 的最早边界：直接从 R2 归档继续。
+      const archived = await archivedMessagesBefore(c.env, beforeId, limit);
+      messages = archived.messages;
+      hasMore = archived.hasMore;
+    } else {
+      const page = await messagesPage(c.env, { beforeId, limit });
+      messages = page.messages;
+      hasMore = page.hasMore;
+      // D1 本页已到边界但还没满一页时，用 R2 归档补齐更早的消息。
+      if (messages.length < limit) {
+        const archived = await archivedMessagesBefore(c.env, minId, limit - messages.length);
+        if (archived.messages.length > 0) {
+          messages = [...archived.messages, ...messages];
+          hasMore = archived.hasMore || hasMore;
+        }
+      }
+    }
+  } else {
+    const page = await messagesSince(c.env, afterId, limit);
+    messages = page.messages;
+    hasMore = page.hasMore;
+  }
   const payload = messages.map((m) => ({
     id: m.id,
     role: m.role,
