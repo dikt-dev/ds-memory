@@ -46,7 +46,8 @@ backup/p5-observation/YYYY-MM-DD.json
 
 ## 每日问题记录
 
-- [Day 1：2026-10-26](phase-5-observation-day1.md)
+- [Day 1：2026-10-26](phase-5-observation-day1.md)（已封板）
+- [Day 2：2026-10-27](phase-5-observation-day2.md)
 
 ## 2 周门禁
 
