@@ -34,8 +34,15 @@ CREATE TABLE IF NOT EXISTS messages (
   -- 时间
   date_key          TEXT    NOT NULL,   -- 北京时间 'YYYY-MM-DD'，归档依据
   created_at        TEXT    NOT NULL,   -- 北京时间 ISO8601
-  created_ms        INTEGER NOT NULL    -- epoch 毫秒，便于排序/算间隔
+  created_ms        INTEGER NOT NULL,   -- epoch 毫秒，便于排序/算间隔
+
+  -- 客户端幂等键：App 重试/轮询时用它把 pending 与服务端消息对上
+  client_message_id TEXT
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_client
+  ON messages(client_message_id)
+  WHERE client_message_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_messages_date      ON messages(date_key);
 CREATE INDEX IF NOT EXISTS idx_messages_turn      ON messages(turn_id);

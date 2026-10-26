@@ -768,7 +768,10 @@ openaiApp.post('/chat/completions', async (c) => {
     if (latest && latest.role === 'user' && latest.content === recordContent) {
       userMessageId = latest.id; // 重试请求：复用已存在的这一轮
     } else {
-      const saved = await insertUserMessage(c.env, recordContent, now, { channel });
+      const saved = await insertUserMessage(c.env, recordContent, now, {
+        channel,
+        clientMessageId: clientMessageId || undefined,
+      });
       userMessageId = saved.id;
       await markProfileDirty(c.env).catch(() => {});
     }

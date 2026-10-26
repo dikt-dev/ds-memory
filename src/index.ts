@@ -273,6 +273,7 @@ app.get('/api/app/events', requireApp, async (c) => {
     created_at: m.created_at,
     turn_id: m.turn_id,
     proactive_kind: m.proactive_kind,
+    client_message_id: m.client_message_id,
   }));
   return c.json({
     messages: sanitizeStoredMessages(payload),
@@ -1802,7 +1803,7 @@ app.onError((err, c) => {
  *   实际一天只刷新一次（北京 08:00）。现在三条 cron 合起来覆盖 0/8/16。
  */
 async function maybeRefreshContext(env: Env, now: Date): Promise<void> {
-  if (now.getUTCMinutes() >= 5) return;
+  if (now.getUTCMinutes() !== 0) return;
   const hour = now.getUTCHours();
   if (hour !== 0 && hour !== 8 && hour !== 16) return;
   await runContextRefresh(env, now);
@@ -1840,7 +1841,7 @@ export default {
       return;
     }
 
-    if (cron === '*/5 1-14 * * *') {
+    if (cron === '* 1-14 * * *') {
       // QQ 通道掉线检查：与主动消息是否暂停无关，每次 tick 都查
       ctx.waitUntil(runChannelCheck(env, now));
       // 白天随机主动消息：打分决策 + 落库 + 推送 QQ（直连或队列）
@@ -1850,7 +1851,7 @@ export default {
       return;
     }
 
-    if (cron === '*/5 23,0,14,15,16 * * *') {
+    if (cron === '* 23,0,14,15,16 * * *') {
       // QQ 通道掉线检查（同上）
       ctx.waitUntil(runChannelCheck(env, now));
       // 早晚固定主动消息：打分决策 + 落库 + 推送 QQ（直连或队列）

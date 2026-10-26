@@ -31,10 +31,11 @@ export interface MessageRow {
   date_key: string;
   created_at: string;
   created_ms: number;
+  client_message_id?: string | null;
 }
 
 const SELECT_COLS = `id, role, content, turn_id, turn_type, reply_to_id, channel, proactive_kind,
-  cost_rmb, prompt_tokens, completion_tokens, date_key, created_at, created_ms`;
+  cost_rmb, prompt_tokens, completion_tokens, date_key, created_at, created_ms, client_message_id`;
 
 export interface InsertOptions {
   channel?: Channel;
@@ -42,6 +43,8 @@ export interface InsertOptions {
   proactiveKind?: ProactiveKind;
   /** 用户消息：无需传；助手回复用户：传 user 消息的 id */
   replyToId?: number;
+  /** App 发来的幂等键；同一 id 重试复用同一行，避免本地 pending + 服务端回显双气泡 */
+  clientMessageId?: string;
   /** 主动消息：turn_id = 自己的 id（插入后回填） */
 }
 
@@ -56,13 +59,28 @@ export async function insertUserMessage(
   const created_ms = at.getTime();
   const date_key = dateKeyInBeijing(at);
   const channel = opts.channel ?? 'web';
+  const clientMessageId =
+    typeof opts.clientMessageId === 'string' && opts.clientMessageId.trim()
+      ? opts.clientMessageId.trim()
+      : null;
+
+  // App 重试/轮询可能把同一 client_message_id 再送一次：直接复用已有行。
+  if (clientMessageId) {
+    const existing = await env.DB.prepare(
+      `SELECT ${SELECT_COLS} FROM messages WHERE client_message_id = ? LIMIT 1`,
+    )
+      .bind(clientMessageId)
+      .first<MessageRow>();
+    if (existing) return existing;
+  }
 
   const row = await env.DB.prepare(
-    `INSERT INTO messages (role, content, turn_id, turn_type, reply_to_id, channel, date_key, created_at, created_ms)
-     VALUES ('user', ?, 0, 'chat', NULL, ?, ?, ?, ?)
+    `INSERT INTO messages
+       (role, content, turn_id, turn_type, reply_to_id, channel, date_key, created_at, created_ms, client_message_id)
+     VALUES ('user', ?, 0, 'chat', NULL, ?, ?, ?, ?, ?)
      RETURNING ${SELECT_COLS}`,
   )
-    .bind(content, channel, date_key, created_at, created_ms)
+    .bind(content, channel, date_key, created_at, created_ms, clientMessageId)
     .first<MessageRow>();
   if (!row) throw new Error('insert user message failed');
 
