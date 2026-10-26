@@ -20,6 +20,7 @@ import {
 import { streamChat } from './chat';
 import { messagesPage, usageByDay, messagesByDate, assistantReplyTo } from './db';
 import { getMemory, MEMORY_KV_KEY, putMemory } from './memory';
+import { applyMemoryCorrection } from './memory-correction';
 import { messagesSince, webMessagesSince, latestWebMessageId } from './db';
 import { byteLength, memoryDensity } from './memory-maintenance';
 import { getCityConfig, setCity } from './settings';
@@ -248,6 +249,19 @@ app.post('/api/app/heartbeat', requireApp, async (c) => {
   };
   await putRuntimeState(c.env, HEARTBEAT_KV_KEY, JSON.stringify(payload), HEARTBEAT_TTL_SECONDS);
   return c.json({ ok: true });
+});
+
+/** App 主动纠正记忆：/更正 职业=... / /更正 我叫...。 */
+app.post('/api/app/memory/correct', requireApp, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { text?: unknown } | null;
+  const text = typeof body?.text === 'string' ? body.text.trim() : '';
+  if (!text) return c.json({ error: 'text required' }, 400);
+  try {
+    const result = await applyMemoryCorrection(c.env, text);
+    return c.json(result);
+  } catch (e) {
+    return c.json({ error: String(e) }, 500);
+  }
 });
 
 /** App 增量消息：所有渠道，按 id 升序；客户端自己按 id 去重。 */
