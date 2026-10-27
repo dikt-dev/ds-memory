@@ -265,6 +265,32 @@ app.post('/api/app/memory/correct', requireApp, async (c) => {
   }
 });
 
+/** App 主动更新位置：用户点击定位并确认后写入记忆。 */
+app.post('/api/app/location', requireApp, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as {
+    latitude?: unknown;
+    longitude?: unknown;
+    accuracy?: unknown;
+    reason?: unknown;
+  } | null;
+  const lat = Number(body?.latitude);
+  const lng = Number(body?.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    return c.json({ error: 'invalid coordinates' }, 400);
+  }
+  const accuracy = Number(body?.accuracy);
+  const reasonRaw = typeof body?.reason === 'string' ? body.reason.trim().slice(0, 120) : '';
+  const reason = reasonRaw || '用户主动更新位置';
+  const accuracyText = Number.isFinite(accuracy) && accuracy > 0 ? `（精度约 ${Math.round(accuracy)}m）` : '';
+  const text = `当前位置=${lat.toFixed(5)},${lng.toFixed(5)}${accuracyText}；位置变更原因=${reason}；更新时间=${isoInBeijing()}`;
+  try {
+    const result = await applyMemoryCorrection(c.env, text);
+    return c.json(result);
+  } catch (e) {
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
 /** App 增量消息：所有渠道，按 id 升序；客户端自己按 id 去重。 */
 app.get('/api/app/events', requireApp, async (c) => {
   const rawAfter = Number(c.req.query('after_id') ?? '');
