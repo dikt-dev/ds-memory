@@ -829,7 +829,7 @@ app.get('/api/app/link-preview', requireApp, async (c) => {
             const sj = await sr.json() as { body?: Array<{ content?: string }> };
             const lines = (sj.body ?? []).map((x) => (x.content ?? '').trim()).filter(Boolean);
             subtitleCount = lines.length;
-            subtitle = lines.join('\n').slice(0, 4000);
+            subtitle = lines.join('\n');
           }
         } catch {
           // 字幕不可用时继续
