@@ -341,3 +341,12 @@ ID 791 assistant 回“哟，五点了？”
 - 已构建并安装 **release APK**（项目原本就是 release 使用 debug 签名）。
 - 这会让 Compose/ART 运行性能优于 debug 包，优先用于验证 D2-02 首次键盘和 D2-07 整体流畅度。
 - release APK：`ds-mobile/app/build/outputs/apk/release/app-release.apk`
+
+## Day 2 收尾确认（2026-10-27）
+
+- 用户确认：**流畅度可以了**。
+- D2-02（首次键盘页面动画）和 D2-07（整体滑动/重启动画）按当前 release 包视为通过。
+- 仍保留的验证项：
+  - B 站完整字幕需要真实登录态再回归一次；
+  - 定位功能需要真机授权测试；
+  - 动态/视频实际加载需要真实媒体再回归。
