@@ -19,8 +19,25 @@ export interface MemoryRollup {
   period: string;
   content: string;
   entry_count: number;
+  /** 该摘要对应的记忆条目内容指纹；用于避免旧摘要覆盖新记忆。 */
+  source_hash?: string | null;
   created_at: number;
   updated_at: number;
+}
+
+/** 计算周/月摘要的来源指纹。 */
+export function rollupSourceHash(
+  items: Array<{ date: string | null; content: string }>,
+): string {
+  let h = 2166136261;
+  for (const item of items) {
+    const line = `${item.date ?? ''}|${item.content}`;
+    for (let i = 0; i < line.length; i++) {
+      h ^= line.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+  }
+  return (h >>> 0).toString(16);
 }
 
 /** 北京时间的"周一"日期键（YYYY-MM-DD）。 */
@@ -89,13 +106,15 @@ export async function generateRollup(
     env.SUMMARY_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL,
   );
   const content = result.text.slice(0, 600).trim();
+  const sourceHash = rollupSourceHash(items);
   if (!content || content === '（无）') {
     // 无内容也记录，避免每天重复生成
     await env.DB.prepare(
-      `INSERT OR REPLACE INTO memory_rollups (id, level, period, content, entry_count, created_at, updated_at)
-       VALUES (?, ?, ?, '（无）', ?, ?, ?)`,
+      `INSERT OR REPLACE INTO memory_rollups
+       (id, level, period, content, entry_count, source_hash, created_at, updated_at)
+       VALUES (?, ?, ?, '（无）', ?, ?, ?, ?)`,
     )
-      .bind(`${level}:${period}`, level, period, items.length, Date.now(), Date.now())
+      .bind(`${level}:${period}`, level, period, items.length, sourceHash, Date.now(), Date.now())
       .run()
       .catch(() => {});
     return null;
@@ -103,10 +122,11 @@ export async function generateRollup(
   const now = Date.now();
   const id = `${level}:${period}`;
   await env.DB.prepare(
-    `INSERT OR REPLACE INTO memory_rollups (id, level, period, content, entry_count, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO memory_rollups
+     (id, level, period, content, entry_count, source_hash, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   )
-    .bind(id, level, period, content, items.length, now, now)
+    .bind(id, level, period, content, items.length, sourceHash, now, now)
     .run();
   return { id, level, period, content, entry_count: items.length, created_at: now, updated_at: now };
 }

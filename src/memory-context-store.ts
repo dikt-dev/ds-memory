@@ -7,6 +7,7 @@
 import type { Env } from './types';
 import { autoTags, bigrams } from './memory-archive';
 import { embedTexts, quantizeVec } from './memory-index';
+import { rollupSourceHash } from './memory-rollups';
 import {
   buildMemoryChunks,
   canonicalizeFacts,
@@ -396,16 +397,42 @@ export async function memoryContextStats(env: Env): Promise<MemoryContextStats> 
  */
 export async function syncRollupSummaries(env: Env, now = Date.now()): Promise<number> {
   const rows = await env.DB.prepare(
-    `SELECT id, level, period, content, created_at
+    `SELECT id, level, period, content, source_hash, created_at
      FROM memory_rollups
      WHERE content IS NOT NULL AND content <> '' AND content <> '（无）'
      ORDER BY period ASC`,
-  ).all<{ id: string; level: 'week' | 'month'; period: string; content: string; created_at: number }>();
+  ).all<{
+    id: string;
+    level: 'week' | 'month';
+    period: string;
+    content: string;
+    source_hash: string | null;
+    created_at: number;
+  }>();
   const items = rows.results ?? [];
   const chunks: MemoryChunk[] = [];
   const summaryIds: string[] = [];
 
   for (const r of items) {
+    // 旧摘要如果和当前记忆条目指纹不一致，先不注入，等下一次 rollup 重算。
+    if (r.source_hash) {
+      const start = r.level === 'week' ? r.period : `${r.period}-01`;
+      let end = `${r.period}-31`;
+      if (r.level === 'week') {
+        const d = new Date(`${r.period}T00:00:00Z`);
+        d.setUTCDate(d.getUTCDate() + 6);
+        end = d.toISOString().slice(0, 10);
+      }
+      const entryRows = await env.DB.prepare(
+        `SELECT content, date FROM memory_entries
+         WHERE date IS NOT NULL AND date >= ? AND date <= ?
+         ORDER BY date ASC`,
+      )
+        .bind(start, end)
+        .all<{ content: string; date: string | null }>();
+      const currentHash = rollupSourceHash(entryRows.results ?? []);
+      if (currentHash !== r.source_hash) continue;
+    }
     const id = `rollup:${r.id}`;
     summaryIds.push(id);
     await env.DB.prepare(

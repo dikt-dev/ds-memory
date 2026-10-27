@@ -305,6 +305,7 @@ CREATE TABLE IF NOT EXISTS memory_rollups (
   period      TEXT NOT NULL,
   content     TEXT NOT NULL,
   entry_count INTEGER NOT NULL DEFAULT 0,
+  source_hash TEXT,
   created_at  INTEGER NOT NULL,
   updated_at  INTEGER NOT NULL
 );

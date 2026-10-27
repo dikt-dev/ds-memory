@@ -171,12 +171,20 @@ export async function archiveOneDay(
     // D1 已被清理、但 R2 已有归档时（例如上次提炼失败后补跑），先从归档恢复消息，
     // 否则会用空数组覆盖掉好日志，导致原始对话永久丢失。
     if (rows.length === 0) {
-      const existing = await getObject(env, `chat_logs/${target}.log`).catch(() => null);
+      // 日归档优先；月度合并后日文件会被删除，此时从月文件里筛出当天。
+      const existingDaily = await getObject(env, `chat_logs/${target}.log`).catch(() => null);
+      const existingMonth = existingDaily
+        ? null
+        : await getObject(env, `chat_logs/${target.slice(0, 7)}.json`).catch(() => null);
+      const existing = existingDaily ?? existingMonth;
       if (existing) {
         try {
           const parsed = JSON.parse(await existing.text()) as { messages?: MessageRow[] };
-          if (Array.isArray(parsed.messages) && parsed.messages.length > 0) {
-            rows = parsed.messages;
+          const archivedRows = (parsed.messages ?? []).filter(
+            (m) => m && m.date_key === target,
+          );
+          if (archivedRows.length > 0) {
+            rows = archivedRows;
             recoveredFromArchive = true;
             console.warn(`[daily] ${target} D1 已清理，从已有归档恢复 ${rows.length} 条消息`);
           }
