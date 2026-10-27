@@ -8,7 +8,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { Env } from './types';
-import { buildBaseSystemPrompt, normalizeChannel, buildLiveFacts, isNowFactQuestion, STYLE_REMINDER } from './prompt';
+import { buildBaseSystemPrompt, normalizeChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, STYLE_REMINDER } from './prompt';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
 import { attachWeather, getOrCreateDayContext } from './context';
@@ -26,7 +26,7 @@ import {
   HISTORY_MESSAGE_MAX_CHARS,
   type MessageRow,
 } from './db';
-import { loadRecentRounds, resolveRecentRounds } from './recent-context';
+import { conversationGapNote, loadRecentRounds, resolveRecentRounds } from './recent-context';
 import { calcCost, loadPricing, type TokenUsage } from './pricing';
 import { completeDeepSeek, streamDeepSeek, type DeepSeekMessage } from './deepseek';
 import { getTodaySummary, maybeSummarizeToday } from './summary';
@@ -509,7 +509,9 @@ openaiApp.post('/chat/completions', async (c) => {
   if (body?.inject_history === true && !skipRecording) {
     const historyRounds = resolveRecentRounds(lastUserCleaned);
     historyRaw = await loadRecentRounds(c.env, historyRounds, now);
-    historyNote = historyRangeNote(historyRaw, now);
+    historyNote = [historyRangeNote(historyRaw, now), conversationGapNote(historyRaw, now)]
+      .filter(Boolean)
+      .join('\n');
     historyMessages = historyRaw
       .filter(
         (m, i) =>
@@ -664,7 +666,7 @@ openaiApp.post('/chat/completions', async (c) => {
       characterName: c.env.CHARACTER_NAME,
       userAddress: c.env.USER_ADDRESS,
     }),
-  ].join('\n\n') + (historyNote ? `\n\n${historyNote}` : '');
+  ].join('\n\n') + (historyNote ? `\n\n${historyNote}` : '') + silentEndRule(channel);
 
   const upstream: DeepSeekMessage[] = [
     { role: 'system', content: mergedSystem },
@@ -792,7 +794,8 @@ openaiApp.post('/chat/completions', async (c) => {
 
   const onFinish = async (text: string, usage: TokenUsage | null) => {
     let cost = 0;
-    const stored = normalizeAssistantText(text);
+    const silent = isSilentEnd(text) && (channel === 'mobile' || channel === 'web');
+    const stored = silent ? '' : normalizeAssistantText(text);
     if (!skipRecording && stored && userMessageId) {
       // 费用与 token 随 INSERT 一次写入（少一条 UPDATE）
       const saved = await insertAssistantReply(c.env, stored, userMessageId, now, {
@@ -816,6 +819,17 @@ openaiApp.post('/chat/completions', async (c) => {
           { expirationTtl: 7 * 24 * 3600 },
         ).catch(() => {});
       }
+    } else if (silent && !skipRecording && userMessageId && cmidKey) {
+      // 静默也是一种合法结果：缓存 [END]，重试时不再调用模型。
+      await c.env.KV.put(
+        cmidKey,
+        JSON.stringify({
+          content: '[END]',
+          user_message_id: userMessageId,
+          created_at: new Date().toISOString(),
+        }),
+        { expirationTtl: 7 * 24 * 3600 },
+      ).catch(() => {});
     }
     return cost;
   };
@@ -833,7 +847,33 @@ openaiApp.post('/chat/completions', async (c) => {
 
   const result = await completeDeepSeek(c.env, upstream, now, maxTokens);
   if ('error' in result) return openaiError(c, result.status, result.error);
-  const stored = normalizeAssistantText(result.text);
+  const silent =
+    isSilentEnd(result.text) && (channel === 'mobile' || channel === 'web');
+  const stored = silent ? '' : normalizeAssistantText(result.text);
+  if (silent) {
+    if (!skipRecording && userMessageId && cmidKey) {
+      await c.env.KV.put(
+        cmidKey,
+        JSON.stringify({
+          content: '[END]',
+          user_message_id: userMessageId,
+          created_at: new Date().toISOString(),
+        }),
+        { expirationTtl: 7 * 24 * 3600 },
+      ).catch(() => {});
+    }
+    return c.json({
+      id: result.id,
+      object: 'chat.completion',
+      created: result.created,
+      model: c.env.DEEPSEEK_MODEL,
+      no_reply: true,
+      choices: [
+        { index: 0, message: { role: 'assistant', content: '' }, finish_reason: 'stop' },
+      ],
+      usage: result.usage,
+    });
+  }
   if (!skipRecording && stored && userMessageId) {
     const saved = await insertAssistantReply(c.env, stored, userMessageId, now, {
       channel,

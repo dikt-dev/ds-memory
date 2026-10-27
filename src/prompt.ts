@@ -288,3 +288,23 @@ export function buildLiveFacts(now: Date, ctx: DayContext, weather?: WeatherInfo
 export function buildSystemPrompt(args: BasePromptArgs): string {
   return `${buildBaseSystemPrompt(args)}\n\n现在，按你自己的判断回应 ta。想短就短，想详细说就详细说，不用刻意压字数；记忆里的事用不用、怎么提，也由你决定。`;
 }
+
+/** App/网页专用：允许模型在明确收尾时只输出 [END]，不产生回复。 */
+export function silentEndRule(channel: MessageChannel): string {
+  if (channel !== 'mobile' && channel !== 'web') return '';
+  return [
+    '',
+    '【结束对话规则】',
+    '如果用户已经明确结束当前对话（例如晚安、再见、拜拜），并且没有未回答的问题、没有未完成的请求、也没有明显的情绪求助，你可以结束这轮对话，不再回复。',
+    '结束时不输出任何正文、动作、标点或解释，只输出 [END] 五个字符。',
+    '只要用户还在提问、请求、难过、焦虑、挽留，或说“在吗/等等/先别走”，就必须正常回复。',
+    '用户再次开口时，必须恢复正常回复；[END] 只代表这一轮不回复，不代表永久静默。',
+  ].join('\n');
+}
+
+export const SILENT_END_TOKEN = '[END]';
+
+/** 只把“整段就是 [END]”视为合法静默，避免普通文本里提到它被误判。 */
+export function isSilentEnd(text: string): boolean {
+  return (text || '').trim() === SILENT_END_TOKEN;
+}

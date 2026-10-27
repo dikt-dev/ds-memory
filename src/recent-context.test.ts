@@ -7,7 +7,7 @@ import {
   withHistoryTimestamp,
   type MessageRow,
 } from './db';
-import { resolveRecentRounds } from './recent-context';
+import { conversationGapNote, resolveRecentRounds } from './recent-context';
 
 const mk = (
   id: number,
@@ -111,5 +111,18 @@ describe('resolveRecentRounds', () => {
 
   it('普通聊天默认 15 轮', () => {
     expect(resolveRecentRounds('在吗')).toBe(15);
+  });
+});
+
+describe('conversationGapNote', () => {
+  it('按最后一条历史消息计算间隔', () => {
+    const rows = [mk(1, 1, 'user', '在吗', '2026-10-27T14:00:00+08:00')];
+    const note = conversationGapNote(rows, new Date('2026-10-27T16:00:00+08:00'));
+    expect(note).toContain('距上次对话');
+    expect(note).toContain('2 小时');
+  });
+
+  it('没有历史时明确标成第一次对话', () => {
+    expect(conversationGapNote([], new Date())).toContain('第一次对话');
   });
 });

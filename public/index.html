@@ -1435,6 +1435,7 @@ async function send() {
   // ★ 活人感：先显示"正在输入…"，再开始流式，模拟思考停顿
   let bubble = addBubble('assistant', '<span class="typing">正在输入<span class="dot">…</span></span>', '');
   let text = '';
+  let noReply = false;
   let firstToken = false; // 是否已收到首字
   let frame = 0;
   // ★ 阅读+反应时延：按消息长度估算"它看完要多久"，让首字不闪现，更像它在想
@@ -1496,6 +1497,11 @@ async function send() {
           if (delta && typeof delta.content === 'string') {
             firstToken = true;
             text += delta.content;
+            if (text.includes('[END]')) {
+              noReply = true;
+              text = text.replace(/\[END\]/g, '');
+            }
+            if (noReply) continue;
             // 首字前若有"思考停顿"，等够时间再刷出，否则直接刷
             if (Date.now() >= thinkDoneAt) {
               repaint();
@@ -1506,6 +1512,10 @@ async function send() {
           }
         } catch { /* 忽略 */ }
       }
+    }
+    if (noReply && !text.trim()) {
+      const row = bubble.closest('.msg');
+      if (row) row.remove();
     }
   } catch (err) {
     bubble.className = 'bubble';

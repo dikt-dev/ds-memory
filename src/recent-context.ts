@@ -17,6 +17,27 @@ export const MAX_RECENT_ROUNDS = 60;
 /** 主动消息不需要占用聊天级的长历史。 */
 export const PROACTIVE_RECENT_ROUNDS = 10;
 
+/** 给模型一条“距上次对话”的提示，不写入消息正文。 */
+export function conversationGapNote(history: MessageRow[], now: Date): string {
+  const last = history[history.length - 1];
+  if (!last) return '【距上次对话】这是你们第一次对话。';
+  const gapMs = Math.max(0, now.getTime() - last.created_ms);
+  const minutes = Math.floor(gapMs / 60_000);
+  let gap: string;
+  if (minutes < 1) gap = '不到 1 分钟';
+  else if (minutes < 60) gap = `约 ${minutes} 分钟`;
+  else if (minutes < 24 * 60) {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    gap = `约 ${h} 小时${m > 0 ? ` ${m} 分钟` : ''}`;
+  } else {
+    const d = Math.floor(minutes / (24 * 60));
+    const h = Math.floor((minutes % (24 * 60)) / 60);
+    gap = `约 ${d} 天${h > 0 ? ` ${h} 小时` : ''}`;
+  }
+  return `【距上次对话】${gap}（上次消息：${last.created_at}）。`;
+}
+
 /**
  * 自适应短期记忆：
  * - 默认 15 轮；

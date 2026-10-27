@@ -4,7 +4,7 @@
  * 图片：已压缩存入 R2（images/日期/时间戳.jpg），发给 DeepSeek 时从 R2 读回；D1 只记录 R2 路径。
  */
 import type { Env } from './types';
-import { buildSystemPrompt, type MessageChannel, buildLiveFacts, isNowFactQuestion, STYLE_REMINDER } from './prompt';
+import { buildSystemPrompt, type MessageChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, STYLE_REMINDER } from './prompt';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
 import { attachWeather, getOrCreateDayContext } from './context';
@@ -20,7 +20,7 @@ import {
   HISTORY_FILE_MAX_CHARS,
   HISTORY_MESSAGE_MAX_CHARS,
 } from './db';
-import { loadRecentRounds, resolveRecentRounds } from './recent-context';
+import { conversationGapNote, loadRecentRounds, resolveRecentRounds } from './recent-context';
 import { calcCost, loadPricing } from './pricing';
 import { streamDeepSeek, type DeepSeekMessage } from './deepseek';
 import { getTodaySummary } from './summary';
@@ -289,7 +289,9 @@ export async function streamChat(
         : [{ type: 'text', text: prefix }, ...userContent];
   }
 
-  const historyNote = historyRangeNote(history, now);
+  const historyNote = [historyRangeNote(history, now), conversationGapNote(history, now)]
+    .filter(Boolean)
+    .join('\n');
   const messages: DeepSeekMessage[] = [
     {
       role: 'system',
@@ -312,7 +314,7 @@ export async function streamChat(
         attitude,
         characterName: env.CHARACTER_NAME,
         userAddress: env.USER_ADDRESS,
-      }) + (historyNote ? `\n\n${historyNote}` : ''),
+      }) + (historyNote ? `\n\n${historyNote}` : '') + silentEndRule(channel),
     },
     // 最近 10 轮按时间从旧到新排列；每条带发送时间，模型才能判断上一句/上上句。
     // 单条只做超长保护（默认 2400 字，带文件 4200 字），不做过去那种 400 字过度压缩。
@@ -337,7 +339,8 @@ export async function streamChat(
     onFinish: async (text, usage) => {
       let cost = 0;
       let assistantId: number | undefined;
-      if (text.trim()) {
+      const silent = isSilentEnd(text) && (channel === 'mobile' || channel === 'web');
+      if (!silent && text.trim()) {
         // 费用与 token 随 INSERT 一次写入（少一条 UPDATE）
         const saved = await insertAssistantReply(env, text, userRow.id, now, {
           channel,
