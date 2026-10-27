@@ -335,3 +335,9 @@ ID 791 assistant 回“哟，五点了？”
 - D2-01：不再在已贴底时额外滚动，并移除消息 `animateContentSize()`，减少回复插入时的布局动画。
 - 媒体预热延迟 1.2 秒、限制 4 个，避免首屏和键盘第一次弹出时抢 CPU。
 - D2-02（首次键盘页面动画）仍需要真机 profiling；D2-07 继续观察滑动和重启表现。
+
+## Day 2 进度更新 4（2026-10-27）
+
+- 已构建并安装 **release APK**（项目原本就是 release 使用 debug 签名）。
+- 这会让 Compose/ART 运行性能优于 debug 包，优先用于验证 D2-02 首次键盘和 D2-07 整体流畅度。
+- release APK：`ds-mobile/app/build/outputs/apk/release/app-release.apk`
