@@ -26,7 +26,7 @@ import {
   HISTORY_MESSAGE_MAX_CHARS,
   type MessageRow,
 } from './db';
-import { loadRecentRounds, RECENT_ROUNDS } from './recent-context';
+import { loadRecentRounds, resolveRecentRounds } from './recent-context';
 import { calcCost, loadPricing, type TokenUsage } from './pricing';
 import { completeDeepSeek, streamDeepSeek, type DeepSeekMessage } from './deepseek';
 import { getTodaySummary, maybeSummarizeToday } from './summary';
@@ -501,13 +501,14 @@ openaiApp.post('/chat/completions', async (c) => {
     characterName: c.env.CHARACTER_NAME,
   });
   const cardTextWithMood = charCard.cardText;
-  // 先加载最近 10 轮历史：QQ 客户端只发当前一条，历史必须从 D1 补。
-  // 这样召回 query 也能带上“上一句/上上句”，而不是只拿当前几个字去搜。
+  // 自适应加载最近历史：默认 15 轮，技术/项目 30 轮，明确指代前文最多 50 轮。
+  // QQ/App 客户端只发当前一条，历史必须从 D1/归档补。
   let historyRaw: MessageRow[] = [];
   let historyMessages: DeepSeekMessage[] = [];
   let historyNote: string | null = null;
   if (body?.inject_history === true && !skipRecording) {
-    historyRaw = await loadRecentRounds(c.env, RECENT_ROUNDS, now);
+    const historyRounds = resolveRecentRounds(lastUserCleaned);
+    historyRaw = await loadRecentRounds(c.env, historyRounds, now);
     historyNote = historyRangeNote(historyRaw, now);
     historyMessages = historyRaw
       .filter(
@@ -525,6 +526,18 @@ openaiApp.post('/chat/completions', async (c) => {
           m.created_at,
         ),
       }));
+    // 按轮数之外再加字符预算，防止 50 轮里塞进大段 B 站资料/文件。
+    const historyBudget =
+      historyRounds >= 50 ? 14_000 : historyRounds >= 30 ? 10_000 : 7_000;
+    let historyChars = historyMessages.reduce(
+      (sum, m) => sum + (typeof m.content === 'string' ? m.content.length : 0),
+      0,
+    );
+    while (historyMessages.length > 2 && historyChars > historyBudget) {
+      const removed = historyMessages.shift();
+      if (!removed) break;
+      historyChars -= typeof removed.content === 'string' ? removed.content.length : 0;
+    }
   }
   // 召回 query：当前消息 + 最近 3 条用户历史（按时间从旧到新）
   const recallQuery = [

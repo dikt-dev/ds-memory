@@ -26,7 +26,7 @@ import { recordEngineMetric } from './engine-metrics';
 import { getOrCreateDayContext, type DayContextFile } from './context';
 import { getTodaySummary } from './summary';
 import { historyTimeLabel, recentProactiveMessages, insertProactiveMessage, updateMessageUsage } from './db';
-import { loadRecentRounds, RECENT_ROUNDS } from './recent-context';
+import { loadRecentRounds, PROACTIVE_RECENT_ROUNDS } from './recent-context';
 import { byteLength, parseRelationValues } from './memory-maintenance';
 import { enqueueProactive } from './queue';
 import { completeDeepSeek } from './deepseek';
@@ -181,7 +181,7 @@ async function generateProactive(
     getOrCreateDayContext(env, dateKey),
     getRecentMemo(env),
     getTodaySummary(env, dateKey),
-    loadRecentRounds(env, RECENT_ROUNDS, now),
+    loadRecentRounds(env, PROACTIVE_RECENT_ROUNDS, now),
     recentProactiveMessages(env, 6),
   ]);
   const relation = parseRelationValues(memory);

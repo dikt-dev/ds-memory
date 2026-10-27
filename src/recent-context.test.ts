@@ -7,6 +7,7 @@ import {
   withHistoryTimestamp,
   type MessageRow,
 } from './db';
+import { resolveRecentRounds } from './recent-context';
 
 const mk = (
   id: number,
@@ -94,5 +95,21 @@ describe('compactHistoryMessage', () => {
     expect(out.endsWith('结尾')).toBe(true);
     expect(out).toContain('…');
     expect(out.length).toBeLessThanOrEqual(21);
+  });
+});
+
+describe('resolveRecentRounds', () => {
+  it('明确指代前文时取 50 轮', () => {
+    expect(resolveRecentRounds('接着刚才那个问题继续说')).toBe(50);
+    expect(resolveRecentRounds('继续前面那段代码')).toBe(50);
+  });
+
+  it('技术/长任务取 30 轮', () => {
+    expect(resolveRecentRounds('帮我排查这个报错')).toBe(30);
+    expect(resolveRecentRounds('继续实现项目的日志接口')).toBe(30);
+  });
+
+  it('普通聊天默认 15 轮', () => {
+    expect(resolveRecentRounds('在吗')).toBe(15);
   });
 });

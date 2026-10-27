@@ -20,7 +20,7 @@ import {
   HISTORY_FILE_MAX_CHARS,
   HISTORY_MESSAGE_MAX_CHARS,
 } from './db';
-import { loadRecentRounds, RECENT_ROUNDS } from './recent-context';
+import { loadRecentRounds, resolveRecentRounds } from './recent-context';
 import { calcCost, loadPricing } from './pricing';
 import { streamDeepSeek, type DeepSeekMessage } from './deepseek';
 import { getTodaySummary } from './summary';
@@ -65,7 +65,7 @@ export async function streamChat(
       getMemory(env),
       getOrCreateDayContext(env, dateKey),
       fetchWeather(env),
-      loadRecentRounds(env, RECENT_ROUNDS, now),
+      loadRecentRounds(env, resolveRecentRounds(content), now),
       getRecentMemo(env),
       getTodaySummary(env, dateKey),
       loadPersonaState(env),

@@ -1,18 +1,41 @@
 /**
- * 跨天短期记忆：默认带最近 10 轮（turn_id 分组，按时间从旧到新）。
+ * 跨天短期记忆：默认带最近 15 轮（turn_id 分组，按时间从旧到新）。
  *
- * - 优先从 D1 取最近 10 轮；
- * - D1 不足 10 轮时（新的一天刚开始，或旧消息已被月度清理），
- *   从 R2 的昨天日归档 / 月归档补最后几轮；
+ * - 默认 15 轮；技术/项目类 30 轮；明确指代前文时最多 50 轮；
+ * - D1 不足时从 R2 的日归档 / 月归档补最近几轮；
  * - 只读归档，不写回 D1，也不改变归档数据。
  */
 import type { Env } from './types';
 import { groupTurns, recentRoundMessages, takeLastRounds, type MessageRow } from './db';
-import { dateKeyInBeijing, previousDateKey } from './date';
+import { addDays, dateKeyInBeijing } from './date';
 import { getObject } from './storage';
 
 /** 默认携带的最近轮数。一轮 = 用户消息 + 它的回复，或一条主动消息。 */
-export const RECENT_ROUNDS = 10;
+export const RECENT_ROUNDS = 15;
+/** 单次请求的硬上限；只有明确“接着刚才/前面”才取 50。 */
+export const MAX_RECENT_ROUNDS = 60;
+/** 主动消息不需要占用聊天级的长历史。 */
+export const PROACTIVE_RECENT_ROUNDS = 10;
+
+/**
+ * 自适应短期记忆：
+ * - 默认 15 轮；
+ * - 明确指代前文（“接着刚才/前面那个”）→ 50 轮；
+ * - 长技术/项目/调试类消息 → 30 轮。
+ */
+export function resolveRecentRounds(text: string): number {
+  const t = (text || '').trim();
+  if (/(接着刚才|继续刚才|接着前面|继续前面|前面那个|上一条|回到刚才|接着上面|继续上面)/.test(t)) {
+    return 50;
+  }
+  if (
+    t.length > 80 ||
+    /(代码|报错|debug|bug|调试|项目|实现|修复|部署|日志|函数|接口|数据库|记忆|归档)/i.test(t)
+  ) {
+    return 30;
+  }
+  return 15;
+}
 
 const compareMessages = (a: MessageRow, b: MessageRow) =>
   a.created_ms - b.created_ms || a.id - b.id;
@@ -52,16 +75,16 @@ export async function loadRecentRounds(
   rounds = RECENT_ROUNDS,
   now: Date = new Date(),
 ): Promise<MessageRow[]> {
-  const n = Math.max(1, Math.min(Math.floor(rounds), 30));
+  const n = Math.max(1, Math.min(Math.floor(rounds), MAX_RECENT_ROUNDS));
   const rows = await recentRoundMessages(env, n);
-  if (groupTurns(rows).length >= n) return rows;
-
-  const prev = previousDateKey(dateKeyInBeijing(now));
-  // 多取一些原始消息，保证跨天时仍能凑出 n 轮
-  const tail = await loadDayTail(env, prev, n * 2 + 4);
-  if (tail.length === 0) return rows;
-
-  const merged = [...tail, ...rows].sort(compareMessages);
+  let merged = rows;
+  const today = dateKeyInBeijing(now);
+  // 50 轮可能跨两三天；最多向前补 3 天，避免长对话被截断。
+  for (let back = 1; back <= 3 && groupTurns(merged).length < n; back++) {
+    const tail = await loadDayTail(env, addDays(today, -back), n * 2 + 4);
+    if (tail.length === 0) continue;
+    merged = [...tail, ...merged].sort(compareMessages);
+  }
   return takeLastRounds(merged, n);
 }
 
