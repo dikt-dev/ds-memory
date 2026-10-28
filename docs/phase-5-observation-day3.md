@@ -307,13 +307,13 @@ docs/memory-project-comparison.md
 
 ## 未完成项
 
-统一记录在：
+统一排期见：
 
 ```text
-docs/memory-backlog.md
+docs/pending-work.md
 ```
 
-包括分层上下文预算、自动回归集、跨日期近重复合并、FTS/CJK 兜底、记忆查看/编辑 UI、静默后的主动消息暂停、BaiShou/Companion 源码补齐。
+技术细节仍保留在 `docs/memory-backlog.md`。
 
 ## 上下文预算与回归骨架（Day 3 后补）
 
