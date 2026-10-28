@@ -296,11 +296,25 @@ GET /api/admin/memory/links?type=fact&id=fact_xxx
 
 | 事项 | 归档原因 | 重新开始条件 |
 |---|---|---|
-| P1-2 `memory_jobs/links/audit` 清理 | 当前数据量小，不影响正确性 | 表行数明显增长或月度维护时 |
-| P1-3 `linkAllFacts` 每日全量建链 | 需要重构增量建链，风险高于当前收益 | 下一次记忆引擎迭代 |
-| P2-1 召回 O(n²)/全量 bigram | 需要 benchmark 和缓存改造 | 切 next 前或 chunks 超过 500 |
+| P1-2 `memory_jobs/links/audit` 清理 | 已补做（第二批） | 已修复 |
+| P1-3 `linkAllFacts` 每日全量建链 | 已补做增量建链（第二批） | 已修复 |
+| P2-1 召回 O(n²)/全量 bigram | 已加 MMR 候选池上限；bigram 缓存仍待做 | 切 next 前或 chunks 超过 500 |
 | P2-2 legacy/next 重复 | shadow 不注入，暂无影响 | 决定切 next 时 |
 | P2-4 死代码清理 | 不影响运行，避免观察期大改 | 记忆重构/清理窗口 |
 | DB/归档链路测试 | 需要 mock D1/R2，工作量大 | 下一轮测试专项 |
 
 这些项已归档，不在本轮观察期继续改。
+
+## 归档项处理结果（2026-10-28 第二批）
+
+已补做：
+
+- P1-2：每日归档清理 `memory_jobs`（30 天）、`memory_links`（180 天）、`memory_audit`（365 天）；
+- P1-3：日常重建只给新事实建链，`linkAllFacts` 改由手动 `/api/admin/memory/link-all` 触发；
+- P2-1：`mmrSelectChunks` 候选池硬截断到 50，避免未截断大池退化为 O(n²)。
+
+仍归档：
+
+- P2-2 legacy/next 重复：等切 next 前验证；
+- P2-4 死代码清理：等记忆重构窗口；
+- DB/归档链路测试专项：下一轮测试专项。

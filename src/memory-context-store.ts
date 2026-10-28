@@ -8,7 +8,7 @@ import type { Env } from './types';
 import { autoTags, bigrams } from './memory-archive';
 import { embedTexts, quantizeVec } from './memory-index';
 import { rollupSourceHash } from './memory-rollups';
-import { linkAllFacts, linkFactToNeighbors } from './memory-links';
+import { linkFactToNeighbors } from './memory-links';
 import {
   buildMemoryChunks,
   canonicalizeFacts,
@@ -81,10 +81,6 @@ async function insertFacts(env: Env, facts: MemoryFact[], origin: string): Promi
         ),
       ),
     );
-    // 显式关联是增量补充，失败不能影响事实落库。
-    for (const fact of batch) {
-      await linkFactToNeighbors(env, fact).catch(() => 0);
-    }
   }
 }
 
@@ -177,6 +173,9 @@ export async function upsertConversationFacts(env: Env, facts: MemoryFact[]): Pr
   }
   await insertFacts(env, facts, 'conversation');
   await insertChunks(env, buildMemoryChunks({ facts, events: [] }), 'conversation');
+  for (const fact of facts) {
+    await linkFactToNeighbors(env, fact).catch(() => 0);
+  }
   return facts.length;
 }
 
@@ -207,6 +206,7 @@ export async function replaceMemoryContext(
   const existingSources = new Map(
     (existing.results ?? []).map((r) => [r.id, parseArray<number>(r.source_message_ids)]),
   );
+  const existingFactIds = new Set(existingSources.keys());
   for (const fact of parsed.facts) {
     if (fact.sourceMessageIds.length === 0) {
       const old = existingSources.get(fact.id);
@@ -225,8 +225,11 @@ export async function replaceMemoryContext(
   await insertFacts(env, parsed.facts, origin);
   await insertEvents(env, parsed.events, origin);
   await insertChunks(env, chunks, origin);
-  // 等事件落库后补一次关联，避免插入顺序导致事实找不到同日事件。
-  await linkAllFacts(env).catch((e) => console.warn('[memory:links] backfill failed:', e));
+  // 只给新事实建链；存量关联保留，避免每日全表重建。
+  for (const fact of parsed.facts) {
+    if (existingFactIds.has(fact.id)) continue;
+    await linkFactToNeighbors(env, fact).catch(() => 0);
+  }
 
   await deleteIds(env, 'memory_facts', oldFacts);
   await deleteIds(env, 'memory_events', oldEvents);

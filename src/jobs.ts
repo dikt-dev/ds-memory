@@ -19,7 +19,7 @@ import { fetchWeather } from './weather';
 import { getMemory, putMemory } from './memory';
 import { reindexMemory } from './memory-index';
 import { backfillMemoryProvenance, embedMemoryChunks, replaceMemoryContext, syncRollupSummaries } from './memory-context-store';
-import { enqueueMemoryJob, runMemoryJobs } from './memory-jobs';
+import { cleanupMemoryTables, enqueueMemoryJob, runMemoryJobs } from './memory-jobs';
 import { maybeGenerateRollups } from './memory-rollups';
 import { buildRelationStatus } from './attitude';
 import { distillDay } from './distill';
@@ -714,6 +714,9 @@ export async function runDailyArchive(env: Env, now: Date): Promise<DailyArchive
   await cleanupQueue(env).catch((e) => console.error('[queue] cleanup failed:', e));
   await cleanupStaleObjects(env, now).catch((e) => console.error('[r2] cleanup failed:', e));
   await cleanupRuntimeState(env, now.getTime()).catch((e) => console.error('[runtime] cleanup failed:', e));
+  await cleanupMemoryTables(env, now.getTime()).catch((e) =>
+    console.error('[memory] table cleanup failed:', e),
+  );
 
   const catchupTargets = await findArchiveCatchupTargets(env, now);
   const catchup: string[] = [];

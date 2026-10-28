@@ -428,7 +428,10 @@ export function mmrSelectChunks(
   lambda = 0.75,
 ): MemoryChunk[] {
   if (k <= 0 || candidates.length === 0) return [];
-  const pool = [...candidates].sort((a, b) => b.score - a.score);
+  // 防止调用方传入未截断大池时退化成 O(n²)。
+  const pool = [...candidates]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 50);
   const maxScore = Math.max(1, pool[0]?.score ?? 1);
   const selected: ScoredChunk[] = [];
   while (selected.length < k && pool.length > 0) {

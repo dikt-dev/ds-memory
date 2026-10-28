@@ -57,7 +57,7 @@ import {
   type MemoryJobStats,
 } from './memory-context-store';
 import { enqueueMemoryJob, runMemoryJobs } from './memory-jobs';
-import { expandLinkedChunks, linksForMemory } from './memory-links';
+import { expandLinkedChunks, linkAllFacts, linksForMemory } from './memory-links';
 import { rankMemoryChunks } from './memory-domain';
 import { applyMemoryProjection, buildMemoryProjection } from './memory-projection';
 import { generateRollup, previousPeriods } from './memory-rollups';
@@ -1137,6 +1137,12 @@ app.get('/api/admin/memory/links', requireAuth, async (c) => {
   const id = (c.req.query('id') ?? '').trim();
   if (!id) return c.json({ error: 'id required' }, 400);
   return c.json({ ok: true, type, id, ...(await linksForMemory(c.env, type, id)) });
+});
+
+/** 手动补齐存量事实关联；日常归档只对新事实增量建链。 */
+app.post('/api/admin/memory/link-all', requireAuth, async (c) => {
+  const linked = await linkAllFacts(c.env);
+  return c.json({ ok: true, linked });
 });
 
 /** 回归调试：只读召回结果，不写记忆、不发模型。 */

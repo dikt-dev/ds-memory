@@ -140,6 +140,38 @@ async function runOne(env: Env, job: MemoryJob): Promise<unknown> {
   }
 }
 
+/**
+ * 清理派生表，避免 memory_jobs/links/audit 无限增长。
+ * 只删历史记录，不碰当前 facts/entries。
+ */
+export async function cleanupMemoryTables(
+  env: Env,
+  now = Date.now(),
+): Promise<{ jobs: number; links: number; audits: number }> {
+  const day = 86_400_000;
+  const jobs = await env.DB.prepare(
+    `DELETE FROM memory_jobs
+     WHERE status IN ('done','failed') AND created_at < ?`,
+  )
+    .bind(now - 30 * day)
+    .run();
+  const links = await env.DB.prepare(
+    'DELETE FROM memory_links WHERE created_at < ?',
+  )
+    .bind(now - 180 * day)
+    .run();
+  const audits = await env.DB.prepare(
+    'DELETE FROM memory_audit WHERE created_at < ?',
+  )
+    .bind(now - 365 * day)
+    .run();
+  return {
+    jobs: jobs.meta.changes ?? 0,
+    links: links.meta.changes ?? 0,
+    audits: audits.meta.changes ?? 0,
+  };
+}
+
 /** 处理最多 limit 个 queued 任务。单个任务失败不影响其它任务。 */
 export async function runMemoryJobs(
   env: Env,

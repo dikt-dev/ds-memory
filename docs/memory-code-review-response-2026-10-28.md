@@ -351,11 +351,14 @@ shadow 阶段不注入，暂时无害。切 next 前用回归集验证。
 - P1-4 `webproactive` 接入预算；
 - P2-3 隐私快照移出仓库并加入 ignore。
 
-未修/归档：
+第二批已修：
 
-- P1-2 jobs/links/audit 清理；
-- P1-3 `linkAllFacts` 增量优化；
-- P2-1 召回性能；
+- P1-2 jobs/links/audit 清理（30/180/365 天）；
+- P1-3 日常只对新事实增量建链，`linkAllFacts` 改为手动接口；
+- P2-1 MMR 候选池硬截断到 50（bigram 缓存仍待做）。
+
+仍归档：
+
 - P2-2 legacy/next 去重；
 - P2-4 死代码清理；
 - DB/归档链路测试专项。
