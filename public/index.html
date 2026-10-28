@@ -846,6 +846,12 @@ function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
 
 /* 用户消息渲染：处理 [图片:images/…] 标记与换行；无路径的 [图片] 显示占位提示 */
 function renderUserContent(content) {
+  // 落库内容里包含文件原文（给 AI 读），历史渲染只显示文件卡片；
+  // 否则刷新后整个文件正文会铺满聊天气泡。
+  content = content.replace(
+    /【文件：([^】]+)】\s*\n?```[^\n]*\n[\s\S]*?\n```/g,
+    (_all, name) => `<div class="msg-file">📄 ${escapeHtml(name)}</div>`,
+  );
   const re = /\[(图片|语音):((?:images|audio)\/[^\]\s]+)\]/g;
   let html = '';
   let last = 0;
