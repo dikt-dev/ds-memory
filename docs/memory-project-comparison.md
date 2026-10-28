@@ -1,0 +1,248 @@
+# 记忆项目对比
+
+调研日期：2026-10-28
+
+目的：对比候选开源项目的记忆/上下文设计，提炼可借鉴项；不直接替换 ds-memory 现有的事实源和观察期架构。
+
+> 说明：LRC、HanakoPro、snowfox-memory-continuity 已读 README/核心源码；BaiShou-Next 的 clone 未完整拉取，Companion-AI-Memory-Context-Token-Optimization 未定位到公开仓库，二者标注“未确认”，不根据名称推断实现。
+
+## 总览
+
+| 项目 | 记忆模型 | 存储/检索 | 主要优点 | 主要代价 |
+|---|---|---|---|---|
+| LRC | 类型化记忆 + 事件/实体关联 + 结晶 | 本地 Rust 服务；语义编码 + HNSW；关联扩展；哈希链审计 | 关联不是纯相似度；可解释、可审计 | 本地服务较重；依赖记忆里写好关联字段 |
+| HanakoPro | 会话摘要 → 原子事实 | SQLite facts + FTS5；CJK ngram；标签/时间 | 原子事实、去重简单、可前端管理 | 以全文检索为主；关系和长期演化较弱 |
+| snowfox-memory-continuity | 分层 F0/L1/L2/L3/L4 | Markdown 文件 + 压缩/合并/退役脚本；L4 TF-IDF | 层级和 token 预算清晰；可人工维护 | 文件一致性/并发弱；语义检索有限 |
+| BaiShou-Next | 未确认 | 未确认 | 未确认 | 未确认 |
+| Companion-AI-Memory-Context-Token-Optimization | 未确认（名称指向上下文/token 优化） | 未确认 | 未确认 | 未确认 |
+
+---
+
+## 1. LRC
+
+来源：
+
+- https://github.com/zhibaiYingChuan/LRC
+- 镜像：https://gitcode.com/gcw_M73FIiUo/LRC
+
+### 记忆模型
+
+- 写入时区分类型：`fact`、`preference`、`decision`、`code_context`、`conversation`、`experience`、`synthesis`。
+- 每条记忆可带重要性（1–10）和隐私级别。
+- 语义相近的记忆会聚类融合成“结晶”条目（程序记忆）；有 LLM 时由 LLM 归纳，否则用本地合成。
+- 检索不是只做相似度：以召回结果为起点做**有界关联展开**。
+
+### 关联来源
+
+- 同一次经历：相同 `event_id`；
+- 同一时段：同项目 + 时间窗口，标注 `auto:` 来源；
+- 共享实体：同一文件/对象；
+- 互相结晶：`derived_from` / `crystallized_into`；
+- 符号层：图结构推导的因果/时序/约束，明确标注“结构推导”，不当作事实。
+
+### 检索与审计
+
+- 代码索引与记忆检索是两条独立链路；代码用 HNSW，记忆检索可用语义编码。
+- 记忆增删改和联想足迹写入 SHA256 哈希链，另有封印文件防篡改。
+- 关联只对已召回结果展开，不扩张检索根集；复用隐私/项目/类型过滤，避免关联绕过权限。
+
+### 可借鉴
+
+1. **显式关联字段**：`event_id`、实体、`derived_from`，比单纯向量相似度更能解释“为什么想起这个”。
+2. **关联来源分层**：记录层（必然成立）与符号层（可能成立）分开标注，不混淆可信度。
+3. **审计链**：记忆修改可追溯；ds-memory 目前只有来源/时间，缺少防篡改审计。
+4. **只对召回结果做有界扩展**：控制成本，不让联想无限扩散。
+
+### 不建议照搬
+
+- 引入完整 Rust 本地服务和 HNSW 代码索引，超出当前 Worker 架构。
+- 依赖用户手工写 `event_id` 才有好效果；ds-memory 应尽量自动生成事件边界。
+- 符号层因果推断在真实召回中读回率很低，优先级应低。
+
+---
+
+## 2. HanakoPro
+
+来源：https://github.com/ZS520L/HanakoPro
+
+### 记忆模型
+
+- 以 session 为单位生成摘要；摘要有 snapshot，只有 `summary !== snapshot` 的脏 session 才进入深度提炼。
+- LLM 将摘要 diff 拆成**原子事实**，每条带 tags 和 time。
+- FactStore 用 SQLite：
+  - `facts` 表保存 fact、search_text、tags、time、session_id；
+  - FTS5 全文索引；
+  - 中文用 CJK ngram 生成检索 token；
+  - 不使用 embedding/vector/score/decay/hit_count（v2 明确简化）。
+- 前端支持分条展示、跳转到对应对话、增删改。
+
+### 可借鉴
+
+1. **脏 session + snapshot diff**：只处理新增内容，避免每天重复提炼同一段摘要。
+2. **原子事实**：一条记忆只表达一个事实，便于去重、合并和引用。
+3. **FTS + CJK ngram 兜底**：向量召回失败时仍能按关键词找回；比纯向量更可控。
+4. **用户可见/可管理**：记忆不是黑盒，前端能看、能改、能跳回来源。
+
+### 不建议照搬
+
+- 完全放弃向量/语义召回；ds-memory 的关键词+向量混合更适合跨表达召回。
+- 只靠 session 摘要 diff；长对话里细节可能已被摘要压掉。
+- 每条事实都调用 LLM 提炼，成本和延迟需要控制。
+
+---
+
+## 3. snowfox-memory-continuity
+
+来源：https://github.com/TNong611/snowfox-memory-continuity
+
+### 记忆模型
+
+分层文件：
+
+```text
+F0 fixed.md      固定记忆，永不压缩
+L1 recent.md     完整近期对话
+L2 summary.md    中期摘要
+L3 long_term.md  长期记忆
+L4 archive.md    归档
+user.md / tasklog.md / _assembled_context.md
+```
+
+脚本负责：
+
+- L1→L2：LLM 摘要；
+- L2→L3：LLM 二次蒸馏，去空、去重、去时间戳；
+- L3→L4：纯搬运；
+- L3/L4 重复记忆合并 + 权重标记；
+- 组装上下文快照 `_assembled_context.md`。
+
+容量参数集中配置，例如 L1 50 条/45KB、L2 100 条/30KB、L3 50 条/45KB。
+
+### 可借鉴
+
+1. **明确分层和容量预算**：每层有 token/条数上限，超出就压缩/退役。
+2. **固定记忆与可压缩记忆分离**：F0 永不压缩，适合称呼、底线、长期偏好。
+3. **合并/去重脚本化**：重复记忆不是靠模型每次即兴处理。
+4. **组装上下文快照**：可复查“这一轮到底带了哪些记忆”。
+5. **任务日志**：tasklog 适合记录进行中事项，而非混进用户画像。
+
+### 不建议照搬
+
+- 纯 Markdown 文件 + 脚本的一致性/并发能力弱；多端同时写容易冲突。
+- L4 仅 TF-IDF，跨语义召回不足。
+- 分层过多会增加维护和调试成本；ds-memory 已有日/周/月 rollup，可映射而不是照搬五层。
+
+---
+
+## 4. BaiShou-Next（未确认）
+
+来源：https://github.com/foxletters-hq/BaiShou-Next
+
+当前 clone 未完整拉取，仓库内容未读到；不做实现判断。
+
+后续需要补：
+
+- README 与目录结构；
+- memory/context 相关源码；
+- 是否有分层、检索、摘要或 token 预算设计。
+
+---
+
+## 5. Companion-AI-Memory-Context-Token-Optimization（未确认）
+
+用户提供的名称指向“基于可观察人脑记忆与存储优化策略的 AI 上下文优化，节省 token 并防止失忆”。
+
+当前未定位到公开仓库地址，未读源码；不做实现判断。
+
+后续需要补：
+
+- 仓库地址；
+- 记忆编码/存储/遗忘/召回策略；
+- token 预算和上下文组装方式。
+
+---
+
+## 与 ds-memory 当前架构对比
+
+ds-memory 当前：
+
+```text
+R2 memory.md                 事实源/长期记忆
+D1 messages                  原始对话
+D1 memory_facts              结构化事实
+D1 memory_events             事件
+D1 memory_chunks/entries     检索索引
+D1 memory_rollups/summaries  周/月摘要
+关键词 + 向量混合召回
+日归档 + 周/月摘要
+关系/情绪系统
+MEMORY_ENGINE_* 影子/legacy
+```
+
+相对优势：
+
+- 事实源明确，可人工修正；
+- 已有归档、摘要、向量、关系/情绪多条链路；
+- 有 shadow 观察机制，可渐进切换。
+
+相对不足：
+
+- 记忆之间缺少显式关联（事件/实体/因果）；
+- 缺少记忆修改审计链；
+- 原子事实粒度不如 HanakoPro；
+- 分层容量预算不如 snowfox 明确；
+- 记忆可解释性/来源可视化不足。
+
+## 借鉴优先级
+
+### P0：事件/实体关联与来源
+
+- 在 `memory_facts` / `memory_entries` 增加 `event_id`、`entities`、`derived_from`（可先 JSON 字段）；
+- 召回时对已召回结果做有界关联扩展；
+- 结果标注“同事件/同实体/同项目/推导”，不混入排序分数。
+
+理由：直接改善“为什么想起这个”，且不改变 memory.md 事实源。
+
+### P1：原子事实 + 去重/合并
+
+- 归档提炼输出原子事实，而不是长段落；
+- 用内容 hash/近重复合并；
+- 保留来源消息 id，支持跳回原文。
+
+理由：HanakoPro 的 snapshot diff 和原子事实能降低重复与上下文污染。
+
+### P1：分层预算与组装快照
+
+- 给 memory.md 核心、近期摘要、周/月 rollup、召回片段设 token/字符预算；
+- 每轮记录实际注入了哪些块（可调试快照）；
+- 固定记忆（称呼、底线、长期偏好）单独标记，不参与压缩。
+
+理由：snowfox 的容量控制能避免上下文膨胀。
+
+### P2：审计与可追溯
+
+- 记录记忆新增/修改/删除的来源、时间、操作者；
+- 先做轻量审计表，不必上哈希链；
+- 后续再评估防篡改。
+
+### P2：FTS/关键词兜底
+
+- 现有 chunks 已有关键词；可补 SQLite FTS 或 CJK ngram 兜底；
+- 不替代向量召回，只做低分/无向量时的回退。
+
+## 不建议照搬
+
+- 引入 LRC 的本地 Rust 服务/HNSW 代码索引；
+- 用 HanakoPro 完全替代向量召回；
+- 照搬 snowfox 的五层文件和脚本链；
+- 在观察期内切换 `MEMORY_ENGINE_*` 到 `next`；
+- 没有来源和回滚方案就自动删除/覆盖记忆。
+
+## 参考链接
+
+- LRC: https://github.com/zhibaiYingChuan/LRC
+- LRC 镜像: https://gitcode.com/gcw_M73FIiUo/LRC
+- HanakoPro: https://github.com/ZS520L/HanakoPro
+- snowfox-memory-continuity: https://github.com/TNong611/snowfox-memory-continuity
+- BaiShou-Next: https://github.com/foxletters-hq/BaiShou-Next
+- Companion-AI-Memory-Context-Token-Optimization: 仓库地址待补
