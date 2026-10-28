@@ -257,6 +257,69 @@ export async function expandLinkedChunks(
   return [...roots, ...extra];
 }
 
+/** 来源追溯：某条记忆的直接关联、两端内容和来源消息 id。 */
+export async function linksForMemory(
+  env: Env,
+  type: 'fact' | 'event',
+  id: string,
+): Promise<{
+  links: LinkRow[];
+  nodes: Array<{ type: string; id: string; content: string; sourceMessageIds: number[] }>;
+}> {
+  const links = await env.DB.prepare(
+    `SELECT from_type, from_id, to_type, to_id, relation, confidence, source
+     FROM memory_links
+     WHERE (from_type = ? AND from_id = ?) OR (to_type = ? AND to_id = ?)
+     ORDER BY confidence DESC, created_at DESC LIMIT 30`,
+  )
+    .bind(type, id, type, id)
+    .all<LinkRow>();
+
+  const nodes: Array<{ type: string; id: string; content: string; sourceMessageIds: number[] }> = [];
+  const seen = new Set<string>();
+  const addNode = async (nodeType: string, nodeId: string) => {
+    const key = `${nodeType}:${nodeId}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    if (nodeType === 'fact') {
+      const row = await env.DB.prepare(
+        'SELECT content, source_message_ids FROM memory_facts WHERE id = ? LIMIT 1',
+      )
+        .bind(nodeId)
+        .first<{ content: string; source_message_ids: string }>();
+      if (row) {
+        nodes.push({
+          type: nodeType,
+          id: nodeId,
+          content: row.content,
+          sourceMessageIds: parseArray<number>(row.source_message_ids),
+        });
+      }
+    } else if (nodeType === 'event') {
+      const row = await env.DB.prepare(
+        'SELECT summary, source_message_ids FROM memory_events WHERE id = ? LIMIT 1',
+      )
+        .bind(nodeId)
+        .first<{ summary: string; source_message_ids: string }>();
+      if (row) {
+        nodes.push({
+          type: nodeType,
+          id: nodeId,
+          content: row.summary,
+          sourceMessageIds: parseArray<number>(row.source_message_ids),
+        });
+      }
+    }
+  };
+
+  await addNode(type, id);
+  for (const link of links.results ?? []) {
+    await addNode(link.from_type, link.from_id);
+    await addNode(link.to_type, link.to_id);
+  }
+  return { links: links.results ?? [], nodes };
+}
+
 /** 调试/审计用：某条记忆直接关联了多少条。 */
 export async function linkedCount(env: Env, type: 'fact' | 'event', id: string): Promise<number> {
   const row = await env.DB.prepare(

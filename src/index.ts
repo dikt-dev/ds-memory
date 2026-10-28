@@ -56,6 +56,7 @@ import {
   type MemoryJobStats,
 } from './memory-context-store';
 import { enqueueMemoryJob, runMemoryJobs } from './memory-jobs';
+import { linksForMemory } from './memory-links';
 import { applyMemoryProjection, buildMemoryProjection } from './memory-projection';
 import { generateRollup, previousPeriods } from './memory-rollups';
 import { getOrCreateDayContext } from './context';
@@ -1128,6 +1129,14 @@ app.post('/api/admin/memory/reindex', requireAuth, async (c) => {
 app.get('/api/admin/memory/context-stats', requireAuth, async (c) => {
   return c.json({ ok: true, ...(await memoryContextStats(c.env)) });
 });
+/** 来源追溯：查看某条事实/事件直接关联和来源消息 id。 */
+app.get('/api/admin/memory/links', requireAuth, async (c) => {
+  const type = c.req.query('type') === 'event' ? 'event' : 'fact';
+  const id = (c.req.query('id') ?? '').trim();
+  if (!id) return c.json({ error: 'id required' }, 400);
+  return c.json({ ok: true, type, id, ...(await linksForMemory(c.env, type, id)) });
+});
+
 /** Phase 5 观察：按天读取 shadow/next 指标（不记录正文）。 */
 app.get('/api/admin/engine-metrics', requireAuth, async (c) => {
   const days = Math.min(30, Math.max(1, Number(c.req.query('days') ?? 7) || 7));
