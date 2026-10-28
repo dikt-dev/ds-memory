@@ -547,6 +547,13 @@ export function pruneTransientSections(
     const lines = sec.lines.filter((line) => {
       const m = line.match(ENTRY_RE);
       if (!m) return true; // 注释与空行保留
+      // 带日期的关系快照只是历史展示，当前值在“称呼与关系”里；
+      // 不要让 [2026-10-24] 心情值 这种旧行在近期动态里冒充当前值。
+      if (/^-\s*\[[^\]]+\]\s*(好感度|亲密度|心情值?|信任|尊重|心动)\s*[:：]/.test(line)) {
+        removed += 1;
+        removedLines.push(line);
+        return false;
+      }
       if (normalizeDateKey(m[1]) < cutoff) {
         removed += 1;
         removedLines.push(line);

@@ -11,6 +11,7 @@ import {
   injectImmutableSection,
   mergeMemoryEntry,
   parseRelationValues,
+  pruneTransientSections,
   reportSectionBudgets,
   trimOldestEntries,
 } from './memory-maintenance';
@@ -71,6 +72,25 @@ describe('mergeMemoryEntry', () => {
 
   it('提炼结果无有效条目时原样返回', () => {
     expect(mergeMemoryEntry(SAMPLE, '今天没什么可记的。', '2026-10-21')).toBe(SAMPLE);
+  });
+});
+
+describe('pruneTransientSections', () => {
+  it('删除近期动态里带日期的旧关系快照，保留当前称呼区数值', () => {
+    const text = `# 长期记忆
+
+## 称呼与关系
+- 心情值：547 / 1000
+
+## 近期动态
+- [2026-10-24] 心情值：560 / 1000
+- [2026-10-27] 今天很开心
+`;
+    const r = pruneTransientSections(text, '2026-10-28');
+    expect(r.removed).toBe(1);
+    expect(r.text).not.toContain('[2026-10-24] 心情值');
+    expect(r.text).toContain('心情值：547 / 1000');
+    expect(r.text).toContain('[2026-10-27] 今天很开心');
   });
 });
 
