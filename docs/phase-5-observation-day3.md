@@ -302,3 +302,15 @@ docs/memory-project-comparison.md
 - 跨日期近重复事实合并；
 - FTS/CJK 关键词兜底；
 - 记忆查看/编辑 UI。
+
+---
+
+## 未完成项
+
+统一记录在：
+
+```text
+docs/memory-backlog.md
+```
+
+包括分层上下文预算、自动回归集、跨日期近重复合并、FTS/CJK 兜底、记忆查看/编辑 UI、静默后的主动消息暂停、BaiShou/Companion 源码补齐。
