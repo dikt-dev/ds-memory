@@ -8,6 +8,7 @@ import type { Env } from './types';
 import { autoTags, bigrams } from './memory-archive';
 import { embedTexts, quantizeVec } from './memory-index';
 import { rollupSourceHash } from './memory-rollups';
+import { linkAllFacts, linkFactToNeighbors } from './memory-links';
 import {
   buildMemoryChunks,
   canonicalizeFacts,
@@ -80,6 +81,10 @@ async function insertFacts(env: Env, facts: MemoryFact[], origin: string): Promi
         ),
       ),
     );
+    // 显式关联是增量补充，失败不能影响事实落库。
+    for (const fact of batch) {
+      await linkFactToNeighbors(env, fact).catch(() => 0);
+    }
   }
 }
 
@@ -220,6 +225,8 @@ export async function replaceMemoryContext(
   await insertFacts(env, parsed.facts, origin);
   await insertEvents(env, parsed.events, origin);
   await insertChunks(env, chunks, origin);
+  // 等事件落库后补一次关联，避免插入顺序导致事实找不到同日事件。
+  await linkAllFacts(env).catch((e) => console.warn('[memory:links] backfill failed:', e));
 
   await deleteIds(env, 'memory_facts', oldFacts);
   await deleteIds(env, 'memory_events', oldEvents);

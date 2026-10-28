@@ -13,6 +13,7 @@ import { dateKeyInBeijing } from './date';
 import { embedMemoryChunks, replaceMemoryContext, syncRollupSummaries } from './memory-context-store';
 import { reindexMemory } from './memory-index';
 import { generateRollup, weekStartKey } from './memory-rollups';
+import { auditHash, recordMemoryAudit } from './memory-audit';
 
 const CORRECTION_HEADER = '## 用户更正（最高优先级）';
 const MAX_LEN = 500;
@@ -79,7 +80,17 @@ export async function applyMemoryCorrection(
     return { ok: true, keyed, line, bytes: new TextEncoder().encode(memory).byteLength };
   }
 
+  const beforeHash = auditHash(memory);
   await putMemory(env, next);
+  await recordMemoryAudit(env, {
+    action: 'correct',
+    targetType: 'memory.md',
+    targetId: 'memory.md',
+    beforeHash,
+    afterHash: auditHash(next),
+    source: 'api:/更正',
+    detail: text,
+  });
   // 纠正属于低频操作，直接同步重建，避免下一轮仍召回旧事实。
   await replaceMemoryContext(env, next, 'correction').catch((e) => {
     console.error('[memory] correction context rebuild failed:', e);

@@ -35,6 +35,7 @@ import { buildVoiceDirective, recentOpeners } from './voice';
 import { formatRecentMemoBlock, getRecentMemo } from './recent-memory';
 import { embedTexts, extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 import { loadMemoryChunks } from './memory-context-store';
+import { expandLinkedChunks } from './memory-links';
 import { formatMemoryChunks, rankMemoryChunks, shouldRecallMemory } from './memory-domain';
 import { buildAttitudePolicy } from './attitude-policy';
 import { packMemoryChunks } from './context-packer';
@@ -131,7 +132,8 @@ export async function streamChat(
         queryVec !== null
           ? rankMemoryChunks(recallQuery, chunks, 6, focus, { queryVec })
           : keywordPicked;
-      const packed = packMemoryChunks(picked);
+      const expanded = await expandLinkedChunks(env, picked, 2);
+      const packed = packMemoryChunks(expanded);
       const nextRaw = formatMemoryChunks(packed.chunks);
       const shadowMs = Math.round(performance.now() - startedAt);
       const oldItems = recalledRaw.split('\n').filter((line) => line.startsWith('- ')).length;
@@ -143,6 +145,7 @@ export async function streamChat(
         oldBytes,
         nextBytes: byteLength(nextRaw),
         packedDropped: packed.dropped,
+        linkedItems: expanded.length - picked.length,
         hasVector: Boolean(queryVec),
         shadowMs,
       });

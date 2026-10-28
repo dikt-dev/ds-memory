@@ -19,6 +19,7 @@ import { getMemory } from './memory';
 import { fetchWeather } from './weather';
 import { loadMemoryChunks } from './memory-context-store';
 import { formatMemoryChunks, rankMemoryChunks, shouldRecallMemory } from './memory-domain';
+import { expandLinkedChunks } from './memory-links';
 import { packMemoryChunks } from './context-packer';
 import { buildAttitudePolicy } from './attitude-policy';
 import { proactiveEngineFor } from './engine-flags';
@@ -263,7 +264,8 @@ async function generateProactive(
       try {
         const chunks = await loadMemoryChunks(env);
         const picked = rankMemoryChunks(focusQuery, chunks, 6, focus);
-        const packed = packMemoryChunks(picked);
+        const expanded = await expandLinkedChunks(env, picked, 2);
+        const packed = packMemoryChunks(expanded);
         nextRecalled = formatMemoryChunks(packed.chunks);
       } catch (e) {
         console.warn('[proactive] 新记忆检索失败，回退 legacy:', e);

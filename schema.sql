@@ -196,6 +196,38 @@ CREATE TABLE IF NOT EXISTS memory_chunks (
   updated_at   INTEGER NOT NULL
 );
 
+-- 记忆之间的显式关联：同事件/同实体/同项目/来源派生。
+CREATE TABLE IF NOT EXISTS memory_links (
+  id          TEXT PRIMARY KEY,
+  from_type   TEXT NOT NULL,           -- fact | event
+  from_id     TEXT NOT NULL,
+  to_type     TEXT NOT NULL,
+  to_id       TEXT NOT NULL,
+  relation    TEXT NOT NULL,           -- same_event | same_entity | same_project | derived_from
+  confidence  REAL NOT NULL DEFAULT 0.5,
+  source      TEXT NOT NULL,           -- auto:tag | auto:date | manual
+  created_at  INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_memory_links_from ON memory_links(from_type, from_id);
+CREATE INDEX IF NOT EXISTS idx_memory_links_to ON memory_links(to_type, to_id);
+
+-- 轻量审计：记录记忆修改/关联动作，不引入哈希链。
+CREATE TABLE IF NOT EXISTS memory_audit (
+  id          TEXT PRIMARY KEY,
+  action      TEXT NOT NULL,           -- correct | link_backfill | rebuild
+  target_type TEXT NOT NULL,           -- memory.md | fact | link
+  target_id   TEXT NOT NULL,
+  before_hash TEXT,
+  after_hash  TEXT,
+  source      TEXT NOT NULL,           -- app | admin | cron
+  detail      TEXT,
+  created_at  INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_memory_audit_target ON memory_audit(target_type, target_id);
+CREATE INDEX IF NOT EXISTS idx_memory_audit_created ON memory_audit(created_at);
+
 CREATE INDEX IF NOT EXISTS idx_memory_chunks_source ON memory_chunks(source, source_id);
 CREATE INDEX IF NOT EXISTS idx_memory_chunks_date ON memory_chunks(date);
 
