@@ -108,6 +108,22 @@ function applyRules(raw: string): { text: string; cleaned: boolean } {
 }
 
 /**
+ * 历史时间标签只是提示词元信息，模型有时会模仿到回复开头。
+ * 兼容 `[10-28 08:57]`、`[10-2808:57]`、`【10-28 08:57】` 等。
+ */
+export function stripLeadingTimeLabels(raw: string): string {
+  const re =
+    /^\s*[\[【]\s*(?:(?:\d{2,4}[-/])?\d{1,2}[-/]\d{1,2}\s*)?\d{1,2}:\d{2}(?::\d{2})?\s*[\]】]\s*/;
+  let text = raw;
+  for (let i = 0; i < 3; i++) {
+    const next = text.replace(re, '');
+    if (next === text) break;
+    text = next;
+  }
+  return text;
+}
+
+/**
  * 清洗 AI 味（幂等，可单测）。
  * 返回 { text, cleaned }：cleaned 表示是否真的动过内容。
  *
@@ -116,7 +132,8 @@ function applyRules(raw: string): { text: string; cleaned: boolean } {
  *   避免「？」单独成为一条消息。
  */
 export function scrubAiFlavor(raw: string): { text: string; cleaned: boolean } {
-  const applied = applyRules(raw);
+  const withoutTime = stripLeadingTimeLabels(raw);
+  const applied = applyRules(withoutTime);
   const finalText = applied.text.trim();
 
   // ★ 只剩标点的空壳一律归空：否则「？」「！」会成为一条真实消息
@@ -124,7 +141,7 @@ export function scrubAiFlavor(raw: string): { text: string; cleaned: boolean } {
     return { text: '', cleaned: true };
   }
 
-  return { text: finalText, cleaned: applied.cleaned };
+  return { text: finalText, cleaned: applied.cleaned || withoutTime !== raw };
 }
 
 export interface StreamScrubber {

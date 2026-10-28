@@ -9,6 +9,7 @@ import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { Env } from './types';
 import { buildBaseSystemPrompt, normalizeChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, stripSilentEndToken, STYLE_REMINDER } from './prompt';
+import { stripLeadingTimeLabels } from './anti-ai-flavor';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
 import { attachWeather, getOrCreateDayContext } from './context';
@@ -267,13 +268,11 @@ export function buildLastUserContent(
  * （实时回复仍然带标记，客户端要拿它去合成语音。）
  */
 export function normalizeAssistantText(text: string): string {
-  const TIME_LABEL =
-    /^\s*[\[【]\s*(?:(?:\d{2,4}[-/])?\d{1,2}[-/]\d{1,2}\s*)?\d{1,2}:\d{2}(?::\d{2})?\s*[\]】]\s*/;
   let out = text
     .replace(/^\s*\[(?:语音|voice)\]\s*/i, '（语音）')
     .replace(/\[face[:：][^\]]{1,12}\]/g, '');
   // 模型偶尔会模仿历史时间标签，把回复开头的时间戳去掉
-  out = out.replace(TIME_LABEL, '').replace(TIME_LABEL, '').trim();
+  out = stripLeadingTimeLabels(out).trim();
   // 模型偶发孤立代理项（\ud83d 之类），落库/发送前清掉
   out = out
     .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, '')

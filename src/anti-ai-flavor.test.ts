@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createStreamScrubber, isMeaninglessResidue, scrubAiFlavor } from './anti-ai-flavor';
+import { createStreamScrubber, isMeaninglessResidue, scrubAiFlavor, stripLeadingTimeLabels } from './anti-ai-flavor';
 
 describe('scrubAiFlavor —— AI 味兜底清洗', () => {
   it('删除客服套话', () => {
@@ -124,6 +124,12 @@ describe('createStreamScrubber —— 流式清洗', () => {
     expect(scrubAiFlavor('### 结论\n**这个**可以').text).not.toContain('###');
     expect(scrubAiFlavor('### 结论\n**这个**可以').text).toContain('结论');
     expect(scrubAiFlavor('**这个**可以').text).toBe('这个可以');
+  });
+
+  it('清掉模型模仿的历史时间标签', () => {
+    expect(stripLeadingTimeLabels('[10-2808:57]正文')).toBe('正文');
+    expect(stripLeadingTimeLabels('[10-28 08:57] 正文')).toBe('正文');
+    expect(scrubAiFlavor('[10-2808:57]晚安').text).toBe('晚安');
   });
 
   it('中文标点后面的半角空格会被吃掉', () => {

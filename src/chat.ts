@@ -37,6 +37,7 @@ import { embedTexts, extractPromptMemory, recallMemoryForChat, stripDuplicateRec
 import { loadMemoryChunks } from './memory-context-store';
 import { expandLinkedChunks } from './memory-links';
 import { formatMemoryChunks, rankMemoryChunks, shouldRecallMemory } from './memory-domain';
+import { normalizeAssistantText } from './openai';
 import { buildAttitudePolicy } from './attitude-policy';
 import { packMemoryChunks } from './context-packer';
 import { affectEngineFor, memoryEngineFor } from './engine-flags';
@@ -343,9 +344,10 @@ export async function streamChat(
       let cost = 0;
       let assistantId: number | undefined;
       const silent = isSilentEnd(text) && (channel === 'mobile' || channel === 'web');
-      if (!silent && text.trim()) {
+      const stored = silent ? '' : normalizeAssistantText(text);
+      if (!silent && stored) {
         // 费用与 token 随 INSERT 一次写入（少一条 UPDATE）
-        const saved = await insertAssistantReply(env, text, userRow.id, now, {
+        const saved = await insertAssistantReply(env, stored, userRow.id, now, {
           channel,
           cost: usage ? calcCost(usage, loadPricing(env), now) : 0,
           promptTokens: usage
