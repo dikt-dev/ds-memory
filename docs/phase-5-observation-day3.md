@@ -239,3 +239,27 @@ docs/memory-project-comparison.md
 - [x] D3-02：输出 `memory-project-comparison.md`
 - [x] D3-03：暂缓（用户要求先不做主动消息暂停）
 - [x] D3-04：继续观察随机主动消息分布（本轮不改参数）
+
+---
+
+## 记忆借鉴落地（Day 3）
+
+已按对比文档落地第一阶段：
+
+- `memory_links`：同实体事实、同日事件关联；
+- 新事实写入自动建链；
+- 重建上下文后补齐存量关联；
+- 召回只对已命中结果扩 1 跳，最多补 2 条；
+- 仅 shadow/next 记忆引擎使用，legacy 不变；
+- `memory_audit`：`/更正` 记录前后 hash、来源、内容；
+- `memory.engine` trace 增加 `linkedItems`；
+- 现有 `canonicalizeFacts()` 继续承担同槽位去重和来源合并。
+
+实测 D1：`memory_links` 87 条（同实体 33、同事件 54）。
+
+仍待：
+
+- 分层上下文预算；
+- 跨日期近重复事实合并；
+- FTS/CJK 关键词兜底；
+- 记忆查看/编辑 UI。
