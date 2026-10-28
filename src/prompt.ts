@@ -295,8 +295,10 @@ export function silentEndRule(channel: MessageChannel): string {
   return [
     '',
     '【结束对话规则】',
+    '每一轮都先判断“这一句是否真的需要我回应”，不要默认一定要回。',
     '如果用户已经明确结束当前对话（例如晚安、再见、拜拜），并且没有未回答的问题、没有未完成的请求、也没有明显的情绪求助，你可以结束这轮对话，不再回复。',
-    '结束时不输出任何正文、动作、标点或解释，只输出 [END] 五个字符。',
+    '决定不回复时，整条消息只能有 [END] 五个字符：前面不能有任何正文、动作、标点、解释，后面也不能有标点或补充。',
+    '如果有一点点需要回应，就正常回复，并且不要附加 [END]。',
     '只要用户还在提问、请求、难过、焦虑、挽留，或说“在吗/等等/先别走”，就必须正常回复。',
     '用户再次开口时，必须恢复正常回复；[END] 只代表这一轮不回复，不代表永久静默。',
   ].join('\n');
@@ -304,7 +306,23 @@ export function silentEndRule(channel: MessageChannel): string {
 
 export const SILENT_END_TOKEN = '[END]';
 
-/** 只把“整段就是 [END]”视为合法静默，避免普通文本里提到它被误判。 */
+/**
+ * 只有“整段就是 [END]”才代表 AI 决定不回。
+ *
+ * `正文……[END]` 不是静默：它说明模型已经决定要说话，只是多输出了标记；
+ * 这种情况应剔除标记后按正常回复发送。
+ */
 export function isSilentEnd(text: string): boolean {
-  return (text || '').trim() === SILENT_END_TOKEN;
+  const t = (text || '').trim();
+  if (!t.includes(SILENT_END_TOKEN)) return false;
+  const normalized = t
+    .replace(/^["'“”‘’\s]+|["'“”‘’\s]+$/g, '')
+    .replace(/[。.!！?？\s]+$/g, '')
+    .trim();
+  return normalized === SILENT_END_TOKEN;
+}
+
+/** 任何最终输出都去掉标记，避免泄漏到 App/网页。 */
+export function stripSilentEndToken(text: string): string {
+  return (text || '').replace(/\[END\]/g, '').trim();
 }

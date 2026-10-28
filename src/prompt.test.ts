@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildDayContext } from './holidays';
-import { buildSystemPrompt, normalizeChannel } from './prompt';
+import { buildSystemPrompt, isSilentEnd, normalizeChannel, stripSilentEndToken } from './prompt';
 
 describe('buildSystemPrompt', () => {
   const ctx = buildDayContext('2026-10-21');
@@ -187,6 +187,28 @@ describe('buildSystemPrompt', () => {
     });
     expect(prompt).toContain('你叫他"主人"');
     expect(prompt).not.toContain('按记忆里的约定称呼对方');
+  });
+});
+
+describe('silent end parsing', () => {
+  it('接受标记单独出现或带标点', () => {
+    expect(isSilentEnd('[END]')).toBe(true);
+    expect(isSilentEnd('  [END]。 ')).toBe(true);
+  });
+
+  it('正文附加标记不算静默，标记会被剔除', () => {
+    expect(isSilentEnd('嗯，睡吧。……[END]')).toBe(false);
+    expect(isSilentEnd('晚安\n[END]')).toBe(false);
+    expect(stripSilentEndToken('嗯，睡吧。……[END]')).toBe('嗯，睡吧。……');
+  });
+
+  it('标记后面还有正文时不静默', () => {
+    expect(isSilentEnd('[END] 但是还有话')).toBe(false);
+    expect(isSilentEnd('普通文本提到 [END] 但不是结尾')).toBe(false);
+  });
+
+  it('任何路径都剔除标记', () => {
+    expect(stripSilentEndToken('正文[END]')).toBe('正文');
   });
 });
 

@@ -239,6 +239,8 @@ export const HISTORY_FILE_MAX_CHARS = 4200;
  */
 export function compactHistoryMessage(content: string, maxChars = HISTORY_MESSAGE_MAX_CHARS): string {
   const cleaned = content
+    // 静默标记不是聊天内容，历史里也不能留。
+    .replace(/\[END\]/g, '')
     // 历史里的完整字幕/网页资料只保留标记，避免 50 轮时把上下文撑爆。
     .replace(/\[BILI_META\][\s\S]*?\[\/BILI_META\]/gi, '[B站资料]')
     .replace(/\[WEB_META\][\s\S]*?\[\/WEB_META\]/gi, '[网页资料]')

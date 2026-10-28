@@ -1498,8 +1498,9 @@ async function send() {
             firstToken = true;
             text += delta.content;
             if (text.includes('[END]')) {
-              noReply = true;
+              // 只有纯标记才代表不回；正文+标记说明它其实已经决定要说话。
               text = text.replace(/\[END\]/g, '');
+              if (!text.trim()) noReply = true;
             }
             if (noReply) continue;
             // 首字前若有"思考停顿"，等够时间再刷出，否则直接刷
