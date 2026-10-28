@@ -60,6 +60,15 @@ describe('mergeMemoryEntry', () => {
     expect(out.indexOf('## 关于用户')).toBeLessThan(out.indexOf('## 全新分类'));
   });
 
+  it('裸 bullet（没有分区标题）落到近期动态，不静默丢失', () => {
+    const distilled = `- [26-10-26] 裸条目一
+- [26-10-26] 裸条目二`;
+    const out = mergeMemoryEntry(SAMPLE, distilled, '2026-10-26');
+    expect(out).toContain('## 近期动态');
+    expect(out).toContain('- [26-10-26] 裸条目一');
+    expect(out).toContain('- [26-10-26] 裸条目二');
+  });
+
   it('提炼结果无有效条目时原样返回', () => {
     expect(mergeMemoryEntry(SAMPLE, '今天没什么可记的。', '2026-10-21')).toBe(SAMPLE);
   });

@@ -23,7 +23,7 @@ import { getMemory, MEMORY_KV_KEY, putMemory } from './memory';
 import { applyMemoryCorrection } from './memory-correction';
 import { archivedMessagesBefore } from './archive';
 import { messagesSince, webMessagesSince, latestWebMessageId } from './db';
-import { byteLength, memoryDensity } from './memory-maintenance';
+import { byteLength, memoryDensity, mergeMemoryEntry } from './memory-maintenance';
 import { getCityConfig, setCity } from './settings';
 import { fetchWeather } from './weather';
 import { buildAudioKey, buildImageKey, saveImage } from './media';
@@ -1137,6 +1137,47 @@ app.get('/api/admin/memory/links', requireAuth, async (c) => {
   const id = (c.req.query('id') ?? '').trim();
   if (!id) return c.json({ error: 'id required' }, 400);
   return c.json({ ok: true, type, id, ...(await linksForMemory(c.env, type, id)) });
+});
+
+/** 修复历史提炼结果：把 context/日期.json 里漏合并的 distilled_summary 重新并入 memory.md。 */
+app.post('/api/admin/memory/replay-distill', requireAuth, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { dates?: unknown } | null;
+  const dates = Array.isArray(body?.dates)
+    ? body.dates.filter((d): d is string => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d))
+    : [];
+  if (dates.length === 0) return c.json({ error: 'dates required' }, 400);
+  let memory = await getMemory(c.env);
+  const applied: string[] = [];
+  for (const date of dates) {
+    const obj = await getObject(c.env, `context/${date}.json`).catch(() => null);
+    if (!obj) continue;
+    try {
+      const parsed = JSON.parse(await obj.text()) as { distilled_summary?: unknown };
+      const summary = typeof parsed.distilled_summary === 'string' ? parsed.distilled_summary : '';
+      if (!summary.trim()) continue;
+      const next = mergeMemoryEntry(memory, summary, date);
+      if (next !== memory) {
+        memory = next;
+        applied.push(date);
+      }
+    } catch (e) {
+      console.error('[memory] replay distill failed:', date, e);
+    }
+  }
+  if (applied.length > 0) {
+    await putMemory(c.env, memory);
+    await replaceMemoryContext(c.env, memory, 'memory').catch(() => {});
+    // 重建 chunks 后必须补索引和向量，否则 replay 会留下 no_vec。
+    await reindexMemory(c.env).catch((e) => console.error('[memory] replay reindex failed:', e));
+    await embedMemoryChunks(c.env, 200).catch((e) =>
+      console.error('[memory] replay embed failed:', e),
+    );
+  }
+  return c.json({
+    ok: true,
+    applied,
+    bytes: byteLength(memory),
+  });
 });
 
 /** 手动补齐存量事实关联；日常归档只对新事实增量建链。 */

@@ -232,14 +232,15 @@ function normalizeBullets(lines: string[], fallbackDate?: string): string[] {
   for (const raw of lines) {
     const t = raw.trim();
     if (!t) continue;
-    // 关系变量由 applyRelationUpdates 单独处理，不走普通条目
-    if (/^(好感度|亲密度|心情值?|信任|尊重|心动)\s*[:：]/.test(t)) continue;
     // 女性注释行不当作条目
     if (t.startsWith('<!--')) continue;
     const m = t.match(/^[-*]\s*(.*)$/);
     if (!m) continue;
     let content = m[1].trim();
     if (!content) continue;
+    // 关系变量由 applyRelationUpdates 单独处理，不走普通条目。
+    // 必须在去掉 bullet 后判断，否则 `- 好感度：...` 会漏成普通条目。
+    if (/^(好感度|亲密度|心情值?|信任|尊重|心动)\s*[:：]/.test(content)) continue;
     if (!DATE_PREFIX_RE.test(content) && fallbackDate) {
       content = `[${fallbackDate}] ${content}`;
     }
@@ -267,6 +268,27 @@ export function mergeMemoryEntry(
   const cur = parseSections(current);
   const dist = parseSections(distilled);
   let changed = false;
+
+  // 模型有时只输出裸 bullet、不带 `## 分区`。不能静默丢掉，
+  // 先落到“近期动态”，至少保证当天内容进入记忆。
+  const looseBullets = normalizeBullets(dist.pre.split('\n'), fallbackDate);
+  if (looseBullets.length > 0) {
+    let target = cur.sections.find((s) => s.header.trim() === '## 近期动态');
+    if (!target) {
+      target = { header: '## 近期动态', lines: [] };
+      cur.sections.push(target);
+    }
+    for (const b of looseBullets) {
+      const key = normalizeForCompare(b.replace(ENTRY_PREFIX_RE, ''));
+      const dup = target.lines.some(
+        (l) => ENTRY_RE.test(l) && normalizeForCompare(l.replace(ENTRY_PREFIX_RE, '')) === key,
+      );
+      if (!dup) {
+        target.lines.push(b);
+        changed = true;
+      }
+    }
+  }
 
   for (const ds of dist.sections) {
     if (ds.header.trim() === IMMUTABLE_HEADER) continue; // 人物底色不可变：忽略提炼输出中的同名区块

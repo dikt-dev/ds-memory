@@ -122,3 +122,57 @@ memory_audit：0（归档本身不写 audit，只有 /更正 等操作写）
 ## 结论
 
 消息归档完整，记忆内容正确；发现并修复了 **归档后 chunks 向量缺失** 的问题。七天观察继续。
+
+---
+
+## 追加：10/26–10/27 记忆未进入 memory.md
+
+### 现象
+
+归档任务显示 `提炼=true`，但 `memory.md` 最新日期停在 10/25；D1 的 `memory_entries` 最大值也是 10/25。
+
+### 根因
+
+归档提炼实际生成了 10/26、10/27 摘要，保存在：
+
+```text
+context/2026-10-26.json → distilled_summary
+context/2026-10-27.json → distilled_summary
+```
+
+但模型输出是**裸 bullet，没有 `## 分区` 标题**：
+
+```text
+- [26-10-26] ...
+- [26-10-27] ...
+```
+
+`mergeMemoryEntry()` 只遍历 `dist.sections`，裸 bullet 留在 `dist.pre`，于是整段被静默丢掉。
+
+`提炼=true` 的标记也不准确：它把情绪结算等变更算进了 `distilled`，不能代表“记忆文本已合并”。
+
+### 修复
+
+- `mergeMemoryEntry()` 增加裸 bullet 兜底：没有分区的 bullet 落到 `## 近期动态`；
+- `normalizeBullets()` 修正关系行判断：先去掉 `-` 再识别“好感度/亲密度…”，避免关系行被当普通条目；
+- 提炼提示词要求必须用 `## 分区名` 包裹，不要只输出裸 bullet；
+- 新增一次性接口：
+
+```text
+POST /api/admin/memory/replay-distill
+{ "dates": ["2026-10-26", "2026-10-27"] }
+```
+
+- replay 后会重新索引并补 embedding，避免 `no_vec`。
+
+### 回填结果
+
+```text
+applied: 2026-10-26, 2026-10-27
+memory.md: 6467 → 7889 字节
+memory_entries: 53 条，最大日期 2026-10-27
+memory_events: 10/26 4 条，10/27 8 条
+chunks: 55，no_vec: 0
+```
+
+`memory.md` 现在包含 10/26 和 10/27 的条目；10/26/27 的内容暂时进入“近期动态”，后续会按分区规则整理。
