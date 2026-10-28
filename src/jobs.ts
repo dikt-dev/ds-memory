@@ -18,7 +18,7 @@ import { attachDistillation, attachRelation, attachWeather, getOrCreateDayContex
 import { fetchWeather } from './weather';
 import { getMemory, putMemory } from './memory';
 import { reindexMemory } from './memory-index';
-import { backfillMemoryProvenance, replaceMemoryContext, syncRollupSummaries } from './memory-context-store';
+import { backfillMemoryProvenance, embedMemoryChunks, replaceMemoryContext, syncRollupSummaries } from './memory-context-store';
 import { enqueueMemoryJob, runMemoryJobs } from './memory-jobs';
 import { maybeGenerateRollups } from './memory-rollups';
 import { buildRelationStatus } from './attitude';
@@ -542,12 +542,21 @@ export async function archiveOneDay(
       const jobs = await runMemoryJobs(env, now, 5);
       if (jobs.failed) console.error('[daily] memory jobs failed:', JSON.stringify(jobs.details));
       else console.log(`[daily] memory jobs：${jobs.processed} 个完成`);
+      // 兜底：任务队列失败时也保证重建后的 chunks 有向量，避免静默退化到纯关键词。
+      const embedded = await embedMemoryChunks(env, 200).catch((e) => {
+        console.error('[daily] embedding fallback failed:', e);
+        return 0;
+      });
+      if (embedded > 0) console.log(`[daily] embedding fallback：${embedded} 条`);
     } catch (e) {
       console.error('[daily] memory jobs unavailable, fallback direct:', e);
       try {
         const summaries = await syncRollupSummaries(env);
         const linked = await backfillMemoryProvenance(env);
-        console.log(`[daily] memory context fallback：summaries=${summaries} provenance=${linked}`);
+        const embedded = await embedMemoryChunks(env, 200).catch(() => 0);
+        console.log(
+          `[daily] memory context fallback：summaries=${summaries} provenance=${linked} embedded=${embedded}`,
+        );
       } catch (fallbackError) {
         console.error('[daily] memory context fallback failed:', fallbackError);
       }
