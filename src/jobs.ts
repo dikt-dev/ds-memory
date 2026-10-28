@@ -764,16 +764,30 @@ export function missingDatesInMonth(month: string, keys: string[]): string[] {
 /** 合并多份单日 .log 的纯函数（按消息 id 去重并排序）。 */
 export function mergeDailyLogs(
   logs: Array<{ messages: MessageRow[] }>,
-): { merged: MessageRow[]; expected: number } {
+): { merged: MessageRow[]; expected: number; duplicates: number; conflicts: number } {
   const map = new Map<number, MessageRow>();
   let expected = 0;
+  let duplicates = 0;
+  let conflicts = 0;
   for (const log of logs) {
     expected += log.messages.length;
     for (const m of log.messages) {
-      if (!map.has(m.id)) map.set(m.id, m);
+      const existing = map.get(m.id);
+      if (existing) {
+        duplicates += 1;
+        // 跨天补全会制造合法重复；同 id 不同正文才是异常。
+        if (existing.content !== m.content || existing.role !== m.role) conflicts += 1;
+      } else {
+        map.set(m.id, m);
+      }
     }
   }
-  return { merged: [...map.values()].sort((a, b) => a.id - b.id), expected };
+  return {
+    merged: [...map.values()].sort((a, b) => a.id - b.id),
+    expected,
+    duplicates,
+    conflicts,
+  };
 }
 
 /** 合并单个自然月：先补缺失日期归档，再合并 + 完整性校验 + 清理 D1。 */
@@ -811,9 +825,12 @@ async function mergeMonth(env: Env, month: string, now: Date): Promise<MonthlyMe
       const parsed = JSON.parse(await obj.text()) as { messages?: MessageRow[] };
       logs.push({ messages: parsed.messages ?? [] });
     }
-    const { merged: all, expected } = mergeDailyLogs(logs);
-    if (all.length !== expected) {
-      throw new Error(`完整性校验失败：单日日志合计 ${expected} 条，去重后 ${all.length} 条`);
+    const { merged: all, expected, duplicates, conflicts } = mergeDailyLogs(logs);
+    // 跨天补全允许同 id 重复；只有内容冲突或去重后数量不等于唯一 id 数才失败。
+    if (conflicts > 0 || all.length !== expected - duplicates) {
+      throw new Error(
+        `完整性校验失败：单日日志合计 ${expected} 条，去重 ${duplicates} 条，合并 ${all.length} 条，冲突 ${conflicts} 条`,
+      );
     }
 
     // 4) 写月度 JSON 并读回校验

@@ -337,3 +337,35 @@ shadow 阶段不注入，暂时无害。切 next 前用回归集验证。
 这三项都应该在 11/01 前修掉。其余性能、清理、测试项按 backlog 排期。
 
 **本轮只出了报告，并先处理了 P2-3 隐私文件；代码修复尚未开始。**
+
+---
+
+## 8. 修复结果（2026-10-28 更新）
+
+已修：
+
+- P0-1 `context-budget` core 独立上限；
+- P0-2 `用户更正（最高优先级）` 正式分区；
+- P0-3 `mergeDailyLogs` 容错跨天合法重复；
+- P1-1 无日期条目进入 facts；
+- P1-4 `webproactive` 接入预算；
+- P2-3 隐私快照移出仓库并加入 ignore。
+
+未修/归档：
+
+- P1-2 jobs/links/audit 清理；
+- P1-3 `linkAllFacts` 增量优化；
+- P2-1 召回性能；
+- P2-2 legacy/next 去重；
+- P2-4 死代码清理；
+- DB/归档链路测试专项。
+
+验证：
+
+```text
+712 → 717 tests passed
+tsc --noEmit 0 error
+server deployed: 6c36cbe5
+```
+
+详细排期见 `docs/pending-work.md`。

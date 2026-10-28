@@ -73,12 +73,18 @@ export interface ParsedMemoryContext {
   events: MemoryEvent[];
 }
 
-const CORE_SECTIONS = new Set(['人物底色', '称呼与关系', '雷区与禁忌']);
+const CORE_SECTIONS = new Set([
+  '用户更正（最高优先级）',
+  '人物底色',
+  '称呼与关系',
+  '雷区与禁忌',
+]);
 const EVENT_SECTIONS = new Set(['共同经历', '近期动态']);
 const RELATION_LINE_RE = /^(好感度|亲密度|心情值?|信任|尊重|心动)\s*[:：]/;
 const ENTRY_RE = /^-\s*\[((?:\d{4}|\d{2})-\d{2}-\d{2})\]\s*(.+)$/;
 
 export const MEMORY_SECTION_ORDER = [
+  '用户更正（最高优先级）',
   '人物底色',
   '称呼与关系',
   '关于用户',
@@ -151,15 +157,18 @@ export function parseMemoryContext(text: string, now = Date.now()): ParsedMemory
       continue;
     }
     if (!section || CORE_SECTIONS.has(section)) continue;
-    const em = raw.trim().match(ENTRY_RE);
-    if (!em) continue;
-    const date = normalizeDate(em[1]);
-    const content = em[2].trim();
+    const line = raw.trim();
+    if (!line.startsWith('-')) continue;
+    const em = line.match(ENTRY_RE);
+    const date = em ? normalizeDate(em[1]) : null;
+    const content = (em ? em[2] : line.replace(/^-\s*/, '')).trim();
     if (!content || RELATION_LINE_RE.test(content)) continue;
     const tags = autoTags(content, 3);
     const kv = parseKeyValue(content);
     const contentHash = stableHash(content);
     if (EVENT_SECTIONS.has(section)) {
+      // 事件必须有日期；无日期条目只作为普通事实进入，避免伪造事件时间。
+      if (!date) continue;
       events.push({
         id: eventId(section, date, content),
         section,

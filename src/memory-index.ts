@@ -28,7 +28,12 @@ import { loadRollups } from './memory-rollups';
 import { distillText } from './distill';
 
 /** 永远常驻注入、不参与检索的分区（核心层）。 */
-export const CORE_SECTIONS = ['人物底色', '称呼与关系', '雷区与禁忌'];
+export const CORE_SECTIONS = [
+  '用户更正（最高优先级）',
+  '人物底色',
+  '称呼与关系',
+  '雷区与禁忌',
+];
 /** 记忆不大时优先全量注入，避免为了省几 KB 引入召回失败风险。 */
 export const MEMORY_INLINE_MAX_BYTES = 16 * 1024;
 /** compact 模式下的稳定画像：这些事实即使没被召回也值得常驻。 */

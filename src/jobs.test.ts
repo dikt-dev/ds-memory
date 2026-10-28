@@ -27,25 +27,44 @@ const mk = (id: number): MessageRow => ({
 
 describe('mergeDailyLogs', () => {
   it('无重叠时条数一致且按 id 升序', () => {
-    const { merged, expected } = mergeDailyLogs([
+    const { merged, expected, duplicates, conflicts } = mergeDailyLogs([
       { messages: [mk(2), mk(1)] },
       { messages: [mk(3)] },
     ]);
     expect(expected).toBe(3);
+    expect(duplicates).toBe(0);
+    expect(conflicts).toBe(0);
     expect(merged.map((m) => m.id)).toEqual([1, 2, 3]);
   });
 
-  it('重复 id 去重后少于 expected（完整性校验据此拦截）', () => {
-    const { merged, expected } = mergeDailyLogs([
+  it('跨天合法重复只计 duplicates，不算冲突', () => {
+    const { merged, expected, duplicates, conflicts } = mergeDailyLogs([
       { messages: [mk(1), mk(2)] },
       { messages: [mk(2), mk(3)] },
     ]);
     expect(expected).toBe(4);
+    expect(duplicates).toBe(1);
+    expect(conflicts).toBe(0);
     expect(merged.map((m) => m.id)).toEqual([1, 2, 3]);
   });
 
+  it('同 id 不同正文计为冲突', () => {
+    const other = { ...mk(2), content: 'changed' };
+    const { duplicates, conflicts } = mergeDailyLogs([
+      { messages: [mk(1), mk(2)] },
+      { messages: [other] },
+    ]);
+    expect(duplicates).toBe(1);
+    expect(conflicts).toBe(1);
+  });
+
   it('空日志返回空结果', () => {
-    expect(mergeDailyLogs([])).toEqual({ merged: [], expected: 0 });
+    expect(mergeDailyLogs([])).toEqual({
+      merged: [],
+      expected: 0,
+      duplicates: 0,
+      conflicts: 0,
+    });
   });
 });
 

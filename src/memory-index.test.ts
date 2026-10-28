@@ -61,6 +61,14 @@ describe('extractPromptMemory（混合注入）', () => {
     expect(out.text).toContain('## 偏好与习惯');
     expect(out.text).not.toContain('## 共同经历');
   });
+
+  it('compact 模式保留用户更正分区', () => {
+    const big = `## 用户更正（最高优先级）\n- [26-10-28] 我喜欢被叫大人\n\n${SAMPLE}\n## 共同经历\n- [26-10-21] ${'旧事'.repeat(4000)}\n`;
+    const out = extractPromptMemory(big);
+    expect(out.mode).toBe('compact');
+    expect(out.text).toContain('## 用户更正（最高优先级）');
+    expect(out.text).toContain('我喜欢被叫大人');
+  });
 });
 
 describe('topKeywords', () => {

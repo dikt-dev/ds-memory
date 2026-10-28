@@ -15,6 +15,7 @@
 import type { Env } from './types';
 import { dateKeyInBeijing, isoInBeijing } from './date';
 import { buildBaseSystemPrompt } from './prompt';
+import { budgetContext } from './context-budget';
 import { getMemory } from './memory';
 import { fetchWeather } from './weather';
 import { loadMemoryChunks } from './memory-context-store';
@@ -295,16 +296,23 @@ async function generateProactive(
     }).catch((e) => console.warn('[proactive] 指标写入失败:', e));
   }
   const useNextProactive = proactiveEngine === 'next';
+  const proactiveRecall = useNextProactive && nextRecalled ? nextRecalled : recalled;
+  const contextBudget = budgetContext({
+    core: promptMemory.text,
+    recent: todaySummary ?? '',
+    rollup: recentMemo ?? '',
+    recall: proactiveRecall,
+  });
 
   const systemPrompt = buildBaseSystemPrompt({
     now,
     ctx,
-    memory: promptMemory.text,
+    memory: contextBudget.core,
     memoryMode: promptMemory.mode,
     weather,
-    todaySummary,
-    recentMemo,
-    recalled: useNextProactive && nextRecalled ? nextRecalled : recalled,
+    todaySummary: contextBudget.recent,
+    recentMemo: contextBudget.rollup,
+    recalled: contextBudget.recall,
     personaDrift,
     channel: 'web',
     characterCard: cardText,

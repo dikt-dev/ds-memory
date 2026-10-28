@@ -13,8 +13,10 @@ export interface ContextBudgetInput {
   recent?: string;
   rollup?: string;
   recall?: string;
-  /** 非核心块总预算；核心记忆不计入裁剪。 */
+  /** 非核心块总预算；核心记忆不计入这个预算。 */
   maxChars?: number;
+  /** 核心记忆自身的安全上限；默认 12k。 */
+  coreMaxChars?: number;
 }
 
 export interface ContextBlockManifest {
@@ -36,6 +38,7 @@ export interface ContextBudgetResult {
 }
 
 const DEFAULT_MAX_CHARS = 10_000;
+const DEFAULT_CORE_MAX_CHARS = 12_000;
 const RECENT_CAP = 2_200;
 const ROLLUP_CAP = 2_200;
 const RECALL_CAP = 4_000;
@@ -73,17 +76,26 @@ function block(
 
 /**
  * 装填顺序：core → recent → rollup → recall。
- * core 不裁剪；剩余预算不足时 recall 先被截断。
+ * core 使用自己的上限，不占用 recent/rollup/recall 的预算；
+ * 非核心预算不足时 recall 先被截断。
  */
 export function budgetContext(input: ContextBudgetInput): ContextBudgetResult {
-  const core = clean(input.core);
+  const coreRaw = clean(input.core);
   const recentRaw = clean(input.recent);
   const rollupRaw = clean(input.rollup);
   const recallRaw = clean(input.recall);
   const maxChars = Math.max(0, Math.floor(input.maxChars ?? DEFAULT_MAX_CHARS));
+  const coreMaxChars = Math.max(
+    0,
+    Math.floor(input.coreMaxChars ?? DEFAULT_CORE_MAX_CHARS),
+  );
 
-  const entries: ContextBlockManifest[] = [block('core', core, core, false)];
-  let remaining = Math.max(0, maxChars - core.length);
+  const coreClip = clip(coreRaw, coreMaxChars);
+  const core = coreClip.text;
+  const entries: ContextBlockManifest[] = [
+    block('core', coreRaw, core, coreClip.truncated),
+  ];
+  let remaining = maxChars;
 
   const recentTake = Math.min(recentRaw.length, RECENT_CAP, remaining);
   const recent = clip(recentRaw, recentTake);

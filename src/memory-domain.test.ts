@@ -65,6 +65,13 @@ describe('memory-domain 解析', () => {
     );
     expect(stableHash('abc')).toHaveLength(8);
   });
+
+  it('无日期条目也进入 facts，不再被 next 静默丢弃', () => {
+    const parsed = parseMemoryContext('## 关于用户\n- 城市=杭州');
+    expect(parsed.facts).toHaveLength(1);
+    expect(parsed.facts[0].content).toBe('城市=杭州');
+    expect(parsed.facts[0].validFrom).toBeNull();
+  });
 });
 
 describe('memory-domain archive 导入', () => {
@@ -95,6 +102,14 @@ describe('memory-domain 投影', () => {
     expect(out).toContain('- [26-10-01] 第一次聊天聊到凌晨');
     expect(out).toContain('## 近期动态');
     expect(out).toContain('好感度：620');
+  });
+
+  it('用户更正分区进入投影，不被丢弃', () => {
+    const text = `# 长期记忆\n\n## 用户更正（最高优先级）\n- [26-10-28] 我喜欢被叫大人\n\n## 关于用户\n- [26-10-01] 城市=杭州\n`;
+    const parsed = parseMemoryContext(text);
+    const out = projectMemoryContext(text, parsed);
+    expect(out).toContain('## 用户更正（最高优先级）');
+    expect(out).toContain('我喜欢被叫大人');
   });
 });
 

@@ -2,19 +2,29 @@ import { describe, expect, it } from 'vitest';
 import { budgetContext, formatBudgetManifest } from './context-budget';
 
 describe('budgetContext', () => {
-  it('核心记忆不被裁剪', () => {
+  it('核心记忆不占用非核心预算', () => {
     const core = '核心'.repeat(20);
     const result = budgetContext({
       core,
       recent: '近期'.repeat(100),
       rollup: '摘要'.repeat(100),
       recall: '召回'.repeat(100),
-      maxChars: 40,
+      maxChars: 10,
     });
     expect(result.core).toBe(core);
-    expect(result.recent).toBe('');
+    expect(result.recent).toHaveLength(10);
     expect(result.rollup).toBe('');
     expect(result.recall).toBe('');
+  });
+
+  it('核心记忆有独立安全上限', () => {
+    const result = budgetContext({
+      core: '核心'.repeat(100),
+      maxChars: 10,
+      coreMaxChars: 20,
+    });
+    expect(result.core.length).toBeLessThanOrEqual(21);
+    expect(result.manifest[0].truncated).toBe(true);
   });
 
   it('超预算时优先级是 core > recent > rollup > recall', () => {
