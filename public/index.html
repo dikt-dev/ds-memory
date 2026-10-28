@@ -848,9 +848,14 @@ function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
 function renderUserContent(content) {
   // 落库内容里包含文件原文（给 AI 读），历史渲染只显示文件卡片；
   // 否则刷新后整个文件正文会铺满聊天气泡。
+  const fileCards = [];
   content = content.replace(
     /【文件：([^】]+)】\s*\n?```[^\n]*\n[\s\S]*?\n```/g,
-    (_all, name) => `<div class="msg-file">📄 ${escapeHtml(name)}</div>`,
+    (_all, name) => {
+      const token = `\u0000DSFILE${fileCards.length}\u0000`;
+      fileCards.push(`<div class="msg-file">📄 ${escapeHtml(name)}</div>`);
+      return token;
+    },
   );
   const re = /\[(图片|语音):((?:images|audio)\/[^\]\s]+)\]/g;
   let html = '';
@@ -867,6 +872,10 @@ function renderUserContent(content) {
     last = m.index + m[0].length;
   }
   html += escapeHtml(content.slice(last));
+  // 占位符在整体转义后还原成卡片，避免 <div> 被 escapeHtml 转成文字。
+  fileCards.forEach((card, i) => {
+    html = html.replace(`\u0000DSFILE${i}\u0000`, card);
+  });
   // 兼容旧记录：只有 [图片] 没有 R2 路径时，显示灰色提示而不是裸露的方括号文字
   html = html.replace(/\[图片\]/g, '<span class="img-missing">[图片未存档]</span>');
   return html.replace(/\n/g, '<br>');
