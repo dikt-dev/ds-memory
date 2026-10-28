@@ -32,6 +32,8 @@ describe('schema.sql 与索引代码保持一致', () => {
     expect(schemaSql).toContain('CREATE TABLE IF NOT EXISTS memory_summaries');
     expect(schemaSql).toContain('CREATE TABLE IF NOT EXISTS memory_chunks');
     expect(schemaSql).toContain('CREATE TABLE IF NOT EXISTS memory_jobs');
+    expect(schemaSql).toContain('CREATE TABLE IF NOT EXISTS memory_links');
+    expect(schemaSql).toContain('CREATE TABLE IF NOT EXISTS memory_audit');
   });
 
   it('存在 dup_of 的迁移脚本（已有库升级用）', () => {

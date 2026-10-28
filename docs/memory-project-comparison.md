@@ -246,3 +246,24 @@ MEMORY_ENGINE_* 影子/legacy
 - snowfox-memory-continuity: https://github.com/TNong611/snowfox-memory-continuity
 - BaiShou-Next: https://github.com/foxletters-hq/BaiShou-Next
 - Companion-AI-Memory-Context-Token-Optimization: 仓库地址待补
+
+## 已落地（2026-10-28）
+
+第一阶段已实现，且只在 shadow/next 记忆引擎路径启用：
+
+- `memory_links`：事实→同实体事实、事实→同日事件；
+- `linkFactToNeighbors()`：新事实写入时自动建关联；
+- `linkAllFacts()`：重建上下文后补齐存量关联；
+- `expandLinkedChunks()`：只从已召回结果扩 1 跳，最多补 2 条；
+- `memory_audit`：`/更正` 写入前后 hash、来源和内容；
+- `memory.engine` trace 增加 `linkedItems`；
+- 现有 `canonicalizeFacts()` 已经承担同槽位去重和来源合并，暂不另造一套原子事实表。
+
+当前 D1 实测：87 条关联（同实体 33、同事件 54）。
+
+下一步仍待做：
+
+- 上下文分层预算；
+- 原子事实的跨日期近重复合并（现有 canonicalize 主要按槽位）；
+- FTS/CJK 兜底；
+- 记忆查看/编辑 UI。
