@@ -1,0 +1,30 @@
+[
+  {
+    "id": "schedule-commute",
+    "query": "我几点出门、几点上班、几点下班",
+    "expect_any": ["8:15出门", "8:30上班", "18:00下班"],
+    "forbid_any": ["上班8:15", "五点下班"],
+    "max_linked": 2
+  },
+  {
+    "id": "job-embedded",
+    "query": "我做什么工作",
+    "expect_any": ["嵌入式", "电源监控器"],
+    "forbid_any": [],
+    "max_linked": 2
+  },
+  {
+    "id": "unrelated-weather",
+    "query": "今天天气怎么样",
+    "expect_any": [],
+    "forbid_any": ["电源监控器", "嵌入式开发"],
+    "max_linked": 2
+  },
+  {
+    "id": "unrelated-code",
+    "query": "帮我写一个快速排序",
+    "expect_any": [],
+    "forbid_any": ["8:30上班", "18:00下班"],
+    "max_linked": 2
+  }
+]

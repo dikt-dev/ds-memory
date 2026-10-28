@@ -38,6 +38,7 @@ import { loadMemoryChunks } from './memory-context-store';
 import { expandLinkedChunks } from './memory-links';
 import { formatMemoryChunks, rankMemoryChunks, shouldRecallMemory } from './memory-domain';
 import { normalizeAssistantText } from './openai';
+import { budgetContext, formatBudgetManifest } from './context-budget';
 import { buildAttitudePolicy } from './attitude-policy';
 import { packMemoryChunks } from './context-packer';
 import { affectEngineFor, memoryEngineFor } from './engine-flags';
@@ -178,6 +179,12 @@ export async function streamChat(
   );
 
   const affectEngine = affectEngineFor(env, channel);
+  const contextBudget = budgetContext({
+    core: promptMemory.text,
+    recent: todaySummary ?? '',
+    rollup: recentMemo ?? '',
+    recall: recalled,
+  });
   // Phase 0 trace：只记录元信息，不记录正文/记忆内容。
   logTrace('chat.context', {
     requestId: requestId ?? 'none',
@@ -190,6 +197,8 @@ export async function streamChat(
     recalledItems: recalled.split('\n').filter((line) => line.startsWith('- ')).length,
     hasMemo: Boolean(recentMemo),
     hasSummary: Boolean(todaySummary),
+    budgetChars: contextBudget.totalChars,
+    budget: formatBudgetManifest(contextBudget.manifest),
   });
 
   // ★ 活人感：在落库本条前采集「距上次聊天间隔 + 今日轮数」
@@ -302,12 +311,12 @@ export async function streamChat(
       content: buildSystemPrompt({
         now,
         ctx,
-        memory: promptMemory.text,
+        memory: contextBudget.core,
         memoryMode: promptMemory.mode,
         weather,
-        todaySummary,
-        recentMemo,
-        recalled,
+        todaySummary: contextBudget.recent,
+        recentMemo: contextBudget.rollup,
+        recalled: contextBudget.recall,
         personaDrift,
         channel,
         characterCard: cardTextWithMood,

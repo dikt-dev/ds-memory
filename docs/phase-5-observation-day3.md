@@ -314,3 +314,19 @@ docs/memory-backlog.md
 ```
 
 包括分层上下文预算、自动回归集、跨日期近重复合并、FTS/CJK 兜底、记忆查看/编辑 UI、静默后的主动消息暂停、BaiShou/Companion 源码补齐。
+
+## 上下文预算与回归骨架（Day 3 后补）
+
+### 已完成
+
+- 分层上下文预算：core / recent / rollup / recall；
+- 固定记忆不裁剪；
+- 超预算先裁 recall，再裁 rollup，最后裁 recent；
+- `openai.context` / `chat.context` 增加 `budgetChars` 和逐块注入清单；
+- 只读召回接口 `GET /api/admin/memory/recall`；
+- `scripts/memory-regression.mjs` + 固定 cases；
+- `npm run memory:regression`，当前 4/4 通过。
+
+### 仍未做
+
+见 `docs/memory-backlog.md`：跨日期近重复合并、FTS/CJK、记忆 UI、主动消息暂停、BaiShou/Companion 补齐、来源追溯 UI。

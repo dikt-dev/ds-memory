@@ -10,6 +10,7 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { Env } from './types';
 import { buildBaseSystemPrompt, normalizeChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, stripSilentEndToken, STYLE_REMINDER } from './prompt';
 import { stripLeadingTimeLabels } from './anti-ai-flavor';
+import { budgetContext, formatBudgetManifest } from './context-budget';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
 import { attachWeather, getOrCreateDayContext } from './context';
@@ -627,6 +628,12 @@ openaiApp.post('/chat/completions', async (c) => {
     recalledRaw,
     [...historyRaw.map((m) => m.content), recentMemo, promptMemory.text].filter(Boolean),
   );
+  const contextBudget = budgetContext({
+    core: promptMemory.text,
+    recent: todaySummary ?? '',
+    rollup: recentMemo ?? '',
+    recall: recalled,
+  });
   logTrace('openai.context', {
     requestId,
     channel,
@@ -638,6 +645,8 @@ openaiApp.post('/chat/completions', async (c) => {
     recalledItems: recalled.split('\n').filter((line) => line.startsWith('- ')).length,
     hasMemo: Boolean(recentMemo),
     hasSummary: Boolean(todaySummary),
+    budgetChars: contextBudget.totalChars,
+    budget: formatBudgetManifest(contextBudget.manifest),
     stream: body?.stream === true,
   });
   const astrbotSystems = textMessages.filter((m) => m.role === 'system').map((m) => m.content);
@@ -652,12 +661,12 @@ openaiApp.post('/chat/completions', async (c) => {
     buildBaseSystemPrompt({
       now,
       ctx,
-      memory: promptMemory.text,
+      memory: contextBudget.core,
       memoryMode: promptMemory.mode,
       weather,
-      todaySummary,
-      recentMemo,
-      recalled,
+      todaySummary: contextBudget.recent,
+      recentMemo: contextBudget.rollup,
+      recalled: contextBudget.recall,
       personaDrift,
       recentFiles,
       voiceReply,

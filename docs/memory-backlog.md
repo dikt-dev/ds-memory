@@ -8,8 +8,8 @@
 
 | 编号 | 事项 | 优先级 | 风险 | 当前状态 |
 |---|---|---|---|---|
-| M-01 | 分层上下文预算 + 注入清单 | P0 | 低 | 待做 |
-| M-02 | 自动回归集与每日离线评估 | P0 | 低 | 待做 |
+| M-01 | 分层上下文预算 + 注入清单 | P0 | 低 | 已完成基础版 |
+| M-02 | 自动回归集与每日离线评估 | P0 | 低 | 骨架已完成；每日执行待做 |
 | M-03 | 跨日期近重复事实合并 | P1 | 中 | 待做 |
 | M-04 | FTS/CJK 兜底 | P2 | 中 | 待验证收益 |
 | M-05 | 记忆查看/编辑 UI | P1 | 中 | 待产品迭代 |
@@ -20,6 +20,16 @@
 ---
 
 ## M-01 分层上下文预算 + 注入清单
+
+### 已完成（2026-10-28）
+
+- `context-budget.ts`：core / recent / rollup / recall 分层装填；
+- 固定记忆不裁剪；
+- 超预算时先裁 recall，再裁 rollup，最后裁 recent；
+- `openai.context` / `chat.context` trace 增加：
+  - `budgetChars`
+  - `budget`（各块 included/original/trimmed）
+- 单测覆盖优先级和清单。
 
 ### 现状
 
@@ -73,6 +83,14 @@ memory.dropped_items
 ---
 
 ## M-02 自动回归集与每日离线评估
+
+### 已完成（骨架）
+
+- `scripts/memory-regression-cases.json`：固定样本；
+- `scripts/memory-regression.mjs`：只读召回、校验 expect/forbid/linked 上限；
+- `npm run memory:regression`；
+- `GET /api/admin/memory/recall` 只读接口；
+- 当前 4 条样本全部通过。
 
 ### 现状
 

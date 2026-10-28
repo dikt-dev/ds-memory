@@ -47,6 +47,7 @@ import {
 import {
   backfillMemoryProvenance,
   embedMemoryChunks,
+  loadMemoryChunks,
   memoryContextStats,
   memoryJobStats,
   replaceMemoryContext,
@@ -56,7 +57,8 @@ import {
   type MemoryJobStats,
 } from './memory-context-store';
 import { enqueueMemoryJob, runMemoryJobs } from './memory-jobs';
-import { linksForMemory } from './memory-links';
+import { expandLinkedChunks, linksForMemory } from './memory-links';
+import { rankMemoryChunks } from './memory-domain';
 import { applyMemoryProjection, buildMemoryProjection } from './memory-projection';
 import { generateRollup, previousPeriods } from './memory-rollups';
 import { getOrCreateDayContext } from './context';
@@ -1135,6 +1137,27 @@ app.get('/api/admin/memory/links', requireAuth, async (c) => {
   const id = (c.req.query('id') ?? '').trim();
   if (!id) return c.json({ error: 'id required' }, 400);
   return c.json({ ok: true, type, id, ...(await linksForMemory(c.env, type, id)) });
+});
+
+/** 回归调试：只读召回结果，不写记忆、不发模型。 */
+app.get('/api/admin/memory/recall', requireAuth, async (c) => {
+  const q = (c.req.query('q') ?? '').trim().slice(0, 500);
+  if (!q) return c.json({ error: 'q required' }, 400);
+  const chunks = await loadMemoryChunks(c.env);
+  const picked = rankMemoryChunks(q, chunks, 10);
+  const expanded = await expandLinkedChunks(c.env, picked, 2);
+  return c.json({
+    ok: true,
+    query: q,
+    picked: picked.length,
+    linked: Math.max(0, expanded.length - picked.length),
+    items: expanded.map((m) => ({
+      id: m.id,
+      source: m.source,
+      date: m.date,
+      content: m.content,
+    })),
+  });
 });
 
 /** Phase 5 观察：按天读取 shadow/next 指标（不记录正文）。 */
