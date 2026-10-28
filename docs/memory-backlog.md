@@ -14,7 +14,7 @@
 | M-04 | FTS/CJK 兜底 | P2 | 中 | 待验证收益 |
 | M-05 | 记忆查看/编辑 UI | P1 | 中 | 待产品迭代 |
 | M-06 | 静默结束后的主动消息暂停 | P2 | 中 | 暂缓 |
-| M-07 | BaiShou / Companion 源码补齐 | P2 | 低 | 未完成 |
+| M-07 | BaiShou / Companion 源码补齐 | P2 | 低 | Companion 已读；BaiShou 待补 |
 | M-08 | 记忆来源追溯 UI | P2 | 低中 | 待做 |
 
 ---
@@ -276,7 +276,7 @@ App/Web：
 ### 现状
 
 - BaiShou-Next：clone 不完整；
-- Companion-AI-Memory-Context-Token-Optimization：仓库地址未定位。
+- Companion-AI-Memory-Context-Token-Optimization：已补充并阅读 README/设计文档（2026-10-28）；仓库目前是设计规范/提示词/示例，尚无宿主实现。
 
 ### 待办
 

@@ -4,7 +4,7 @@
 
 目的：对比候选开源项目的记忆/上下文设计，提炼可借鉴项；不直接替换 ds-memory 现有的事实源和观察期架构。
 
-> 说明：LRC、HanakoPro、snowfox-memory-continuity 已读 README/核心源码；BaiShou-Next 的 clone 未完整拉取，Companion-AI-Memory-Context-Token-Optimization 未定位到公开仓库，二者标注“未确认”，不根据名称推断实现。
+> 说明：LRC、HanakoPro、snowfox-memory-continuity、Companion-AI-Memory-Context-Token-Optimization 已读 README/设计文档；BaiShou-Next 的 clone 未完整拉取，仍标注“未确认”。Companion 目前主要是设计规范/提示词/示例，未包含宿主实现，不能当成已验证效果。
 
 ## 总览
 
@@ -14,7 +14,7 @@
 | HanakoPro | 会话摘要 → 原子事实 | SQLite facts + FTS5；CJK ngram；标签/时间 | 原子事实、去重简单、可前端管理 | 以全文检索为主；关系和长期演化较弱 |
 | snowfox-memory-continuity | 分层 F0/L1/L2/L3/L4 | Markdown 文件 + 压缩/合并/退役脚本；L4 TF-IDF | 层级和 token 预算清晰；可人工维护 | 文件一致性/并发弱；语义检索有限 |
 | BaiShou-Next | 未确认 | 未确认 | 未确认 | 未确认 |
-| Companion-AI-Memory-Context-Token-Optimization | 未确认（名称指向上下文/token 优化） | 未确认 | 未确认 | 未确认 |
+| Companion-AI-Memory-Context-Token-Optimization | 热记忆 + 冷库 + 连续状态 | 设计规范；全量对话归档 + 逻辑索引 + 事件向量 | token 子预算、线索触发冷召回、渐进冷却 | 目前是设计方案，需宿主实现和实测 |
 
 ---
 
@@ -148,17 +148,66 @@ user.md / tasklog.md / _assembled_context.md
 
 ---
 
-## 5. Companion-AI-Memory-Context-Token-Optimization（未确认）
+## 5. Companion-AI-Memory-Context-Token-Optimization
 
-用户提供的名称指向“基于可观察人脑记忆与存储优化策略的 AI 上下文优化，节省 token 并防止失忆”。
+来源：https://github.com/ARCHEON999/Companion-AI-Memory-Context-Token-Optimization
 
-当前未定位到公开仓库地址，未读源码；不做实现判断。
+### 定位
 
-后续需要补：
+这是一个面向 Companion/Coopanion 的**设计规范 + 提示词 + 示例配置**仓库，不是宿主实现；README 也明确“尚未接入真实对话、没有实测节省比例”。因此只借鉴机制，不把它的参数当作已验证最优值。
 
-- 仓库地址；
-- 记忆编码/存储/遗忘/召回策略；
-- token 预算和上下文组装方式。
+### 记忆模型
+
+- **热记忆**：当前上下文只放
+  - 用户固定事实；
+  - 相关活跃记忆；
+  - 当前线索召回的少量条目；
+  - 近期历史窗口。
+- **冷库**：所有对话原文都归档，按类型、时间、地点、人物、物品、话题建立逻辑索引。
+- **渐进冷却**：
+  - 近期细节 → 短摘要 → 冷库；
+  - 不因为“到点”整段播下；
+  - 性格底色和当前相处基线不随旧事件冷却。
+- **线索触发冷召回**：只有用户明确提到相关人/时间/地点/物品/话题才查冷库；普通问候、定时提醒、模型自己想起不能触发。
+- **事件向量**：每个事件可存语义向量；关联度按当前问题重算，冷召回不叠加“距今年代”的衰减。
+- **连续状态**：基础性格、近期状态、未说完的话和少量具体细节跨天保留，旧状态版本进历史。
+
+### token 预算
+
+README 的初始建议：
+
+```text
+每请求记忆总块：1,600 tokens
+固定事实：160 tokens / 4 条
+活跃记忆：960 tokens / 8 条，每主题最多 2 条
+当前线索召回：480 tokens / 3 条
+近期历史窗口：2,000 tokens / 最多 6 个完整交互
+```
+
+子预算不可互相借用，没用完就留空；固定事实和当前任务不能无限增长。
+
+### 可借鉴
+
+1. **子预算不可互相借用**：比“总预算一刀切”更能控制某类记忆膨胀。
+2. **线索触发冷召回**：避免模型每轮主动翻旧账，降低 token 和上下文污染。
+3. **渐进冷却**：细节→摘要→冷库，保留“自然过渡”，不突然失忆。
+4. **逻辑索引**：类型/时间/地点/人物/物品/话题多入口，弥补纯向量召回。
+5. **冷召回不做年龄惩罚**：久远但被明确提起的事也要能找回。
+6. **连续状态预算**：性格底色和近期状态单独占预算，不跟普通事件一起被淘汰。
+
+### 不建议直接照搬
+
+- 当前仓库没有宿主实现，不能直接当依赖；
+- 1,600 tokens 等参数未实测，需按 ds-memory 的上下文长度重新标定；
+- 多入口索引和事件向量会增加写入/维护成本，应先用回归集验证；
+- “线索模糊时让用户补充一句”适合聊天，但不适合所有 App 场景。
+
+### 对 ds-memory 的启发
+
+- 现有 `context-budget.ts` 可以进一步把“固定事实/近期/rollup/召回”做成不可互借的子预算；
+- 冷库召回应加“用户明确线索”门槛，不要让主动消息或普通问候触发；
+- 归档已有全量原文，下一步可补逻辑索引，而不是只靠向量；
+- 事件向量可以复用现有 chunks，但需要独立测试冷召回质量。
 
 ---
 
@@ -245,7 +294,7 @@ MEMORY_ENGINE_* 影子/legacy
 - HanakoPro: https://github.com/ZS520L/HanakoPro
 - snowfox-memory-continuity: https://github.com/TNong611/snowfox-memory-continuity
 - BaiShou-Next: https://github.com/foxletters-hq/BaiShou-Next
-- Companion-AI-Memory-Context-Token-Optimization: 仓库地址待补
+- Companion-AI-Memory-Context-Token-Optimization: https://github.com/ARCHEON999/Companion-AI-Memory-Context-Token-Optimization
 
 ## 已落地（2026-10-28）
 
