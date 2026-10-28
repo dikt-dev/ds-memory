@@ -2,6 +2,8 @@
 
 更新：2026-10-28
 
+> 代码评估复核与修复优先级见 [memory-code-review-response-2026-10-28.md](./memory-code-review-response-2026-10-28.md)。
+
 七天观察窗口：
 
 ```text

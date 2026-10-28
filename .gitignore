@@ -10,10 +10,12 @@ coverage/
 .dev.vars.*
 !.dev.vars.example
 memory.md
+memory.*.md
 chat_logs/
 backup/
 backups/
 *.local
+*.local.md
 
 # 系统/编辑器
 .DS_Store
