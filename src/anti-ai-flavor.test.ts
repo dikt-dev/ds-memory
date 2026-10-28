@@ -132,6 +132,18 @@ describe('createStreamScrubber —— 流式清洗', () => {
     expect(scrubAiFlavor('[10-2808:57]晚安').text).toBe('晚安');
   });
 
+  it('流式首帧跨 chunk 的时间标签也能清掉', () => {
+    const scrubber = createStreamScrubber(8);
+    const out = [
+      scrubber.push('[10-28'),
+      scrubber.push('17:08]你'),
+      scrubber.push('好呀，今天也辛苦了。'),
+      scrubber.flush(),
+    ].join('');
+    expect(out).not.toContain('[10-28');
+    expect(out).toContain('你好呀');
+  });
+
   it('中文标点后面的半角空格会被吃掉', () => {
     expect(scrubAiFlavor('摆着看的。 不过也挺好').text).toBe('摆着看的。不过也挺好');
     expect(scrubAiFlavor('嗯， 好吧').text).toBe('嗯，好吧');

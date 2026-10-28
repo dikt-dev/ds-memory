@@ -160,9 +160,21 @@ export interface StreamScrubber {
  */
 export function createStreamScrubber(hold = 18): StreamScrubber {
   let buf = '';
+  let started = false;
   return {
     push(delta: string): string {
-      buf += delta;
+      if (!started) {
+        // 首个 delta 可能只包含一半时间标签。先扣住前缀，等完整标签再清洗，
+        // 否则切点落在 `[10-28` 中间时，后半截会永久残留。
+        buf += delta;
+        buf = stripLeadingTimeLabels(buf);
+        const openBracket = buf.startsWith('[') || buf.startsWith('【');
+        const closed = buf.includes(']') || buf.includes('】');
+        if (openBracket && !closed && buf.length < 40) return '';
+        started = true;
+      } else {
+        buf += delta;
+      }
       if (buf.length <= hold) return '';
       const cut = buf.length - hold;
       const out = applyRules(buf.slice(0, cut)).text;
@@ -170,6 +182,7 @@ export function createStreamScrubber(hold = 18): StreamScrubber {
       return out;
     },
     flush(): string {
+      if (!started) buf = stripLeadingTimeLabels(buf);
       const out = applyRules(buf).text;
       buf = '';
       return out;
