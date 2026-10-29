@@ -125,3 +125,29 @@ Server deployed：b97e2b02（pending/400 修复）
 | D4-01 | 已修，待断网真机复验 |
 | D4-02 | 已调整提示词，待观察口癖频率 |
 | D4-03 | 已加重试与诊断，待复现确认根因 |
+
+### 最终根因（补充）
+
+用户复现后，App 显示了完整错误：
+
+```text
+Failed to parse the request body as JSON:
+messages[0].content: unexpected end of hex escape
+```
+
+说明请求 JSON 里有**落单的 UTF-16 代理字符**（例如 emoji 被截断成 `\ud83d`），DeepSeek 直接 400。
+
+处理：
+
+- 在 `requestDeepSeek()` 边界统一调用 `sanitizeDeepSeekMessages()`；
+- 清理 system/history/user 所有文本里的落单代理字符；
+- 保留正常 emoji；
+- 补 `deepseek-sanitize.test.ts`。
+
+复测同一条消息：
+
+```text
+HTTP 200，正常返回
+```
+
+所以 502 不是网络波动，也不是 DeepSeek 配额，是请求 JSON 编码问题。
