@@ -171,3 +171,42 @@ return new Response(obj.body, {
 - 没测真实设备上的 Range 行为（推断依据是 HTTP 语义，不是实测）；
 - 没查 R2 当前 `videos/` 的实际占用（需要 `list` 全量遍历，建议单独跑一次）；
 - 没看 App 侧的上传实现细节（只看了接口调用点）。
+---
+
+## 6. 进度（2026-10-29 更新）
+
+### ✅ 已完成并提交
+
+| # | 项 | 提交 | 状态 |
+|---|---|---|---|
+| 1 | `/api/app/media` 支持 Range/206/416 + ETag 304 + immutable | `c3ce525` | 代码+测试完成，**未部署** |
+| 2 | `[视频]`/`[GIF]`/`[语音]` 占位符压成标记（历史 + 提炼共用） | `c3ce525` | 同上 |
+| 2b | 提炼输入走同一份清洗（此前 `[图片:images/…]` 会进 memory.md） | `c3ce525` | 同上 |
+| 9 | App：宫格按 `index[]` 裁剪真实帧 + 每格标时间 | `ds-mobile` 提交 | 已装真机，待真实视频复验 |
+
+测试：`tsc` 0 错；vitest **62 文件 / 733 用例**全过（新增 `parseByteRange`、`sanitizeMessagePlaceholders` 两组）。
+
+### ⏸ 现在做不了的（记录在此）
+
+| # | 项 | 卡在哪 |
+|---|---|---|
+| 3 | R2 视频 TTL 清理 | 需要先知道 `videos/` 实际占用；主桶没有 S3 凭据，`wrangler r2 object list` 在 v4.151 不可用。等 11/02 用 admin 接口或补 S3 key |
+| 4 | 上传 hash 去重 + 魔数校验 | 需要改上传协议（App 同时改），排到 11/06 之后 |
+| 5 | 缓存头改 immutable | 已随 #1 完成（`max-age=31536000, immutable`） |
+| 6 | Worker 侧 `link-preview` 透传 storyboard 字段 | 网页端需要；App 不依赖（自己调 videoshot）。观察期结束后再做 |
+| 7 | 宫格图持久化（跨会话/网页可回放） | 目前走 `#__transient`，不落 R2；要不要存是产品决定 |
+| 8 | `media_sheets` 元记忆 | 依赖 #7 |
+| — | 真机验证宫格效果 | 需要发一条真实 B 站链接，会写入真实对话/记忆，等用户确认后再做 |
+| — | Worker 部署 | 观察期冻结，11/02 之后 |
+
+### 部署清单（11/02 后一条命令）
+
+```bash
+node node_modules/wrangler/bin/wrangler.js deploy --config wrangler.local.toml \
+  --var MEMORY_ENGINE_QQ:shadow --var AFFECT_ENGINE_QQ:shadow \
+  --var MEMORY_ENGINE_WEB:legacy --var AFFECT_ENGINE_WEB:legacy \
+  --var MEMORY_ENGINE_MOBILE:shadow --var AFFECT_ENGINE_MOBILE:shadow \
+  --var PROACTIVE_ENGINE:shadow --var PROACTIVE_DELIVERY:queue
+```
+
+部署内容仅：Range 支持 + 占位符清洗，不涉及引擎 flag、不改检索路径。
