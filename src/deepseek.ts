@@ -18,6 +18,37 @@ export interface DeepSeekMessage {
 
 export const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
 
+/** DeepSeek 400 常见于历史过长/请求过大；保留 system + 最近交互再试一次。 */
+function compactDeepSeekMessages(messages: DeepSeekMessage[]): DeepSeekMessage[] {
+  const system = messages.filter((m) => m.role === 'system');
+  const rest = messages.filter((m) => m.role !== 'system');
+  return [...system, ...rest.slice(-14)];
+}
+
+async function requestDeepSeek(
+  env: Env,
+  apiKey: string,
+  messages: DeepSeekMessage[],
+  stream: boolean,
+  maxTokens?: number,
+): Promise<Response> {
+  return fetch(DEEPSEEK_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: env.DEEPSEEK_MODEL,
+      messages,
+      ...(stream
+        ? { stream: true, stream_options: { include_usage: true } }
+        : { max_tokens: maxTokens ?? 4096 }),
+      temperature: 0.85,
+      frequency_penalty: 0.15,
+      presence_penalty: 0.1,
+      thinking: { type: 'disabled' },
+    }),
+  });
+}
+
 export function normalizeUsage(
   u?: { prompt_cache_hit_tokens?: number; prompt_cache_miss_tokens?: number; completion_tokens?: number },
 ): TokenUsage {
@@ -55,23 +86,18 @@ export async function streamDeepSeek(
 
   let upstream: Response;
   try {
-    upstream = await fetch(DEEPSEEK_URL, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: env.DEEPSEEK_MODEL,
-        messages,
-        stream: true,
-        stream_options: { include_usage: true },
-        ...(opts.maxTokens ? { max_tokens: opts.maxTokens } : {}),
-        // 温度别再拉满：1.2 容易造词/漏词，0.85 仍活泼但句子更通顺
-        temperature: 0.85,
-        frequency_penalty: 0.15,
-        presence_penalty: 0.1,
-        // deepseek-flash/v4-pro 默认开启思考模式（effort=high），这里关闭：回复更快、成本可预期
-        thinking: { type: 'disabled' },
-      }),
-    });
+    upstream = await requestDeepSeek(env, apiKey, messages, true, opts.maxTokens);
+    if (upstream.status === 400) {
+      const detail = await upstream.clone().text().catch(() => '');
+      console.error('[deepseek] upstream 400, retry compact:', detail.slice(0, 300));
+      upstream = await requestDeepSeek(
+        env,
+        apiKey,
+        compactDeepSeekMessages(messages),
+        true,
+        opts.maxTokens,
+      );
+    }
   } catch (e) {
     console.error('[deepseek] fetch failed:', e);
     return Response.json({ error: { message: 'DeepSeek 请求失败，请稍后重试', type: 'server_error' } }, { status: 502 });
@@ -79,7 +105,16 @@ export async function streamDeepSeek(
   if (!upstream.ok) {
     const detail = await upstream.text().catch(() => '');
     console.error('[deepseek] upstream error:', upstream.status, detail);
-    return Response.json({ error: { message: `DeepSeek 返回错误（${upstream.status}）`, type: 'server_error' } }, { status: 502 });
+    return Response.json(
+      {
+        error: {
+          message: `DeepSeek 返回错误（${upstream.status}）`,
+          type: 'server_error',
+          detail: detail.slice(0, 300),
+        },
+      },
+      { status: 502 },
+    );
   }
   if (!upstream.body) {
     return Response.json({ error: { message: 'DeepSeek 返回空流', type: 'server_error' } }, { status: 502 });
@@ -162,20 +197,18 @@ export async function completeDeepSeek(
   if (!apiKey) return { error: 'DEEPSEEK_API_KEY 未配置', status: 500 };
   let res: Response;
   try {
-    res = await fetch(DEEPSEEK_URL, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: env.DEEPSEEK_MODEL,
-        messages,
-        max_tokens: maxTokens,
-        temperature: 0.85,
-        frequency_penalty: 0.15,
-        presence_penalty: 0.1,
-        // 关闭思考模式（默认开启 effort=high，会额外消耗按输出计费的 reasoning tokens）
-        thinking: { type: 'disabled' },
-      }),
-    });
+    res = await requestDeepSeek(env, apiKey, messages, false, maxTokens);
+    if (res.status === 400) {
+      const detail = await res.clone().text().catch(() => '');
+      console.error('[deepseek] upstream 400, retry compact:', detail.slice(0, 300));
+      res = await requestDeepSeek(
+        env,
+        apiKey,
+        compactDeepSeekMessages(messages),
+        false,
+        maxTokens,
+      );
+    }
   } catch (e) {
     console.error('[deepseek] fetch failed:', e);
     return { error: 'DeepSeek 请求失败，请稍后重试', status: 502 };
@@ -183,7 +216,10 @@ export async function completeDeepSeek(
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
     console.error('[deepseek] upstream error:', res.status, detail);
-    return { error: `DeepSeek 返回错误（${res.status}）`, status: 502 };
+    return {
+      error: `DeepSeek 返回错误（${res.status}）${detail ? `：${detail.slice(0, 160)}` : ''}`,
+      status: 502,
+    };
   }
   const data = (await res.json()) as {
     id?: string;

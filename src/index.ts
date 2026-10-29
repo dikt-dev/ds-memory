@@ -352,6 +352,33 @@ app.get('/api/app/events', requireApp, async (c) => {
   });
 });
 
+/** App pending 对账：按 client_message_id 查服务端是否已经落库。 */
+app.get('/api/app/client-messages', requireApp, async (c) => {
+  const ids = (c.req.query('ids') ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && s.length <= 100)
+    .slice(0, 20);
+  if (ids.length === 0) return c.json({ messages: [] });
+  const placeholders = ids.map(() => '?').join(',');
+  const rows = await c.env.DB.prepare(
+    `SELECT * FROM messages WHERE client_message_id IN (${placeholders}) ORDER BY id ASC LIMIT 40`,
+  )
+    .bind(...ids)
+    .all<MessageRow>();
+  const payload = (rows.results ?? []).map((m) => ({
+    id: m.id,
+    role: m.role,
+    content: m.content,
+    channel: m.channel,
+    created_at: m.created_at,
+    turn_id: m.turn_id,
+    proactive_kind: m.proactive_kind,
+    client_message_id: m.client_message_id,
+  }));
+  return c.json({ messages: sanitizeStoredMessages(payload) });
+});
+
 /** 资源连通性检查（阶段 0 验收项）。 */
 app.get('/api/health', async (c) => {
   const checks: Record<string, string> = {};
