@@ -238,3 +238,34 @@ export async function loadImageDataUrl(
   const mime = obj.httpMetadata?.contentType ?? 'image/jpeg';
   return { dataUrl: `data:${mime};base64,${base64FromUint8Array(buf)}`, mime };
 }
+
+/** Range 请求解析结果：null = 无 Range（整段返回）；'invalid' = 语法或越界，应回 416。 */
+export type ParsedByteRange = { start: number; end: number } | null | 'invalid';
+
+/**
+ * 解析单段 Range 请求头（纯函数）。
+ *
+ * 只支持单段：浏览器和 ExoPlayer 取音视频都是单段请求；
+ * 多段（bytes=0-1,5-6）一律按 416 处理，避免实现 multipart/byteranges。
+ */
+export function parseByteRange(header: string | null | undefined, size: number): ParsedByteRange {
+  if (!header) return null;
+  if (!Number.isFinite(size) || size <= 0) return 'invalid';
+  const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!m) return 'invalid';
+  const [, rawStart, rawEnd] = m;
+  if (!rawStart && !rawEnd) return 'invalid';
+  if (!rawStart) {
+    // bytes=-N：末尾 N 字节
+    const n = Number(rawEnd);
+    if (!Number.isFinite(n) || n <= 0) return 'invalid';
+    return { start: Math.max(0, size - n), end: size - 1 };
+  }
+  const start = Number(rawStart);
+  const end = rawEnd ? Number(rawEnd) : size - 1;
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return 'invalid';
+  if (start > end || start >= size) return 'invalid';
+  return { start, end: Math.min(end, size - 1) };
+}
+
+

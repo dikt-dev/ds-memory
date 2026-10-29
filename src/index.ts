@@ -26,7 +26,7 @@ import { messagesSince, webMessagesSince, latestWebMessageId } from './db';
 import { byteLength, memoryDensity, mergeMemoryEntry } from './memory-maintenance';
 import { getCityConfig, setCity } from './settings';
 import { fetchWeather } from './weather';
-import { buildAudioKey, buildImageKey, saveImage } from './media';
+import { buildAudioKey, buildImageKey, parseByteRange, saveImage } from './media';
 import SparkMD5 from 'spark-md5';
 import {
   deleteObject,
@@ -970,16 +970,38 @@ app.get('/api/app/media', requireApp, async (c) => {
   if (!/^(videos|gifs)\//.test(key) || key.length > 200 || key.includes('..')) {
     return c.json({ error: 'not found' }, 404);
   }
-  const obj = await c.env.R2.get(key);
+  const head = await c.env.R2.head(key);
+  if (!head) return c.json({ error: 'not found' }, 404);
+  const size = head.size;
+  const etag = head.httpEtag;
+
+  // 内容不可变（key 里带日期和 uuid），命中 ETag 直接 304，省掉整段重传。
+  if (etag && c.req.header('if-none-match') === etag) {
+    return new Response(null, { status: 304, headers: { etag } });
+  }
+
+  const range = parseByteRange(c.req.header('range'), size);
+  if (range === 'invalid') {
+    // 416 必须带 Content-Range: bytes */size，播放器据此回到整段重取。
+    return new Response(null, {
+      status: 416,
+      headers: { 'content-range': `bytes */${size}`, 'accept-ranges': 'bytes' },
+    });
+  }
+  const obj = await c.env.R2.get(
+    key,
+    range ? { range: { offset: range.start, length: range.end - range.start + 1 } } : undefined,
+  );
   if (!obj) return c.json({ error: 'not found' }, 404);
-  return new Response(obj.body, {
-    headers: {
-      'content-type': obj.httpMetadata?.contentType ?? 'application/octet-stream',
-      'content-length': String(obj.size),
-      'accept-ranges': 'bytes',
-      'cache-control': 'private, max-age=86400',
-    },
-  });
+  const headers: Record<string, string> = {
+    'content-type': head.httpMetadata?.contentType ?? 'application/octet-stream',
+    'content-length': String(range ? range.end - range.start + 1 : size),
+    'accept-ranges': 'bytes',
+    'cache-control': 'private, max-age=31536000, immutable',
+  };
+  if (etag) headers.etag = etag;
+  if (range) headers['content-range'] = `bytes ${range.start}-${range.end}/${size}`;
+  return new Response(obj.body, { status: range ? 206 : 200, headers });
 });
 
 app.get('/api/app/image', requireApp, async (c) => {

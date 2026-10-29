@@ -237,14 +237,27 @@ export const HISTORY_FILE_MAX_CHARS = 4200;
  * - 连续空白折叠成一个空格（B站/网页抓取块常带大量换行）；
  * - 超长时保留开头 + 结尾（结尾常包含结论/追问），中间省略，避免只剩开头。
  */
-export function compactHistoryMessage(content: string, maxChars = HISTORY_MESSAGE_MAX_CHARS): string {
-  const cleaned = content
+/**
+ * 占位符清洗：把 R2 路径压成可读标记。
+ *
+ * 历史注入和每日提炼共用同一份规则——两边不一致时，
+ * 提炼会把 `[视频:videos/2026-10-28/<uuid>.mp4]` 当成正文写进 memory.md。
+ */
+export function sanitizeMessagePlaceholders(content: string): string {
+  return content
     // 静默标记不是聊天内容，历史里也不能留。
     .replace(/\[END\]/g, '')
-    // 历史里的完整字幕/网页资料只保留标记，避免 50 轮时把上下文撑爆。
+    // 完整字幕/网页资料只保留标记，避免把上下文撑爆。
     .replace(/\[BILI_META\][\s\S]*?\[\/BILI_META\]/gi, '[B站资料]')
     .replace(/\[WEB_META\][\s\S]*?\[\/WEB_META\]/gi, '[网页资料]')
     .replace(/\[图片:images\/[^\]]+\]/g, '[图片]')
+    .replace(/\[视频:videos\/[^\]]+\]/g, '[视频]')
+    .replace(/\[GIF:gifs\/[^\]]+\]/g, '[GIF]')
+    .replace(/\[语音:audio\/[^\]]+\]/g, '[语音]');
+}
+
+export function compactHistoryMessage(content: string, maxChars = HISTORY_MESSAGE_MAX_CHARS): string {
+  const cleaned = sanitizeMessagePlaceholders(content)
     .replace(/\s+/g, ' ')
     .trim();
   if (cleaned.length <= maxChars) return cleaned;

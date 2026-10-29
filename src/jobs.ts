@@ -52,7 +52,7 @@ import { FACET_KEYS } from './relation-facets';
 import { applyRelationDecay } from './memory-maintenance';
 import { getDaySummaryRaw, summaryKey } from './summary';
 import { checkStorageCapacity, cleanupStaleObjects, deleteObject, getObject, listKeys, putObject } from './storage';
-import { messagesByDate, assistantReplyTo, type MessageRow } from './db';
+import { messagesByDate, assistantReplyTo, sanitizeMessagePlaceholders, type MessageRow } from './db';
 import { backfillFeedback } from './feedback';
 import { cleanupQueue } from './queue';
 import { addLlmCost } from './llm-cost';
@@ -279,10 +279,12 @@ export async function archiveOneDay(
         const conversation =
           distilledRows
             .map((m) => {
-              if (m.role === 'user') return `用户：${m.content}`;
+              // R2 路径占位符先压成标记，避免 UUID 被提炼进 memory.md。
+              const content = sanitizeMessagePlaceholders(m.content);
+              if (m.role === 'user') return `用户：${content}`;
               return m.turn_type === 'proactive'
-                ? `助手（主动发起，用户未回复）：${m.content}`
-                : `助手：${m.content}`;
+                ? `助手（主动发起，用户未回复）：${content}`
+                : `助手：${content}`;
             })
             .join('\n\n') +
           (daySummary?.text ? `\n\n今日摘要（滚动提炼）：${daySummary.text}` : '');
