@@ -32,12 +32,41 @@ export async function getMemory(env: Env): Promise<string> {
   }
 }
 
-export async function putMemory(env: Env, text: string): Promise<void> {
-  // 先删旧缓存（等效"手动失效"，避免覆盖失败时残留旧值）
-  await env.KV.delete(MEMORY_KV_KEY).catch(() => {});
-  await putObject(env, MEMORY_R2_KEY, text);
-  await env.KV.put(MEMORY_KV_KEY, text, { expirationTtl: MEMORY_KV_TTL_SECONDS }).catch((e) => {
-    // KV 写失败时缓存已删除，下次读取会回源 R2，不会读到旧值
+/**
+ * 写回长期记忆，返回是否**确认落盘**。
+ *
+ * 旧实现是"删缓存 → put → put 缓存"，三步都不检查结果：R2 单次 put 静默失败时，
+ * 当天的 LLM 提炼凭空消失，而调用方仍按新内容重建索引和 Memory Context，
+ * 于是索引里有一份 R2 里不存在的记忆 —— 比直接报错更难查。
+ * 现在：写后读回比对，不一致就不刷新缓存并返回 false，让调用方跳过派生重建。
+ */
+export async function putMemory(env: Env, text: string): Promise<boolean> {
+  // 1) 先写 R2（唯一真相）。失败时缓存保持旧值：KV 与 R2 仍是**一致**的旧版本。
+  try {
+    await putObject(env, MEMORY_R2_KEY, text);
+  } catch (e) {
+    console.error('[memory] R2 put failed, cache left untouched:', e);
+    return false;
+  }
+
+  // 2) 读回校验（内容级，不是大小级：同长度写坏也能发现）
+  const echo = await getObject(env, MEMORY_R2_KEY).catch(() => null);
+  const stored = echo ? await echo.text().catch(() => null) : null;
+  if (stored !== text) {
+    console.error(
+      `[memory] R2 write verify failed (wrote ${text.length} chars, read back ${stored === null ? 'null' : stored.length})`,
+    );
+    // 缓存里可能是旧版也可能是半截新版，一律作废，下次回源看真实内容。
+    await env.KV.delete(MEMORY_KV_KEY).catch(() => {});
+    return false;
+  }
+
+  // 3) 校验通过才刷新缓存；KV 失败就删缓存，下次回源 R2 读到的是新内容。
+  try {
+    await env.KV.put(MEMORY_KV_KEY, text, { expirationTtl: MEMORY_KV_TTL_SECONDS });
+  } catch (e) {
     console.error('[memory] KV write failed (cache cleared, next read re-sources R2):', e);
-  });
+    await env.KV.delete(MEMORY_KV_KEY).catch(() => {});
+  }
+  return true;
 }

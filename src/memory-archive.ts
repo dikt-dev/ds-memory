@@ -232,87 +232,8 @@ export function strongWords(text: string): string[] {
   return [...text.toLowerCase().matchAll(/[a-z0-9][a-z0-9_.-]{1,20}/g)].map((m) => m[0]);
 }
 
-/**
- * 从档案里挑出与 query 最相关的行（纯函数，可单测）。
- *
- * 打分规则（缺一不可，否则要么召不回、要么满屏噪声）：
- *   ① 正文 bigram：区分度高的 gram（只出现在少数条目里）计 2 分，普通的计 1 分；
- *   ② 行内标签：命中 +3（标签是入档时人工规则挑的，信息密度最高）；
- *   ③ 英文/数字强词：命中 +2（项目名、命令、缩写）；
- *   ④ 同义词：只对「不常见」的扩展词加分，避免 token/余额 这种词把结果带偏。
- * 同分时新的优先（数组靠后的更新）。
- */
-export function pickRelevant(
-  lines: string[],
-  query: string,
-  limit = RECALL_LIMIT,
-  minScore = RECALL_MIN_SCORE,
-): string[] {
-  if (!query.trim() || lines.length === 0) return [];
-
-  const N = lines.length;
-  const { lowers, gramSets } = prepareArchive(lines);
-
-  const qGrams = [...new Set(bigrams(query))];
-  const qWords = strongWords(query);
-  const tagCtx = expandQuery(query).toLowerCase();
-
-  // 出现在过多条目里的词没有区分度（N 小时至少允许 2 条）
-  const freqLimit = Math.max(2, Math.ceil(N * 0.4));
-  const countHits = (term: string) => lowers.reduce((n, l) => (l.includes(term) ? n + 1 : n), 0);
-
-  const weights = new Map<string, number>();
-  for (const g of qGrams) {
-    const df = gramSets.reduce((n, s) => (s.has(g) ? n + 1 : n), 0);
-    weights.set(g, df > 0 && df <= freqLimit ? 2 : 1);
-  }
-
-  const aliases = aliasTerms(query).filter((t) => {
-    if (t.length < 2) return false;
-    const hits = countHits(t);
-    return hits > 0 && hits <= freqLimit;
-  });
-
-  const scored = lines
-    .map((line, idx) => {
-      let score = 0;
-      for (const g of gramSets[idx]) {
-        const w = weights.get(g);
-        if (w) score += w;
-      }
-      for (const tag of extractTags(line)) {
-        if (tagCtx.includes(tag)) score += TAG_BOOST;
-      }
-      for (const w of qWords) {
-        if (w.length >= 3 && lowers[idx].includes(w)) score += WORD_BOOST;
-      }
-      for (const term of aliases) {
-        if (lowers[idx].includes(term)) score += ALIAS_BOOST;
-      }
-      return { line, score, idx };
-    })
-    .filter((x) => x.score >= minScore)
-    .sort((a, b) => b.score - a.score || b.idx - a.idx);
-
-  // 档案保留同事实的不同日期；注入时同一内容只取一次，避免重复占召回名额。
-  const picked: string[] = [];
-  const seenContent = new Set<string>();
-  for (const x of scored) {
-    const contentKey = normalizeLine(x.line).replace(/^\d{4}-\d{2}-\d{2}\|/, '');
-    if (seenContent.has(contentKey)) continue;
-    seenContent.add(contentKey);
-    picked.push(stripTags(x.line));
-    if (picked.length >= limit) break;
-  }
-  return picked;
-}
 
 /** 渲染成提示词里的一块；没有命中返回空串。 */
-export function formatRecalledBlock(lines: string[]): string {
-  const clean = lines.map(stripTags).filter(Boolean);
-  if (clean.length === 0) return '';
-  return ['## 相关往事（记忆档案检索，自然引用即可）', ...clean].join('\n');
-}
 
 /* ---------- 存储 ---------- */
 
@@ -365,16 +286,3 @@ export async function appendArchiveLines(env: Env, incoming: string[]): Promise<
 }
 
 /** 旧版档案直检入口（保留给纯函数测试/兼容；生产聊天已改用 D1 记忆索引）。 */
-export async function recallForQuery(env: Env, query: string): Promise<string> {
-  if (!query.trim()) return '';
-  try {
-    // 档案完整保留，检索不再截断；索引本身有 preparedCache。
-    // 查询只取最后 2000 字：太长的抓取正文会产生大量噪声 bigram，稀释权重。
-    const q = query.slice(-2000);
-    const lines = await getArchiveLines(env);
-    if (lines.length === 0) return '';
-    return formatRecalledBlock(pickRelevant(lines, q));
-  } catch {
-    return '';
-  }
-}

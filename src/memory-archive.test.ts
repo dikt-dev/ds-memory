@@ -5,10 +5,8 @@ import {
   countNewLines,
   expandQuery,
   extractTags,
-  formatRecalledBlock,
   mergeArchiveLines,
   parseArchiveLines,
-  pickRelevant,
   serializeArchiveLines,
   stripTags,
   withAutoTags,
@@ -114,60 +112,4 @@ describe('expandQuery（同义词扩展）', () => {
   });
 });
 
-describe('pickRelevant', () => {
-  it('按话题命中对应往事', () => {
-    expect(pickRelevant(SAMPLE, '还记得我们第一次聊天吗')[0]).toContain('第一次聊天');
-    expect(pickRelevant(SAMPLE, 'GBVS 那个 DLC 补丁')[0]).toContain('GBVS');
-  });
 
-  it('同义词召回：说「熬夜」能命中写着「通宵」的条目', () => {
-    const hits = pickRelevant(SAMPLE, '你昨晚是不是又熬夜了');
-    expect(hits.some((h) => h.includes('凌晨三点'))).toBe(true);
-  });
-
-  it('标签加权：查「作息」能命中打了 #作息 的条目', () => {
-    const lines = [
-      '- [2026-10-01] 今天吃了两碗饭',
-      '- [2026-10-21] 凌晨三点还在调插件 #作息',
-    ];
-    expect(pickRelevant(lines, '最近作息怎么样')[0]).toContain('凌晨三点');
-  });
-
-  it('无关话题不召回（宁缺毋滥）', () => {
-    expect(pickRelevant(SAMPLE, '今天天气不错')).toEqual([]);
-  });
-
-  it('同分时新的优先', () => {
-    const lines = ['- [2026-10-01] 一起聊天', '- [2026-10-21] 又一起聊天'];
-    expect(pickRelevant(lines, '聊天', 1, 1)[0]).toContain('2026-10-21');
-  });
-
-  it('返回的条目不包含 #标签', () => {
-    const lines = ['- [2026-10-21] 凌晨三点调插件 #作息'];
-    expect(pickRelevant(lines, '作息')[0]).not.toContain('#');
-  });
-
-  it('遵守条数上限', () => {
-    const many = Array.from({ length: 10 }, (_, i) => `- [2026-10-21] 第${i}次聊天`);
-    // 单个 bigram 命中默认会被 minScore=2 过滤，这里显式放宽到 1
-    expect(pickRelevant(many, '聊天', 3, 1)).toHaveLength(3);
-    expect(pickRelevant(many, '聊天', 3)).toHaveLength(0);
-  });
-
-  it('空查询返回空数组', () => {
-    expect(pickRelevant(SAMPLE, '   ')).toEqual([]);
-  });
-});
-
-describe('formatRecalledBlock', () => {
-  it('没有命中时不产生任何字节', () => {
-    expect(formatRecalledBlock([])).toBe('');
-  });
-
-  it('有命中时带标题，且剥离标签', () => {
-    const block = formatRecalledBlock(['- [2026-10-21] 第一次聊天 #称呼']);
-    expect(block.startsWith('## 相关往事')).toBe(true);
-    expect(block).toContain('第一次聊天');
-    expect(block).not.toContain('#称呼');
-  });
-});

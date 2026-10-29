@@ -372,61 +372,6 @@ export function reportSectionBudgets(text: string): SectionBudget[] {
   });
 }
 
-/**
- * 分区配额软限制：超出预算的分类，把**最旧的两条合并成一条**（日期取较早那条），
- * 直到回到预算内或该区只剩一条。
- *
- * 设计取舍：
- * - 只合并、不删除 —— 用户要求「尽可能保留记忆量」，合并只去掉重复的日期前缀和行结构；
- * - 日期取较早者，保证合并项仍按「老」排序，全局 15KB 裁剪时先被处理；
- * - 受保护分区不处理（人物底色/称呼与关系/雷区与禁忌 一行都不动）；
- * - 合并后字节数没变小就停止，避免死循环。
- */
-export function enforceSectionBudgets(text: string): { text: string; changed: boolean; merged: number } {
-  const { pre, sections } = parseSections(text);
-  const protectedHeaders = new Set(PROTECTED_HEADERS.map((h) => h.trim()));
-  let merged = 0;
-
-  for (const sec of sections) {
-    const header = sec.header.trim();
-    const budget = SECTION_BUDGETS[header];
-    if (!budget || protectedHeaders.has(header)) continue;
-    if (DEMOTE_HEADERS.includes(header)) continue; // 这类分区走分层（搬进档案），不合并
-
-    // 只合并带日期的条目行；注释/空行/说明保持原样
-    const entryIdx = sec.lines.map((l, i) => (ENTRY_RE.test(l) ? i : -1)).filter((i) => i >= 0);
-    let size = byteLength([sec.header, ...sec.lines].join('\n'));
-
-    while (size > budget && entryIdx.length >= 2) {
-      const [i1, i2] = entryIdx.splice(0, 2);
-      const line1 = sec.lines[i1];
-      const line2 = sec.lines[i2];
-      const m1 = line1.match(ENTRY_RE);
-      const m2 = line2.match(ENTRY_RE);
-      const date = m1?.[1] ?? m2?.[1];
-      if (!date) break;
-      const c1 = line1.replace(ENTRY_RE, '').trim();
-      const c2 = line2.replace(ENTRY_RE, '').trim();
-      const body = [c1.replace(/[；;，,]$/, ''), c2.replace(/[；;，,]$/, '')].filter(Boolean).join('；');
-      const out = `- [${date}] ${body}`;
-
-      // 合并后没变小（内容本身为空）→ 停止，避免死循环
-      if (byteLength(out) >= byteLength(line1) + byteLength(line2)) break;
-
-      sec.lines[i1] = out;
-      sec.lines[i2] = '';
-      merged += 1;
-      size = byteLength([sec.header, ...sec.lines].join('\n'));
-    }
-  }
-
-  if (merged === 0) return { text, changed: false, merged: 0 };
-  const next = sections.map((sec) => ({
-    header: sec.header,
-    lines: sec.lines.filter((l) => l !== ''),
-  }));
-  return { text: reassemble(pre, next), changed: true, merged };
-}
 
 /**
  * 分层：把某个分区里最旧的条目搬出去（交由调用方写入 R2 档案层），
@@ -760,33 +705,8 @@ export function archiveCompletedItems(
   return { text: reassemble(pre, next), moved: toMove.length, titles };
 }
 
-/**
- * 拆出"人物底色"区块（压缩时先取出，压缩完原样放回，保证 AI 无法改动它）。
- * 返回的 body 不含该区块。
- */
-export function extractImmutableSection(text: string): { body: string; section: string | null } {
-  const lines = text.split('\n');
-  const start = lines.findIndex((l) => l.trim() === IMMUTABLE_HEADER);
-  if (start === -1) return { body: text, section: null };
-  let end = lines.length;
-  for (let i = start + 1; i < lines.length; i++) {
-    if (/^##\s/.test(lines[i])) {
-      end = i;
-      break;
-    }
-  }
-  const section = lines.slice(start, end).join('\n').trimEnd();
-  const body = [...lines.slice(0, start), ...lines.slice(end)].join('\n');
-  return { body, section };
-}
 
 /** 把"人物底色"区块放回（放在第一个分类位置，保持固定顺序）。 */
-export function injectImmutableSection(body: string, section: string): string {
-  const { pre, sections } = parseSections(body);
-  const rest = sections.filter((s) => s.header.trim() !== IMMUTABLE_HEADER);
-  const parts = [pre.trimEnd(), section, ...rest.map((s) => [s.header, ...s.lines].join('\n'))].filter(Boolean);
-  return parts.join('\n\n') + '\n';
-}
 
 /* ---------- 关系变量（好感度 / 亲密度） ---------- */
 
@@ -827,10 +747,6 @@ export function parseRelationValues(text: string): RelationValues {
 }
 
 /** 单日变化截断（保留兼容；新逻辑用 applyGradualChange）。 */
-export function applyRelationDelta(current: number, proposed: number, maxDelta = RELATION_MAX_DAILY_DELTA): number {
-  const delta = Math.min(Math.max(proposed - current, -maxDelta), maxDelta);
-  return clampInt(current + delta, 0, RELATION_MAX);
-}
 
 function setValueLine(section: Section, lineRe: RegExp, label: string, value: number): boolean {
   const next = `- ${label}：${value} / ${RELATION_MAX}`;

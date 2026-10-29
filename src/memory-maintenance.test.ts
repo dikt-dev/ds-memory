@@ -1,14 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyRelationDelta,
   byteLength,
   compactMemoryEntries,
   memoryDensity,
   demoteSectionEntries,
-  enforceSectionBudgets,
   ensureModuleComments,
-  extractImmutableSection,
-  injectImmutableSection,
   mergeMemoryEntry,
   parseRelationValues,
   pruneTransientSections,
@@ -170,15 +166,6 @@ describe('人物底色（不可变区块）', () => {
     expect(out).toContain('新事实');
   });
 
-  it('压缩时先取出、压缩后原样放回', () => {
-    const { body, section } = extractImmutableSection(WITH_IMMUTABLE);
-    expect(section).toContain('昵称"小忆"');
-    expect(body).not.toContain('人物底色');
-    const restored = injectImmutableSection(body, section!);
-    expect(restored).toContain('## 人物底色');
-    expect(restored).toContain('昵称"小忆"');
-    expect(restored).toContain('旧事实A');
-  });
 
   it('裁剪不会删除人物底色', () => {
     const r = trimOldestEntries(WITH_IMMUTABLE, 40);
@@ -232,14 +219,6 @@ describe('关系变量（好感度/亲密度）', () => {
     expect(parseRelationValues('# 长期记忆')).toEqual(expected);
   });
 
-  it('applyRelationDelta：单日 ±5 截断与 0~1000 边界', () => {
-    expect(applyRelationDelta(500, 900)).toBe(505);
-    expect(applyRelationDelta(500, 100)).toBe(495);
-    expect(applyRelationDelta(0, 3)).toBe(3);
-    expect(applyRelationDelta(0, -10)).toBe(0);
-    expect(applyRelationDelta(1000, 1200)).toBe(1000);
-    expect(applyRelationDelta(998, 1000)).toBe(1000);
-  });
 
   it('C1：AI 提议的数值被忽略（数值由系统计算）', () => {
     const withDrivers = mergeMemoryEntry(WITH_RELATION, '- 好感度：900 / 1000', '2026-10-22', {
@@ -337,56 +316,6 @@ describe('关系变量（好感度/亲密度）', () => {
   });
 });
 
-describe('分区配额 enforceSectionBudgets', () => {
-  const big = (n: number) =>
-    Array.from(
-      { length: n },
-      (_, i) => `- [2026-10-0${(i % 9) + 1}] 事件${i + 1}：一起把第 ${i + 1} 个模块调通了，还挺有成就感的。`,
-    ).join('\n');
-
-  const build = () => `# 长期记忆
-
-## 人物底色
-- 这是固定设定，一个字都不能动。
-
-## 偏好与习惯
-${big(40)}
-`;
-
-  it('超预算的分区把最旧两条合并，字节下降但内容不丢', () => {
-    const before = build();
-    const res = enforceSectionBudgets(before);
-
-    expect(res.changed).toBe(true);
-    expect(res.merged).toBeGreaterThan(0);
-    expect(byteLength(res.text)).toBeLessThan(byteLength(before));
-
-    // 每一条的内容都还在（只是合并掉了重复的日期前缀）
-    for (let i = 1; i <= 40; i++) {
-      expect(res.text).toContain(`事件${i}：`);
-    }
-  });
-
-  it('受保护分区一行都不动', () => {
-    const before = build();
-    const res = enforceSectionBudgets(before);
-    expect(res.text).toContain('- 这是固定设定，一个字都不能动。');
-  });
-
-  it('没超预算时原样返回', () => {
-    const small = '# 长期记忆\n\n## 共同经历\n- [2026-10-01] 小事一桩。\n';
-    const res = enforceSectionBudgets(small);
-    expect(res.changed).toBe(false);
-    expect(res.text).toBe(small);
-  });
-
-  it('reportSectionBudgets 能报出超预算的分区', () => {
-    const report = reportSectionBudgets(build());
-    const shared = report.find((r) => r.header === '## 偏好与习惯');
-    expect(shared?.over).toBe(true);
-    expect(shared?.bytes).toBeGreaterThan(shared?.budget ?? 0);
-  });
-});
 
 describe('分层 demoteSectionEntries', () => {
   const big = (n: number) =>

@@ -508,9 +508,12 @@ export async function archiveOneDay(
     }
 
     // 7) 写回 R2 + 强制刷新 KV 缓存（24h TTL）
-    await putMemory(env, memory);
+    const saved = await putMemory(env, memory);
+    if (!saved) {
+      console.error('[daily] 记忆写回失败（R2 读回校验未通过），跳过索引与 context 重建，避免两者不一致');
+    }
     // 重建 D1 记忆检索索引（幂等；失败不影响归档，下次可手动 /api/admin/memory/reindex）
-    try {
+    if (saved) try {
       const idx = await reindexMemory(env);
       if (idx.errors) console.error('[daily] memory reindex failed:', idx.errors);
       else console.log(`[daily] 记忆索引重建：${idx.entries} 条，含向量 ${idx.withVec} 条`);
@@ -518,7 +521,7 @@ export async function archiveOneDay(
       console.error('[daily] memory reindex error:', e);
     }
     // Phase 2：同步 Memory Context（facts/events/chunks）；表未迁移时只记录，不影响归档。
-    try {
+    if (saved) try {
       const ctx = await replaceMemoryContext(env, memory, 'memory');
       console.log(
         `[daily] memory context：facts=${ctx.facts} events=${ctx.events} chunks=${ctx.chunks}`,
