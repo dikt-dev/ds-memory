@@ -247,8 +247,29 @@ node node_modules/wrangler/bin/wrangler.js deploy --config wrangler.local.toml \
 
 ### 仍未做
 
-- R2 `videos/` TTL 清理（需要先量占用，主桶无 S3 凭据）
+- ~~R2 `videos/` TTL 清理~~ → **2026-10-29 实测不必要**，见下方占用快照
 - 上传 hash 去重 + 魔数校验
 - Worker 侧 `link-preview` 透传 storyboard 字段（网页端用；App 不依赖）
 - `media_sheets` 元记忆（宫格目前 `#__transient`，不落库）
 - **竖屏视频比例**：宫格固定 720×405，竖屏会被拉伸，需要按源比例算画布
+### R2 占用快照（2026-10-29，S3 API 只读统计）
+
+| 前缀 | 对象数 | 大小 | 最早 | 最新 |
+|---|---|---|---|---|
+| **合计** | **49** | **18.1 MB** | 2026-10-24 | 2026-10-29 |
+| `videos/` | 1 | 0.5 MB | 10-25 | 10-25 |
+| `gifs/` | 3 | 3.4 MB | 10-25 | 10-26 |
+| `images/` | 27 | 12.7 MB | 10-24 | 10-28 |
+| `audio/` | 3 | 0.4 MB | 10-25 | 10-27 |
+| `chat_logs/` | 6 | 1.0 MB | 10-24 | 10-28 |
+| `context/` | 7 | ~0 MB | 10-24 | 10-29 |
+
+结论：
+
+- 10 GB 免费额度用了 **0.18%**；按 `images/` 约 2.5 MB/天外推，一年约 0.9 GB，**短期不需要 TTL**。
+- 真要上 TTL 也得先解决引用：消息里的 `[图片:images/…]` 会变死链。
+- 更值得做的是**上传去重**：27 张图 12.7 MB，同图重复上传会线性膨胀。
+
+统计方式（可复用）：S3 `ListObjectsV2`，URL 必须是
+`https://<acct>.r2.cloudflarestorage.com/<bucket>?list-type=2&prefix=…` ——
+前缀放 **query** 里；放进 path 会被当成对象 key，返回 `NoSuchKey`。
