@@ -18,6 +18,31 @@ export interface DeepSeekMessage {
 
 export const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
 
+/**
+ * 去掉落单的 UTF-16 代理字符。
+ * 典型来源：emoji 被截断、旧消息/提示词里只剩 `\ud83d`。
+ * JSON.stringify 会把它写成非法的 `\ud83d`，DeepSeek 直接 400。
+ */
+function stripLoneSurrogates(text: string): string {
+  return text
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, '')
+    .replace(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
+}
+
+export function sanitizeDeepSeekMessages(messages: DeepSeekMessage[]): DeepSeekMessage[] {
+  return messages.map((m) => {
+    if (typeof m.content === 'string') {
+      return { ...m, content: stripLoneSurrogates(m.content) };
+    }
+    return {
+      ...m,
+      content: m.content.map((part) =>
+        part.type === 'text' ? { ...part, text: stripLoneSurrogates(part.text) } : part,
+      ),
+    };
+  });
+}
+
 /** DeepSeek 400 常见于历史过长/请求过大；保留 system + 最近交互再试一次。 */
 function compactDeepSeekMessages(messages: DeepSeekMessage[]): DeepSeekMessage[] {
   const system = messages.filter((m) => m.role === 'system');
@@ -37,7 +62,7 @@ async function requestDeepSeek(
     headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model: env.DEEPSEEK_MODEL,
-      messages,
+      messages: sanitizeDeepSeekMessages(messages),
       ...(stream
         ? { stream: true, stream_options: { include_usage: true } }
         : { max_tokens: maxTokens ?? 4096 }),
