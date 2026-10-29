@@ -17,7 +17,7 @@
 - **活人感**：口语化风格、情绪残留、疲劳度、时段状态、反 AI 套话兜底
 - **主动消息**：早晚两档 + 白天随机，按打分决策是否真的发；支持队列或直连推送
 - **多端接入**：网页 SSE 聊天、OpenAI 兼容端点（AstrBot 等）、图片、文件
-- **语音**：手机收到的 QQ 语音转 MP3 存 R2；网页 AI 语音由手机 TTS 优先、MeloTTS 兜底；按“正文 → 语音卡”顺序显示，语音卡保留原话
+- **语音**：DS-Mobile App 内 Azure TTS 优先（走 Worker `/api/app/tts` 代理）、Android 本地 TTS 兜底；AI 回复带 `[语音]` 标记时按“正文 → 语音条”顺序显示，语音条保留原话
 - **计费**：按 token 精确计算，含提炼/摘要费用；页头显示今日与近 7 天花费
 - **全链路降级**：记忆/天气/提炼失败都不影响聊天主流程
 
@@ -127,8 +127,8 @@ USER_ADDRESS   = "主人"     # 它怎么称呼你（可删，改用记忆里的
 |---|---|---|---|
 | 长期记忆 | `memory.md` | 永久 | ≤16KB 全量注入；更大时核心+稳定画像，其余按需检索 |
 | 长期档案 | R2 `memory/archive.md` | 永久 | **按需检索**，命中才注入 |
-| 中期 | KV `memo:24h` | 最近 24 小时 | 每 3 小时或 15 条消息滚动 |
-| 短期 | D1 最近 **10 轮**原文 | 当下 | 每轮按时间从旧到新注入，每条带 `[MM-DD HH:mm]` |
+| 中期 | D1 `runtime_state` 的 `memo:24h` 纪要 | 最近 24 小时 | 每 3 小时或 15 条消息滚动（Phase 1 起已不再存 KV） |
+| 短期 | D1 最近 **15 轮**原文（技术类 30、指代前文最多 50，上限 60） | 当下 | 每轮按时间从旧到新注入，每条带 `[MM-DD HH:mm]` |
 | 结构化记忆 | D1 `memory_facts/events/summaries/chunks` | 长期 | validity + provenance；Phase 5 以 shadow 投影/检索验证 |
 
 - **密度优先**：条目用「电报体」（去虚词、单条 ≤50 字），稳定事实用 `键=值`（同键原地覆盖）
@@ -139,6 +139,8 @@ USER_ADDRESS   = "主人"     # 它怎么称呼你（可删，改用记忆里的
 - **归档可靠性**：提炼失败不会把当天标记为完成；第二天自动补跑；D1 清理只删「归档+提炼都成功」的日期
 
 > 已有部署升级：先执行 `migrations/002-memory-index-dup-of.sql`（补 `memory_entries.dup_of`），否则检索索引无法写入。
+>
+> 实现级细节（数据流向、阈值、降级矩阵、排障手册、文档与代码的不一致）见 [docs/memory-system-walkthrough.md](docs/memory-system-walkthrough.md)。
 
 ## 主动消息
 
@@ -173,7 +175,7 @@ Worker 提供 OpenAI 兼容端点，AstrBot 作为「OpenAI Compatible」服务�
 
 - 完整对话记录自动落 D1，参与每日归档与记忆提炼
 - 平台包装（`<system_reminder>`、`<attachment>` 文件附件、图片占位）在落库前自动清洗
-- 主动消息由客户端（如 [ds-qq-client](../ds-qq-client)）轮询队列投递；文件解析也在客户端侧完成
+- 移动端由 [DS-Mobile](../ds-mobile)（Android App）通过 `/api/app/*` 直连：增量消息、配对、TTS 代理、媒体回放都在这条链路上；主动消息由 App 轮询队列投递，文件解析在 App 本地完成
 
 ## API
 
@@ -202,9 +204,8 @@ Worker 提供 OpenAI 兼容端点，AstrBot 作为「OpenAI Compatible」服务�
 | GET | `/api/admin/engine-metrics?days=7` | Cookie | shadow/next 按天指标 |
 | GET | `/api/admin/storage-check` | Cookie | 小号 R2 的 put/get/delete + 主模式回源探针 |
 | POST | `/api/admin/*` | Cookie | 手动归档 / 合并 / 触发主动消息 / 刷新 memory 缓存 |
-| POST | `/api/admin/memory/refresh` | Cookie | 手动改完 R2 memory.md 后强制刷新 KV 缓存 |
-| POST | `/api/admin/memory/reload` | Cookie | 刷新 KV 缓存 + 重建记忆检索索引 |
 | POST | `/api/admin/memory/reindex` | Cookie | 只重建记忆检索索引 |
+| POST | `/api/admin/memory/reload` | Cookie | 刷新 KV 缓存 + 重建记忆检索索引 |
 | POST | `/api/admin/memory/rollup` | Cookie | 生成周/月摘要（`{level, period}`） |
 | GET | `/api/admin/relation` | Cookie | 情感全貌（5 轴关系 / 8 维情绪 / 芥蒂） |
 | POST | `/api/admin/emotion/simulate` | Cookie | 预览一段对话会生成的情绪快照 |
@@ -221,9 +222,22 @@ src/
 ├── voice.ts            # 语言层：禁用词、口语化、长度控制
 ├── character-card.ts   # 角色状态卡：时段/疲惫/离线生活
 ├── memory.ts           # memory.md 读写（R2 + KV 缓存）
-├── memory-maintenance.ts # 合并/压缩/裁剪/配额/键覆盖
+├── memory-maintenance.ts # 合并/压缩/裁剪/配额/键覆盖/关系值
 ├── memory-archive.ts   # 档案层 + 按需召回
+├── memory-index.ts     # 检索索引 + legacy 召回（关键词/向量/MMR/重排）
+├── memory-domain.ts    # Memory Context 领域模型：解析/投影/RRF+MMR
+├── memory-context-store.ts # facts/events/chunks 的 D1 持久化
+├── memory-rollups.ts   # 周/月摘要（时间金字塔）
+├── memory-jobs.ts      # 可重试记忆任务（queued/running/done/failed）
+├── memory-correction.ts # 用户显式纠正（/更正）
+├── memory-extract.ts   # 从对话抽取显式事实
+├── memory-projection.ts # facts → memory.md 投影（手动、需 confirm）
 ├── recent-memory.ts    # 中期记忆（最近 24 小时纪要）
+├── recent-context.ts   # 短期记忆：自适应 N 轮（含 R2 回补）
+├── summary.ts          # 今日滚动摘要（中期记忆兜底）
+├── context-packer.ts   # 召回结果字节预算装包
+├── aversion.ts         # 雷区主动学习（累计后写入禁忌区）
+├── runtime-store.ts    # D1 runtime_state（KV 兜底）+ 锁
 ├── distill.ts          # 提炼与压缩（DeepSeek 优先，Workers AI 兜底）
 ├── jobs.ts             # 每日归档 / 月度合并 / context 刷新
 ├── proactive*.ts       # 主动消息：时间规则、打分决策、队列
@@ -241,7 +255,7 @@ src/
 
 ```bash
 pnpm build   # tsc --noEmit
-pnpm test    # vitest（57 个测试文件 / 695 用例）
+pnpm test    # vitest（60 个测试文件 / 722 用例）
 ```
 
 ## 隐私与免责

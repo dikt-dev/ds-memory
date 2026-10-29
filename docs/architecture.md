@@ -157,6 +157,11 @@ R2 根目录/
 > 可能导致同一时段重复发送。现在改用 D1 `proactive_log` 的 `UNIQUE(date_key, slot_key)`，
 > 强一致、不会重复。（历史文档里的 `proactive:sent:*` 键已废弃。）
 
+> ⚠️ Phase 1 之后，`memo:24h`、`summary:*`（含锁）、`emotion:state`、`profile:*`、`weather:*`、
+> `cost:llm:*`、`proactive:heartbeat` 等高频键已迁到 D1 `runtime_state`（KV 仅作兜底）；
+> 上表保留的是完整键名清单与 TTL，实际存储位置见 [current-state.md §7](./current-state.md)
+> 与 [memory-system-walkthrough.md](./memory-system-walkthrough.md)。
+
 ---
 
 ## 五、核心流程
@@ -171,7 +176,7 @@ R2 根目录/
    - memory.md（KV→R2 兜底；小记忆全量，大记忆核心+稳定画像）
    - 当天 context（日期/星期/节假日/天气）
    - 今日摘要（D1 runtime_state，仅当 memo:24h 不存在时）
-   - 最近 **10 轮**消息（D1，按 turn_id 分组、时间从旧到新、每条带时间戳）
+   - 最近 **15 轮**消息（技术类自动 30、指代前文最多 50，上限 60；D1，按 turn_id 分组、时间从旧到新、每条带时间戳）
    - 按话题召回的 memory_entries top-k（关键词优先，必要时补向量）
    - Phase 2/5：Memory Context（`MEMORY_ENGINE[_QQ|_WEB]=shadow|next`；shadow 只记录对比，next 使用 facts/chunks 召回）
    - 情感快照（5 轴关系原型 + 8 维情绪 + 未化解事件 → 行为指令）
@@ -191,7 +196,7 @@ POST /v1/chat/completions（Bearer 鉴权）
 ② 清洗 AstrBot 的 <system_reminder> 和 [Image N: ...] 内部路径
 ③ 图片：普通图压缩存 R2；大 GIF 走 `POST /api/upload/image` raw binary 原样存 R2，
    客户端抽帧后用 `image_keys` 只记录原图 key → 发给 DeepSeek 的是帧拼图
-④ 组装上下文（同上；inject_history=true 时从 D1/R2 补最近 10 轮并带时间戳）
+④ 组装上下文（同上；inject_history=true 时从 D1/R2 补最近 15~50 轮并带时间戳，另有字符预算）
 ⑤ 落 user 消息（channel=astrobot，增量去重）
 ⑥ 流式/非流式返回 + 落 assistant + 计费
 ```
@@ -269,11 +274,13 @@ cron "0 20 * * *"
 |------|------|------|---------|---------|
 | **长期记忆** | 人物底色、称呼与关系、关于用户、偏好、进行中事项、共同经历、雷区、近期动态 | R2 `memory.md` | 每日归档维护，受保护分区不自动删 | ≤16KB 每轮全文；更大时核心+稳定画像+按需召回 |
 | **长期档案** | 过期「近期动态」等旧条目，带 `#标签` | R2 `memory/archive.md` | 永久 | **按需检索**，命中才注入 |
-| **中期** | 最近 24 小时的电报体纪要（3~6 条） | KV `memo:24h` | 3 小时或每 15 条消息滚动刷新 | 每轮注入（存在时替代今日摘要） |
-| **短期** | 最近 **10 轮**原文（按 turn_id 分组） | D1（不足时从 R2 归档补） | 滚动 | 每轮按时间从旧到新，每条带 `[MM-DD HH:mm]` |
+| **中期** | 最近 24 小时的电报体纪要（5~8 条） | D1 `runtime_state` 的 `memo:24h` | 3 小时或每 15 条消息滚动刷新 | 每轮注入（存在时替代今日摘要） |
+| **短期** | 最近 **15 轮**原文（技术类 30、指代前文最多 50，上限 60；按 turn_id 分组） | D1（不足时从 R2 归档补） | 滚动 | 每轮按时间从旧到新，每条带 `[MM-DD HH:mm]` |
 
-> 另有「今日摘要」（KV `summary:日期`，100 字速写，TTL 36h）作为中期记忆的兜底：
+> 另有「今日摘要」（D1 `runtime_state` 的 `summary:日期`，约 100 字，TTL 36h）作为中期记忆的兜底：
 > 中期纪要存在时不注入，避免同一段内容发两遍。
+>
+> 实现级细节见 [memory-system-walkthrough.md](./memory-system-walkthrough.md)。
 
 **保护机制**：
 - 人物底色：提炼时忽略、压缩时取出放回、裁剪时跳过（三重保护）
@@ -488,8 +495,19 @@ ds_memory/
 │   ├── memory.ts           # memory.md 读写（R2+KV）
 │   ├── memory-maintenance.ts # 记忆合并/压缩/裁剪/分区配额/关系变量
 │   ├── memory-archive.ts   # 长期档案 + 按需检索（同义词/标签/区分度）
+│   ├── memory-index.ts     # 检索索引 + legacy 召回（关键词/向量/MMR/LLM 重排）
+│   ├── memory-domain.ts    # Memory Context 领域模型：解析/投影/RRF+MMR
+│   ├── memory-context-store.ts # facts/events/chunks/summaries 的 D1 持久化
+│   ├── memory-rollups.ts   # 周/月摘要（时间金字塔）
+│   ├── memory-jobs.ts      # 可重试记忆任务队列
+│   ├── memory-correction.ts # 用户显式纠正（/更正）
+│   ├── memory-extract.ts   # 从对话抽取显式事实
+│   ├── memory-projection.ts # facts → memory.md 投影（手动、需 confirm）
 │   ├── recent-memory.ts    # 中期记忆：最近 24 小时纪要
+│   ├── recent-context.ts   # 短期记忆：自适应 15/30/50 轮 + R2 回补
 │   ├── summary.ts          # 当日滚动摘要（中期记忆的兜底）
+│   ├── context-packer.ts   # 召回结果字节预算装包
+│   ├── runtime-store.ts    # D1 runtime_state（KV 兜底）+ 原子锁
 │   ├── distill.ts          # 提炼与压缩（DeepSeek 优先，AI 兜底）
 │   ├── aversion.ts         # 雷区与禁忌的主动学习
 │   │

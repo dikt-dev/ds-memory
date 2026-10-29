@@ -1,9 +1,9 @@
 # 当前状态清单（Phase 0 基线）
 
-> 日期：2026-10-24  
+> 日期：2026-10-24（2026-10-26 随整理更新）  
 > 基线提交：`9155038`（pre-refactor checkpoint）  
 > 用途：Phase 0–5 重构的现状快照；后续变更需同步本文件  
-> 范围：`ds-memory`；`ds-qq-client` 只记录接口契约
+> 范围：`ds-memory`；移动端 `DS-Mobile` 只记录接口契约
 
 ---
 
@@ -16,9 +16,9 @@
 | 前端 | `public/index.html`，单页、零构建 |
 | 运行时 | Cloudflare Workers（免费计划） |
 | 存储 | D1 + R2（主/小号）+ KV + Workers AI |
-| 模型 | DeepSeek `deepseek-flash`（对话）、`deepseek-v4-pro`（每日提炼）、Workers AI 兜底 |
-| 手机端 | `../ds-qq-client`，Python + NapCat/OneBot 11 |
-| 测试 | 57 个测试文件、695 个用例（Phase 5 生产 shadow 后；基线为 45/631） |
+| 模型 | DeepSeek `deepseek-flash`（对话）、`deepseek-v4-flash`（每日提炼，默认）、Workers AI 兜底 |
+| 手机端 | DS-Mobile（Android App，`com.dsmobile.app`），经 `/api/app/*` 直连 |
+| 测试 | 60 个测试文件、722 个用例（Phase 5 生产 shadow 后；基线为 45/631） |
 | 构建检查 | `tsc --noEmit` |
 
 ---
@@ -184,7 +184,7 @@ KV auth / memory cache / memo / summary / emotion / heartbeat / ...
 1. 鉴权（Cookie/KV 或 Bearer）；
 2. `getMemory`（KV→R2）；
 3. `extractPromptMemory`（≤16KB 全量；否则核心+稳定画像）；
-4. `loadRecentRounds`（10 轮，D1 + R2 补）；
+4. `loadRecentRounds`（默认 15 轮，技术类 30、指代前文 50、上限 60；D1 + R2 补）；
 5. `getRecentMemo` / 今日摘要；
 6. `recallMemoryForChat`（关键词优先，必要时向量）；
 7. `processEmotionTurn`（读 KV `emotion:state`，可能写回）；
@@ -210,11 +210,11 @@ KV auth / memory cache / memo / summary / emotion / heartbeat / ...
 
 | 项 | 值 |
 |---|---|
-| 测试文件 | 57（基线 45；Phase 0 trace，Phase 1 auth/runtime，Phase 2 memory，Phase 3 affect，Phase 4 retrieval，Phase 5 flags/metrics） |
-| 测试用例 | 695（基线 631；Phase 0 +6，Phase 1 +8，Phase 2 +25，Phase 3 +7，Phase 4 +7，Phase 5 +11） |
+| 测试文件 | 58（基线 45；Phase 0 trace，Phase 1 auth/runtime，Phase 2 memory，Phase 3 affect，Phase 4 retrieval，Phase 5 flags/metrics） |
+| 测试用例 | 699（基线 631；Phase 0 +6，Phase 1 +8，Phase 2 +25，Phase 3 +7，Phase 4 +7，Phase 5 +11） |
 | 类型检查 | `node node_modules/typescript/bin/tsc --noEmit` |
 | 测试命令 | `node node_modules/vitest/vitest.mjs run` |
-| 关键测试 | 10 轮历史、记忆合并/去重、摘要触发、召回、关系/情绪、归档、队列、API 解析 |
+| 关键测试 | 短期历史、记忆合并/去重、摘要触发、召回、关系/情绪、归档、队列、API 解析 |
 
 ---
 
@@ -236,7 +236,7 @@ KV auth / memory cache / memo / summary / emotion / heartbeat / ...
 
 ## 11. 本轮重构不动的部分
 
-- `ds-qq-client` 的 NapCat/proot/媒体/TTS 实现；
+- DS-Mobile 的媒体/TTS 实现；
 - `/api/chat`、`/v1/chat/completions`、`/api/proactive/*` 的外部契约；
 - `memory.md` 作为导出/快照的兼容性；
 - 单用户模型（不引入多租户）。
