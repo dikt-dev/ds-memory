@@ -73,6 +73,7 @@ import {
   runWebProactiveSlot,
 } from './webproactive';
 import { ackSent, dropMessages, markAttempt, queueStats, takePending } from './queue';
+import { fallbackPlanTimes, readPlan } from './proactive-plan';
 import { openaiApp, stripAttachmentWrapper, checkBearer } from './openai';
 import { getLlmCost } from './llm-cost';
 import { getRecentMemo } from './recent-memory';
@@ -2097,6 +2098,29 @@ async function checkAppOrQueueAuth(c: Context<AppEnv>): Promise<boolean> {
   const device = await c.env.KV.get(`app:device:${token}`).catch(() => null);
   return device !== null;
 }
+
+/**
+ * 今日主动消息计划（App 用）。
+ *
+ * 客户端拿到 slots 后，在 `at - tolerance_min` 设一个 setAndAllowWhileIdle 闹钟，
+ * 醒来拉一次 /api/app/events。不需要 SCHEDULE_EXACT_ALARM——主动消息的时刻本来
+ * 就带随机性，晚十几分钟用户感知不到；超过 notify_deadline_min 就不弹通知。
+ */
+app.get('/api/proactive/plan', requireApp, async (c) => {
+  const today = dateKeyInBeijing();
+  const raw = (c.req.query('date') ?? today).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return c.json({ error: 'invalid_date' }, 400);
+
+  const target = Date.parse(`${raw}T00:00:00+08:00`);
+  if (!Number.isFinite(target)) return c.json({ error: 'invalid_date' }, 400);
+  // 只允许 ±7 天：既够补看错过的档，又不至于被当成历史查询接口
+  const diffDays = Math.round((target - Date.parse(`${today}T00:00:00+08:00`)) / 86400000);
+  if (Math.abs(diffDays) > 7) return c.json({ error: 'date_out_of_range' }, 400);
+
+  const plan = await readPlan(c.env, new Date(), raw);
+  // fallback 给客户端兜底：计划拉取失败时至少还有两个固定时段
+  return c.json({ ...plan, fallback: fallbackPlanTimes() });
+});
 
 /** 拉取待发送的主动消息。 */
 app.get('/api/proactive/pending', async (c) => {
