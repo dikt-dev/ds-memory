@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-30T22:01:25.391Z",
+  "at": "2026-10-30T22:03:55.985Z",
   "file": "golden-memory.local.json",
   "rows": [
     {
@@ -46,13 +46,11 @@
         "notes": "奶茶约定"
       },
       "legacy": {
-        "hit": true,
-        "hits": [
-          "奶茶"
-        ],
+        "hit": false,
+        "hits": [],
         "bad": [],
         "overLimit": false,
-        "count": 6
+        "count": 3
       },
       "next": {
         "hit": true,
@@ -159,8 +157,7 @@
       "next": {
         "hit": true,
         "hits": [
-          "奶茶",
-          "熬夜"
+          "奶茶"
         ],
         "bad": [],
         "overLimit": false,
@@ -318,7 +315,7 @@
         ],
         "bad": [],
         "overLimit": false,
-        "count": 4
+        "count": 6
       },
       "next": {
         "hit": true,
@@ -557,6 +554,40 @@
     },
     {
       "item": {
+        "id": "g4-04",
+        "query": "你还记得我什么时候第一次跟你聊天吗",
+        "expect": [
+          "凌晨四点",
+          "凌晨"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "明确追问",
+        "notes": "起源时刻"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "凌晨四点",
+          "凌晨"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "凌晨四点",
+          "凌晨"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 4
+      }
+    },
+    {
+      "item": {
         "id": "g5-01",
         "query": "在吗",
         "expect": [],
@@ -653,6 +684,73 @@
         "bad": [],
         "overLimit": false,
         "count": 0
+      }
+    },
+    {
+      "item": {
+        "id": "g6-01",
+        "query": "午饭报菜名那次",
+        "expect": [
+          "猪脚饭",
+          "菜名"
+        ],
+        "avoid": [
+          "怪物火车"
+        ],
+        "maxItems": null,
+        "section": "易混区分",
+        "notes": "别把游戏当午饭"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "猪脚饭",
+          "菜名"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "猪脚饭",
+          "菜名"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 5
+      }
+    },
+    {
+      "item": {
+        "id": "g6-02",
+        "query": "我在深圳那几天在干嘛",
+        "expect": [
+          "深圳"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "易混区分",
+        "notes": "出差段"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "深圳"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "深圳"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 5
       }
     },
     {
@@ -787,7 +885,7 @@
         ],
         "bad": [],
         "overLimit": false,
-        "count": 6
+        "count": 5
       }
     },
     {
