@@ -139,6 +139,7 @@ async function runNextEngine(
   dropped: number;
   linked: number;
   hasVector: boolean;
+  intents: string[];
   stages: NextStageMs;
 }> {
   const stages: NextStageMs = { load: 0, rank: 0, embed: 0, expand: 0 };
@@ -148,7 +149,7 @@ async function runNextEngine(
   const chunks = await loadMemoryChunks(env);
   stages.load = performance.now() - t;
   if (chunks.length === 0) {
-    return { text: '', items: 0, dropped: 0, linked: 0, hasVector: false, stages };
+    return { text: '', items: 0, dropped: 0, linked: 0, hasVector: false, intents: [], stages };
   }
 
   t = performance.now();
@@ -175,7 +176,8 @@ async function runNextEngine(
   // 一次调用同时做「想清楚要找什么」和「挑哪几条」；失败就退回确定性排序。
   t = performance.now();
   let picked = pool.slice(0, RECALL_MAX_ITEMS);
-  const selection = await selectRecall(env, {
+  let selection: Awaited<ReturnType<typeof selectRecall>> = null;
+  selection = await selectRecall(env, {
     query,
     focus,
     candidates: pool.map((chunk) => ({
@@ -214,6 +216,7 @@ async function runNextEngine(
     dropped: packed.dropped,
     linked: expanded.length - picked.length,
     hasVector: queryVec !== null,
+    intents: selection?.intents ?? [],
     stages,
   };
 }
@@ -230,17 +233,23 @@ async function runNextEngineSafe(
   deadlineMs: number,
   onTimeout: () => void,
 ): Promise<Awaited<ReturnType<typeof runNextEngine>>> {
-  const empty = {
+  const empty = emptyNext();
+  return withDeadline(runNextEngine(env, query, focus), deadlineMs, empty, onTimeout).catch(
+    () => empty,
+  );
+}
+
+/** 空结果（超时/报错时的兜底），单独提出来避免每处重复。 */
+function emptyNext(): Awaited<ReturnType<typeof runNextEngine>> {
+  return {
     text: '',
     items: 0,
     dropped: 0,
     linked: 0,
     hasVector: false,
+    intents: [],
     stages: { load: 0, rank: 0, embed: 0, expand: 0 },
   };
-  return withDeadline(runNextEngine(env, query, focus), deadlineMs, empty, onTimeout).catch(
-    () => empty,
-  );
 }
 
 /** 查询向量：失败就当没有，退回纯关键词。 */
@@ -322,7 +331,9 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
     stages = next.stages;
     // 记「封顶之后」的条数：pack 出来的 8 条会被 capRecallText 裁到 5，
     // 记未裁的数字会让指标看起来永远顶满，误导判断。
-    nextItems = nextRaw.split('\n').filter((line) => line.startsWith('- ')).length;
+    nextItems = nextRaw
+      .split('\n')
+      .filter((line) => line.startsWith('- ') && !line.includes('条相关记忆没展开')).length;
     nextLinked = next.linked;
     nextHasVector = next.hasVector;
 
@@ -370,6 +381,7 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
       // 注意：skipMemorySource 只是过滤掉 memory 来源，legacy 仍会读行/排序/可能 embed，
       // 所以这一位为 1 时 legacy_ms 仍然可能是几百毫秒。old_items=0 别直接读成「旧召回差」。
       legacySkipped: opts.skipMemorySource === true && result.legacyText.trim() === '',
+      intents: next.intents,
     }, nowMs);
   } catch (e) {
     logTrace('memory.engine.error', {

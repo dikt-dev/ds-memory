@@ -34,6 +34,8 @@ export interface RecallSample {
    * 误读成「旧召回很差」，实际是「旧召回压根没跑」。
    */
   legacySkipped: boolean;
+  /** 这一轮拆出来的检索意图（P1-1）；没有就空数组。 */
+  intents?: string[];
 }
 
 export interface RecallSampleRow extends RecallSample {
@@ -72,6 +74,9 @@ export async function ensureRecallSampleTable(env: Env): Promise<void> {
   )
     .run()
     .catch(() => undefined);
+  await env.DB.prepare('ALTER TABLE recall_samples ADD COLUMN intents TEXT')
+    .run()
+    .catch(() => undefined);
   ensured = true;
 }
 
@@ -84,8 +89,8 @@ export async function recordRecallSample(env: Env, s: RecallSample, now = Date.n
       `INSERT INTO recall_samples
          (day_key, channel, mode, kind, legacy_ms, load_ms, rank_ms, embed_ms,
           expand_ms, total_ms, items, linked, has_vector, timed_out, legacy_skipped,
-          created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          intents, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
       .bind(
         dateKeyInBeijing(new Date(now)),
@@ -103,6 +108,7 @@ export async function recordRecallSample(env: Env, s: RecallSample, now = Date.n
         s.hasVector ? 1 : 0,
         s.timedOut ? 1 : 0,
         s.legacySkipped ? 1 : 0,
+        s.intents && s.intents.length > 0 ? JSON.stringify(s.intents) : null,
         now,
       )
       .run();
