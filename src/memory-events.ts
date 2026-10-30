@@ -41,10 +41,17 @@ export interface MemoryEvent {
 
 let ensured = false;
 
+/**
+ * ★ 表名必须是 `memory_event_log`，不能叫 `memory_events`。
+ *   `memory_events` 早就被 schema.sql 占用了，那是**记忆上下文投影**（id TEXT/section/summary/participants…），
+ *   和这里的事件账本（started_ms/ended_ms/title/quotes…）是两套完全不同的结构。
+ *   曾用同名导致线上 `CREATE TABLE IF NOT EXISTS` 被跳过、`CREATE UNIQUE INDEX … (started_ms, ended_ms)`
+ *   报 `no such column: started_ms`，整个回填接口 500，阶段 A 从未写入成功（2026-10-31 修复）。
+ */
 export async function ensureEventsTable(env: Env): Promise<void> {
   if (ensured) return;
   await env.DB.prepare(
-    `CREATE TABLE IF NOT EXISTS memory_events (
+    `CREATE TABLE IF NOT EXISTS memory_event_log (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
        date_key TEXT NOT NULL,
        started_ms INTEGER NOT NULL,
@@ -62,7 +69,7 @@ export async function ensureEventsTable(env: Env): Promise<void> {
      )`,
   ).run();
   await env.DB.prepare(
-    `CREATE UNIQUE INDEX IF NOT EXISTS idx_events_range ON memory_events(started_ms, ended_ms)`).run();
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_event_log_range ON memory_event_log(started_ms, ended_ms)`).run();
   ensured = true;
 }
 
@@ -182,7 +189,7 @@ export async function extractEvent(env: Env, rows: EventSourceRow[]): Promise<Me
 export async function writeEvent(env: Env, ev: MemoryEvent): Promise<void> {
   await ensureEventsTable(env);
   await env.DB.prepare(
-    `INSERT INTO memory_events
+    `INSERT INTO memory_event_log
        (date_key, started_ms, ended_ms, title, summary, quotes, msg_ids, entities, facts, importance, status, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "active", ?)
      ON CONFLICT(started_ms, ended_ms) DO UPDATE SET
@@ -282,7 +289,7 @@ export async function readEventStats(env: Env, days = 7): Promise<EventStats> {
               COUNT(DISTINCT date_key) AS days,
               ROUND(AVG(importance), 2) AS avg_importance,
               SUM(CASE WHEN quotes != "[]" THEN 1 ELSE 0 END) AS with_quotes
-       FROM memory_events WHERE date_key >= ?`,
+       FROM memory_event_log WHERE date_key >= ?`,
     )
       .bind(cutoff)
       .first<{ total: number; days: number; avg_importance: number | null; with_quotes: number | null }>();
