@@ -76,6 +76,7 @@
 | 文件 | 内容 |
 |---|---|
 | `runbooks/backup-rollback.md` | 备份与回滚操作手册 |
+| `runbooks/deploy-2026-11-01.md` | 11-01 12:00 发布手册：前置检查、命令、验证、回滚 |
 | `runbooks/operations-notes.md` | 日常运维零散笔记 |
 | `eval/` | 评测夹具：`golden-memory.json`、`affect-scenarios.json`、`safety-cases.json`、`fixture-memory.md` |
 
