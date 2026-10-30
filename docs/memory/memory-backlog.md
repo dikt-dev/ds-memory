@@ -4,7 +4,7 @@
 
 状态说明：本文件只记录尚未实施的事项。已完成项见 `docs/memory/memory-project-comparison.md` 的“已落地”和 `docs/phases/phase-5/phase-5-observation-day3.md`。
 
-> 统一排期与“什么时候开始做”见 [pending-work.md](./pending-work.md)；本文件保留技术细节。
+> 统一排期与“什么时候开始做”见 [pending-work.md](../pending-work.md)；本文件保留技术细节。
 
 ## 总览
 

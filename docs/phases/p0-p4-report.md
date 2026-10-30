@@ -550,7 +550,7 @@ context-stats → events=5, chunks=13
 
 > 日期：2026-10-24  
 > 状态：✅ 工程门禁通过（tag `refactor-p3`；生产 7 天影子在 Phase 5 上线前）  
-> 规则文档：[affect-policy.md](ds-memory/docs/plans/affect-policy.md)
+> 规则文档：[affect-policy.md](../plans/affect-policy.md)
 
 ---
 
