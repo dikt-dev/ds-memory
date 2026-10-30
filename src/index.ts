@@ -94,6 +94,13 @@ import { listAffectTimeline, recordAttitudeSnapshot } from './affect-store';
 import { readRecallSamples, summarizeSamples } from './recall-samples';
 import { readUsageStats, summarizeUsage } from './usage-stats';
 import { backfillEvents, readEventStats } from './memory-events';
+import {
+  insertKeepsake,
+  loadKeepsakes,
+  refreshKeepsakesBlock,
+  setKeepsakePinned,
+  setKeepsakeStatus,
+} from './keepsakes';
 import { readEngineMetrics } from './engine-metrics';
 import {
   ackTtsJob,
@@ -1290,6 +1297,66 @@ app.post('/api/admin/memory/events/backfill', requireAuth, async (c) => {
   return c.json({ ok: true, ...result });
 });
 
+/** 铭记：列表（默认只看已通过；pending=1 看候选）。 */
+app.get('/api/admin/memory/keepsakes', requireAuth, async (c) => {
+  const status = c.req.query('status');
+  const items = await loadKeepsakes(
+    c.env,
+    status === 'pending' || status === 'approved' || status === 'rejected' ? status : undefined,
+  );
+  return c.json({ ok: true, items });
+});
+
+/** 铭记：手动新增（source=manual，直接通过）。 */
+app.post('/api/admin/memory/keepsakes', requireAuth, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!body || typeof body.title !== 'string') {
+    return c.json({ ok: false, error: 'need title' }, 400);
+  }
+  const happenedAt =
+    typeof body.happened_at === 'number'
+      ? body.happened_at
+      : typeof body.happened_at === 'string'
+        ? Date.parse(body.happened_at)
+        : Date.now();
+  const outcome = await insertKeepsake(c.env, {
+    kind: (typeof body.kind === 'string' ? body.kind : 'custom') as never,
+    tone: (typeof body.tone === 'string' ? body.tone : 'warm') as never,
+    title: body.title,
+    detail: typeof body.detail === 'string' ? body.detail : '',
+    happened_at: Number.isFinite(happenedAt) ? happenedAt : Date.now(),
+    source: 'manual',
+    status: 'approved',
+    evidence: typeof body.evidence === 'string' ? body.evidence : '',
+  });
+  if (outcome !== 'inserted') return c.json({ ok: false, outcome }, 409);
+  await refreshKeepsakesBlock(c.env);
+  return c.json({ ok: true, outcome });
+});
+
+/** 铭记：审核（approved / rejected）。 */
+app.post('/api/admin/memory/keepsakes/:id/status', requireAuth, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { status?: string } | null;
+  const status = body?.status;
+  if (status !== 'approved' && status !== 'rejected' && status !== 'pending') {
+    return c.json({ ok: false, error: 'bad status' }, 400);
+  }
+  const id = c.req.param('id') ?? '';
+  const ok = await setKeepsakeStatus(c.env, id, status);
+  if (ok) await refreshKeepsakesBlock(c.env);
+  return c.json({ ok });
+});
+
+/** 铭记：放回/移出常驻注入。 */
+app.post('/api/admin/memory/keepsakes/:id/pin', requireAuth, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { pinned?: number } | null;
+  const pinned = body?.pinned === 0 ? 0 : 1;
+  const id = c.req.param('id') ?? '';
+  const ok = await setKeepsakePinned(c.env, id, pinned);
+  if (ok) await refreshKeepsakesBlock(c.env);
+  return c.json({ ok, pinned });
+});
+
 /** 成本看板：按天聚合 token / 费用 / 缓存命中率（只读）。 */
 app.get('/api/admin/cost', requireAuth, async (c) => {
   const days = Math.min(30, Math.max(1, Number(c.req.query('days') ?? 7) || 7));
@@ -1311,7 +1378,7 @@ app.get('/api/admin/readiness', requireAuth, async (c) => {
     'attitude_snapshots',
     'engine_metrics',
     'chat_usage',
-    'memory_events',
+    'memory_keepsakes',
   ];
   const checks: Record<string, string> = {};
   for (const table of tables) {

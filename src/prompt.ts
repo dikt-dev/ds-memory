@@ -48,6 +48,8 @@ export interface BasePromptArgs {
   attitude?: string | null;
   /** 这一轮的脾气（由情绪换算，见 temper.ts） */
   temper?: string | null;
+  /** 铭记块（已渲染好的 Markdown，空串表示没有） */
+  keepsakes?: string | null;
   /** 消息来源渠道 */
   channel: MessageChannel;
   /** 角色状态卡（当前的它：开场白引导 + 时段状态 + 疲惫） */
@@ -90,6 +92,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     todaySummary,
     attitude,
   temper,
+  keepsakes,
     channel,
     characterCard,
     voice,
@@ -146,6 +149,10 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   lines.push(memoryParts.stable || '（暂无记忆）');
   if (memoryMode === 'compact') {
     lines.push('（其余记忆按本轮话题检索，可能不完整；没检索到就说记不清，不要编。）');
+  }
+  if (keepsakes?.trim()) {
+    lines.push('');
+    lines.push(keepsakes.trim());
   }
   lines.push('');
   lines.push('## 记忆怎么用');

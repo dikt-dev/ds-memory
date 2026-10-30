@@ -32,6 +32,7 @@ import { markProfileDirty } from './profile-cache';
 import { buildCharacterCard } from './character-card';
 import { facetsOf, processEmotionTurn } from './emotion-context';
 import { computeTemper } from './temper';
+import { loadKeepsakesBlock } from './keepsakes';
 import { moodFromVector } from './emotion-vector';
 import { readSessionFacts } from './session-facts';
 import { buildVoiceDirective, recentOpeners } from './voice';
@@ -170,6 +171,9 @@ export async function streamChat(
     allowAiReview: true,
   });
 
+  // ★ 铭记：常驻注入，不参与召回。KV 缓存，避免每轮查 D1。
+  const keepsakesBlock = await loadKeepsakesBlock(env).catch(() => '');
+
   // ★ 脾气：情绪 → 配合度。让她可以拒绝，而不是"委屈地答应"。
   const temper = computeTemper({
     vector: emotion.state.vector,
@@ -281,6 +285,7 @@ export async function streamChat(
         avoidOpeners,
         attitude,
         temper: temper.line,
+        keepsakes: keepsakesBlock,
         characterName: env.CHARACTER_NAME,
         userAddress: env.USER_ADDRESS,
   });

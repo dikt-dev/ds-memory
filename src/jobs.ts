@@ -17,6 +17,12 @@ import {
 import { attachDistillation, attachRelation, attachWeather, getOrCreateDayContext } from './context';
 import { fetchWeather } from './weather';
 import { getMemory, putMemory } from './memory';
+import {
+  detectAiKeepsakes,
+  detectRuleKeepsakes,
+  insertKeepsake,
+  refreshKeepsakesBlock,
+} from './keepsakes';
 import { reindexMemory } from './memory-index';
 import { backfillMemoryProvenance, embedMemoryChunks, replaceMemoryContext, syncRollupSummaries } from './memory-context-store';
 import { cleanupMemoryTables, enqueueMemoryJob, runMemoryJobs } from './memory-jobs';
@@ -297,6 +303,21 @@ export async function archiveOneDay(
           // 兜底模型返回空内容 → 视为失败，任务标 failed，下次补提炼
           distillError = 'Workers AI 兜底返回空内容';
         }
+        // 铭记：规则先跑（零成本、确定性强），再让 v4-pro 挑候选（进待审核，不直接注入）。
+        // 任何失败都只记日志，绝不影响当天记忆归档。
+        try {
+          const ruleHits = await detectRuleKeepsakes(env, now.getTime(), {
+            conversation,
+            memory,
+          });
+          for (const k of ruleHits) await insertKeepsake(env, k);
+          const aiHits = await detectAiKeepsakes(env, target, conversation);
+          for (const k of aiHits) await insertKeepsake(env, k);
+          if (ruleHits.length > 0 || aiHits.length > 0) await refreshKeepsakesBlock(env);
+        } catch (e) {
+          console.error('[daily] keepsake detect failed:', e);
+        }
+
         // 收集关系驱动统计（量 → 亲密度，质 → 好感度）
         const streakDays = await computeStreak(env, target);
         const daysSinceInteraction = await daysSinceLastUserMessage(env, now);
