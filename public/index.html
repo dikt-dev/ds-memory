@@ -892,8 +892,9 @@ function renderUserContent(content) {
   }
   html += escapeHtml(content.slice(last));
   // 占位符在整体转义后还原成卡片，避免 <div> 被 escapeHtml 转成文字。
+  // 卡片是块级元素且自带 margin-top，前面残留的换行会变成一行空行——一起吃掉。
   fileCards.forEach((card, i) => {
-    html = html.replace(`\u0000DSFILE${i}\u0000`, card);
+    html = html.replace(new RegExp(`\\s*\u0000DSFILE${i}\u0000`), card);
   });
   // 兼容旧记录：只有 [图片] 没有 R2 路径时，显示灰色提示而不是裸露的方括号文字
   html = html.replace(/\[图片\]/g, '<span class="img-missing">[图片未存档]</span>');
