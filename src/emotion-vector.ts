@@ -205,12 +205,6 @@ export function dominantEmotions(vector: EmotionVector, min = 15, limit = 2): Do
   return items.slice(0, limit);
 }
 
-/** 情绪向量的可读签名（日志/测试用）。 */
-export function emotionSignature(vector: EmotionVector): string {
-  const parts = EMOTION_DIMS.filter((d) => vector[d] !== 0).map((d) => `${d}:${vector[d]}`);
-  return parts.length === 0 ? 'neutral' : parts.join(',');
-}
-
 /**
  * 由情绪向量派生的心情值（0-1000，兼容旧记忆里的「心情值」行）。
  *

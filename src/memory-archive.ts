@@ -26,16 +26,6 @@ let archiveMemoryCache: { at: number; text: string } | null = null;
 
 /** 核心层目标体积：超过 24KB 时把最旧往事无损搬进档案（仍可被索引召回）。 */
 export const CORE_TARGET_BYTES = 24000;
-/** 一次注入最多带几条往事 */
-export const RECALL_LIMIT = 4;
-/** 命中分数下限（低于它视为噪声，宁缺毋滥） */
-export const RECALL_MIN_SCORE = 2;
-/** 命中行内标签的加分 */
-export const TAG_BOOST = 3;
-/** 命中英文/数字强词的加分（项目名、命令、缩写） */
-export const WORD_BOOST = 2;
-/** 命中同义词扩展词的加分（语义相近，比普通 bigram 更有说服力） */
-export const ALIAS_BOOST = 2;
 
 /* ---------- 同义词 / 别名扩展 ---------- */
 
@@ -231,7 +221,6 @@ export function bigrams(text: string): string[] {
 export function strongWords(text: string): string[] {
   return [...text.toLowerCase().matchAll(/[a-z0-9][a-z0-9_.-]{1,20}/g)].map((m) => m[0]);
 }
-
 
 /** 渲染成提示词里的一块；没有命中返回空串。 */
 

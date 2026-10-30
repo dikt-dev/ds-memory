@@ -156,16 +156,6 @@ export async function insertProactiveMessage(
   return { ...row, turn_id: row.id };
 }
 
-/** 最近 N 条消息（按时间正序返回）。 */
-export async function recentMessages(env: Env, limit = 12): Promise<MessageRow[]> {
-  const result = await env.DB.prepare(
-    `SELECT ${SELECT_COLS} FROM messages ORDER BY created_ms DESC, id DESC LIMIT ?`,
-  )
-    .bind(limit)
-    .all<MessageRow>();
-  return (result.results ?? []).reverse();
-}
-
 /** 消息比较：先时间，再 id，保证同一毫秒内也有稳定顺序。 */
 function compareMessages(a: MessageRow, b: MessageRow): number {
   return a.created_ms - b.created_ms || a.id - b.id;

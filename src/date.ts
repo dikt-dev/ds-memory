@@ -127,13 +127,6 @@ export function previousMonthKey(mk: string): string {
   return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
-/** 月份键的下一个月 'YYYY-MM'。 */
-export function nextMonthKey(mk: string): string {
-  const [y, m] = mk.split('-').map(Number);
-  const dt = new Date(Date.UTC(y, m, 1));
-  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}`;
-}
-
 /** 月份键对应的天数（如 2026-02 → 28）。 */
 export function daysInMonth(mk: string): number {
   const [y, m] = mk.split('-').map(Number);

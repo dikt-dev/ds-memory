@@ -177,15 +177,3 @@ export async function loadSessionHistory(env: Env, now: Date = new Date()): Prom
   const kept = turns.slice(-SESSION_KEEP_ROUNDS).flat();
   return { rows: kept, brief: buildSessionBrief(dropped), rounds: turns.length };
 }
-
-/**
- * 兼容旧调用：按“消息条数”估算轮数。
- * 新代码请直接用 loadRecentRounds。
- */
-export async function loadRecentHistory(
-  env: Env,
-  limit: number,
-  now: Date,
-): Promise<MessageRow[]> {
-  return loadRecentRounds(env, Math.max(1, Math.ceil(limit / 2)), now);
-}

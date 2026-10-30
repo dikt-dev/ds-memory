@@ -319,14 +319,3 @@ export async function linksForMemory(
   }
   return { links: links.results ?? [], nodes };
 }
-
-/** 调试/审计用：某条记忆直接关联了多少条。 */
-export async function linkedCount(env: Env, type: 'fact' | 'event', id: string): Promise<number> {
-  const row = await env.DB.prepare(
-    `SELECT COUNT(*) AS c FROM memory_links
-     WHERE (from_type = ? AND from_id = ?) OR (to_type = ? AND to_id = ?)`,
-  )
-    .bind(type, id, type, id)
-    .first<{ c: number }>();
-  return Number(row?.c) || 0;
-}

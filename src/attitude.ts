@@ -36,15 +36,6 @@ export const INTIMACY_STAGES: Stage[] = [
   { min: 850, label: '知己' },
 ];
 
-/** 心情阶段 */
-export const MOOD_STAGES: Stage[] = [
-  { min: 0, label: '低落' },
-  { min: 350, label: '平静' },
-  { min: 550, label: '轻快' },
-  { min: 750, label: '愉快' },
-  { min: 900, label: '雀跃' },
-];
-
 /** 阶段索引。 */
 export function stageIndex(value: number, stages: Stage[]): number {
   let idx = 0;

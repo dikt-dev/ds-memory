@@ -8,7 +8,6 @@ import type { Env } from './types';
 import { dateKeyInBeijing } from './date';
 
 export type EngineMetricKind = 'memory' | 'affect' | 'proactive';
-export type EngineMetricMode = 'shadow' | 'next';
 
 export interface EngineMetricInput {
   channel: string;

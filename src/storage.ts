@@ -67,11 +67,6 @@ export async function setStorageMode(env: Env, mode: StorageMode): Promise<void>
   modeCache = { mode, at: Date.now() };
 }
 
-/** 测试/手动切换后立即按最新模式读取。 */
-export function invalidateStorageModeCache(_env?: Env): void {
-  modeCache = null;
-}
-
 export interface StoredObject {
   size: number;
   httpMetadata?: { contentType?: string };

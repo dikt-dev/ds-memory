@@ -140,13 +140,6 @@ export const OVERWRITE_KEY_RE = new RegExp(
 /** 会随时间变化、应当「原地覆盖」而非叠加的分区。 */
 export const OVERWRITE_HEADERS: string[] = ['## 偏好与习惯', '## 关于用户'];
 
-/**
- * 走「分层」而不是「合并」的分区：超预算时把最旧的搬进 R2 档案。
- * 这些分区不能交给 SECTION_BUDGETS 合并——合并会把不同话题摄成一条，
- * 反而降低档案检索的精度。
- */
-export const DEMOTE_HEADERS: string[] = ['## 共同经历', '## 进行中的事项', '## 近期动态'];
-
 /** 取条目的覆盖键（归一化后）；不是键值写法则返回 null。 */
 export function overwriteKeyOf(line: string): string | null {
   const m = line.match(OVERWRITE_KEY_RE);
@@ -199,8 +192,6 @@ export const TRUST_DEFAULT = 600;
 export const RESPECT_DEFAULT = 650;
 /** 心动默认值：新关系不自带暧昧。 */
 export const ATTRACTION_DEFAULT = 300;
-/** 好感度/亲密度单日变化上限（慢变量）。 */
-export const RELATION_MAX_DAILY_DELTA = 5;
 /** 心情值单日变化上限（快变量）。 */
 export const MOOD_MAX_DAILY_DELTA = 80;
 
@@ -419,7 +410,6 @@ export function reportSectionBudgets(text: string): SectionBudget[] {
     return { header, bytes, budget, over: budget > 0 && bytes > budget };
   });
 }
-
 
 /**
  * 分层：把某个分区里最旧的条目搬出去（交由调用方写入 R2 档案层），
@@ -752,7 +742,6 @@ export function archiveCompletedItems(
 
   return { text: reassemble(pre, next), moved: toMove.length, titles };
 }
-
 
 /** 把"人物底色"区块放回（放在第一个分类位置，保持固定顺序）。 */
 

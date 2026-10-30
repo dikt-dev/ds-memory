@@ -28,9 +28,6 @@ export interface RelationSnapshot extends RelationStatus {
   updated_at: string;
 }
 
-/** 兼容旧字段名（relation 里现在有 mood） */
-export type RelationSnapshotV2 = RelationStatus & { updated_at: string };
-
 export const contextKey = (dateKey: string) => `context/${dateKey}.json`;
 
 /**
