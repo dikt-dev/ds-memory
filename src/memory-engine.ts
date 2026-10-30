@@ -22,8 +22,14 @@ import { embedTexts, recallMemoryForChat } from './memory-index';
 import { byteLength } from './memory-maintenance';
 import { logTrace } from './trace';
 
-/** 整条召回的时间预算。超时就当没召回——空召回是合法降级，卡住不是。 */
-export const RECALL_DEADLINE_MS = 800;
+/**
+ * 整条召回的时间预算。超时就当没召回——空召回是合法降级，卡住不是。
+ *
+ * 2026-10-30 按实测校准：shadow 路径（只跑新引擎，不含 legacy）的平均耗时
+ * 10-27 171ms → 10-28 345ms → 10-29 503ms，随索引增长接近线性上升。
+ * 800ms 在 legacy + 新引擎串行时几乎必然撞线，所以放宽到 1500ms。
+ */
+export const RECALL_DEADLINE_MS = 1500;
 
 /** 输出封顶：条数与每条字数。借鉴 dsh-fish 的"回忆不是读档"。 */
 export const RECALL_MAX_ITEMS = 8;

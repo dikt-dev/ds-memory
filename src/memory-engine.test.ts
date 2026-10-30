@@ -60,7 +60,7 @@ describe('resolveRecall 门控', () => {
     expect(r.timedOut).toBe(false);
   });
 
-  it('默认预算符合 800ms 约定', () => {
-    expect(RECALL_DEADLINE_MS).toBe(800);
+  it('默认预算按实测校准到 1500ms', () => {
+    expect(RECALL_DEADLINE_MS).toBe(1500);
   });
 });
