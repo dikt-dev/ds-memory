@@ -2203,11 +2203,14 @@ app.get('*', async (c) => {
   const name = c.env.CHARACTER_NAME?.trim() || '小忆';
   const original = await upstream.text();
   const replaced = original.replace(/小忆/g, name);
+  const headers = new Headers(
+    [...upstream.headers].filter(([k]) => k.toLowerCase() !== 'content-length'),
+  );
+  // 页面本身必须每次回源校验：静态资源没有 ETag/Last-Modified 时，浏览器会
+  // 按启发式缓存一直用旧页面，前端改了也看不到（我们踩过：改了 JS 用户还在跑旧版）。
+  headers.set('cache-control', 'no-store');
   return new Response(replaced, {
-    // 内容长度已变，去掉沿袭自上游的 content-length，避免响应被截断
-    headers: new Headers(
-      [...upstream.headers].filter(([k]) => k.toLowerCase() !== 'content-length'),
-    ),
+    headers,
     status: upstream.status,
   });
 });

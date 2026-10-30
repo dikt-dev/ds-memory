@@ -1200,7 +1200,9 @@ async function loadDay() {
     const res = await fetch('/api/day');
     const d = await res.json();
     const weatherPart = d.weather ? ` · ${d.weather.desc} ${d.weather.temp_c}°C` : '';
-    $('dayInfo').textContent = `${d.date} ${d.weekday} · ${d.holiday_note} · ${d.city}${weatherPart}`;
+    // 顶栏只有一行，日期带年份 + 节日说明会把三个 chip 全挤成省略号，这里只留月日
+    $('dayInfo').textContent = `${(d.date || '').slice(5)} ${d.weekday} · ${d.city}${weatherPart}`;
+    $('dayInfo').title = `${d.date} ${d.weekday}${d.holiday_note ? ' · ' + d.holiday_note : ''} · ${d.city}${weatherPart}`;
   } catch { /* 忽略 */ }
 }
 
@@ -1233,8 +1235,8 @@ async function loadUsage() {
     const res = await fetch('/api/usage');
     if (res.status === 401) return;
     usageData = await res.json();
-    $('usageInfo').textContent =
-      `今日 ¥${(usageData.today || 0).toFixed(4)} · 7天 ¥${(usageData.total_7d || 0).toFixed(3)}`;
+    $('usageInfo').textContent = `今日 ¥${(usageData.today || 0).toFixed(4)}`;
+    $('usageInfo').title = `今日 ¥${(usageData.today || 0).toFixed(4)} · 最近 7 天 ¥${(usageData.total_7d || 0).toFixed(3)}（点击看明细）`;
   } catch { /* 忽略 */ }
 }
 $('usageInfo').addEventListener('click', () => {
