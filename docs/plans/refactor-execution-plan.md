@@ -12,12 +12,12 @@
 
 | Phase | 状态 | 报告/证据 | 提交/tag |
 |---|---|---|---|
-| 0 | ✅ 完成（tagged） | `docs/phase-0-report.md` | `refactor-p0` |
-| 1 | ✅ 完成（tagged） | `docs/phase-1-report.md` | `refactor-p1` |
-| 2 | ✅ 完成（工程门禁；7 天生产影子在 Phase 5 上线前） | `docs/phase-2-progress.md` | `refactor-p2` |
-| 3 | ✅ 完成（工程门禁；7 天生产影子在 Phase 5 上线前） | `docs/phase-3-progress.md` | `refactor-p3` |
-| 4 | ✅ 完成（工程门禁；真实 embedding/生产 p95 在 Phase 5） | `docs/phase-4-progress.md` | `refactor-p4` |
-| 5 | 🚧 生产已部署，回滚演练通过；QQ shadow 观察中，7 天/2 周门禁未完成 | `docs/phase-5-progress.md`、`docs/phase-5-cutover.md` | `refactor-p5` |
+| 0 | ✅ 完成（tagged） | `docs/phases/p0-p4-report.md` | `refactor-p0` |
+| 1 | ✅ 完成（tagged） | `docs/phases/p0-p4-report.md` | `refactor-p1` |
+| 2 | ✅ 完成（工程门禁；7 天生产影子在 Phase 5 上线前） | `docs/phases/p0-p4-report.md` | `refactor-p2` |
+| 3 | ✅ 完成（工程门禁；7 天生产影子在 Phase 5 上线前） | `docs/phases/p0-p4-report.md` | `refactor-p3` |
+| 4 | ✅ 完成（工程门禁；真实 embedding/生产 p95 在 Phase 5） | `docs/phases/p0-p4-report.md` | `refactor-p4` |
+| 5 | 🚧 生产已部署，回滚演练通过；QQ shadow 观察中，7 天/2 周门禁未完成 | `docs/phases/phase-5/phase-5-progress.md`、`docs/phases/phase-5/phase-5-cutover.md` | `refactor-p5` |
 
 ---
 
@@ -356,7 +356,7 @@
 
 **步骤**：
 
-1. 写 `docs/affect-policy.md`：5 轴、上限、衰减、半衰期、委屈/道歉；
+1. 写 `docs/plans/affect-policy.md`：5 轴、上限、衰减、半衰期、委屈/道歉；
 2. 明确“心情派生、态度策略”；
 3. 场景集评审。
 

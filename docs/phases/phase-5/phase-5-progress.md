@@ -2,7 +2,7 @@
 
 > 日期：2026-10-24  
 > 状态：🚧 进行中（**生产已迁移/部署；回滚演练通过；QQ shadow 观察中；7 天/2 周门禁未完成**）  
-> runbook：[phase-5-cutover.md](ds-memory/docs/phase-5-cutover.md)
+> runbook：[phase-5-cutover.md](ds-memory/docs/phases/phase-5/phase-5-cutover.md)
 
 ---
 

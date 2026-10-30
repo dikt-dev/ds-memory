@@ -61,7 +61,7 @@ monthly_merge(2026-10)
 出最终观察报告：
 
 ```text
-docs/phase-5-final-review.md
+docs/phases/phase-5/phase-5-final-review.md
 ```
 
 内容包括：
@@ -341,7 +341,7 @@ AFFECT_ENGINE_WEB=legacy
 观察结束后应产出：
 
 ```text
-docs/phase-5-final-review.md
+docs/phases/phase-5/phase-5-final-review.md
 ```
 
 包含：

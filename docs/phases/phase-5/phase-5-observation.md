@@ -55,7 +55,7 @@ backup/p5-observation/YYYY-MM-DD.json
 - 连续 2 周无 P0；
 - `readiness` 全绿；D1/R2 在免费额度；
 - 回滚演练通过；
-- 旧表/旧代码按 `p5-cleanup-manifest.md` 清理（先备份）。
+- 旧表/旧代码按 `docs/logs/p5-cleanup-manifest.md` 清理（先备份）。
 
 全部通过后再：
 

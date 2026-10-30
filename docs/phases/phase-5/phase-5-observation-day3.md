@@ -171,7 +171,7 @@ AI 有正文   → 就是正常回复，[END] 只作为格式标记剔除
 ### 交付物
 
 ```text
-docs/memory-project-comparison.md
+docs/memory/memory-project-comparison.md
 ```
 
 内容至少包括：
@@ -313,7 +313,7 @@ docs/memory-project-comparison.md
 docs/pending-work.md
 ```
 
-技术细节仍保留在 `docs/memory-backlog.md`。
+技术细节仍保留在 `docs/memory/memory-backlog.md`。
 
 ## 上下文预算与回归骨架（Day 3 后补）
 
@@ -329,4 +329,4 @@ docs/pending-work.md
 
 ### 仍未做
 
-见 `docs/memory-backlog.md`：跨日期近重复合并、FTS/CJK、记忆 UI、主动消息暂停、BaiShou/Companion 补齐、来源追溯 UI。
+见 `docs/memory/memory-backlog.md`：跨日期近重复合并、FTS/CJK、记忆 UI、主动消息暂停、BaiShou/Companion 补齐、来源追溯 UI。

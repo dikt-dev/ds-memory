@@ -2,7 +2,7 @@
 
 更新：2026-10-28
 
-状态说明：本文件只记录尚未实施的事项。已完成项见 `docs/memory-project-comparison.md` 的“已落地”和 `docs/phase-5-observation-day3.md`。
+状态说明：本文件只记录尚未实施的事项。已完成项见 `docs/memory/memory-project-comparison.md` 的“已落地”和 `docs/phases/phase-5/phase-5-observation-day3.md`。
 
 > 统一排期与“什么时候开始做”见 [pending-work.md](./pending-work.md)；本文件保留技术细节。
 
@@ -99,7 +99,7 @@ memory.dropped_items
 已有回归方案：
 
 ```text
-docs/memory-regression-plan.md
+docs/plans/memory-regression-plan.md
 ```
 
 但还没有固定样本和自动执行。

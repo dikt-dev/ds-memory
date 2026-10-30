@@ -17,7 +17,7 @@
 > | 只注入最近 10 轮历史 | 最近 20 条，另加四层记忆（长期核心/档案/中期/短期） |
 >
 > 新增能力（分层记忆、活人感、主动消息引擎、关系三维驱动等）不在本文件范围内，
-> 请看 `docs/architecture.md` 与 `docs/liveliness-plan.md`。
+> 请看 `docs/architecture.md` 与 `docs/plans/liveliness-plan.md`。
 
 ---
 

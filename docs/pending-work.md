@@ -2,7 +2,7 @@
 
 更新：2026-10-28
 
-> 代码评估复核与修复优先级见 [memory-code-review-response-2026-10-28.md](./memory-code-review-response-2026-10-28.md)。
+> 代码评估复核与修复优先级见 [code-review-responses.md](./memory/code-review-responses.md)。
 
 七天观察窗口：
 
@@ -329,7 +329,7 @@ GET /api/admin/memory/links?type=fact&id=fact_xxx
   不是小改，单独排期。
 - **提炼 token 分项已开始记录**：`cron_runs.detail` 里新增
   `token 命中X/未命中Y/输出Z`，用来解释提炼费用的日间波动。
-## 记忆快照（docs/memory-rollback-plan.md）
+## 记忆快照（docs/memory/memory-rollback-plan.md）
 
 - 已完成 2026-10-30：`src/memory-snapshot.ts` —— 写前快照、一天只写一次、失败不阻断归档、
   45 天清理、`MEMORY_SNAPSHOT=off` 开关；已接进 `runDailyArchive`，9 个用例覆盖。未部署（冻结期）。
