@@ -31,6 +31,7 @@ import { byteLength, parseRelationValues } from './memory-maintenance';
 import { markProfileDirty } from './profile-cache';
 import { buildCharacterCard } from './character-card';
 import { facetsOf, processEmotionTurn } from './emotion-context';
+import { computeTemper } from './temper';
 import { moodFromVector } from './emotion-vector';
 import { readSessionFacts } from './session-facts';
 import { buildVoiceDirective, recentOpeners } from './voice';
@@ -167,6 +168,13 @@ export async function streamChat(
     wasIgnored: facts.wasIgnored,
   });
 
+  // ★ 脾气：情绪 → 配合度。让她可以拒绝，而不是"委屈地答应"。
+  const temper = computeTemper({
+    vector: emotion.state.vector,
+    facets: emotion.facets,
+    wasIgnored: facts.wasIgnored,
+  });
+
   // Phase 3：态度策略影子/新引擎。默认 legacy，不改变回复。
   let attitude = emotion.snapshot;
   if (affectEngine === 'shadow' || affectEngine === 'next') {
@@ -270,6 +278,7 @@ export async function streamChat(
         voiceReply: true,
         avoidOpeners,
         attitude,
+        temper: temper.line,
         characterName: env.CHARACTER_NAME,
         userAddress: env.USER_ADDRESS,
   });

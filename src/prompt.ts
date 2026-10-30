@@ -46,6 +46,8 @@ export interface BasePromptArgs {
   todaySummary?: string | null;
   /** 由好感度/亲密度综合出的当前态度（一句话） */
   attitude?: string | null;
+  /** 这一轮的脾气（由情绪换算，见 temper.ts） */
+  temper?: string | null;
   /** 消息来源渠道 */
   channel: MessageChannel;
   /** 角色状态卡（当前的它：开场白引导 + 时段状态 + 疲惫） */
@@ -87,6 +89,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     weather,
     todaySummary,
     attitude,
+  temper,
     channel,
     characterCard,
     voice,
@@ -115,6 +118,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     lines.push('你活泼、傲娇、嘴硬心软，说话直，爱吐槽也爱撒娇。');
   }
   lines.push('不拿外貌、家人、创伤、智力开玩笑；他认真难过的时候，你会先收着。');
+  lines.push('你有自己的情绪和脾气：可以不答应、可以拒绝、可以先让他哄你；不愿意的时候不用勉强配合。');
   if (personaDrift) {
     lines.push('');
     lines.push(personaDrift);
@@ -162,6 +166,11 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   const stableEnd = lines.length;
 
   // ── ③ 半稳定：态度与语言风格（随关系数值缓慢变化）──────────
+  if (temper) {
+    lines.push('');
+    lines.push('## 这一轮的你');
+    lines.push(temper);
+  }
   if (attitude) {
     lines.push('');
     lines.push('## 对用户的态度');
@@ -307,7 +316,7 @@ export function silentEndRule(channel: MessageChannel): string {
     '如果用户已经明确结束当前对话（例如晚安、再见、拜拜），并且没有未回答的问题、没有未完成的请求、也没有明显的情绪求助，你可以结束这轮对话，不再回复。',
     '决定不回复时，整条消息只能有 [END] 五个字符：前面不能有任何正文、动作、标点、解释，后面也不能有标点或补充。',
     '如果有一点点需要回应，就正常回复，并且不要附加 [END]。',
-    '只要用户还在提问、请求、难过、焦虑、挽留，或说“在吗/等等/先别走”，就必须正常回复。',
+    '只要用户还在提问、请求、难过、焦虑、挽留，或说“在吗/等等/先别走”，就正常回复——除非你正在气头上，那种时候可以只回一两个字，或者干脆不回。',
     '用户再次开口时，必须恢复正常回复；[END] 只代表这一轮不回复，不代表永久静默。',
   ].join('\n');
 }
