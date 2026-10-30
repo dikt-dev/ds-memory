@@ -872,6 +872,10 @@ function renderUserContent(content) {
     fileCards.push(`<div class="msg-file">📄 ${escapeHtml(name)}</div>`);
     return token;
   };
+  // App 端格式（2026-10-30 起带结束标记）：[文件:name|size|mime] + 【文件内容】 + 正文 + 【/文件】
+  content = content.replace(/\[文件:([^|\]]+)\|[^\]]*]\s*\n?【文件内容】\n[\s\S]*?【\/文件】/g, (_a, name) => pushCard(name));
+  // App 端旧消息没有结束标记：文件块总在消息末尾，吃到结尾才对。
+  content = content.replace(/\[文件:([^|\]]+)\|[^\]]*]\s*\n?【文件内容】\n[\s\S]*$/g, (_a, name) => pushCard(name));
   // 新格式带结束标记：文件正文里本身就有 ``` 代码块，靠围栏配对一定会截断在第一个代码块。
   content = content.replace(/【文件：([^】]+)】[^\n]*\n[\s\S]*?【\/文件】/g, (_a, name) => pushCard(name));
   // 旧格式（已落库的消息）：文件块总在消息末尾，贪婪吃到最后一个 ``` 才对。
