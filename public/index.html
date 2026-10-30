@@ -867,14 +867,15 @@ function renderUserContent(content) {
   // 落库内容里包含文件原文（给 AI 读），历史渲染只显示文件卡片；
   // 否则刷新后整个文件正文会铺满聊天气泡。
   const fileCards = [];
-  content = content.replace(
-    /【文件：([^】]+)】\s*\n?```[^\n]*\n[\s\S]*?\n```/g,
-    (_all, name) => {
-      const token = `\u0000DSFILE${fileCards.length}\u0000`;
-      fileCards.push(`<div class="msg-file">📄 ${escapeHtml(name)}</div>`);
-      return token;
-    },
-  );
+  const pushCard = (name) => {
+    const token = `\u0000DSFILE${fileCards.length}\u0000`;
+    fileCards.push(`<div class="msg-file">📄 ${escapeHtml(name)}</div>`);
+    return token;
+  };
+  // 新格式带结束标记：文件正文里本身就有 ``` 代码块，靠围栏配对一定会截断在第一个代码块。
+  content = content.replace(/【文件：([^】]+)】[^\n]*\n[\s\S]*?【\/文件】/g, (_a, name) => pushCard(name));
+  // 旧格式（已落库的消息）：文件块总在消息末尾，贪婪吃到最后一个 ``` 才对。
+  content = content.replace(/【文件：([^】]+)】\s*\n?```[^\n]*\n[\s\S]*\n```/g, (_a, name) => pushCard(name));
   const re = /\[(图片|语音):((?:images|audio)\/[^\]\s]+)\]/g;
   let html = '';
   let last = 0;
@@ -1457,7 +1458,9 @@ async function send() {
   // 文件内容拼成一段「文件原文」，让 AI 能读到；图片仍走视觉
   let sendContent = content;
   if (file) {
-    const fileBlock = `【文件：${file.name}】\n\`\`\`\n${file.text}\n\`\`\``;
+    // 结束标记必须有：文件正文里的 ``` 会让「靠围栏配对」的解析提前收尾，
+    // 剩下的正文就当成聊天内容显示出来了。
+    const fileBlock = `【文件：${file.name}】\n\`\`\`\n${file.text}\n\`\`\`\n【/文件】`;
     sendContent = content ? `${content}\n\n${fileBlock}` : fileBlock;
   }
 
