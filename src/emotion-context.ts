@@ -20,6 +20,7 @@ import {
 } from './runtime-store';
 import { recordEmotionEvents, recordFacetDelta } from './affect-store';
 import {
+  applyEmotionDelta,
   applyEnvironmentToEmotion,
   decayEmotion,
   decayGrievanceDaily,
@@ -166,6 +167,8 @@ export interface EmotionTurnInput {
   wasIgnored?: boolean;
   /** 是否允许在关键路径调 Workers AI（默认关闭，避免拖慢首字延迟） */
   allowAiReview?: boolean;
+  /** 规则没抽出事件时也调 AI 复核（每日归档任务用；聊天路径不开，否则每条消息都调） */
+  reviewEmpty?: boolean;
 }
 
 export interface EmotionTurnResult {
@@ -212,9 +215,7 @@ export async function processEmotionTurn(input: EmotionTurnInput): Promise<Emoti
   // 只有「这一轮可能真的产生事件」时才加锁：普通闲聊不加锁，
   // 否则每条消息都要额外两次 KV 写（锁 + 解锁），免费额度扛不住。
   const mayWrite =
-    input.wasIgnored === true ||
-    input.allowAiReview === true ||
-    extractEmotionEvents(input.userText ?? "", input.now).length > 0;
+    input.wasIgnored === true || extractEmotionEvents(input.userText ?? '', input.now).length > 0;
   if (!mayWrite) return processEmotionTurnUnlocked(input, true);
   const locked = await acquireRuntimeLock(input.env, EMOTION_LOCK, EMOTION_LOCK_TTL);
   if (!locked) {
@@ -241,7 +242,7 @@ async function processEmotionTurnUnlocked(
   // 规则判出负向事件时也要复核：误判成「真生气」的代价不对称——
   // 她会对一句玩笑莫名其妙发火；反过来漏判只是没反应，代价小得多。
   const hasNegative = newEvents.some((e) => isNegativeEvent(e.type));
-  if (input.allowAiReview && (userText ?? "").trim() && (newEvents.length === 0 || hasNegative)) {
+  if (input.allowAiReview && (userText ?? "").trim() && (hasNegative || input.reviewEmpty === true)) {
     try {
       const aiEvents = await reviewEventsWithAI(input.env, userText, now);
       if (hasNegative) {
@@ -282,6 +283,12 @@ async function processEmotionTurnUnlocked(
   // ② 情绪向量：事件驱动 + 环境自发（按间隔折算，避免连聊几十轮把值推满）
   let vector = applyEventsToVector(state.vector, newEvents);
   const elapsedMin = Math.max(0, (now - state.at) / 60000);
+  // 长聊也会累：间隔越久（同一次对话内）越接近「聊久了」，每 30 分钟补 3 点，
+  // 单轮最多 6 点，睡着的时候由环境漂移接管。
+  if (elapsedMin >= 15 && state.vector.fatigue < 80) {
+    const chatFatigue = Math.min(6, Math.round(elapsedMin / 30) * 3);
+    if (chatFatigue > 0) vector = applyEmotionDelta(vector, { fatigue: chatFatigue });
+  }
   if (environment) {
     const envFactor = Math.min(1, elapsedMin / 180);
     if (envFactor > 0) {

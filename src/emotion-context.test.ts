@@ -98,6 +98,26 @@ describe('processEmotionTurn —— 一轮对话的完整链路', () => {
     expect(kv.puts).toBe(0);
   });
 
+  it('开了 AI 复核也不该让闲聊加锁（否则每条消息两次 KV 写）', async () => {
+    const { env, kv } = fakeEnv();
+    await processEmotionTurn({ env, now: T0, base, userText: '今天几号', allowAiReview: true });
+    expect(kv.puts).toBe(0);
+  });
+
+  it('聊久了会累', async () => {
+    const { env } = fakeEnv();
+    await saveEmotionState(env, emptyEmotionState(T0 - 90 * 60_000));
+    const long = await processEmotionTurn({ env, now: T0, base, userText: '在吗' });
+    expect(long.state.vector.fatigue).toBeGreaterThan(0);
+  });
+
+  it('刚聊完一句不会累', async () => {
+    const { env } = fakeEnv();
+    await saveEmotionState(env, emptyEmotionState(T0 - 2 * 60_000));
+    const quick = await processEmotionTurn({ env, now: T0, base, userText: '在吗' });
+    expect(quick.state.vector.fatigue).toBe(0);
+  });
+
   it('冷落会追加一条 ignored 事件', async () => {
     const { env } = fakeEnv();
     const r = await processEmotionTurn({
