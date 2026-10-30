@@ -480,16 +480,35 @@ app.get('/api/admin/storage-check', requireAuth, async (c) => {
 
 /** 当天上下文预览（含天气）。 */
 app.get('/api/day', async (c) => {
-  const ctx = buildDayContext(dateKeyInBeijing());
+  const dateKey = dateKeyInBeijing();
+  const cacheKey = `day:cache:${dateKey}`;
+  // 天气每次都要打外网，而首屏就等它：10 分钟内复用同一份
+  const cached = await c.env.KV.get(cacheKey).catch(() => null);
+  if (cached) {
+    return c.json(JSON.parse(cached) as Record<string, unknown>, 200, {
+      'cache-control': 'private, max-age=60',
+    });
+  }
+  const ctx = buildDayContext(dateKey);
   const cfg = await getCityConfig(c.env);
   const weather = await fetchWeather(c.env);
-  return c.json({ ...ctx, city: cfg.city, weather });
+  const payload = { ...ctx, city: cfg.city, weather };
+  await c.env.KV.put(cacheKey, JSON.stringify(payload), { expirationTtl: 600 }).catch(() => {});
+  return c.json(payload, 200, {
+    'cache-control': 'private, max-age=60',
+  });
 });
 
 /** DeepSeek 账户余额（代理官方接口，密钥不出服务端）。 */
 app.get('/api/balance', requireAuth, async (c) => {
   const apiKey = c.env.DEEPSEEK_API_KEY;
   if (!apiKey) return c.json({ error: 'DEEPSEEK_API_KEY 未配置' }, 500);
+  const cachedBalance = await c.env.KV.get('balance:snapshot').catch(() => null);
+  if (cachedBalance) {
+    return c.json(JSON.parse(cachedBalance) as Record<string, unknown>, 200, {
+      'cache-control': 'private, max-age=60',
+    });
+  }
   try {
     const res = await fetch('https://api.deepseek.com/user/balance', {
       headers: { authorization: `Bearer ${apiKey}` },
@@ -505,12 +524,16 @@ app.get('/api/balance', requireAuth, async (c) => {
       }>;
     };
     const info = data.balance_infos?.[0];
-    return c.json({
+    const snapshot = {
       available: data.is_available ?? false,
       currency: info?.currency ?? 'CNY',
       total: Number(info?.total_balance ?? 0),
       granted: Number(info?.granted_balance ?? 0),
       topped_up: Number(info?.topped_up_balance ?? 0),
+    };
+    await c.env.KV.put('balance:snapshot', JSON.stringify(snapshot), { expirationTtl: 300 }).catch(() => {});
+    return c.json(snapshot, 200, {
+      'cache-control': 'private, max-age=60',
     });
   } catch (e) {
     console.error('[balance] fetch failed:', e);
@@ -1261,6 +1284,7 @@ app.get('/api/history', requireAuth, async (c) => {
 
 /** 计费统计：今日 + 最近 7 天（按天聚合 D1 中 messages，并补上提炼/摘要的 KV 记账）。 */
 app.get('/api/usage', requireAuth, async (c) => {
+  // 费用统计 60 秒内不必重算
   const today = dateKeyInBeijing();
   const seven = addDays(today, -6);
   const days = await usageByDay(c.env, seven);

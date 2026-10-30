@@ -1044,11 +1044,7 @@ $('loginForm').addEventListener('submit', async (e) => {
   });
   if (res.ok) {
     $('password').value = '';
-    hideLogin();
-    await loadDay();
-    await resetAndLoadHistory();
-    loadUsage();
-    loadBalance();
+    await bootChat();
     input.focus();
   } else {
     const data = await res.json().catch(() => ({}));
@@ -1252,30 +1248,35 @@ async function fetchHistoryPage(beforeId) {
   return res.json();
 }
 
+/** 把一页历史渲染进列表；首屏和上滑加载都走这里。 */
+function applyHistoryPage(data, jumpToBottom) {
+  nextBefore = data.next_before_id ?? null;
+  hasMore = data.has_more ?? false;
+  const frag = document.createDocumentFragment();
+  for (const m of data.messages || []) {
+    frag.appendChild(buildBubbleEl(
+      m.role === 'user' ? 'user' : 'assistant',
+      m.role === 'user' ? renderUserContent(m.content) : renderMarkdown(stripLeadTime(m.content)),
+      m.content,
+    ));
+    if (Number.isFinite(m.id) && m.id > latestSeenId) latestSeenId = m.id;
+  }
+  const prevHeight = messagesEl.scrollHeight;
+  messagesEl.prepend(frag);
+  if (jumpToBottom) {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  } else {
+    messagesEl.scrollTop += messagesEl.scrollHeight - prevHeight;
+  }
+}
+
 async function loadMoreHistory(jumpToBottom) {
   if (loadingHistory) return;
   loadingHistory = true;
   try {
     const data = await fetchHistoryPage(nextBefore);
     if (!data) return;
-    nextBefore = data.next_before_id ?? null;
-    hasMore = data.has_more ?? false;
-    const frag = document.createDocumentFragment();
-    for (const m of data.messages || []) {
-      frag.appendChild(buildBubbleEl(
-        m.role === 'user' ? 'user' : 'assistant',
-        m.role === 'user' ? renderUserContent(m.content) : renderMarkdown(stripLeadTime(m.content)),
-        m.content,
-      ));
-      if (Number.isFinite(m.id) && m.id > latestSeenId) latestSeenId = m.id;
-    }
-    const prevHeight = messagesEl.scrollHeight;
-    messagesEl.prepend(frag);
-    if (jumpToBottom) {
-      messagesEl.scrollTop = messagesEl.scrollHeight; // 首次加载定位到最新
-    } else {
-      messagesEl.scrollTop += messagesEl.scrollHeight - prevHeight; // 上滑加载保持视口不跳
-    }
+    applyHistoryPage(data, jumpToBottom);
   } catch { /* 网络异常忽略，可继续滚动重试 */ }
   finally {
     loadingHistory = false;
@@ -1765,21 +1766,33 @@ async function send() {
 }
 
 /* ---------- 会话恢复：有有效 Cookie（24 小时内）自动免登录 ---------- */
+/**
+ * 首屏：一次请求就把聊天记录画出来。
+ *
+ * 原来是一次串行三次往返——探活(/api/history?limit=5) → 今日信息 → 再拉一次历史，
+ * 每次都要跨一次太平洋（D1 主库在 LAX），光等待就两三秒。现在探活和历史合成一次，
+ * 今日/用量/余额改成并行，谁慢都不挡消息出现。
+ */
+async function bootChat() {
+  hideLogin();
+  const first = await fetchHistoryPage(null);
+  if (!first) { showLogin(); return false; }
+  messagesEl.innerHTML = '';
+  nextBefore = null;
+  hasMore = false;
+  latestSeenId = 0;
+  applyHistoryPage(first, true);
+  loadDay().catch(() => {});
+  loadUsage();
+  loadBalance();
+  startPolling();
+  return true;
+}
+
 async function initSession() {
-  try {
-    const res = await fetch('/api/history?limit=5');
-    if (res.ok) {
-      hideLogin();
-      await loadDay();
-      await resetAndLoadHistory();
-      loadUsage();
-      loadBalance();
-      startPolling();
-      input.focus();
-      return;
-    }
-  } catch { /* 网络异常按未登录处理 */ }
-  showLogin();
+  const ok = await bootChat();
+  if (!ok) showLogin();
+  else input.focus();
 }
 initSession();
 </script>
