@@ -70,22 +70,29 @@ function cnNumber(n: number): string {
 }
 
 /**
- * 北京时间的口语读法，如「晚上九点十一分」。
+ * 北京时间的口语读法，**按半小时取整**：晚上九点 / 晚上九点半 / 晚上十点。
  *
- * 模型拿到 `21:11` 这种 24 小时制串时，会自己换算成"几多点"并算错
- * （实测 21:10 说成"快十点多"）。直接把口语说法喂进去，省掉这次换算。
+ * 不给精确到分：精确读法会让回复变成报时（"现在是九点十一分"），而且模型
+ * 一旦开始算分钟就容易算歪。半小时的粒度足够她说清"现在几点了"，也不会
+ * 因为 21:10 和 21:55 都算成"快十点"。
+ *
+ * 取整规则：<15 分 → 本小时整点；15–44 分 → 半点；≥45 分 → 进位到下一小时。
  */
 export function spokenTime(d: Date = new Date()): string {
   const parts = ISO_FMT.formatToParts(d);
   const get = (type: string) => parts.find((p) => p.type === type)!.value;
-  const hour = Number(get('hour')) % 24;
+  let hour = Number(get('hour')) % 24;
   const minute = Number(get('minute'));
+  let half = false;
+  if (minute >= 45) {
+    hour = (hour + 1) % 24;
+  } else if (minute >= 15) {
+    half = true;
+  }
   const period =
     hour < 5 ? '凌晨' : hour < 8 ? '早上' : hour < 12 ? '上午' : hour === 12 ? '中午' : hour < 18 ? '下午' : '晚上';
   const hourText = hour === 0 ? '零点' : `${cnNumber(hour % 12 === 0 ? 12 : hour % 12)}点`;
-  const minuteText =
-    minute === 0 ? '整' : minute < 10 ? `零${CN_DIGITS[minute]}分` : `${cnNumber(minute)}分`;
-  return `${period}${hourText}${minuteText}`;
+  return `${period}${hourText}${half ? '半' : ''}`;
 }
 
 /** 日期键对应的星期名（日期键本身即北京时间日历日，直接用 UTC 解析）。 */

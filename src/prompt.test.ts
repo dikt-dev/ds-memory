@@ -235,11 +235,11 @@ describe('时间与诚实性规则', () => {
     channel: 'web' as const,
   };
 
-  it('同时给出 ISO 时间和口语说法，并要求按口语说法读', () => {
+  it('同时给出 ISO 时间和按半小时取整的口语说法', () => {
     const prompt = buildSystemPrompt(base);
     expect(prompt).toContain('2026-10-29T21:11:00+08:00');
-    expect(prompt).toContain('口语说法：晚上九点十一分');
-    expect(prompt).toContain('不要拿 HH:mm 自己换算');
+    expect(prompt).toContain('口语说法：晚上九点（按半小时取整');
+    expect(prompt).not.toContain('不要拿 HH:mm 自己换算');
   });
 
   it('含“不记得就说不知道”的硬规则，禁止编造事实', () => {
@@ -251,6 +251,6 @@ describe('时间与诚实性规则', () => {
 
   it('实时事实块里也带口语时间', () => {
     const prompt = buildSystemPrompt(base);
-    expect(prompt).toContain('现在=2026-10-29T21:11:00+08:00（晚上九点十一分；');
+    expect(prompt).toContain('现在=2026-10-29T21:11:00+08:00（晚上九点；');
   });
 });

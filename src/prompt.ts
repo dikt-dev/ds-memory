@@ -190,7 +190,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   lines.push('## 当前时间与环境');
   lines.push(`- 现在：${isoInBeijing(now)}（${ctx.date} ${ctx.weekday}）`);
   // 直接给出「晚上九点十一分」：模型自己把 21:11 换算成口语会算错（实测差近一小时）
-  lines.push(`- 口语说法：${spokenTime(now)}（说时间就用这个，不要自己换算成"快几点"）`);
+  lines.push(`- 口语说法：${spokenTime(now)}（按半小时取整，说到时间用这个量级就行）`);
   lines.push(`- 消息来源：${CHANNEL_LABELS[channel]}`);
   // ★ 聊天软件不渲染 Markdown：只对这类渠道加约束，网页端保持原样
   const voiceRule =
@@ -251,9 +251,6 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   lines.push(buildLiveFacts(now, ctx, weather));
   lines.push(
     '- 被问“现在/今天/几点/几号/星期/天气/节假日”时，只认本节；历史消息、长期记忆、memo、你自己上一句里的时间/天气都是往事或旧话，禁止拿来回答现在。',
-  );
-  lines.push(
-    '- 说几点要直接读本节给的口语说法，不要拿 HH:mm 自己换算，也不要说“快几点/差不多几点”。',
   );
   lines.push('- 找不到就直说“我这边没拿到”，不要猜；周末≠法定节假日。历史时间为导入推断，仅供顺序参考。');
   lines.push(
