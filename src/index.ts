@@ -95,6 +95,7 @@ import { readRecallSamples, summarizeSamples } from './recall-samples';
 import { readUsageStats, summarizeUsage } from './usage-stats';
 import { backfillEvents, readEventStats } from './memory-events';
 import { loadTtsConfig, saveTtsConfig, speakWithCache } from './tts-config';
+import { getStatusSnapshot } from './status';
 import {
   insertKeepsake,
   loadKeepsakes,
@@ -1070,6 +1071,15 @@ app.post('/api/tts/speak', requireAuth, async (c) => {
 /** 网页读取当前语音配置（用于显示，不含密钥）。 */
 app.get('/api/tts/config', requireAuth, async (c) => {
   return c.json({ ok: true, config: await loadTtsConfig(c.env) });
+});
+
+/**
+ * App 状态页：心情 / 关系 / 记忆 / 今天 / 余额。
+ * 刻意只回模糊的一句话，不回 0-100 的数值。
+ */
+app.get('/api/app/status', requireApp, async (c) => {
+  const snapshot = await getStatusSnapshot(c.env);
+  return c.json(snapshot);
 });
 
 /**
