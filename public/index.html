@@ -1071,7 +1071,7 @@ async function loadMoreHistory(jumpToBottom) {
     for (const m of data.messages || []) {
       frag.appendChild(buildBubbleEl(
         m.role === 'user' ? 'user' : 'assistant',
-        m.role === 'user' ? renderUserContent(m.content) : renderMarkdown(m.content),
+        m.role === 'user' ? renderUserContent(m.content) : renderMarkdown(stripLeadTime(m.content)),
         m.content,
       ));
       if (Number.isFinite(m.id) && m.id > latestSeenId) latestSeenId = m.id;
@@ -1129,7 +1129,7 @@ async function pollNewMessages() {
       for (const m of incoming) {
         messagesEl.appendChild(buildBubbleEl(
           m.role === 'user' ? 'user' : 'assistant',
-          m.role === 'user' ? renderUserContent(m.content) : renderMarkdown(m.content),
+          m.role === 'user' ? renderUserContent(m.content) : renderMarkdown(stripLeadTime(m.content)),
           m.content,
         ));
       }
