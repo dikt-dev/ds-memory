@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { OFFLINE_ALERT_HOURS, checkChannelOffline } from './webproactive';
+import { CLIENT_BACKGROUND_OFF, OFFLINE_ALERT_HOURS, checkChannelOffline } from './webproactive';
 
 /** 极简 KV + D1 替身：只记录发生了哪些写入。 */
 function fakeEnv(heartbeat: Record<string, unknown> | null, alertedAt: string | null = null) {
@@ -57,6 +57,15 @@ describe('checkChannelOffline（QQ 通道掉线提醒）', () => {
   it('从没收到过心跳时不提醒（刚部署）', async () => {
     const { env } = fakeEnv(null);
     expect(await checkChannelOffline(env, NOW)).toBe('no-heartbeat');
+  });
+
+  it('用户主动关掉后台常驻（background-off）时，即使过了几小时也不提醒', async () => {
+    const { env, enqueued } = fakeEnv({
+      at: new Date(NOW.getTime() - (OFFLINE_ALERT_HOURS + 5) * 3600000).toISOString(),
+      version: CLIENT_BACKGROUND_OFF,
+    });
+    expect(await checkChannelOffline(env, NOW)).toBe('no-heartbeat');
+    expect(enqueued).toHaveLength(0);
   });
 
   it('心跳新鲜时视为在线', async () => {

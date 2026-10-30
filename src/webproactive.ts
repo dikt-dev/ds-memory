@@ -606,6 +606,9 @@ export async function diagnoseProactive(env: Env, now: Date): Promise<ProactiveD
 /** 超过这么久没心跳才提醒（客户端 5 分钟一次）。 */
 export const OFFLINE_ALERT_HOURS = 3;
 
+/** 客户端主动关掉「后台常驻」时上报的版本标记：说明「我知道它不在跑」，不是掉线。 */
+export const CLIENT_BACKGROUND_OFF = 'ds-mobile/background-off';
+
 export type OfflineCheckResult =
   | 'no-heartbeat'
   | 'online'
@@ -623,6 +626,8 @@ export type OfflineCheckResult =
 export async function checkChannelOffline(env: Env, now: Date): Promise<OfflineCheckResult> {
   const hb = await getHeartbeat(env);
   if (!hb) return 'no-heartbeat';
+  // 用户主动关掉后台常驻（App 默认如此）：这不是掉线，别每 3 小时发一条运维提醒
+  if ((hb.version ?? '') === CLIENT_BACKGROUND_OFF) return 'no-heartbeat';
 
   const at = Date.parse(hb.at);
   if (!Number.isFinite(at)) return 'no-heartbeat';
