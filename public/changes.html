@@ -15,66 +15,100 @@
 </script>
 <style>
   :root {
-    --bg: #f7f7f8; --panel: #fff; --text: #1d1d20; --text-soft: #55555c;
-    --muted: #8a8a93; --border: #e6e6ea; --hover: #f0f0f3;
-    --feat: #2f7d4f; --fix: #b4552f; --docs: #3b6ea5; --other: #6b6b75; --deploy: #7b4fb5;
+    color-scheme: light;
+    --canvas: #f7f6f3; --surface: #ffffff; --surface-muted: #f1f0eb;
+    --ink: #17171a; --ink-2: #5e5b54; --ink-3: #706c63;
+    --hairline: #e6e3dc; --hairline-strong: #d8d4ca;
+    --accent: #4b3fd1; --accent-soft: #edeafb; --accent-ink: #fff;
+    --hover: rgba(23, 23, 26, .05);
+    --ring: 0 0 0 3px rgba(75, 63, 209, .16);
+    --feat: #1b7a4b; --fix: #b3261e; --docs: #2f5d8a; --other: #706c63; --deploy: #4b3fd1;
+    /* 旧变量名兼容 */
+    --bg: var(--canvas); --panel: var(--surface); --text: var(--ink);
+    --text-soft: var(--ink-2); --muted: var(--ink-3); --border: var(--hairline);
   }
   [data-theme="dark"] {
-    --bg: #141416; --panel: #1c1c20; --text: #ececf1; --text-soft: #b6b6c0;
-    --muted: #8b8b96; --border: #2b2b32; --hover: #24242b;
-    --feat: #6fcf97; --fix: #f2997a; --docs: #8ab4f8; --other: #9a9aa5; --deploy: #b39ddb;
+    color-scheme: dark;
+    --canvas: #0e0e10; --surface: #17171a; --surface-muted: #1f1f23;
+    --ink: #f4f2ed; --ink-2: #b2afa7; --ink-3: #7e7b74;
+    --hairline: #2a2a2f; --hairline-strong: #3a3a40;
+    --accent: #a79bff; --accent-soft: #241f3d; --accent-ink: #14121f;
+    --hover: rgba(255, 255, 255, .06);
+    --ring: 0 0 0 3px rgba(167, 155, 255, .2);
+    --feat: #57d68a; --fix: #ff8a7a; --docs: #8fb8e8; --other: #9a968e; --deploy: #a79bff;
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 15px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    margin: 0; background: var(--canvas); color: var(--ink);
+    font: 15px/1.7 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
   }
+  svg.icon { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
   header {
-    position: sticky; top: 0; z-index: 9; backdrop-filter: blur(8px);
-    background: color-mix(in oklab, var(--bg) 88%, transparent);
-    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 9;
+    background: var(--surface); border-bottom: 1px solid var(--hairline);
   }
-  .bar { max-width: 880px; margin: 0 auto; padding: .7rem 1rem; display: flex; align-items: center; gap: .6rem; }
-  .bar h1 { font-size: 1rem; margin: 0; font-weight: 600; }
-  .bar .count { color: var(--muted); font-size: .8rem; }
+  .bar { max-width: 820px; margin: 0 auto; padding: .75rem 1rem; display: flex; align-items: center; gap: .6rem; }
+  .bar h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: 0; }
+  .bar .count { color: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; }
   .bar .spacer { flex: 1; }
   .bar a, .bar button {
-    background: transparent; border: 1px solid var(--border); color: var(--text-soft);
-    border-radius: 9px; padding: .3rem .6rem; font-size: .78rem; cursor: pointer;
-    text-decoration: none; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: .35rem;
+    background: transparent; border: 1px solid transparent; color: var(--ink-2);
+    border-radius: 10px; padding: .38rem .55rem; font: inherit; font-size: 13px;
+    cursor: pointer; text-decoration: none; white-space: nowrap; line-height: 1;
+    transition: background .15s ease, color .15s ease;
   }
-  .bar a:hover, .bar button:hover { background: var(--hover); }
-  .tools { max-width: 880px; margin: 0 auto; padding: .8rem 1rem 0; display: flex; flex-wrap: wrap; gap: .5rem; }
+  .bar a:hover, .bar button:hover { background: var(--hover); color: var(--ink); }
+
+  .tools { max-width: 820px; margin: 0 auto; padding: 1rem 1rem 0; display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
   .tools input {
-    flex: 1 1 220px; min-width: 0; background: var(--panel); color: var(--text);
-    border: 1px solid var(--border); border-radius: 10px; padding: .45rem .7rem; font-size: .86rem;
+    flex: 1 1 240px; min-width: 0; background: var(--surface-muted); color: var(--ink);
+    border: 1px solid transparent; border-radius: 14px; padding: .55rem .85rem;
+    font: inherit; font-size: 14px; outline: none;
+    transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
   }
-  .chips { display: flex; gap: .35rem; flex-wrap: wrap; }
+  .tools input::placeholder { color: var(--ink-3); }
+  .tools input:focus { background: var(--surface); border-color: var(--hairline-strong); box-shadow: var(--ring); }
+
+  .chips { display: flex; gap: .3rem; flex-wrap: wrap; }
   .chips button {
-    background: transparent; border: 1px solid var(--border); color: var(--text-soft);
-    border-radius: 999px; padding: .22rem .6rem; font-size: .74rem; cursor: pointer;
+    background: transparent; border: 1px solid transparent; color: var(--ink-2);
+    border-radius: 10px; padding: .3rem .55rem; font: inherit; font-size: 12.5px; cursor: pointer;
+    transition: background .15s ease, color .15s ease;
   }
-  .chips button[aria-pressed="true"] { background: var(--hover); color: var(--text); border-color: var(--text-soft); }
-  main { max-width: 880px; margin: 0 auto; padding: 1rem; }
-  .day { margin: 1.4rem 0 0; }
-  .day h2 { font-size: .8rem; color: var(--muted); font-weight: 600; margin: 0 0 .5rem; letter-spacing: .04em; }
+  .chips button:hover { background: var(--hover); color: var(--ink); }
+  .chips button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+  main { max-width: 820px; margin: 0 auto; padding: .5rem 1rem 1rem; }
+  .day { margin: 1.6rem 0 0; }
+  .day h2 {
+    font-size: 12px; color: var(--ink-3); font-weight: 600; margin: 0 0 .5rem;
+    letter-spacing: .04em; display: flex; align-items: center; gap: .6rem;
+  }
+  .day h2::after { content: ""; flex: 1; height: 1px; background: var(--hairline); }
+
   .card {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
-    padding: .7rem .85rem; margin-bottom: .5rem;
+    background: var(--surface); border: 1px solid var(--hairline); border-radius: 16px;
+    padding: .8rem .95rem; margin-bottom: .55rem;
+    transition: border-color .15s ease;
   }
-  .card .head { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; }
-  .badge { font-size: .68rem; padding: .08rem .4rem; border-radius: 6px; border: 1px solid currentColor; }
+  .card:hover { border-color: var(--hairline-strong); }
+  .card .head { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+  .badge { font-size: 11px; padding: .06rem .4rem; border-radius: 6px; border: 1px solid currentColor; line-height: 1.5; }
   .badge.feat { color: var(--feat); } .badge.fix { color: var(--fix); }
   .badge.docs { color: var(--docs); } .badge.other { color: var(--other); }
   .badge.deploy { color: var(--deploy); font-weight: 600; }
-  .card .area { color: var(--muted); font-size: .72rem; }
-  .card .hash { color: var(--muted); font-size: .72rem; font-family: ui-monospace, monospace; margin-left: auto; }
-  .card .title { margin: .35rem 0 0; }
-  .card .why { margin: .3rem 0 0; color: var(--text-soft); font-size: .84rem; display: none; white-space: pre-wrap; }
+  .card .area { color: var(--ink-3); font-size: 12px; }
+  .card .hash { color: var(--ink-3); font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin-left: auto; }
+  .card .title { margin: .45rem 0 0; font-size: 15px; color: var(--ink); }
+  .card .why { margin: .4rem 0 0; color: var(--ink-2); font-size: 13.5px; display: none; white-space: pre-wrap; }
   .card.open .why { display: block; }
-  .card .toggle { background: none; border: 0; color: var(--muted); font-size: .74rem; cursor: pointer; padding: 0; margin-top: .3rem; }
-  .empty { color: var(--muted); text-align: center; padding: 3rem 0; font-size: .86rem; }
-  footer { color: var(--muted); text-align: center; font-size: .72rem; padding: 2rem 1rem 3rem; }
+  .card .toggle { background: none; border: 0; color: var(--ink-3); font: inherit; font-size: 12px; cursor: pointer; padding: 0; margin-top: .45rem; }
+  .card .toggle:hover { color: var(--accent); }
+  .empty { color: var(--ink-3); text-align: center; padding: 3rem 0; font-size: 14px; }
+  footer { color: var(--ink-3); text-align: center; font-size: 12px; padding: 2rem 1rem 3rem; }
 </style>
 </head>
 <body>
@@ -84,7 +118,7 @@
     <span class="count" id="count"></span>
     <span class="spacer"></span>
     <a href="/">← 回聊天</a>
-    <button id="themeBtn" title="切换主题">🎨</button>
+    <button id="themeBtn" title="切换主题"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg></button>
   </div>
 </header>
 
@@ -105,13 +139,17 @@ let keyword = '';
 
 /* 主题：与聊天页同一个 key，循环 跟随系统 → 深色 → 浅色 */
 const THEME_KEY = 'ds-memory-theme';
-const THEME_LABELS = { system: '🎨', dark: '🌙', light: '☀️' };
+const THEME_ICONS = {
+  system: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg>',
+  dark: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
+  light: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+};
 const mode = () => localStorage.getItem(THEME_KEY) || 'system';
 const resolve = (m) => m === 'dark' ? 'dark' : m === 'light' ? 'light'
   : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 function applyTheme(m) {
   document.documentElement.dataset.theme = resolve(m);
-  $('themeBtn').textContent = THEME_LABELS[m] || '🎨';
+  $('themeBtn').innerHTML = THEME_ICONS[m] || THEME_ICONS.system;
   localStorage.setItem(THEME_KEY, m);
 }
 $('themeBtn').addEventListener('click', () => {

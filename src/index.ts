@@ -222,7 +222,26 @@ async function requireApp(c: Context<AppEnv>, next: Next) {
   await next();
 }
 
-/** 一次性配对码换设备 Token；配对码优先 APP_PAIR_CODE，未配置时临时复用 ASTROBOT_API_KEY。 */
+/**
+ * 当前生效的配对码：网页上设的（KV `pair:code`）> 环境变量 APP_PAIR_CODE > ASTROBOT_API_KEY。
+ * 这样不用重新部署就能改码，也就不用把一个长期 API Key 当配对码用。
+ */
+const PAIR_CODE_KV_KEY = 'pair:code';
+
+async function loadPairCode(env: Env): Promise<string | null> {
+  const stored = await env.KV.get(PAIR_CODE_KV_KEY).catch(() => null);
+  if (stored && stored.trim()) return stored.trim();
+  return env.APP_PAIR_CODE || env.ASTROBOT_API_KEY || null;
+}
+
+/** 配对码只允许字母数字，长度 8~32；返回 null 表示不合法。 */
+function sanitizePairCode(raw: string): string | null {
+  const code = raw.trim();
+  if (!/^[A-Za-z0-9]{8,32}$/.test(code)) return null;
+  return code;
+}
+
+/** 一次性配对码换设备 Token；配对码优先网页设置（KV），未配置时回退环境变量。 */
 app.post('/api/app/pair', async (c) => {
   const body = await c.req.json().catch(() => null) as {
     pair_code?: unknown;
@@ -230,7 +249,7 @@ app.post('/api/app/pair', async (c) => {
     device_id?: unknown;
   } | null;
   const pairCode = body && typeof body.pair_code === 'string' ? body.pair_code : '';
-  const expected = c.env.APP_PAIR_CODE || c.env.ASTROBOT_API_KEY;
+  const expected = await loadPairCode(c.env);
   if (!expected) return c.json({ error: 'pair_not_configured' }, 503);
   if (!pairCode || pairCode !== expected) return c.json({ error: 'invalid_pair_code' }, 401);
 
@@ -247,6 +266,33 @@ app.post('/api/app/pair', async (c) => {
     token,
     expires_at: new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString(),
   });
+});
+
+// ── 配对码管理（网页端设置，走 KV，不用重新部署） ──────────────────
+
+app.get('/api/admin/pair-code', requireAuth, async (c) => {
+  const stored = await c.env.KV.get(PAIR_CODE_KV_KEY).catch(() => null);
+  const effective = await loadPairCode(c.env);
+  return c.json({
+    code: effective,
+    source: stored && stored.trim() ? 'web' : (c.env.APP_PAIR_CODE ? 'env' : 'fallback'),
+    editable: true,
+  });
+});
+
+app.post('/api/admin/pair-code', requireAuth, async (c) => {
+  const body = await c.req.json().catch(() => null) as { code?: unknown } | null;
+  const raw = body && typeof body.code === 'string' ? body.code : null;
+  if (raw === null) return c.json({ error: 'invalid_body' }, 400);
+  // 空字符串 = 清掉网页设置，回退到环境变量里的那个
+  if (raw.trim() === '') {
+    await c.env.KV.delete(PAIR_CODE_KV_KEY);
+    return c.json({ ok: true, code: await loadPairCode(c.env), source: 'env' });
+  }
+  const code = sanitizePairCode(raw);
+  if (!code) return c.json({ error: 'invalid_code', hint: '8~32 位字母或数字' }, 400);
+  await c.env.KV.put(PAIR_CODE_KV_KEY, code);
+  return c.json({ ok: true, code, source: 'web' });
 });
 
 /** App 心跳：让 Worker 知道移动端在线，避免误发“QQ 通道掉线”。 */
