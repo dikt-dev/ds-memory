@@ -94,6 +94,7 @@ import { listAffectTimeline, recordAttitudeSnapshot } from './affect-store';
 import { readRecallSamples, summarizeSamples } from './recall-samples';
 import { readUsageStats, summarizeUsage } from './usage-stats';
 import { backfillEvents, readEventStats } from './memory-events';
+import { loadTtsConfig, saveTtsConfig, speakWithCache } from './tts-config';
 import {
   insertKeepsake,
   loadKeepsakes,
@@ -700,7 +701,10 @@ app.post('/api/tts/nack', async (c) => {
 /** 聊天语音回放（需登录；audio/ 下，主账号优先、小号兜底）。 */
 app.get('/api/audio/*', requireAuth, async (c) => {
   const key = decodeURIComponent(c.req.path.replace(/^\/api\/audio\//, ''));
-  if (!key.startsWith('audio/')) return c.json({ error: 'not found' }, 404);
+  // audio/ 是 App 上传的音频；tts/ 是服务端合成的缓存（见 tts-config.ts）
+  if (!key.startsWith('audio/') && !key.startsWith('tts/')) {
+    return c.json({ error: 'not found' }, 404);
+  }
   const obj = await getObject(c.env, key);
   if (!obj) return c.json({ error: 'not found' }, 404);
   return new Response(await obj.arrayBuffer(), {
@@ -1025,6 +1029,47 @@ app.get('/api/app/image', requireApp, async (c) => {
       'cache-control': 'private, max-age=86400',
     },
   });
+});
+
+/** App 读取云端语音配置（多设备一致）。 */
+app.get('/api/app/tts-config', requireApp, async (c) => {
+  const config = await loadTtsConfig(c.env);
+  return c.json({ ok: true, config });
+});
+
+/** App 上传语音配置：设置变了就同步一次，网页也用这份。 */
+app.post('/api/app/tts-config', requireApp, async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const config = await saveTtsConfig(c.env, body);
+  return c.json({ ok: true, config });
+});
+
+/** 网页合成语音：走云端配置 + R2 缓存，声音和 App 一致。 */
+app.post('/api/tts/speak', requireAuth, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { text?: unknown; style?: unknown } | null;
+  const text = typeof body?.text === 'string' ? body.text.trim().slice(0, 1200) : '';
+  if (!text) return c.json({ error: 'text 不能为空' }, 400);
+  const style = typeof body?.style === 'string' ? body.style.replace(/[^a-z]/gi, '') : undefined;
+  try {
+    const { key, audio, cached } = await speakWithCache(c.env, text, { style });
+    return new Response(audio, {
+      headers: {
+        'content-type': 'audio/mpeg',
+        'cache-control': 'private, max-age=86400',
+        'x-tts-cache': cached ? 'hit' : 'miss',
+        // 网页拿到 key 后直接用 /api/audio/<key> 播放，省一次大响应体
+        'x-tts-key': key,
+      },
+    });
+  } catch (e) {
+    console.error('[tts] speak failed:', e);
+    return c.json({ error: 'tts failed' }, 502);
+  }
+});
+
+/** 网页读取当前语音配置（用于显示，不含密钥）。 */
+app.get('/api/tts/config', requireAuth, async (c) => {
+  return c.json({ ok: true, config: await loadTtsConfig(c.env) });
 });
 
 /**

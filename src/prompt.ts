@@ -197,8 +197,9 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   lines.push(`- 消息来源：${CHANNEL_LABELS[channel]}`);
   // ★ 聊天软件不渲染 Markdown：只对这类渠道加约束，网页端保持原样
   const voiceRule =
-    '想发语音时，可以写成 [语音]「要说的话」；系统只念引号里的内容，引号外照常当文字发。' +
-    '语音里可以用？！……～帮 TTS 停顿；句子怎么组织、要不要发语音，都由你判断。';
+    '想发语音时，把 [语音]「要说的话」放在整条消息的最后；引号里是这一段完整要说的话，不是摘一句。' +
+    '标记前面的文字照常显示，但不会被念出来——所以别把想说的话留在标记后面。' +
+    '语音里可以用？！……～帮 TTS 停顿；要不要发语音、说多长，都由你判断。';
   if (channel === 'astrobot') {
     lines.push('- 对方在 QQ 这类聊天软件里看：不支持 Markdown，纯文本才能正常显示。');
     lines.push(

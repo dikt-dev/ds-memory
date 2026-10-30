@@ -637,9 +637,12 @@ function speakVoice(texts, btn) {
   utterances.forEach((u) => window.speechSynthesis.speak(u));
 }
 const VOICE_BLOCK_RE = /(?:[\[【［]\s*(?:语音消息|语音|voice)\s*[\]】］]\s*[「“]([^」”]*)[」”])|(?:[（(]\s*[【\[［]\s*语音消息\s*[】\]］]\s*发送\s*[：:]\s*([^）)\n]+)[）)])|(?:[【\[［]\s*语音消息\s*[】\]］]\s*发送\s*[：:]\s*([^\n）)]+))|(?:[【\[［]\s*语音(?:消息)?\s*[】\]］]\s*(?!(?:发送\s*[：:]|[「“]))([^\n]+))|(?:^（语音）\s*(.+)$)/gmi;
+const ttsBlobCache = new Map();
 function voiceCardHtml(text, index, audioKey) {
+  // 服务端合成时我们已经把音频读成 blob，直接用 blob URL，点击不用再等网络
+  const directUrl = audioKey ? ttsBlobCache.get(audioKey) : '';
   const play = audioKey
-    ? '<audio class="voice-audio" controls preload="metadata" src="/api/audio/' + audioKey + '"></audio>'
+    ? '<audio class="voice-audio" controls preload="metadata" src="' + (directUrl || '/api/audio/' + audioKey) + '"></audio>'
     : '<button type="button" class="voice-segment-play" data-index="' + index + '" data-label="▶ 播放">▶ 播放</button>';
   return '<div class="voice-card">'
     + '<span class="voice-tag">🎤 语音</span>'
@@ -673,6 +676,26 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 async function fetchTtsKey(text) {
+  // 首选：服务端用云端配置（= App 的 Azure 音色）直接合成，带上 R2 缓存。
+  // 手机不在线、或者没响应，也能拿到和 App 一样的声音。
+  try {
+    const direct = await fetch('/api/tts/speak', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    if (direct.ok) {
+      const key = direct.headers.get('x-tts-key') || '';
+      if (key) {
+        // 顺带把音频读掉，浏览器缓存住，点击时几乎瞬时
+        const blob = await direct.blob();
+        const url = URL.createObjectURL(blob);
+        ttsBlobCache.set(key, url);
+      }
+      if (key) return key;
+    }
+  } catch { /* 落到下面的手机合成 */ }
+  // 兜底：原有链路（手机合成 → R2），手机不在线再走 MeloTTS
   try {
     const create = await fetch('/api/tts', {
       method: 'POST',
