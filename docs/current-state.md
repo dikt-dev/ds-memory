@@ -1,21 +1,23 @@
 # 当前状态
 
-> **本次核对：2026-10-30**。下面第 0 节是现在的事实；第 1 节往后是 Phase 0 基线原文（10-24），
+> **本次核对：2026-10-31**。下面第 0 节是现在的事实；第 1 节往后是 Phase 0 基线原文（10-24），
 > 路线、模型、测试数量等已被后续实现取代，与代码冲突时以代码为准。
 
-## 0. 现状速览（2026-10-30）
+## 0. 现状速览（2026-10-31 核对）
 
 | 项 | 现在 |
 |---|---|
-| 线上版本 | `5dd4184e`（10-30 网页热修）；引擎代码等同 `f335707`（10-29 部署） |
-| 观察期 | 2026-10-25 21:10 → **2026-11-01 12:00**（实际 6 天 14 小时 50 分） |
-| 开关 | `MEMORY_ENGINE_MOBILE=shadow`、`MEMORY_ENGINE_WEB=legacy`、`AFFECT_ENGINE_*`=shadow、`PROACTIVE_ENGINE=shadow`、`PROACTIVE_DELIVERY=queue` |
+| 线上版本 | Version `92297db2-34b7-4342-87b6-20c56770e0c2`，对应代码提交 `eaf3c5b`（10-31 凌晨部署） |
+| 仓库 HEAD | `00db532`（网页顶栏折行 + 历史逐条渲染兜底）——**这批网页改动还没部署** |
+| 观察期 | **已结束**（原定 11-01 12:00，实际 10-31 凌晨提前全量部署） |
+| 开关 | `MEMORY_ENGINE_MOBILE=shadow`、`MEMORY_ENGINE_WEB=legacy`、`AFFECT_ENGINE_*`=shadow、`PROACTIVE_ENGINE`=shadow、`PROACTIVE_DELIVERY=queue`（以 `wrangler.toml` 为准） |
 | 模型分工 | 对话 `deepseek-flash`；每日提炼 `deepseek-v4-pro`（带思考）；滚动摘要 `deepseek-flash`；兜底 Workers AI |
-| 测试 | **69 个文件 / 765 个用例**通过，`tsc --noEmit` 干净 |
-| 记忆规模（10-29 归档） | facts 40 / events 45 / entries 84 / **chunks 87** / links 227；memory.md 11700 字节 |
-| 召回（shadow，10-29） | 77 次，平均 **503ms**，平均 8.0 条（已顶到封顶 8 条），`expandLinkedChunks` 疑似主要开销 |
-| 待发布 | 8 批提交，见 [pending-work.md](./pending-work.md)；发布手册 [runbooks/deploy-2026-11-01.md](./runbooks/deploy-2026-11-01.md) |
-| 已知缺口 | 召回是 O(全部数据)：倒排索引尚未做；`putMemory` 只校验写入不校验语义 |
+| 测试 | **77 个文件 / 881 个用例**通过，`tsc --noEmit` 干净（10-31 03:30 实跑） |
+| 记忆规模（10-29 归档后未再变） | facts 40 / events 45 / entries 84 / **chunks 87** / links 227；`no_vec=0`；memory.md 11,700 字节 |
+| 召回（shadow） | 10-25 69ms → 10-26 143 → 10-27 171 → 10-28 345 → **10-29 503ms**（77 次，平均 8.0 条，已顶封顶 8 条） |
+| 部署后流量 | 最后一条消息 `2026-10-30 23:54:52`；**部署后还没有对话** |
+| 惰性建表 | 因此 `recall_samples`（分段计时）、`memory_keepsakes`（铭记）、`chat_usage`（成本看板）在线上**还不存在**，首次使用才会建 |
+| 已知缺口 | 召回仍是 O(全部数据)，倒排索引未做；`putMemory` 只校验写入不校验语义 |
 
 入口文档：`pending-work.md`（待办）、`handover-2026-10-29.md`（交接）、`memory-system-walkthrough.md`（实现细节）。
 

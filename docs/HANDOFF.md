@@ -12,7 +12,7 @@
 | 引擎仓库 | `D:\WorkSpace\ds-memory`（Cloudflare Worker，Hono + TypeScript ESM） |
 | App 仓库 | `D:\WorkSpace\ds-mobile`（Kotlin + Compose，公开仓库 `dikt-dev/ds-mobile`，Apache-2.0） |
 | 线上地址 | `https://fae.us.ci`（Worker 名 `ds-memory`） |
-| 引擎 HEAD | `eaf3c5b`，已部署，Version ID `92297db2-34b7-4342-87b6-20c56770e0c2` |
+| 引擎 HEAD | `00db532`（网页 UI 定稿 + 渲染兜底）；**线上部署的仍是 `eaf3c5b`**，Version ID `92297db2-34b7-4342-87b6-20c56770e0c2` |
 | App HEAD | `b77b8bd`，已构建 release 并装到手机 |
 | 测试 | 77 个文件 / **881 个用例全绿**，`npx tsc --noEmit` 干净 |
 | 冻结状态 | **已解除**，10-31 凌晨全量部署过一次（含积压的 190+ 提交） |
@@ -57,6 +57,7 @@
 - 提交 `57254f0`「首屏历史从三次串行往返压成一次」：把「探活 → 今日 → 拉历史」合并成一次请求，为此新写了 `applyHistoryPage`。**上线后历史只零星出几条**，因为新渲染路径没有在本地验证过。
 - 已由 `43d8de4` 整体撤回，页面逻辑回到 `c682348` 的状态。
 - **要做这个优化，前置条件是在本地或可验证环境先证明渲染正常再上线**，不要拿线上当试验田。优化目标还在：单次从中国到 Cloudflare 的往返约 0.6~0.9 秒，D1 主库在 LAX，一次页面加载串三次就是两三秒。
+- **10-31 复核补充（重要）**：真正的根因很可能不是 `applyHistoryPage` 的合并逻辑，而是**某一条消息渲染时抛异常、把整批循环打断**——`00db532` 已经给 `loadMoreHistory` / `pollNewMessages` 加了逐条 `try/catch`，注释写的就是「单条渲染失败不能让整段历史变空白」。所以这个优化可以重做，前提是这个兜底先上线、并且能在本地把 72KB 页面渲染完整看一遍。
 
 ---
 
@@ -184,13 +185,17 @@ await fetch('https://fae.us.ci/api/app/pair', {method:'POST', ...})  // 401/503 
 - 已知脏数据，**用户已拒绝清理**：15 条 `affect_events` 分类错误、`grievance` 值 64。别自作主张洗数据。
 - 记忆文件在 R2：`memory.md`、`archive.md`；改完要 `POST /api/admin/memory/refresh` 才会丢缓存重建。
 - 配对：线上 `APP_PAIR_CODE` 没设，实际回退到 `ASTROBOT_API_KEY`（在 `.dev.vars` 第 16 行）。**建议让用户在网页上设一个独立配对码**，别长期拿 API Key 当配对码。
+- 记忆表计数（10-31 核对，与 10-29 一致）：facts 40 / events 45 / entries 84 / chunks 87 / links 227，`no_vec=0`。
+- 部署后（10-31 凌晨）**还没有新对话**，所以 `recall_samples`（召回分段计时）、`memory_keepsakes`（铭记）、`chat_usage`（成本看板）这三张惰性建的表在线上还不存在——别以为功能没上线，是还没被调用过。
 
 ---
 
 ## 九、交接时的未提交物
 
-- `D:\WorkSpace\ds-memory\public\_diag.html`（未跟踪）——来源不明，我这边没创建过，用之前先看一眼内容再决定留删。
-- 工作区根目录有几个临时产物可忽略：`_shot*.png`、`_rel.png`、`_webcheck.js`、`push*.log`、`deploy*.log`、`tail.log`、`d1stat.json`。
+- 两个仓库的工作区现在都是**干净的**（10-31 03:40 核对，`git status` 无输出）。
+- 原先登记的不明文件 `ds-memory/public/_diag.html` **已经不存在**，不用再管。
+- `00db532` 这批网页改动（顶栏窄屏折行、历史/实时消息逐条渲染兜底）**只提交、没部署**：线上跑的还是 `eaf3c5b` 的页面。要上线就正常 `wrangler deploy`，别以为已经生效。
+- 工作区根目录的临时产物可忽略：`_shot*.png`、`_rel.png`、`_webcheck.js`、`push*.log`、`deploy*.log`、`tail.log`、`d1stat.json`、`_tmp_tables.sql`。
 
 ---
 

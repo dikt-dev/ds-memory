@@ -1,6 +1,6 @@
 # 角色名由 CHARACTER_NAME 环境变量决定（缺省「小忆」）· 项目结构与流程总结
 
-> 版本 v3.0（messages 表重构后）｜2026-10-22
+> 版本 v3.1（2026-10-31 核对：会话级短期记忆、API 全量、模块补齐）｜v3.0 2026-10-22
 > 线上：https://your-worker.example.com ｜ 仓库：https://github.com/dikt-dev/ds-memory
 
 ---
@@ -176,7 +176,8 @@ R2 根目录/
    - memory.md（KV→R2 兜底；小记忆全量，大记忆核心+稳定画像）
    - 当天 context（日期/星期/节假日/天气）
    - 今日摘要（D1 runtime_state，仅当 memo:24h 不存在时）
-   - 最近 **15 轮**消息（技术类自动 30、指代前文最多 50，上限 60；D1，按 turn_id 分组、时间从旧到新、每条带时间戳）
+   - **当前会话**全部消息（`loadSessionHistory`：距上一条超过 6 小时即算新会话；
+     会话内只追加、不滑窗，超过 120 轮才退化成「提要 + 尾部 40 轮」；D1，按 turn_id 分组、时间从旧到新、每条带时间戳）
    - 按话题召回的 memory_entries top-k（关键词优先，必要时补向量）
    - Phase 2/5：Memory Context（`MEMORY_ENGINE[_QQ|_WEB]=shadow|next`；shadow 只记录对比，next 使用 facts/chunks 召回）
    - 情感快照（5 轴关系原型 + 8 维情绪 + 未化解事件 → 行为指令）
@@ -275,7 +276,7 @@ cron "0 20 * * *"
 | **长期记忆** | 人物底色、称呼与关系、关于用户、偏好、进行中事项、共同经历、雷区、近期动态 | R2 `memory.md` | 每日归档维护，受保护分区不自动删 | ≤16KB 每轮全文；更大时核心+稳定画像+按需召回 |
 | **长期档案** | 过期「近期动态」等旧条目，带 `#标签` | R2 `memory/archive.md` | 永久 | **按需检索**，命中才注入 |
 | **中期** | 最近 24 小时的电报体纪要（5~8 条） | D1 `runtime_state` 的 `memo:24h` | 3 小时或每 15 条消息滚动刷新 | 每轮注入（存在时替代今日摘要） |
-| **短期** | 最近 **15 轮**原文（技术类 30、指代前文最多 50，上限 60；按 turn_id 分组） | D1（不足时从 R2 归档补） | 滚动 | 每轮按时间从旧到新，每条带 `[MM-DD HH:mm]` |
+| **短期** | **当前会话**全部原文（6 小时没说话即开新会话；会话内只追加不滑窗，>120 轮才压成「提要 + 尾部 40 轮」） | D1（不足时从 R2 归档补） | 会话级 | 每轮按时间从旧到新，每条带 `[MM-DD HH:mm]` |
 
 > 另有「今日摘要」（D1 `runtime_state` 的 `summary:日期`，约 100 字，TTL 36h）作为中期记忆的兜底：
 > 中期纪要存在时不注入，避免同一段内容发两遍。
@@ -428,6 +429,19 @@ mood = 500 + 3.2×愉悦 + 0.8×激活 + 0.5×依恋
 | GET/POST | `/api/proactive/pending`、`/api/proactive/ack`、`/api/proactive/nack` | Bearer | 主动消息队列（拉取/回执/失败上报） |
 | GET | `/api/proactive/stats` | Cookie | 主动消息队列状态 |
 
+> 上表只列公开与常用端点。2026-10-31 核对时 `src/index.ts` 共注册 **97 条路由**，其余按组：
+
+| 组 | 端点 | 鉴权 | 说明 |
+|----|------|------|------|
+| App（设备） | `POST /api/app/pair` `/heartbeat` `/memory/correct` `/location` `/upload/video`；`GET /api/app/events` `/client-messages` `/web-preview` `/link-preview` `/media` `/image` `/tts` `/status` | Bearer 设备令牌 | 配对码取值优先级：KV `pair:code` > `APP_PAIR_CODE` > `ASTROBOT_API_KEY` |
+| TTS | `/api/tts`、`/api/tts/jobs/:id`、`/api/tts/{pending,ack,nack}`、`/api/tts/speak`、`/api/tts/config`、`/api/app/tts-config` | Cookie / Bearer | 服务端合成 + R2 缓存，失败可退回端上合成 |
+| 配对管理 | `GET/POST /api/admin/pair-code` | Cookie | 网页头部「配对」入口，可随机生成/保存/清除 |
+| 成本与自检 | `GET /api/admin/cost?days=N`、`GET /api/admin/readiness` | Cookie | 前缀缓存命中率、月度外推；启动自检 |
+| 记忆运维 | `/api/admin/memory/{reindex,reload,rollup,rebuild-context,sync-summaries,sync-archive,embed,backfill-provenance,extract,jobs,projection,project,enqueue-rebuild,link-all,replay-distill,context-stats,links,recall,events,keepsakes}` | Cookie | 见 current-state.md §7 |
+| 召回采样 | `GET /api/admin/recall-samples?days=N` | Cookie | 分段 p50/p95；表 `recall_samples` 惰性建表 |
+| 情感运维 | `GET /api/admin/relation`、`POST /api/admin/affect/{explain,reset,ingest}`、`POST /api/admin/emotion/simulate` | Cookie | 数值不进提示词，只出定性快照 |
+| B 站 / 网页预览 | `GET /api/app/web-preview`、`GET /api/app/link-preview` | Bearer | Worker 侧 WBI 签名；App 侧另有一份直连实现 |
+
 ---
 
 ## 九、定时任务
@@ -540,8 +554,24 @@ ds_memory/
 │   ├── sse-scrub.ts        # 流式回复 AI 味清洗
 │   ├── session-facts.ts    # 活人感：状态数据采集
 │   ├── identity.ts         # 角色名/称呼解析（CHARACTER_NAME / USER_ADDRESS）
+│   ├── keepsakes.ts        # 铭记：常驻注入、去重、配额、规则+AI 双通道
+│   ├── status.ts           # App 状态快照（只回模糊说法，只有余额给数字）
+│   ├── tts.ts              # TTS 任务队列（D1 tts_jobs）
+│   ├── tts-config.ts       # Azure 合成、SSML、R2 缓存
+│   ├── affect-store.ts     # 情感事件账本（affect_events / attitude_snapshots）
+│   ├── attitude-policy.ts  # 态度策略（Phase 3，shadow/next）
+│   ├── memory-events.ts    # 事件记忆 v2 阶段 A：影子写入（只写不读）
+│   ├── memory-snapshot.ts  # 写前快照（45 天保留，MEMORY_SNAPSHOT=off 可关）
+│   ├── memory-audit.ts     # 记忆写入审计（哈希 + 来源）
+│   ├── recall-samples.ts   # 召回分段计时采样（p50/p95，14 天）
+│   ├── usage-stats.ts      # chat_usage：命中/未命中/输出 token 与费用
+│   ├── engine-metrics.ts   # engine_metrics：shadow/next 按天聚合
+│   ├── engine-flags.ts     # MEMORY_ENGINE_* / AFFECT_ENGINE_* / PROACTIVE_ENGINE 归一化
+│   ├── context-budget.ts   # 分层预算（core 独立上限，其余按 recent→rollup→recall 装填）
+│   ├── runtime-store.ts    # D1 runtime_state（KV 兜底）+ 原子锁
+│   ├── trace.ts            # request-id 与结构化日志
 │   ├── vendor.d.ts         # 第三方模块类型声明
-│   └── *.test.ts           # 单元测试（39 个，与模块同名）
+│   └── *.test.ts           # 单元测试（77 个文件 / 881 用例，与模块同名）
 ├── public/
 │   ├── index.html          # 聊天页面
 │   ├── avatar.png          # 助手头像
