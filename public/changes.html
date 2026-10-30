@@ -17,12 +17,12 @@
   :root {
     --bg: #f7f7f8; --panel: #fff; --text: #1d1d20; --text-soft: #55555c;
     --muted: #8a8a93; --border: #e6e6ea; --hover: #f0f0f3;
-    --feat: #2f7d4f; --fix: #b4552f; --docs: #3b6ea5; --other: #6b6b75;
+    --feat: #2f7d4f; --fix: #b4552f; --docs: #3b6ea5; --other: #6b6b75; --deploy: #7b4fb5;
   }
   [data-theme="dark"] {
     --bg: #141416; --panel: #1c1c20; --text: #ececf1; --text-soft: #b6b6c0;
     --muted: #8b8b96; --border: #2b2b32; --hover: #24242b;
-    --feat: #6fcf97; --fix: #f2997a; --docs: #8ab4f8; --other: #9a9aa5;
+    --feat: #6fcf97; --fix: #f2997a; --docs: #8ab4f8; --other: #9a9aa5; --deploy: #b39ddb;
   }
   * { box-sizing: border-box; }
   body {
@@ -66,6 +66,7 @@
   .badge { font-size: .68rem; padding: .08rem .4rem; border-radius: 6px; border: 1px solid currentColor; }
   .badge.feat { color: var(--feat); } .badge.fix { color: var(--fix); }
   .badge.docs { color: var(--docs); } .badge.other { color: var(--other); }
+  .badge.deploy { color: var(--deploy); font-weight: 600; }
   .card .area { color: var(--muted); font-size: .72rem; }
   .card .hash { color: var(--muted); font-size: .72rem; font-family: ui-monospace, monospace; margin-left: auto; }
   .card .title { margin: .35rem 0 0; }
@@ -96,7 +97,7 @@
 <footer id="foot"></footer>
 
 <script>
-const TYPE_LABEL = { feat: '新功能', fix: '修复', docs: '文档', refactor: '重构', perf: '性能', test: '测试', chore: '杂务', other: '其他' };
+const TYPE_LABEL = { deploy: '上线', feat: '新功能', fix: '修复', docs: '文档', refactor: '重构', perf: '性能', test: '测试', chore: '杂务', other: '其他' };
 const $ = (id) => document.getElementById(id);
 let all = [];
 let activeType = 'all';

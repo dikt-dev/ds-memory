@@ -8,7 +8,7 @@
  * 用法：node scripts/gen-changelog.mjs [--limit 400] [--out public/changelog.json]
  */
 import { execFileSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const args = process.argv.slice(2);
@@ -69,9 +69,30 @@ function readGitLog() {
     });
 }
 
+function readDeploys() {
+  const file = resolve(process.cwd(), 'public/deploys.json');
+  if (!existsSync(file)) return [];
+  try {
+    const raw = JSON.parse(readFileSync(file, 'utf8'));
+    const list = Array.isArray(raw) ? raw : (raw.deploys ?? []);
+    return list.map((d) => ({
+      hash: d.hash ?? '',
+      date: d.date,
+      type: 'deploy',
+      area: 'deploy',
+      title: d.note ? `上线：${d.note}` : '上线',
+      why: d.at ? `部署时间 ${d.at}` : '',
+      at: d.at ?? '',
+    }));
+  } catch {
+    return [];
+  }
+}
+
 function main() {
   const commits = readGitLog();
-  const items = commits.map(toRecord).filter((r) => r.title);
+  const deploys = readDeploys();
+  const items = [...deploys, ...commits.map(toRecord).filter((r) => r.title)];
   const days = [];
   const index = new Map();
   for (const item of items) {
@@ -82,6 +103,7 @@ function main() {
     }
     index.get(item.date).items.push(item);
   }
+  days.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   const payload = {
     generated_at: new Date().toISOString(),
     count: items.length,

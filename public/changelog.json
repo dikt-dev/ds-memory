@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-10-30T13:26:47.646Z",
-  "count": 230,
+  "generated_at": "2026-10-30T13:29:51.893Z",
+  "count": 231,
   "days": [
     {
       "date": "2026-10-30",
       "items": [
+        {
+          "hash": "17d9c60",
+          "date": "2026-10-30",
+          "type": "feat",
+          "area": "web",
+          "title": "修改记录页 /changes，从 git 历史自动生成",
+          "why": "scripts/gen-changelog.mjs 解析 git log（类型/模块/标题/正文原因），输出 public/changelog.json（当前 230 条 / 9 天）；public/changes.html 纯静态页面，支持关键词搜索与类型筛选、展开原因、跟随主题；聊天页 header 加「📋 记录」入口。部署前先跑 node scripts/gen-changelog.mjs（已加 npm run changelog 与 runbook 步骤）。"
+        },
         {
           "hash": "92ddb77",
           "date": "2026-10-30",
