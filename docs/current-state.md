@@ -7,16 +7,16 @@
 
 | 项 | 现在 |
 |---|---|
-| 线上版本 | Version `92297db2-34b7-4342-87b6-20c56770e0c2`，对应代码提交 `eaf3c5b`（10-31 凌晨部署） |
-| 仓库 HEAD | `00db532`（网页顶栏折行 + 历史逐条渲染兜底）——**这批网页改动还没部署** |
+| 线上版本 | Version `91a0ed0b-1ebf-4dec-a183-b4249d96710d`（10-31 03:26 部署），代码等同提交 `eaf3c5b` |
+| 仓库 HEAD | `581bc79`（request_log / 事件表改名 / 死导出清理 / 本地环境）；网页改动已随 03:26 那次部署上线 |
 | 观察期 | **已结束**（原定 11-01 12:00，实际 10-31 凌晨提前全量部署） |
-| 开关 | `MEMORY_ENGINE_MOBILE=shadow`、`MEMORY_ENGINE_WEB=legacy`、`AFFECT_ENGINE_*`=shadow、`PROACTIVE_ENGINE`=shadow、`PROACTIVE_DELIVERY=queue`（以 `wrangler.toml` 为准） |
+| 开关 | **全部 legacy**：`MEMORY_ENGINE*`=legacy、`AFFECT_ENGINE*`=legacy、`PROACTIVE_ENGINE`=shadow、`PROACTIVE_DELIVERY`=queue（10-31 03:47 用 `/api/admin/readiness` 核对）。shadow 对比数据因此**没有在积累** |
 | 模型分工 | 对话 `deepseek-flash`；每日提炼 `deepseek-v4-pro`（带思考）；滚动摘要 `deepseek-flash`；兜底 Workers AI |
 | 测试 | **77 个文件 / 881 个用例**通过，`tsc --noEmit` 干净（10-31 03:30 实跑） |
 | 记忆规模（10-29 归档后未再变） | facts 40 / events 45 / entries 84 / **chunks 87** / links 227；`no_vec=0`；memory.md 11,700 字节 |
 | 召回（shadow） | 10-25 69ms → 10-26 143 → 10-27 171 → 10-28 345 → **10-29 503ms**（77 次，平均 8.0 条，已顶封顶 8 条） |
 | 部署后流量 | 最后一条消息 `2026-10-30 23:54:52`；**部署后还没有对话** |
-| 惰性建表 | 因此 `recall_samples`（分段计时）、`memory_keepsakes`（铭记）、`chat_usage`（成本看板）在线上**还不存在**，首次使用才会建 |
+| 惰性建表 | `recall_samples` / `memory_keepsakes` / `chat_usage` 在线上**还不存在**。注意：legacy 模式下 `resolveRecall` 提前 return，所以 `recall_samples` 不只是「没数据」，而是**永远不会被创建** |
 | 已知缺口 | 召回仍是 O(全部数据)，倒排索引未做；`putMemory` 只校验写入不校验语义 |
 
 入口文档：`pending-work.md`（待办）、`handover-2026-10-29.md`（交接）、`memory-system-walkthrough.md`（实现细节）。

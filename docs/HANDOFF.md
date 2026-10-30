@@ -12,7 +12,7 @@
 | 引擎仓库 | `D:\WorkSpace\ds-memory`（Cloudflare Worker，Hono + TypeScript ESM） |
 | App 仓库 | `D:\WorkSpace\ds-mobile`（Kotlin + Compose，公开仓库 `dikt-dev/ds-mobile`，Apache-2.0） |
 | 线上地址 | `https://fae.us.ci`（Worker 名 `ds-memory`） |
-| 引擎 HEAD | `00db532`（网页 UI 定稿 + 渲染兜底）；**线上部署的仍是 `eaf3c5b`**，Version ID `92297db2-34b7-4342-87b6-20c56770e0c2` |
+| 引擎 HEAD | `581bc79`（request_log / 事件表改名 / 死导出清理 / 本地环境）；**线上 Version `91a0ed0b`（10-31 03:26，代码等同 `eaf3c5b`）** |
 | App HEAD | `b77b8bd`，已构建 release 并装到手机 |
 | 测试 | 77 个文件 / **881 个用例全绿**，`npx tsc --noEmit` 干净 |
 | 冻结状态 | **已解除**，10-31 凌晨全量部署过一次（含积压的 190+ 提交） |
@@ -194,7 +194,7 @@ await fetch('https://fae.us.ci/api/app/pair', {method:'POST', ...})  // 401/503 
 
 - 两个仓库的工作区现在都是**干净的**（10-31 03:40 核对，`git status` 无输出）。
 - 原先登记的不明文件 `ds-memory/public/_diag.html` **已经不存在**，不用再管。
-- `00db532` 这批网页改动（顶栏窄屏折行、历史/实时消息逐条渲染兜底）**只提交、没部署**：线上跑的还是 `eaf3c5b` 的页面。要上线就正常 `wrangler deploy`，别以为已经生效。
+- `00db532` 这批网页改动（顶栏窄屏折行、历史/实时消息逐条渲染兜底）**已经在线上**——10-31 03:26 那次部署就打进去了（逐字节比对过：线上页面 == 本地文件，只差「小忆→大肥鱼」的名称替换）。所以「未部署」这句话是错的，已更正。
 - 工作区根目录的临时产物可忽略：`_shot*.png`、`_rel.png`、`_webcheck.js`、`push*.log`、`deploy*.log`、`tail.log`、`d1stat.json`、`_tmp_tables.sql`。
 
 ---
@@ -204,3 +204,23 @@ await fetch('https://fae.us.ci/api/app/pair', {method:'POST', ...})  // 401/503 
 1. **改前端后，先用 node fetch 确认线上文件里真的有你的改动**，再让用户刷新。今天的连环翻车全部源于「以为部署了」。
 2. **改 App 后先 `screencap` 看一眼**，别只看编译通过。头像尺寸、气泡层次这类问题，编译永远不会报错。
 3. **动记忆/情绪相关的逻辑前，先跑一遍 `npx vitest run` 留基线**，881 个用例是你唯一的安全网。
+
+---
+
+## 十一、2026-10-31 复查发现的偏差（以本节为准）
+
+1. **线上版本比本文旧版写的更新三次**：最新部署是 Version `91a0ed0b`（`2026-10-30T19:26Z` = 北京 10-31 03:26），
+   不是 `92297db2`（那是 03:17）。部署历史用 `npx wrangler deployments list -c wrangler.local.toml` 查。
+2. **线上引擎开关全部 legacy**：`/api/admin/readiness` 显示 `memory_engine` / `_web` / `_mobile` / `_qq` 与
+   `affect_engine*` 都是 `legacy`（`wrangler.local.toml` 里也是）。后果：新引擎的 shadow 对比**完全没在跑**，
+   `engine_metrics` 不再增长；而且 `resolveRecall` 在 legacy 下提前 return，`recall_samples` **永远不会建表**，
+   所以「看 share 决定召回方向」这条路在现在这套开关下永远等不到数据。
+3. **`memory_events` 表名冲突（已修代码，未部署）**：线上那张表是 schema.sql 的「记忆上下文投影」
+   （id TEXT / section / summary / participants…），而事件账本 v2（started_ms / ended_ms / title / quotes…）
+   用了同一个表名，导致 `CREATE TABLE IF NOT EXISTS` 被跳过、建索引时 `no such column: started_ms`，
+   `POST /api/admin/memory/events/backfill` 直接 500——**阶段 A 从未写入成功过**。
+   已在 `85b3184` 把 v2 改名 `memory_event_log`（v1 不动），**下次部署后重跑回填即可**。
+4. **惰性建表还没建**：`chat_usage`、`memory_keepsakes`、`recall_samples` 在线上都不存在（部署后还没有对话）。
+   `GET /api/admin/readiness` 因此返回 503，这是预期，不是故障。
+5. **新增 `request_log`**：请求/cron/召回分段写进 D1，`GET /api/admin/requests?hours=24` 看 p50/p95。
+   这是替 `wrangler tail`（连不上）做的可观测性，部署后才开始有数据。
