@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-10-30T13:29:51.893Z",
-  "count": 231,
+  "generated_at": "2026-10-30T13:30:02.183Z",
+  "count": 232,
   "days": [
     {
       "date": "2026-10-30",
       "items": [
+        {
+          "hash": "cfbc958",
+          "date": "2026-10-30",
+          "type": "feat",
+          "area": "web",
+          "title": "修改记录页增加「上线」记录，部署后一条命令追加",
+          "why": "scripts/record-deploy.mjs 往 public/deploys.json 追加 { at, date, hash, note }（同提交同天去重）；gen-changelog 合并成 type=deploy 条目，页面显示紫色「上线」徽标并按日期倒序；npm run deploy:record；runbook 部署命令改成「生成数据 → 部署 → 记部署」。"
+        },
         {
           "hash": "17d9c60",
           "date": "2026-10-30",
