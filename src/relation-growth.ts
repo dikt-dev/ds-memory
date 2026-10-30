@@ -19,7 +19,9 @@
  *    - 中断联系 > 7 天：开始缓慢衰减
  */
 
-export const RELATION_MAX = 1000;
+import { RELATION_MAX } from './relation-model';
+
+export { RELATION_MAX };
 
 /** 分段增长上限（每天最多涨多少）。整数分段，避免小数在四舍五入时丢失。 */
 const GROWTH_TIERS: Array<{ below: number; maxGain: number }> = [

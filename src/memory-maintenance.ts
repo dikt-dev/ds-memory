@@ -5,6 +5,7 @@ import {
   type AffinitySignals,
   type IntimacySignals,
 } from './relation-drivers';
+import { RELATION_MAX, MOOD_MAX_DAILY_DELTA } from './relation-model';
 
 /**
  * memory.md 维护纯函数：
@@ -182,7 +183,8 @@ export const SECTION_COMMENTS: Record<string, string> = {
 };
 
 /** 关系变量：好感度 / 亲密度 / 心情值（0-1000）。 */
-export const RELATION_MAX = 1000;
+// 常量统一来自 relation-model（保持 export 以兼容既有引用）
+export { RELATION_MAX };
 export const AFFINITY_DEFAULT = 500;
 export const INTIMACY_DEFAULT = 300;
 export const MOOD_DEFAULT = 500;
@@ -193,7 +195,8 @@ export const RESPECT_DEFAULT = 650;
 /** 心动默认值：新关系不自带暧昧。 */
 export const ATTRACTION_DEFAULT = 300;
 /** 心情值单日变化上限（快变量）。 */
-export const MOOD_MAX_DAILY_DELTA = 80;
+// 常量统一来自 relation-model（保持 export 以兼容既有引用）
+export { MOOD_MAX_DAILY_DELTA };
 
 const AFFINITY_VAL_RE = /好感度[:：]\s*(\d{1,4})/;
 const INTIMACY_VAL_RE = /亲密度[:：]\s*(\d{1,4})/;

@@ -11,12 +11,17 @@
  * 心情值 决定「当下表现」（同样关系下，心情好就更热情，心情差就更冷淡）
  */
 
+import { RELATION_MAX, MOOD_MAX_DAILY_DELTA } from './relation-model';
+
 export interface Stage {
   min: number;
   label: string;
 }
 
-export const RELATION_MAX_SCORE = 1000;
+export const RELATION_MAX_SCORE = RELATION_MAX;
+
+/** 心情值单日最大变化（统一来自 relation-model，保留旧导出名） */
+export { MOOD_MAX_DAILY_DELTA };
 
 /** 好感度阶段 */
 export const AFFINITY_STAGES: Stage[] = [
@@ -148,7 +153,7 @@ export function driftMood(current: number, baseline = 500, rate = 0.05): number 
 }
 
 /** 心情的单日变化上限（比好感度/亲密度快，但仍有边界）。 */
-export const MOOD_MAX_DAILY_DELTA = 80;
+// 已合并到上一处导出，这里不再重复定义
 
 /** 心情变化截断。 */
 export function applyMoodDelta(current: number, proposed: number, maxDelta = MOOD_MAX_DAILY_DELTA): number {

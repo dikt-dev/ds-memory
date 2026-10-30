@@ -15,16 +15,18 @@
  *   刚认识但一见如故 → 好感高 + 亲密低 = 「热辣亲近」
  */
 
-export const RELATION_MAX = 1000;
+import { RELATION_MAX, INTIMACY_BASE, INTIMACY_PER_DAY } from './relation-model';
+
+export { RELATION_MAX };
 
 // ────────────────────────────────────────────────────────────
 // 亲密度：由「互动量」驱动
 // ────────────────────────────────────────────────────────────
 
 /** 亲密度初始值（新关系）。 */
-export const INTIMACY_BASE = 300;
+export { INTIMACY_BASE };
 /** 每累计 1 个「有效聊天日」解锁的亲密度上限。 */
-export const INTIMACY_PER_DAY = 2;
+export { INTIMACY_PER_DAY };
 /** 单日亲密度最大涨幅（防止一天猛聊暴涨）。 */
 export const INTIMACY_MAX_DAILY_GAIN = 4;
 /** 长期失联后每天下降。 */
