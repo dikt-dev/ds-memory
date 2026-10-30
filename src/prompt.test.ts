@@ -20,17 +20,17 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('消息来源：网页');
   });
 
-  it('包含傲娇/活泼/毒舌的强度与安全边界', () => {
+  it('保留安全边界，但不再写死傲娇配比与口癖模板', () => {
     const prompt = buildSystemPrompt({
       now: new Date('2026-10-21T01:00:00Z'),
       ctx,
       memory: 'x',
       channel: 'astrobot',
     });
-    expect(prompt).toContain('傲娇配比');
-    expect(prompt).toContain('毒舌要有分寸');
-    expect(prompt).toContain('不攻击外貌、家人、创伤、智力');
-    expect(prompt).toContain('认真难过时先收毒舌');
+    expect(prompt).toContain('不拿外貌、家人、创伤、智力开玩笑');
+    expect(prompt).toContain('认真难过的时候，你会先收着');
+    expect(prompt).not.toContain('傲娇配比');
+    expect(prompt).not.toContain('口癖参考');
   });
 
   it('不再把历史对话拼进 system（避免与 messages 重复）', () => {
@@ -242,11 +242,12 @@ describe('时间与诚实性规则', () => {
     expect(prompt).not.toContain('不要拿 HH:mm 自己换算');
   });
 
-  it('含“不记得就说不知道”的硬规则，禁止编造事实', () => {
+  it('记忆边界写成陈述：没依据就说没印象，感受可以编事实不行', () => {
     const prompt = buildSystemPrompt(base);
-    expect(prompt).toContain('## 记忆缺失时怎么说（硬规则）');
-    expect(prompt).toContain('不能编造事实');
-    expect(prompt).toContain('直接说“不记得/没印象/你没跟我说过”');
+    expect(prompt).toContain('## 记忆的边界');
+    expect(prompt).toContain('你没有依据，就说“不记得/没印象”');
+    expect(prompt).toContain('感受、态度、反应你随便说；事实不行');
+    expect(prompt).not.toContain('硬规则');
   });
 
   it('实时事实块里也带口语时间', () => {
