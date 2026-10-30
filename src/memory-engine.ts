@@ -19,7 +19,8 @@ import { packMemoryChunks } from './context-packer';
 import { loadMemoryChunks } from './memory-context-store';
 import { expandLinkedChunks } from './memory-links';
 import { formatMemoryChunks, rankMemoryChunks, shouldRecallMemory } from './memory-domain';
-import { embedTexts, recallMemoryForChat } from './memory-index';
+import { CANDIDATE_TOP_K, embedTexts, recallMemoryForChat } from './memory-index';
+import { selectRecall } from './recall-intent';
 import { byteLength } from './memory-maintenance';
 import { logTrace } from './trace';
 
@@ -151,7 +152,8 @@ async function runNextEngine(
   }
 
   t = performance.now();
-  const keywordPicked = rankMemoryChunks(query, chunks, 6, focus);
+  // 粗召回放宽到 20 条：选择器要在一个较大的池子里挑，而不是在 6 条里挑 5 条。
+  const keywordPicked = rankMemoryChunks(query, chunks, CANDIDATE_TOP_K, focus);
   stages.rank = performance.now() - t;
 
   // 关键词已经够强时不再付 query embedding 延迟；弱召回才走向量。
@@ -164,8 +166,41 @@ async function runNextEngine(
   }
 
   t = performance.now();
-  const picked =
-    queryVec !== null ? rankMemoryChunks(query, chunks, 6, focus, { queryVec }) : keywordPicked;
+  const pool =
+    queryVec !== null
+      ? rankMemoryChunks(query, chunks, CANDIDATE_TOP_K, focus, { queryVec })
+      : keywordPicked;
+  stages.rank += performance.now() - t;
+
+  // 一次调用同时做「想清楚要找什么」和「挑哪几条」；失败就退回确定性排序。
+  t = performance.now();
+  let picked = pool.slice(0, RECALL_MAX_ITEMS);
+  const selection = await selectRecall(env, {
+    query,
+    focus,
+    candidates: pool.map((chunk) => ({
+      id: chunk.id,
+      date: chunk.date,
+      content: chunk.content,
+      section: chunk.section,
+    })),
+    maxPick: RECALL_MAX_ITEMS,
+  }).catch(() => null);
+  if (selection) {
+    const byId = new Map(pool.map((chunk) => [chunk.id, chunk]));
+    const chosen = selection.pickedIds
+      .map((id) => byId.get(id))
+      .filter((chunk): chunk is (typeof pool)[number] => Boolean(chunk));
+    // 模型明确说「一条都不该提」时就真的不放：宁缺毋滥。
+    picked = chosen;
+    logTrace('memory.intents', {
+      intents: selection.intents,
+      picked: chosen.length,
+      candidates: pool.length,
+      ms: selection.ms,
+      backend: selection.backend,
+    });
+  }
   stages.rank += performance.now() - t;
 
   t = performance.now();
