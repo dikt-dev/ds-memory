@@ -4,9 +4,14 @@ import {
   MEMO_MIN_NEW_MESSAGES,
   MEMO_REFRESH_MESSAGES,
   MEMO_REFRESH_MS,
+  MEMO_WINDOW_MS,
   buildMemoInput,
   formatRecentMemoBlock,
   hasEnoughNewMaterial,
+  mergeMemoItems,
+  parseLegacyMemo,
+  parseMemoItems,
+  pickKeyLines,
   shouldRefreshRecentMemo,
 } from './recent-memory';
 
@@ -39,27 +44,45 @@ describe('hasEnoughNewMaterial', () => {
 
 describe('formatRecentMemoBlock', () => {
   const memo = {
-    text: ['- 一起调了 AstrBot 文件插件', '随便一行非列表', '- 早上说北京太阳大', '- 下午提了 GBVS 补丁'].join('\n'),
+    items: [
+      { at: '2026-10-22T08:00:00+08:00', text: '一起调了 AstrBot 文件插件' },
+      { at: '2026-10-22T09:00:00+08:00', text: '早上说北京太阳大' },
+      { at: '2026-10-22T15:00:00+08:00', text: '下午提了 GBVS 补丁' },
+    ],
     up_to_id: 42,
     updated_at: '2026-10-22T10:00:00.000Z',
   };
 
-  it('只保留列表行，并加上标题', () => {
+  it('带上标题，每条带时间锚', () => {
     const block = formatRecentMemoBlock(memo);
-    expect(block.startsWith('## 最近一天（中期记忆）')).toBe(true);
-    expect(block).toContain('- 一起调了 AstrBot 文件插件');
-    expect(block).not.toContain('随便一行非列表');
+    expect(block.startsWith('## 最近三天（中期记忆）')).toBe(true);
+    expect(block).toContain('10/22 08:00] 一起调了 AstrBot 文件插件');
   });
 
   it('超出条数时保留最新的几条', () => {
-    const block = formatRecentMemoBlock(memo, 2);
-    expect(block).toContain('- 下午提了 GBVS 补丁');
+    const block = formatRecentMemoBlock(memo, 1);
+    expect(block).toContain('下午提了 GBVS 补丁');
     expect(block).not.toContain('一起调了 AstrBot');
+  });
+
+  it('被取代的条目不注入', () => {
+    const withOld = {
+      ...memo,
+      items: [...memo.items, { at: '2026-10-22T16:00:00+08:00', text: '已经过时', superseded: true }],
+    };
+    expect(formatRecentMemoBlock(withOld)).not.toContain('已经过时');
+  });
+
+  it('落在当前会话时间范围内的条目不重复注入（O4）', () => {
+    const sessionStart = Date.parse('2026-10-22T14:00:00+08:00');
+    const block = formatRecentMemoBlock(memo, 24, sessionStart);
+    expect(block).not.toContain('下午提了 GBVS 补丁');
+    expect(block).toContain('一起调了 AstrBot 文件插件');
   });
 
   it('没有数据时返回空串（不污染提示词）', () => {
     expect(formatRecentMemoBlock(null)).toBe('');
-    expect(formatRecentMemoBlock({ ...memo, text: '没有列表行' })).toBe('');
+    expect(formatRecentMemoBlock({ ...memo, items: [] })).toBe('');
   });
 });
 
@@ -68,11 +91,15 @@ describe('buildMemoInput', () => {
 
   it('有旧纪要时带上它，便于增量更新', () => {
     const input = buildMemoInput(
-      { text: '- 旧：在修插件', up_to_id: 10, updated_at: '2026-10-22T10:00:00.000Z' },
+      {
+        items: [{ at: '2026-10-22T09:00:00+08:00', text: '旧：在修插件' }],
+        up_to_id: 10,
+        updated_at: '2026-10-22T10:00:00.000Z',
+      },
       [row('user', '修好了')],
     );
     expect(input).toContain('【当前纪要】');
-    expect(input).toContain('- 旧：在修插件');
+    expect(input).toContain('旧：在修插件');
     expect(input).toContain('【新增对话】');
     expect(input).toContain('用户：修好了');
   });
@@ -96,5 +123,68 @@ describe('buildMemoInput', () => {
   it('主动消息标注来源，避免被当成用户说的话', () => {
     const input = buildMemoInput(null, [{ role: 'assistant', turn_type: 'proactive', content: '在想你' }]);
     expect(input).toContain('助手（主动发起）：在想你');
+  });
+});
+
+describe('中期记忆改版（O1~O4）', () => {
+  it('覆盖窗口是 3 天', () => {
+    expect(MEMO_WINDOW_MS).toBe(3 * 24 * 60 * 60 * 1000);
+  });
+
+  it('新条目追加，旧条目原文不变（O2）', () => {
+    const prev = [{ at: '2026-10-21T09:00:00+08:00', text: '在改记忆系统' }];
+    const added = [{ at: '2026-10-21T15:00:00+08:00', text: '召回延迟 500ms' }];
+    const merged = mergeMemoItems(prev, added);
+    expect(merged[0].text).toBe('在改记忆系统');
+    expect(merged[1].text).toBe('召回延迟 500ms');
+  });
+
+  it('重复条目不重复添加', () => {
+    const prev = [{ at: '2026-10-21T09:00:00+08:00', text: '在改记忆系统' }];
+    const merged = mergeMemoItems(prev, [{ at: '2026-10-21T10:00:00+08:00', text: '在改记忆系统' }]);
+    expect(merged).toHaveLength(1);
+  });
+
+  it('超出 3 天窗口的条目被丢掉', () => {
+    const old = { at: '2026-10-18T09:00:00+08:00', text: '很久以前' };
+    const fresh = { at: '2026-10-22T09:00:00+08:00', text: '今天' };
+    const merged = mergeMemoItems([old, fresh], [], 48, Date.parse('2026-10-19T12:00:00+08:00'));
+    expect(merged.map((i) => i.text)).toEqual(['今天']);
+  });
+
+  it('解析模型输出时认时间锚，没有锚就用刷新时间', () => {
+    const out = ['- [10/21 14:30] 决定换工作', '- 没有时间锚的一句'].join('\n');
+    const items = parseMemoItems(out, '2026-10-22T10:00:00.000Z');
+    expect(items[0].text).toBe('决定换工作');
+    expect(items[0].at).toContain('2026-10-21T14:30');
+    expect(items[1].at).toBe('2026-10-22T10:00:00.000Z');
+  });
+
+  it('旧格式（一整段 - 列表）能迁移成条目', () => {
+    const items = parseLegacyMemo('- 第一条\n- 第二条', '2026-10-21T09:00:00.000Z');
+    expect(items.map((i) => i.text)).toEqual(['第一条', '第二条']);
+  });
+
+  it('规则预筛优先挑含决定/约定/状态的句子（O3）', () => {
+    const rows = [
+      { role: 'user', turn_type: 'chat', content: '哈哈哈' },
+      { role: 'user', turn_type: 'chat', content: '明天要去面试' },
+      { role: 'user', turn_type: 'chat', content: '今天好累' },
+      { role: 'user', turn_type: 'chat', content: '我决定下个月搬家' },
+      { role: 'assistant', turn_type: 'chat', content: '那就好好休息' },
+    ];
+    const picked = pickKeyLines(rows);
+    const texts = picked.map((r) => r.content);
+    expect(texts).toContain('明天要去面试');
+    expect(texts).toContain('我决定下个月搬家');
+    expect(texts).not.toContain('哈哈哈');
+  });
+
+  it('筛不出关键句时退回最近若干行（不能没材料）', () => {
+    const rows = [
+      { role: 'user', turn_type: 'chat', content: '哈哈' },
+      { role: 'user', turn_type: 'chat', content: '嗯嗯' },
+    ];
+    expect(pickKeyLines(rows)).toHaveLength(2);
   });
 });

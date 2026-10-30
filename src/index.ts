@@ -1824,7 +1824,7 @@ app.get('/api/admin/stats', requireAuth, async (c) => {
     over_budget_sections: reportSectionBudgets(memory)
       .filter((b) => b.over)
       .map((b) => ({ header: b.header, bytes: b.bytes, budget: b.budget })),
-    recent_memo_items: memo ? memo.text.split('\n').filter((l) => l.trim().startsWith('- ')).length : 0,
+    recent_memo_items: memo ? memo.items.filter((i) => !i.superseded).length : 0,
     archive_lines: archiveLines.length,
     archive_bytes: byteLength(archiveLines.join('\n')),
     chat_log_files: logKeys.length,
