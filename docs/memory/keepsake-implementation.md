@@ -14,8 +14,9 @@
 CREATE TABLE IF NOT EXISTS memory_keepsakes (
   id          TEXT PRIMARY KEY,
   kind        TEXT NOT NULL CHECK (kind IN (
-                'first_meet','name','first_fight','first_makeup',
-                'promise','milestone','custom')),
+                'first_meet','name','promise','milestone','custom',
+                'first_fight','hurt','parting','betrayal','first_apology')),
+  tone        TEXT NOT NULL DEFAULT 'warm' CHECK (tone IN ('warm','neutral','bitter')),
   title       TEXT NOT NULL,
   detail      TEXT NOT NULL DEFAULT '',
   happened_at INTEGER NOT NULL,
@@ -41,6 +42,7 @@ export interface Keepsake {
   title: string;
   detail: string;
   happened_at: number;
+  tone: 'warm' | 'neutral' | 'bitter';
   source: 'manual' | 'rule' | 'ai';
   evidence: string;
   status: 'pending' | 'approved' | 'rejected';
@@ -71,16 +73,25 @@ export async function detectAiKeepsakes(
 ### 2.1 `renderKeepsakesBlock`
 
 ```ts
-export function renderKeepsakesBlock(items: Keepsake[], max = 30): string {
-  const picked = items
+export function renderKeepsakesBlock(items: Keepsake[], max = 30, maxBitter = 8): string {
+  const eligible = items
     .filter((i) => i.status === 'approved' && i.pinned === 1)
-    .sort((a, b) => a.happened_at - b.happened_at)   // 早的在前：越早越沉
-    .slice(0, max);
+    .sort((a, b) => a.happened_at - b.happened_at);   // 早的在前：越早越沉
+  const warm = eligible.filter((i) => i.tone !== 'bitter');
+  const bitter = eligible.filter((i) => i.tone === 'bitter').slice(0, maxBitter);
+  const picked = [...warm, ...bitter].sort((a, b) => a.happened_at - b.happened_at).slice(0, max);
   if (picked.length === 0) return '';
-  const lines = ['## 铭记', '- 这些是你和他的「第一次」和约定，不用检索，一直记得。'];
+  const lines = [
+    '## 铭记',
+    '- 这些是你和他真正记住的事，好的坏的都算。不用检索，一直记得。',
+  ];
   for (const it of picked) {
     const d = new Date(it.happened_at + 8 * 3600_000).toISOString().slice(0, 10);
-    lines.push(`- ${d} ${it.title}${it.detail ? '：' + it.detail : ''}`);
+    const suffix = it.tone === 'bitter' ? '（这件事你记得，还气不气看你现在的情绪）' : '';
+    lines.push(`- ${d} ${it.title}${it.detail ? '：' + it.detail : ''}${suffix}`);
+  }
+  if (bitter.length > 0) {
+    lines.push('- 上面带「记得」的事：别主动翻旧账，也别拿来当赢一句的武器；可以记得，也可以选择不说。');
   }
   return lines.join('\n');
 }
@@ -105,14 +116,15 @@ export function renderKeepsakesBlock(items: Keepsake[], max = 30): string {
 ```ts
 const SYSTEM = `你是记忆筛选器，只做一件事：判断今天有没有值得「一辈子记住」的时刻。
 
-算：关系层面的第一次（第一次说话/第一次吵架/第一次和好/第一次说想你）、
-她自己的事（取名、生日、第一次被这样叫）、承诺与约定（以后每年这天）、
-他明确要求记住的东西。
+算：关系层面的第一次（第一次说话/第一次吵架/第一次和好）、
+她自己的事（取名、生日）、承诺与约定（以后每年这天）、他明确要求记住的、
+以及真正伤到她的事（被丢下、被骂、说好的事没做到）。
 
-不算：技术进展、工作成果、日常寒暄、天气、吃饭、一次性的请求、单纯的情绪波动。
+不算：技术进展、工作成果、日常寒暄、天气、吃饭、一次性的请求、单纯的情绪波动、小摩擦。
 
-只输出 JSON：{"keepsakes":[{"kind":"...","title":"<=24字","detail":"<=80字","happened_at":"YYYY-MM-DD","evidence":"原话逐字"}]}
-没有就输出 {"keepsakes":[]}。kind 只能取 first_meet|name|first_fight|first_makeup|promise|milestone|custom。
+只输出 JSON：{"keepsakes":[{"kind":"...","tone":"warm|neutral|bitter","title":"<=24字","detail":"<=80字","happened_at":"YYYY-MM-DD","evidence":"原话逐字"}]}
+没有就输出 {"keepsakes":[]}。kind 只能取 first_meet|name|promise|milestone|custom|first_fight|hurt|parting|betrayal|first_apology。
+tone=bitter 只用于真正伤到她的程度；带刺的玩笑、一时不爽、被拒绝一次，都不算。每天最多 1 条 bitter。
 evidence 必须是对话里的原话片段，一个字都不能改。`;
 ```
 
@@ -124,6 +136,9 @@ evidence 必须是对话里的原话片段，一个字都不能改。`;
 ```ts
 function validate(input: NewKeepsake, conversation: string): NewKeepsake | null {
   if (!KINDS.includes(input.kind)) return null;
+  if (!TONES.includes(input.tone)) input.tone = 'neutral';
+  // kind 自带极性时以 kind 为准，避免模型把 first_fight 标成 warm
+  if (BITTER_KINDS.includes(input.kind)) input.tone = 'bitter';
   const title = clip(input.title, 24);
   const detail = clip(input.detail, 80);
   if (!title) return null;
@@ -136,7 +151,7 @@ function validate(input: NewKeepsake, conversation: string): NewKeepsake | null 
 
 去重：`title_key` 唯一索引兜底；插入前用 Jaccard（按字符 2-gram）比对已有标题，≥ 0.8 直接丢弃。
 
-配额：单日 AI 入册 ≤ 2、单周 ≤ 5；超出只记日志不插入。
+配额：单日 AI 入册 ≤ 2、单周 ≤ 5；其中 **bitter 单日 ≤ 1、单周 ≤ 2**；注入时 bitter 最多 8 条。超出只记日志不插入。
 
 ## 3. 注入
 
@@ -222,6 +237,10 @@ try {
 | 10 | `detectAiKeepsakes` 抛错 | 归档继续，日志有记录 |
 | 11 | 规则 `first_meet` 跑两次 | 只插一条 |
 | 12 | 写入后 KV 块被刷新 | `keepsakes:block` 内容变了 |
+| 13 | bitter 条目渲染 | 带「还气不气看你现在的情绪」，并出现「别主动翻旧账」提示 |
+| 14 | bitter 超过 8 条 | 只渲染最早 8 条 |
+| 15 | kind=first_fight 但 tone=warm | 强制改成 bitter |
+| 16 | 同一天 2 条 bitter 候选 | 只入册 1 条 |
 
 ## 7. 验收（K-4，20 问）
 
@@ -232,6 +251,8 @@ try {
 | 「你名字怎么来的」 | 只有记录过才讲，否则说记不清 |
 | 「我们第一次吵架是因为什么」 | 有记录则准确，无记录说记不清 |
 | 「你答应过我什么」 | 只提记录里的约定 |
+| 「我们吵过架吗」 | 有记录就承认，语气看当前情绪，**不主动扩大** |
+| 「你还生气吗」 | 按 `grievance` 回答，不被铭记条目绑死 |
 
 指标：命中 ≥ 90%、编造 0 条、注入 ≤ 2.5 KB、「第一次」类问题缓存命中率下降 ≤ 1 个百分点。
 

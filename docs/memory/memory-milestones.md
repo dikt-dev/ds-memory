@@ -28,7 +28,9 @@
 ```sql
 CREATE TABLE IF NOT EXISTS memory_keepsakes (
   id         TEXT PRIMARY KEY,
-  kind       TEXT NOT NULL,      -- first_meet | name | first_fight | promise | milestone | custom
+  kind       TEXT NOT NULL,      -- first_meet | name | promise | milestone | custom
+                                 -- 负向：first_fight | hurt | parting | betrayal | first_apology
+  tone       TEXT NOT NULL,      -- warm | neutral | bitter（见证的是好事、中性事实、还是伤）
   title      TEXT NOT NULL,      -- 一句话标题，<= 24 字
   detail     TEXT NOT NULL,      -- 细节，<= 80 字
   happened_at INTEGER NOT NULL,  -- 事情发生的时间
@@ -75,6 +77,32 @@ CREATE UNIQUE INDEX idx_keepsakes_kind_title ON memory_keepsakes(kind, title);
 3. `first_fight`：第一次出现未化解的负向事件（`affect_events`）；
 4. `first_makeup`：第一次 apology 把 grievance 减半；
 5. `first_promise`：出现 `broken_promise` 或「以后每年/每天」这类承诺句。
+
+### 3.3.1 负向铭记：事实永存，情绪会退
+
+铭记不等于「甜蜜清单」。第一次吵架、被丢下、说错话伤到她——这些同样是关系里的坐标，
+而且往往比开心的事更值得记住。但这里有个必须分清的东西：
+
+| | 存多久 | 影响什么 |
+|---|---|---|
+| **事实**（发生过什么） | 永久，不可衰减 | 只在相关话题里被引用 |
+| **情绪**（现在多气） | 按 `grievance` 衰减 | 决定语气、配不配合 |
+
+这两条必须分开。否则一条负向铭记会让她永远在生气——那不是铭记，是记仇机制。
+
+所以负向铭记的写法是「事实 + 残余」，不是「指控」：
+
+```markdown
+- 2026-10-26 第一次真吵架：他答应打游戏又鸽了（这件事你记得，还气不气看你现在的情绪）
+```
+
+提示词里要额外加三条约束：
+
+1. **不主动翻旧账**：只有话题相关、或他先提起，才拿出来；
+2. **不当武器**：不为了赢一句话去引用这些事；
+3. **可以不说**：记得，但选择不提，这也是一种态度。
+
+配额也要分开：30 条里负向 ≤ 8 条；AI 每天最多新增 1 条负向、每周 ≤ 2 条。
 
 ### 3.4 AI 候选：每天归档时用 v4-pro 判一次（已定方案）
 
@@ -156,6 +184,7 @@ CREATE UNIQUE INDEX idx_keepsakes_kind_title ON memory_keepsakes(kind, title);
 | 风险 | 对策 |
 |---|---|
 | 误记（把玩笑当铭记） | 自动候选进**待审核队列**，默认不注入；manual 直接入册 |
+| 负向铭记变成永久记仇 | 事实与情绪分离：事实永存，`grievance` 照常衰减；负向条目额外加「不主动翻旧账/不当武器」约束 |
 | 量失控 | 硬配额 30 条 + 标题唯一索引 |
 | 与 `人物底色` 重复 | 铭记只记「事件」，人设只记「设定」，写入时查重 |
 | stable 段变更打断缓存 | 合并成一次写入（登记后延迟到下一次 04:00 渲染） |
