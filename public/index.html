@@ -106,7 +106,7 @@
   /* ---------- 顶栏 ---------- */
   header {
     display: flex; align-items: center; gap: 1rem;
-    padding: 0 max(1rem, calc((100vw - var(--col)) / 2));
+    padding: 0 max(1rem, calc((100vw - 1040px) / 2));
     height: 60px; flex: 0 0 auto;
     background: var(--surface);
     border-bottom: 1px solid var(--hairline);
@@ -163,6 +163,21 @@
   @media (max-width: 900px) {
     .actions .label { display: none; }
     .actions button, .actions a { padding: .45rem; }
+  }
+
+  /* 窄一点时顶栏折成两行：第一行品牌 + 操作，第二行日期/费用/余额，避免全挤成省略号 */
+  @media (max-width: 1100px) {
+    header {
+      flex-wrap: wrap; height: auto; row-gap: .15rem;
+      padding-top: .5rem; padding-bottom: .5rem;
+    }
+    .brand { order: 1; }
+    .actions { order: 2; margin-left: auto; }
+    .meta {
+      order: 3; flex-basis: 100%;
+      overflow-x: auto; scrollbar-width: none;
+    }
+    .meta::-webkit-scrollbar { display: none; }
   }
 
   /* ---------- 消息区 ---------- */
@@ -966,6 +981,7 @@ function renderUserContent(content) {
   // 落库内容里包含文件原文（给 AI 读），历史渲染只显示文件卡片；
   // 否则刷新后整个文件正文会铺满聊天气泡。
   const fileCards = [];
+  let hadMetaCard = false;
   const pushCard = (name) => {
     const token = `\u0000DSFILE${fileCards.length}\u0000`;
     fileCards.push(`<div class="msg-file"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>${escapeHtml(name)}</div>`);
@@ -1267,11 +1283,16 @@ async function loadMoreHistory(jumpToBottom) {
     hasMore = data.has_more ?? false;
     const frag = document.createDocumentFragment();
     for (const m of data.messages || []) {
-      frag.appendChild(buildBubbleEl(
-        m.role === 'user' ? 'user' : 'assistant',
-        m.role === 'user' ? renderUserContent(m.content) : renderMarkdown(stripLeadTime(m.content)),
-        m.content,
-      ));
+      // 单条渲染失败不能让整段历史变空白（2026-10-31 就踩过一次）
+      try {
+        frag.appendChild(buildBubbleEl(
+          m.role === 'user' ? 'user' : 'assistant',
+          m.role === 'user' ? renderUserContent(m.content) : renderMarkdown(stripLeadTime(m.content)),
+          m.content,
+        ));
+      } catch (e) {
+        console.warn('skip history message', m && m.id, e);
+      }
       if (Number.isFinite(m.id) && m.id > latestSeenId) latestSeenId = m.id;
     }
     const prevHeight = messagesEl.scrollHeight;
@@ -1325,11 +1346,15 @@ async function pollNewMessages() {
       }
 
       for (const m of incoming) {
-        messagesEl.appendChild(buildBubbleEl(
-          m.role === 'user' ? 'user' : 'assistant',
-          m.role === 'user' ? renderUserContent(m.content) : renderMarkdown(stripLeadTime(m.content)),
-          m.content,
-        ));
+        try {
+          messagesEl.appendChild(buildBubbleEl(
+            m.role === 'user' ? 'user' : 'assistant',
+            m.role === 'user' ? renderUserContent(m.content) : renderMarkdown(stripLeadTime(m.content)),
+            m.content,
+          ));
+        } catch (e) {
+          console.warn('skip live message', m && m.id, e);
+        }
       }
       appended = true;
       if (!data.has_more) break;
