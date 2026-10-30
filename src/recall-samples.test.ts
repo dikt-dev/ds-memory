@@ -16,6 +16,7 @@ const row = (over: Partial<RecallSampleRow> = {}): RecallSampleRow => ({
   linked: 1,
   hasVector: false,
   timedOut: false,
+  legacySkipped: false,
   created_at: 0,
   ...over,
 });

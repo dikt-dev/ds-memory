@@ -47,15 +47,17 @@ PROACTIVE_LEVEL = "normal"
 
 # Phase 5 切换开关（默认 legacy；按 App → 网页 → 主动消息顺序改）
 AUTH_MODE = "signed"
-MEMORY_ENGINE = "legacy"
-AFFECT_ENGINE = "legacy"
-# 渠道级覆盖：App 先切，网页后切；旧 QQ 键保留兼容
-MEMORY_ENGINE_MOBILE = "legacy"
-MEMORY_ENGINE_WEB = "legacy"
-MEMORY_ENGINE_QQ = "legacy"
-AFFECT_ENGINE_MOBILE = "legacy"
-AFFECT_ENGINE_WEB = "legacy"
-AFFECT_ENGINE_QQ = "legacy"
+# 2026-10-31：全渠道开 shadow（只跑新引擎记录差异，回复仍走 legacy）。
+# 延迟实测 171ms(10-27) → 503ms(10-29)，随索引增长；已确认可以接受。
+MEMORY_ENGINE = "shadow"
+AFFECT_ENGINE = "shadow"
+# 渠道级覆盖：与全局一致，显式写出来避免回退歧义；旧 QQ 键保留兼容
+MEMORY_ENGINE_MOBILE = "shadow"
+MEMORY_ENGINE_WEB = "shadow"
+MEMORY_ENGINE_QQ = "shadow"
+AFFECT_ENGINE_MOBILE = "shadow"
+AFFECT_ENGINE_WEB = "shadow"
+AFFECT_ENGINE_QQ = "shadow"
 # App 轮询并 ACK；events 仅调试
 PROACTIVE_DELIVERY = "queue"
 

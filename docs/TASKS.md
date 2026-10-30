@@ -14,9 +14,9 @@
 > | T-03 成本基线 | ✅ 已记：今日 0 / 近 7 天 1.1941 元 / 10-29 0.5008 / 10-30 0.6933 |
 > | T-02 部署后验证 | ✅ 已做：health、day、页面(no-store)、usage、stats 全过；readiness 503 是 `chat_usage`/`memory_keepsakes` 未建（预期） |
 > | T-04 事件回填 | ❌ 当时 500：`memory_events` 表名与 schema.sql 冲突。已修（`85b3184`，改名 `memory_event_log`），**等下次部署后重跑** |
-> | 引擎开关 | ⚠️ 线上**全部 legacy**（memory/affect），shadow 对比没在积累；`recall_samples` 永不建表 → T-06 依赖它的前提不成立 |
+> | 引擎开关 | ✅ 2026-10-31 决定**全渠道开 shadow**（memory/affect；proactive 早就是 shadow）。线上生效需一次部署。历史数据里旧侧恒为 0 是因为全量记忆注入时 legacy 召回被跳过，不代表旧召回差；已加 `legacy_skipped` 标记区分 |
 >
-> 其余条目日期可整体提前一天；T-06 之前必须先决定「shadow 要不要打开」。
+> 其余条目日期可整体提前一天。T-06 的 shadow 前提已解决；但先跑几天拿到 `recall_samples` 明细（p50/p95 + 分段耗时）再动手改召回。
 >
 > 另（2026-10-31）：主动消息改为「闹钟唤醒 + 本地通知」，见 `docs/design/proactive-notify.md`；请求量 17,280/天 → 4~8/天。
 > 后台保活（KeepAliveService）仍**默认关闭**（设置 → 通知里可开）。关着时不再每 5 秒拉一次 events，
@@ -27,7 +27,7 @@
 | # | 事项 | 现状 / 影响 | 状态 |
 |---|---|---|---|
 | 1 | **部署这批修复** | `85b3184` 事件表改名、`f735437` request_log 都还没上线；T-04 回填、`chat_usage`/`memory_keepsakes` 建表都等这次部署 | ⏳ 等确认 |
-| 2 | **shadow 开关** | 线上全 legacy → shadow 对比没数据、`recall_samples` 永不建表 → T-06 前提不成立 | ⏳ 等确认 |
+| 2 | ~~**shadow 开关**~~ | ✅ 已定：全渠道 shadow（配置已改，随下次部署生效） | ✅ 完成 |
 | 3 | **R8** | ✅ 已开：102.5 MB → **56.3 MB**，keep 规则见 `ds-mobile/app/proguard-rules.pro`；真机验证过启动/PDF/ZIP/docx/SSH | ✅ 完成 |
 
 ## 状态图例

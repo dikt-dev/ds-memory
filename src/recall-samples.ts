@@ -26,6 +26,14 @@ export interface RecallSample {
   linked: number;
   hasVector: boolean;
   timedOut: boolean;
+  /**
+   * 旧引擎这一侧是不是被「跳过」了（不是「返回空」）。
+   *
+   * 手机上全量记忆已经整块塞进提示词，legacy 召回被 skipMemorySource 主动跳过，
+   * old_items 因此恒为 0。如果不区分「跳过」和「返回空」，这份对比数据会被
+   * 误读成「旧召回很差」，实际是「旧召回压根没跑」。
+   */
+  legacySkipped: boolean;
 }
 
 export interface RecallSampleRow extends RecallSample {
@@ -54,9 +62,16 @@ export async function ensureRecallSampleTable(env: Env): Promise<void> {
        linked      INTEGER NOT NULL DEFAULT 0,
        has_vector  INTEGER NOT NULL DEFAULT 0,
        timed_out   INTEGER NOT NULL DEFAULT 0,
+       legacy_skipped INTEGER NOT NULL DEFAULT 0,
        created_at  INTEGER NOT NULL)
    `.trim(),
   ).run();
+  // 老表没有这一列（CREATE IF NOT EXISTS 不会补列），单独加一次；已存在会抛，忽略。
+  await env.DB.prepare(
+    'ALTER TABLE recall_samples ADD COLUMN legacy_skipped INTEGER NOT NULL DEFAULT 0',
+  )
+    .run()
+    .catch(() => undefined);
   ensured = true;
 }
 
@@ -68,8 +83,9 @@ export async function recordRecallSample(env: Env, s: RecallSample, now = Date.n
     await env.DB.prepare(
       `INSERT INTO recall_samples
          (day_key, channel, mode, kind, legacy_ms, load_ms, rank_ms, embed_ms,
-          expand_ms, total_ms, items, linked, has_vector, timed_out, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          expand_ms, total_ms, items, linked, has_vector, timed_out, legacy_skipped,
+          created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
       .bind(
         dateKeyInBeijing(new Date(now)),
@@ -86,6 +102,7 @@ export async function recordRecallSample(env: Env, s: RecallSample, now = Date.n
         ms(s.linked),
         s.hasVector ? 1 : 0,
         s.timedOut ? 1 : 0,
+        s.legacySkipped ? 1 : 0,
         now,
       )
       .run();
@@ -113,7 +130,8 @@ export async function readRecallSamples(env: Env, days = 3): Promise<RecallSampl
   const cutoff = dateKeyInBeijing(new Date(Date.now() - Math.max(1, days) * 86400000));
   const rows = await env.DB.prepare(
     `SELECT day_key, channel, mode, kind, legacy_ms, load_ms, rank_ms, embed_ms,
-            expand_ms, total_ms, items, linked, has_vector, timed_out, created_at
+            expand_ms, total_ms, items, linked, has_vector, timed_out, legacy_skipped,
+            created_at
        FROM recall_samples
       WHERE day_key >= ?
       ORDER BY id DESC
@@ -135,6 +153,7 @@ export async function readRecallSamples(env: Env, days = 3): Promise<RecallSampl
       linked: number;
       has_vector: number;
       timed_out: number;
+      legacy_skipped: number;
       created_at: number;
     }>();
   return (rows.results ?? []).map((r) => ({
@@ -152,6 +171,7 @@ export async function readRecallSamples(env: Env, days = 3): Promise<RecallSampl
     linked: r.linked,
     hasVector: r.has_vector === 1,
     timedOut: r.timed_out === 1,
+    legacySkipped: r.legacy_skipped === 1,
     created_at: r.created_at,
   }));
 }
