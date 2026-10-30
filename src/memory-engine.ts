@@ -304,8 +304,9 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
       linked: nextLinked,
       hasVector: nextHasVector,
       timedOut: result.timedOut,
-      // 「旧侧跳过」和「旧侧返回空」是两件事：手机上全量记忆注入时 legacy 召回
-      // 被主动跳过，old_items 恒为 0 不代表旧召回差。分开记，别误读。
+      // 旧侧「受限于只允许 archive 来源且没有任何命中」——不是「没跑」。
+      // 注意：skipMemorySource 只是过滤掉 memory 来源，legacy 仍会读行/排序/可能 embed，
+      // 所以这一位为 1 时 legacy_ms 仍然可能是几百毫秒。old_items=0 别直接读成「旧召回差」。
       legacySkipped: opts.skipMemorySource === true && result.legacyText.trim() === '',
     }, nowMs);
   } catch (e) {
