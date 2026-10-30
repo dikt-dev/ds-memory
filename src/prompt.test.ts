@@ -226,3 +226,31 @@ describe('normalizeChannel', () => {
     expect(normalizeChannel(undefined, 'astrobot')).toBe('astrobot');
   });
 });
+describe('时间与诚实性规则', () => {
+  const ctx = buildDayContext('2026-10-29');
+  const base = {
+    now: new Date('2026-10-29T13:11:00Z'),
+    ctx,
+    memory: 'x',
+    channel: 'web' as const,
+  };
+
+  it('同时给出 ISO 时间和口语说法，并要求按口语说法读', () => {
+    const prompt = buildSystemPrompt(base);
+    expect(prompt).toContain('2026-10-29T21:11:00+08:00');
+    expect(prompt).toContain('口语说法：晚上九点十一分');
+    expect(prompt).toContain('不要拿 HH:mm 自己换算');
+  });
+
+  it('含“不记得就说不知道”的硬规则，禁止编造事实', () => {
+    const prompt = buildSystemPrompt(base);
+    expect(prompt).toContain('## 记忆缺失时怎么说（硬规则）');
+    expect(prompt).toContain('不能编造事实');
+    expect(prompt).toContain('直接说“不记得/没印象/你没跟我说过”');
+  });
+
+  it('实时事实块里也带口语时间', () => {
+    const prompt = buildSystemPrompt(base);
+    expect(prompt).toContain('现在=2026-10-29T21:11:00+08:00（晚上九点十一分；');
+  });
+});

@@ -60,6 +60,34 @@ export function beijingMonth(d: Date = new Date()): number {
   return Number(MONTH_FMT.format(d));
 }
 
+const CN_DIGITS = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+
+function cnNumber(n: number): string {
+  if (n < 10) return CN_DIGITS[n];
+  const tens = Math.floor(n / 10);
+  const ones = n % 10;
+  return (tens === 1 ? '十' : CN_DIGITS[tens] + '十') + (ones ? CN_DIGITS[ones] : '');
+}
+
+/**
+ * 北京时间的口语读法，如「晚上九点十一分」。
+ *
+ * 模型拿到 `21:11` 这种 24 小时制串时，会自己换算成"几多点"并算错
+ * （实测 21:10 说成"快十点多"）。直接把口语说法喂进去，省掉这次换算。
+ */
+export function spokenTime(d: Date = new Date()): string {
+  const parts = ISO_FMT.formatToParts(d);
+  const get = (type: string) => parts.find((p) => p.type === type)!.value;
+  const hour = Number(get('hour')) % 24;
+  const minute = Number(get('minute'));
+  const period =
+    hour < 5 ? '凌晨' : hour < 8 ? '早上' : hour < 12 ? '上午' : hour === 12 ? '中午' : hour < 18 ? '下午' : '晚上';
+  const hourText = hour === 0 ? '零点' : `${cnNumber(hour % 12 === 0 ? 12 : hour % 12)}点`;
+  const minuteText =
+    minute === 0 ? '整' : minute < 10 ? `零${CN_DIGITS[minute]}分` : `${cnNumber(minute)}分`;
+  return `${period}${hourText}${minuteText}`;
+}
+
 /** 日期键对应的星期名（日期键本身即北京时间日历日，直接用 UTC 解析）。 */
 export function weekdayName(dateKey: string): string {
   const [y, m, day] = dateKey.split('-').map(Number);

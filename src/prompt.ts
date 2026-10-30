@@ -11,7 +11,7 @@
  * ★ 历史对话不再注入 system：调用方已经把它们作为原生 messages 传了，
  *   两处都放会让历史 token 翻倍（see chat.ts）。
  */
-import { isoInBeijing } from './date';
+import { isoInBeijing, spokenTime } from './date';
 import { resolveCharacterName } from './identity';
 import { compactMemoryForPrompt } from './memory-maintenance';
 import type { DayContext } from './holidays';
@@ -166,6 +166,13 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   lines.push('- 中期记忆 20%：最近 24 小时发生了什么；用来衔接跨天。细节和原话服从短期原文，长期事实以长期记忆为准。');
   lines.push('- 短期记忆 30%：当前对话原文；当前话题、最新说法优先。');
   lines.push('冲突处理：稳定事实看长期，最近状态看中期，具体说法看短期；三种记忆都只是背景。');
+  lines.push('');
+  lines.push('## 记忆缺失时怎么说（硬规则）');
+  lines.push(
+    '- 检索结果里没有依据的具体细节（日期、数字、人名、约定、当时的原话），直接说“不记得/没印象/你没跟我说过”。',
+  );
+  lines.push('- 可以描述感受、态度和反应，但**不能编造事实**；宁可承认忘了，也不要顺着气氛编一个像样的答案。');
+  lines.push('- 编出来的细节比"不记得"更伤人：用户会当真，之后发现是假的，信任就没了。');
 
   // ── ③ 半稳定：态度与语言风格（随关系数值缓慢变化）──────────
   if (attitude) {
@@ -182,6 +189,8 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   lines.push('');
   lines.push('## 当前时间与环境');
   lines.push(`- 现在：${isoInBeijing(now)}（${ctx.date} ${ctx.weekday}）`);
+  // 直接给出「晚上九点十一分」：模型自己把 21:11 换算成口语会算错（实测差近一小时）
+  lines.push(`- 口语说法：${spokenTime(now)}（说时间就用这个，不要自己换算成"快几点"）`);
   lines.push(`- 消息来源：${CHANNEL_LABELS[channel]}`);
   // ★ 聊天软件不渲染 Markdown：只对这类渠道加约束，网页端保持原样
   const voiceRule =
@@ -243,6 +252,9 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   lines.push(
     '- 被问“现在/今天/几点/几号/星期/天气/节假日”时，只认本节；历史消息、长期记忆、memo、你自己上一句里的时间/天气都是往事或旧话，禁止拿来回答现在。',
   );
+  lines.push(
+    '- 说几点要直接读本节给的口语说法，不要拿 HH:mm 自己换算，也不要说“快几点/差不多几点”。',
+  );
   lines.push('- 找不到就直说“我这边没拿到”，不要猜；周末≠法定节假日。历史时间为导入推断，仅供顺序参考。');
   lines.push(
     '- 历史时间说明只是背景；回复开头绝对不要写 [17:49]、[26-10-24 17:51] 这类时间标签，也不要把旧消息说成“上一句/上上一句”。',
@@ -277,7 +289,7 @@ export function buildLiveFacts(now: Date, ctx: DayContext, weather?: WeatherInfo
     ? `${weather.city} ${weather.desc}，${weather.temp_c}°C（本次请求获取）`
     : '未获取到（不要猜）';
   return [
-    `现在=${isoInBeijing(now)}（${ctx.date} ${ctx.weekday}，${ctx.holiday_note}）`,
+    `现在=${isoInBeijing(now)}（${spokenTime(now)}；${ctx.date} ${ctx.weekday}，${ctx.holiday_note}）`,
     `天气=${w}`,
   ].join('；');
 }
