@@ -1,5 +1,7 @@
 # 待做事项总表
 
+> **排期以 [TASKS.md](TASKS.md) 为准。** 本文只保留技术细节与背景。
+
 更新：2026-10-30
 
 > 代码评估复核与修复优先级见 [code-review-responses.md](./memory/code-review-responses.md)。

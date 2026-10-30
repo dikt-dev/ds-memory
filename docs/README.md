@@ -8,7 +8,8 @@
 | 你想知道 | 看这里 |
 |---|---|
 | 系统现在怎么样、卡在哪 | [current-state.md](./current-state.md) |
-| 接下来做什么、什么时候做 | [pending-work.md](./pending-work.md) |
+| **接下来做什么、什么时候做** | **[TASKS.md](./TASKS.md)**（唯一排期来源） |
+| 某项任务的技术细节 | [pending-work.md](./pending-work.md)、[memory/memory-backlog.md](./memory/memory-backlog.md) |
 | 整体架构怎么搭的 | [architecture.md](./architecture.md) |
 | 某个功能具体怎么实现的、怎么排障 | [memory-system-walkthrough.md](./memory-system-walkthrough.md) |
 | 从别人那接手 | [handover-2026-10-29.md](./handover-2026-10-29.md) |
@@ -19,7 +20,8 @@
 | 文件 | 内容 | 更新 |
 |---|---|---|
 | `current-state.md` | 当前状态快照：能力、指标、已知问题 | 10-29 |
-| `pending-work.md` | 待做事项总表，含排期 | 10-30 |
+| `TASKS.md` | **任务总表（唯一排期来源，每次改动需维护）** | 10-30 |
+| `pending-work.md` | 待做事项的技术细节（排期以 TASKS.md 为准） | 10-30 |
 | `architecture.md` | 模块、数据流、存储、部署 | 10-27 |
 | `memory-system-walkthrough.md` | 实现级细节：阈值、降级矩阵、排障 | 10-27 |
 | `design-notes.md` | 早期设计推演，与代码不一致处已标注 | 10-23 |
