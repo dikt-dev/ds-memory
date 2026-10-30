@@ -63,6 +63,7 @@ async function deepseekDistill(
   system: string,
   user: string,
   maxTokens: number,
+  opts: { thinking?: boolean } = {},
 ): Promise<{ text: string; cost: number }> {
   const apiKey = env.DEEPSEEK_API_KEY;
   if (!apiKey) throw new Error('DEEPSEEK_API_KEY 未配置');
@@ -76,8 +77,8 @@ async function deepseekDistill(
         { role: 'user', content: user },
       ],
       max_tokens: maxTokens,
-      // 提炼/压缩不需要思维链，关闭思考模式控制成本
-      thinking: { type: 'disabled' },
+      // 每日归档要对照全文记忆做取舍，思考模式明显提升质量；其余提炼保持关闭以控成本
+      thinking: { type: opts.thinking ? 'enabled' : 'disabled' },
     }),
   });
   if (!res.ok) {
@@ -85,11 +86,14 @@ async function deepseekDistill(
     throw new Error(`DeepSeek HTTP ${res.status}: ${detail.slice(0, 200)}`);
   }
   const data = (await res.json()) as {
-    choices?: { message?: { content?: unknown } }[];
+    choices?: { message?: { content?: unknown }; finish_reason?: string }[];
     usage?: { prompt_cache_hit_tokens?: number; prompt_cache_miss_tokens?: number; completion_tokens?: number };
   };
   const content = data.choices?.[0]?.message?.content;
-  if (typeof content !== 'string' || !content.trim()) throw new Error('DeepSeek 返回空内容');
+  if (typeof content !== 'string' || !content.trim()) {
+    const reason = data.choices?.[0]?.finish_reason ?? 'unknown';
+    throw new Error(`DeepSeek 返回空内容（finish_reason=${reason}）`);
+  }
   const usage: TokenUsage = {
     prompt_cache_hit_tokens: data.usage?.prompt_cache_hit_tokens ?? 0,
     prompt_cache_miss_tokens: data.usage?.prompt_cache_miss_tokens ?? 0,
@@ -120,9 +124,10 @@ export async function distillText(
   user: string,
   maxTokens: number,
   deepseekModel = env.DISTILL_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL,
+  opts: { thinking?: boolean } = {},
 ): Promise<DistillResult> {
   try {
-    const { text, cost } = await deepseekDistill(env, deepseekModel, system, user, maxTokens);
+    const { text, cost } = await deepseekDistill(env, deepseekModel, system, user, maxTokens, opts);
     return { text, cost, backend: 'deepseek' };
   } catch (e) {
     console.warn('[distill] DeepSeek 失败，回退 Workers AI：', e);
@@ -147,7 +152,10 @@ ${memory || '（暂无）'}
 ${conversation.slice(-60000)}
 
 请对照当前记忆，只输出需要新增或修正的条目（不要重复已有内容），格式 "- [YY-MM-DD] 内容"。`;
-  return distillText(env, DAY_DISTILL_SYSTEM, user, 4096, env.DISTILL_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL);
+  // 每日归档是一天只跑一次的重活：开思考模式，并给思维链留出额度（4096 会被推理吃掉）
+  return distillText(env, DAY_DISTILL_SYSTEM, user, 8192, env.DISTILL_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL, {
+    thinking: true,
+  });
 }
 
 /** 全量压缩 memory.md 的旧实现已停用；质量优先，超限只走无损分层。 */
