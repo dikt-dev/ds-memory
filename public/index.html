@@ -112,7 +112,7 @@
     border-bottom: 1px solid var(--hairline);
     position: sticky; top: 0; z-index: 5;
   }
-  /* 品牌块不参与收缩：一旦被挤到只剩一个字，名字会截断、「在线」会竖着折行 */
+  /* 品牌块不参与收缩：被挤扁时名字会截断、「在线」会竖着折两行盖在一起 */
   .brand { display: flex; align-items: center; gap: .7rem; min-width: 0; flex: 0 0 auto; }
   .avatar-wrap {
     position: relative; width: 36px; height: 36px; flex: 0 0 auto;
@@ -133,7 +133,8 @@
   }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
 
-  .meta { display: flex; align-items: center; gap: 0; flex-wrap: nowrap; flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  /* 空间不够时先压缩这排信息并允许横向滑动，而不是把品牌块挤到只剩一个字 */
+  .meta { display: flex; align-items: center; gap: 0; flex-wrap: nowrap; flex: 0 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
   .meta::-webkit-scrollbar { display: none; }
   .chip {
     font-size: 12px; color: var(--ink-3);
@@ -1046,7 +1047,11 @@ $('loginForm').addEventListener('submit', async (e) => {
   });
   if (res.ok) {
     $('password').value = '';
-    await bootChat();
+    hideLogin();
+    await loadDay();
+    await resetAndLoadHistory();
+    loadUsage();
+    loadBalance();
     input.focus();
   } else {
     const data = await res.json().catch(() => ({}));
@@ -1250,35 +1255,30 @@ async function fetchHistoryPage(beforeId) {
   return res.json();
 }
 
-/** 把一页历史渲染进列表；首屏和上滑加载都走这里。 */
-function applyHistoryPage(data, jumpToBottom) {
-  nextBefore = data.next_before_id ?? null;
-  hasMore = data.has_more ?? false;
-  const frag = document.createDocumentFragment();
-  for (const m of data.messages || []) {
-    frag.appendChild(buildBubbleEl(
-      m.role === 'user' ? 'user' : 'assistant',
-      m.role === 'user' ? renderUserContent(m.content) : renderMarkdown(stripLeadTime(m.content)),
-      m.content,
-    ));
-    if (Number.isFinite(m.id) && m.id > latestSeenId) latestSeenId = m.id;
-  }
-  const prevHeight = messagesEl.scrollHeight;
-  messagesEl.prepend(frag);
-  if (jumpToBottom) {
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-  } else {
-    messagesEl.scrollTop += messagesEl.scrollHeight - prevHeight;
-  }
-}
-
 async function loadMoreHistory(jumpToBottom) {
   if (loadingHistory) return;
   loadingHistory = true;
   try {
     const data = await fetchHistoryPage(nextBefore);
     if (!data) return;
-    applyHistoryPage(data, jumpToBottom);
+    nextBefore = data.next_before_id ?? null;
+    hasMore = data.has_more ?? false;
+    const frag = document.createDocumentFragment();
+    for (const m of data.messages || []) {
+      frag.appendChild(buildBubbleEl(
+        m.role === 'user' ? 'user' : 'assistant',
+        m.role === 'user' ? renderUserContent(m.content) : renderMarkdown(stripLeadTime(m.content)),
+        m.content,
+      ));
+      if (Number.isFinite(m.id) && m.id > latestSeenId) latestSeenId = m.id;
+    }
+    const prevHeight = messagesEl.scrollHeight;
+    messagesEl.prepend(frag);
+    if (jumpToBottom) {
+      messagesEl.scrollTop = messagesEl.scrollHeight; // 首次加载定位到最新
+    } else {
+      messagesEl.scrollTop += messagesEl.scrollHeight - prevHeight; // 上滑加载保持视口不跳
+    }
   } catch { /* 网络异常忽略，可继续滚动重试 */ }
   finally {
     loadingHistory = false;
@@ -1768,33 +1768,21 @@ async function send() {
 }
 
 /* ---------- 会话恢复：有有效 Cookie（24 小时内）自动免登录 ---------- */
-/**
- * 首屏：一次请求就把聊天记录画出来。
- *
- * 原来是一次串行三次往返——探活(/api/history?limit=5) → 今日信息 → 再拉一次历史，
- * 每次都要跨一次太平洋（D1 主库在 LAX），光等待就两三秒。现在探活和历史合成一次，
- * 今日/用量/余额改成并行，谁慢都不挡消息出现。
- */
-async function bootChat() {
-  hideLogin();
-  const first = await fetchHistoryPage(null);
-  if (!first) { showLogin(); return false; }
-  messagesEl.innerHTML = '';
-  nextBefore = null;
-  hasMore = false;
-  latestSeenId = 0;
-  applyHistoryPage(first, true);
-  loadDay().catch(() => {});
-  loadUsage();
-  loadBalance();
-  startPolling();
-  return true;
-}
-
 async function initSession() {
-  const ok = await bootChat();
-  if (!ok) showLogin();
-  else input.focus();
+  try {
+    const res = await fetch('/api/history?limit=5');
+    if (res.ok) {
+      hideLogin();
+      await loadDay();
+      await resetAndLoadHistory();
+      loadUsage();
+      loadBalance();
+      startPolling();
+      input.focus();
+      return;
+    }
+  } catch { /* 网络异常按未登录处理 */ }
+  showLogin();
 }
 initSession();
 </script>
