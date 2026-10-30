@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildDayContext } from './holidays';
-import { buildSystemPrompt, isSilentEnd, normalizeChannel, stripSilentEndToken } from './prompt';
+import { buildSystemPrompt, buildSystemPromptSplit, isSilentEnd, normalizeChannel, stripSilentEndToken } from './prompt';
 
 describe('buildSystemPrompt', () => {
   const ctx = buildDayContext('2026-10-21');
@@ -252,5 +252,57 @@ describe('时间与诚实性规则', () => {
   it('实时事实块里也带口语时间', () => {
     const prompt = buildSystemPrompt(base);
     expect(prompt).toContain('现在=2026-10-29T21:11:00+08:00（晚上九点；');
+  });
+});
+
+describe('buildSystemPromptSplit（前缀缓存）', () => {
+  const ctx = buildDayContext('2026-10-21');
+
+  it('稳定段不随时间变化：两轮不同时刻，稳定段字节一致', () => {
+    const base = {
+      ctx,
+      memory: '- 用户生活在杭州。',
+      channel: 'mobile' as const,
+      characterCard: '你有点困',
+      recalled: '## 相关往事\n- 昨天他说要早睡',
+      attitude: '现在心情不错',
+      weather: { city: '杭州', temp_c: 18.5, desc: '晴' },
+    };
+    const a = buildSystemPromptSplit({ ...base, now: new Date('2026-10-21T01:00:00Z') });
+    const b = buildSystemPromptSplit({ ...base, now: new Date('2026-10-21T09:30:00Z') });
+    expect(a.stable).toBe(b.stable);
+    expect(a.volatile).not.toBe(b.volatile);
+  });
+
+  it('易变内容不进稳定段', () => {
+    const split = buildSystemPromptSplit({
+      now: new Date('2026-10-21T01:00:00Z'),
+      ctx,
+      memory: '- 用户生活在杭州。',
+      channel: 'mobile',
+      characterCard: '你有点困',
+      recalled: '## 相关往事\n- 昨天他说要早睡',
+      weather: { city: '杭州', temp_c: 18.5, desc: '晴' },
+    });
+    expect(split.stable).toContain('用户生活在杭州');
+    expect(split.stable).not.toContain('杭州 晴');
+    expect(split.volatile).toContain('杭州 晴');
+    expect(split.volatile).toContain('昨天他说要早睡');
+  });
+
+  it('拼接后与完整提示词内容一致（不丢段）', () => {
+    const args = {
+      now: new Date('2026-10-21T01:00:00Z'),
+      ctx,
+      memory: '- 用户生活在杭州。',
+      channel: 'web' as const,
+      characterCard: '你有点困',
+    };
+    const split = buildSystemPromptSplit(args);
+    const all = buildSystemPrompt(args);
+    for (const piece of split.stable.split('\n').filter((s) => s.startsWith('## '))) {
+      expect(all).toContain(piece);
+    }
+    expect(split.stable.length + split.volatile.length).toBeGreaterThan(0);
   });
 });

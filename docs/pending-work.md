@@ -397,3 +397,16 @@ GET /api/admin/memory/links?type=fact&id=fact_xxx
 
 - App 已装 release 包（`21c0406`：渲染时剥时间标签 + 清理 SQL 改 GLOB 通配），无需再装。
 - 新增文档入口 `docs/README.md`；记忆快照与回滚方案在 `docs/memory/memory-rollback-plan.md`。
+
+## 2026-10-30｜缓存前缀拆分 + 成本看板（代码已完成，等 11-01 窗口部署）
+
+- `prompt.ts`：`buildBaseSystemPrompt` 支持 `part: 'stable' | 'volatile'`，`buildSystemPromptSplit()` 返回两段。
+  - stable = ①②（人设 + 长期记忆），每天 04:00 才变 → 可被前缀缓存命中。
+  - volatile = ③之后（态度/时间/状态卡/中期记忆/召回/今日摘要/实时事实）+ historyNote。
+- `chat.ts`：messages 变成 `[system(stable+silent 规则), ...history, system(volatile), user]`。
+  原来所有易变内容都在第一条 system 里，等于每轮都打断缓存。
+- `usage-stats.ts`：新增 `chat_usage` 表（day×channel×model 聚合 hit/miss/completion/cost），
+  自动建表；`recordChatUsage` 在 `chat.ts` 的 onFinish 里落账。
+- `GET /api/admin/cost?days=N` → `{ rows, summary }`，summary 含 hitRate / costPerCall / monthlyProjection。
+- 测试：773 通过（新增 8 个），`tsc --noEmit` 干净。
+- **未部署**：遵守 11-01 12:00 前的冻结期。部署后先看 `/api/admin/cost?days=1` 的 hitRate 基线。

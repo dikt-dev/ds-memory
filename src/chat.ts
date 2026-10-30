@@ -5,7 +5,7 @@
  */
 import { resolveRecall } from './memory-engine';
 import type { Env } from './types';
-import { buildSystemPrompt, type MessageChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, STYLE_REMINDER } from './prompt';
+import { buildSystemPromptSplit, type MessageChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, STYLE_REMINDER } from './prompt';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
 import { attachWeather, getOrCreateDayContext } from './context';
@@ -23,6 +23,7 @@ import {
 } from './db';
 import { conversationGapNote, loadRecentRounds, resolveRecentRounds } from './recent-context';
 import { calcCost, loadPricing } from './pricing';
+import { recordChatUsage } from './usage-stats';
 import { streamDeepSeek, type DeepSeekMessage } from './deepseek';
 import { getTodaySummary } from './summary';
 import { loadImageDataUrl } from './media';
@@ -246,10 +247,9 @@ export async function streamChat(
   const historyNote = [historyRangeNote(history, now), conversationGapNote(history, now)]
     .filter(Boolean)
     .join('\n');
-  const messages: DeepSeekMessage[] = [
-    {
-      role: 'system',
-      content: buildSystemPrompt({
+  // ★ 稳定段（人设+长期记忆）单独作为第一条 system，每轮字节一致才能吃到缓存命中价；
+  // 时间/心情/召回/摘要这些每轮都变的放到最后一条 system，紧贴用户消息。
+  const promptSplit = buildSystemPromptSplit({
         now,
         ctx,
         memory: contextBudget.core,
@@ -268,7 +268,12 @@ export async function streamChat(
         attitude,
         characterName: env.CHARACTER_NAME,
         userAddress: env.USER_ADDRESS,
-      }) + (historyNote ? `\n\n${historyNote}` : '') + silentEndRule(channel),
+  });
+  const volatileBlock = [promptSplit.volatile, historyNote].filter(Boolean).join('\n\n');
+  const messages: DeepSeekMessage[] = [
+    {
+      role: 'system',
+      content: promptSplit.stable + silentEndRule(channel),
     },
     // 最近 10 轮按时间从旧到新排列；每条带发送时间，模型才能判断上一句/上上句。
     // 单条只做超长保护（默认 2400 字，带文件 4200 字），不做过去那种 400 字过度压缩。
@@ -282,6 +287,8 @@ export async function streamChat(
         m.created_at,
       ),
     })),
+    // 易变段放最后：时间、心情、召回、摘要每轮都在变，放在前缀里会让缓存全部失效
+    ...(volatileBlock ? [{ role: 'system' as const, content: volatileBlock }] : []),
     { role: 'user', content: userContent },
   ];
 
@@ -307,6 +314,17 @@ export async function streamChat(
         });
         cost = saved.cost_rmb;
         assistantId = saved.id;
+      }
+      // 记账（失败的 session 也记，成本已经产生）：命中/未命中分开，才能算命中率
+      if (usage) {
+        await recordChatUsage(env, {
+          channel,
+          model: env.DEEPSEEK_MODEL,
+          promptHit: usage.prompt_cache_hit_tokens ?? 0,
+          promptMiss: usage.prompt_cache_miss_tokens ?? 0,
+          completion: usage.completion_tokens ?? 0,
+          costRmb: calcCost(usage, loadPricing(env), now),
+        });
       }
       // 把 id 一并返回：前端用它推进轮询游标，避免重复渲染同一轮
       return { cost, ids: { user: userRow.id, assistant: assistantId } };

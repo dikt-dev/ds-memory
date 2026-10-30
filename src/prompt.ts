@@ -70,6 +70,8 @@ export interface BasePromptArgs {
   avoidOpeners?: string[] | null;
   /** 长期缓慢漂移出的近期性格倾向（见 persona-drift.ts） */
   personaDrift?: string | null;
+  /** 只取某一段：stable = ①②（人设+长期记忆，可缓存前缀）；volatile = ③之后（每轮都变） */
+  part?: 'all' | 'stable' | 'volatile';
 }
 
 /**
@@ -174,6 +176,10 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   lines.push('- 可以描述感受、态度和反应，但**不能编造事实**；宁可承认忘了，也不要顺着气氛编一个像样的答案。');
   lines.push('- 编出来的细节比"不记得"更伤人：用户会当真，之后发现是假的，信任就没了。');
 
+  // ★ 前缀缓存边界：①②（人设 + 长期记忆）是稳定段，每天 04:00 才变；
+  // ③ 之后每轮都在变，必须放在消息末尾，否则第一句就打断缓存、整段上下文都吃不到命中价。
+  const stableEnd = lines.length;
+
   // ── ③ 半稳定：态度与语言风格（随关系数值缓慢变化）──────────
   if (attitude) {
     lines.push('');
@@ -263,7 +269,20 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     '- 你可以参考下面这段气质，也可以完全按自己的判断回：用户说“在干嘛呢，怎么这么久才回我”——（把手机一捞，翘起腿）哟，查岗啊？本小姐刚眯了一会儿，怎么，不行？……行了行了，别阴阳怪气，我这不是回你了嘛。或者直接回：刚在收拾东西，没故意晾着你。',
   );
 
+  if (args.part === 'stable') return lines.slice(0, stableEnd).join('\n');
+  if (args.part === 'volatile') return lines.slice(stableEnd).join('\n');
   return lines.join('\n');
+}
+
+/**
+ * 把系统提示拆成「稳定前缀」和「易变后缀」两段：
+ * 稳定段每轮字节一致，DeepSeek 的上下文缓存才能命中；易变段放到用户消息前面。
+ */
+export function buildSystemPromptSplit(args: BasePromptArgs): { stable: string; volatile: string } {
+  return {
+    stable: buildBaseSystemPrompt({ ...args, part: 'stable' }),
+    volatile: buildBaseSystemPrompt({ ...args, part: 'volatile' }),
+  };
 }
 
 /** 每轮贴在用户消息前的语气提醒：压过历史里跑偏的格式/情绪。 */

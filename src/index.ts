@@ -92,6 +92,7 @@ import {
 import { explainAttitude } from './attitude-policy';
 import { listAffectTimeline, recordAttitudeSnapshot } from './affect-store';
 import { readRecallSamples, summarizeSamples } from './recall-samples';
+import { readUsageStats, summarizeUsage } from './usage-stats';
 import { readEngineMetrics } from './engine-metrics';
 import {
   ackTtsJob,
@@ -1271,6 +1272,13 @@ app.get('/api/admin/recall-samples', requireAuth, async (c) => {
   return c.json({ ok: true, days, samples: rows.length, summary: summarizeSamples(rows) });
 });
 
+/** 成本看板：按天聚合 token / 费用 / 缓存命中率（只读）。 */
+app.get('/api/admin/cost', requireAuth, async (c) => {
+  const days = Math.min(30, Math.max(1, Number(c.req.query('days') ?? 7) || 7));
+  const rows = await readUsageStats(c.env, days);
+  return c.json({ ok: true, days, rows, summary: summarizeUsage(rows, days) });
+});
+
 /** Phase 5 预检：只读检查迁移/开关/密钥，不做任何写入。 */
 app.get('/api/admin/readiness', requireAuth, async (c) => {
   const tables = [
@@ -1284,6 +1292,7 @@ app.get('/api/admin/readiness', requireAuth, async (c) => {
     'affect_events',
     'attitude_snapshots',
     'engine_metrics',
+    'chat_usage',
   ];
   const checks: Record<string, string> = {};
   for (const table of tables) {
