@@ -109,3 +109,34 @@ Phase 0 只建立数据集和评分口径；基线分数在 Phase 2/4 第一次 
 3. 先看检索/来源/不变量，再看语气；
 4. 每阶段只改一个变量，避免无法归因；
 5. 评估集可以扩充，但不要为了让指标好看而删难例。
+---
+
+## 7. 真实记忆对照跑（legacy vs next）
+
+`scripts/eval-recall.mjs`：把同一句话按**生产链路**分别喂给 legacy 与 next，看谁想起对了。
+数据放 `golden-memory.local.json`（真实内容，已在 .gitignore，不入库）。
+
+```bash
+node scripts/eval-recall.mjs            # 全部
+node scripts/eval-recall.mjs --only g3  # 单组：g1 偏好 / g2 进行中 / g3 底色 / g4 追问 / g5 低信息量 / g6 易混 / g7 计划
+node scripts/eval-recall.mjs --verbose  # 未命中时打印召回原文
+```
+
+服务端入口 `GET /api/admin/memory/recall?compare=1&q=...`：内部走 `resolveRecall(mode='shadow')`，
+所以门控、意图选择器、封顶都在链路里，测的是线上真实行为。
+
+评分：`expected_any` 命中任一即通过；`avoid` 出现即误召；`max_items` 是低信息量用例的上限。
+结果写 `docs/eval/last-run.json`。
+
+### 2026-10-31 基线
+
+| 引擎 | 命中 | 平均召回 | 误召/越界 |
+|---|---|---|---|
+| legacy | 26/27 | 5.0 | 0 |
+| next | 27/27 | 4.2 | 0 |
+
+（30 条里 3 条因请求抖动 503 未计入，重跑补齐即可。）
+
+切 `next` 的判据：命中 **≥** legacy 且误召 **≤** legacy。当前达标，但差距只有 1 条，
+属于噪声范围——**要继续加难例（易混/长时跨度的）再判一次**。
+

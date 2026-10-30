@@ -59,6 +59,7 @@ import {
 import { enqueueMemoryJob, runMemoryJobs } from './memory-jobs';
 import { expandLinkedChunks, linkAllFacts, linksForMemory } from './memory-links';
 import { rankMemoryChunks } from './memory-domain';
+import { resolveRecall } from './memory-engine';
 import { applyMemoryProjection, buildMemoryProjection } from './memory-projection';
 import { generateRollup, previousPeriods } from './memory-rollups';
 import { getOrCreateDayContext } from './context';
@@ -1396,6 +1397,27 @@ app.get('/api/admin/memory/recall', requireAuth, async (c) => {
   const chunks = await loadMemoryChunks(c.env);
   const picked = rankMemoryChunks(q, chunks, 10);
   const expanded = await expandLinkedChunks(c.env, picked, 2);
+  // compare=1：同一句话按**生产链路**同时跑 legacy 与 next（含门控、选择器、封顶），
+  // 给评估集对照用。直接调 recallMemoryForChat 会绕过门控，"在吗"这种就会假性翻旧账。
+  if (c.req.query('compare') === '1') {
+    const r = await resolveRecall(c.env, {
+      query: q,
+      mode: 'shadow',
+      channel: 'web',
+      requestId: 'eval-compare',
+    });
+    const countItems = (text: string) =>
+      text.split('\n').filter((line: string) => line.trimStart().startsWith('- ')).length;
+    return c.json({
+      ok: true,
+      query: q,
+      skipped: r.skipped,
+      timedOut: r.timedOut,
+      ms: r.ms,
+      legacy: { items: countItems(r.legacyText), text: r.legacyText },
+      next: { items: countItems(r.nextText), text: r.nextText },
+    });
+  }
   return c.json({
     ok: true,
     query: q,

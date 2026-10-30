@@ -454,7 +454,9 @@ export function mmrSelectChunks(
   return selected.map((x) => x.chunk);
 }
 
-const GREETING_RE = /^(你好|在吗|早安|晚安|哈哈|嘿嘿|谢谢|好的|嗯+|哦+|ok|hi|hello|在不在)[!！。,.，\s]*$/i;
+// 纯语气词也要拦住：连发三个"哈"不该把五条旧事翻出来。
+const GREETING_RE =
+  /^(你好|在吗|早安|晚安|在不在|谢谢|好的|哈{2,}|嘿{2,}|呵{2,}|嗯+|哦+|噢+|喔+|啊+|诶+|ok|hi|hello)[!！。,.，~～?？\s]*$/i;
 const TECH_RE = /^(帮我|写|解释|翻译|计算|生成|做个|怎么|code|写个)/i;
 const MEMORY_MARK_RE = /(上次|之前|以前|记得|我说过|那次|昨天|前天|还记得|我说|曾经)/;
 

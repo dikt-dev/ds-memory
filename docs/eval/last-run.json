@@ -1,0 +1,858 @@
+{
+  "at": "2026-10-30T22:01:25.391Z",
+  "file": "golden-memory.local.json",
+  "rows": [
+    {
+      "item": {
+        "id": "g1-01",
+        "query": "今天中午吃啥好",
+        "expect": [
+          "猪脚饭"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "偏好日常",
+        "notes": "定点午饭偏好"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "猪脚饭"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "猪脚饭"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 5
+      }
+    },
+    {
+      "item": {
+        "id": "g1-02",
+        "query": "有点渴了",
+        "expect": [
+          "奶茶"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "偏好日常",
+        "notes": "奶茶约定"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "奶茶"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "奶茶"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 5
+      }
+    },
+    {
+      "item": {
+        "id": "g1-03",
+        "query": "最近有什么游戏好玩",
+        "expect": [
+          "怪物火车",
+          "Switch"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "偏好日常",
+        "notes": "在玩的游戏"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "怪物火车",
+          "Switch"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "怪物火车",
+          "Switch"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      }
+    },
+    {
+      "item": {
+        "id": "g1-04",
+        "query": "我玩什么游戏的",
+        "expect": [
+          "怪物火车",
+          "Switch"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "偏好日常",
+        "notes": "与 g1-03 同源，换问法"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "怪物火车",
+          "Switch"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "怪物火车",
+          "Switch"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 5
+      }
+    },
+    {
+      "item": {
+        "id": "g1-05",
+        "query": "晚上想吃点宵夜",
+        "expect": [
+          "猪脚饭",
+          "奶茶",
+          "熬夜"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "偏好日常",
+        "notes": "夜间饮食/熬夜"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "猪脚饭",
+          "奶茶"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "奶茶",
+          "熬夜"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      }
+    },
+    {
+      "item": {
+        "id": "g2-01",
+        "query": "回滚的事弄得怎么样了",
+        "expect": [
+          "回滚"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "进行中",
+        "notes": "正在推进的事"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "回滚"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "回滚"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 5
+      }
+    },
+    {
+      "item": {
+        "id": "g2-02",
+        "query": "那个记忆管理的学习计划还学吗",
+        "expect": [
+          "记忆管理"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "进行中",
+        "notes": "'别贪多'那条建议"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "记忆管理"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "记忆管理"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 4
+      }
+    },
+    {
+      "item": {
+        "id": "g2-03",
+        "query": "开源项目调研到哪一步了",
+        "expect": [
+          "开源",
+          "LRC",
+          "HanakoPro"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "进行中",
+        "notes": "5 个项目清单"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "开源",
+          "LRC",
+          "HanakoPro"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "开源",
+          "LRC",
+          "HanakoPro"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 5
+      }
+    },
+    {
+      "item": {
+        "id": "g2-04",
+        "query": "11月1号我要干嘛来着",
+        "expect": [
+          "11-01"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "进行中",
+        "notes": "解冻部署排期"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "11-01"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "11-01"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 5
+      }
+    },
+    {
+      "item": {
+        "id": "g2-05",
+        "query": "B站视频那个画质的事",
+        "expect": [
+          "B站",
+          "画质"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "进行中",
+        "notes": "画质增强调试"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "B站",
+          "画质"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 4
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "B站",
+          "画质"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 4
+      }
+    },
+    {
+      "item": {
+        "id": "g3-01",
+        "query": "你叫什么名字",
+        "expect": [
+          "大肥鱼"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "人物底色",
+        "notes": "旧称呼"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "大肥鱼"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 5
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "大肥鱼"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 4
+      }
+    },
+    {
+      "item": {
+        "id": "g3-02",
+        "query": "我该怎么称呼你",
+        "expect": [
+          "大人"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "人物底色",
+        "notes": "偏好称呼"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "大人"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "大人"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      }
+    },
+    {
+      "item": {
+        "id": "g3-03",
+        "query": "我是做什么工作的",
+        "expect": [
+          "嵌入式"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "人物底色",
+        "notes": "职业"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "嵌入式"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "嵌入式"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 5
+      }
+    },
+    {
+      "item": {
+        "id": "g3-04",
+        "query": "我平时用什么语言写代码",
+        "expect": [
+          "C语言",
+          "C 语言"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "人物底色",
+        "notes": "技术栈"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "C语言"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "C语言"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 5
+      }
+    },
+    {
+      "item": {
+        "id": "g4-01",
+        "query": "你还记得我说想学什么吗",
+        "expect": [
+          "记忆管理"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "明确追问",
+        "notes": "强信号追问"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "记忆管理"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "记忆管理"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 3
+      }
+    },
+    {
+      "item": {
+        "id": "g4-02",
+        "query": "你还记得我最喜欢哪部番吗",
+        "expect": [
+          "可塑性记忆"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "明确追问",
+        "notes": "看哭的那部"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "可塑性记忆"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "可塑性记忆"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 5
+      }
+    },
+    {
+      "item": {
+        "id": "g4-03",
+        "query": "你还记得我的作息吗",
+        "expect": [
+          "8:15",
+          "8:30",
+          "18:00"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "明确追问",
+        "notes": "作息表"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "8:15",
+          "8:30",
+          "18:00"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "8:15",
+          "8:30",
+          "18:00"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      }
+    },
+    {
+      "item": {
+        "id": "g5-01",
+        "query": "在吗",
+        "expect": [],
+        "avoid": [],
+        "maxItems": 1,
+        "section": "低信息量",
+        "notes": "寒暄不该翻旧账"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [],
+        "bad": [],
+        "overLimit": false,
+        "count": 0
+      },
+      "next": {
+        "hit": true,
+        "hits": [],
+        "bad": [],
+        "overLimit": false,
+        "count": 0
+      }
+    },
+    {
+      "item": {
+        "id": "g5-02",
+        "query": "嗯",
+        "expect": [],
+        "avoid": [],
+        "maxItems": 1,
+        "section": "低信息量",
+        "notes": "单字"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [],
+        "bad": [],
+        "overLimit": false,
+        "count": 0
+      },
+      "next": {
+        "hit": true,
+        "hits": [],
+        "bad": [],
+        "overLimit": false,
+        "count": 0
+      }
+    },
+    {
+      "item": {
+        "id": "g5-03",
+        "query": "哈哈哈",
+        "expect": [],
+        "avoid": [],
+        "maxItems": 1,
+        "section": "低信息量",
+        "notes": "情绪词"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [],
+        "bad": [],
+        "overLimit": false,
+        "count": 0
+      },
+      "next": {
+        "hit": true,
+        "hits": [],
+        "bad": [],
+        "overLimit": false,
+        "count": 0
+      }
+    },
+    {
+      "item": {
+        "id": "g5-04",
+        "query": "晚安",
+        "expect": [],
+        "avoid": [],
+        "maxItems": 2,
+        "section": "低信息量",
+        "notes": "睡前问候"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [],
+        "bad": [],
+        "overLimit": false,
+        "count": 0
+      },
+      "next": {
+        "hit": true,
+        "hits": [],
+        "bad": [],
+        "overLimit": false,
+        "count": 0
+      }
+    },
+    {
+      "item": {
+        "id": "g6-03",
+        "query": "博客部署在哪个域名",
+        "expect": [
+          "ryn.us.ci",
+          "fae.us.ci"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "易混区分",
+        "notes": "两个域名要分清"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "fae.us.ci"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "ryn.us.ci",
+          "fae.us.ci"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      }
+    },
+    {
+      "item": {
+        "id": "g6-04",
+        "query": "我几点上班",
+        "expect": [
+          "8:30"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "易混区分",
+        "notes": "别答成 8:15 出门以外的"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "8:30"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "8:30"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 4
+      }
+    },
+    {
+      "item": {
+        "id": "g7-01",
+        "query": "我下个月要做什么大事",
+        "expect": [
+          "上海",
+          "迁移"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "计划",
+        "notes": "回上海"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "上海",
+          "迁移"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "上海",
+          "迁移"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 5
+      }
+    },
+    {
+      "item": {
+        "id": "g7-02",
+        "query": "搬家的事准备得怎么样",
+        "expect": [
+          "上海",
+          "住处",
+          "网络"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "计划",
+        "notes": "搬家清单"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "上海",
+          "住处",
+          "网络"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "上海",
+          "住处",
+          "网络"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      }
+    },
+    {
+      "item": {
+        "id": "g7-03",
+        "query": "我最近在忙什么",
+        "expect": [
+          "ds-memory",
+          "项目"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "计划",
+        "notes": "主线"
+      },
+      "legacy": {
+        "hit": true,
+        "hits": [
+          "ds-memory",
+          "项目"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "项目"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 3
+      }
+    },
+    {
+      "item": {
+        "id": "g7-04",
+        "query": "我的记忆系统还差什么",
+        "expect": [
+          "回滚",
+          "追溯"
+        ],
+        "avoid": [],
+        "maxItems": null,
+        "section": "计划",
+        "notes": "缺回滚与溯源"
+      },
+      "legacy": {
+        "hit": false,
+        "hits": [],
+        "bad": [],
+        "overLimit": false,
+        "count": 6
+      },
+      "next": {
+        "hit": true,
+        "hits": [
+          "回滚",
+          "追溯"
+        ],
+        "bad": [],
+        "overLimit": false,
+        "count": 5
+      }
+    }
+  ]
+}

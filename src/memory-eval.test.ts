@@ -27,6 +27,8 @@ describe('query planning', () => {
   it('寒暄/纯技术请求不触发，记忆标记触发', () => {
     expect(shouldRecallMemory('在吗')).toBe(false);
     expect(shouldRecallMemory('你好')).toBe(false);
+    expect(shouldRecallMemory('哈哈哈')).toBe(false);
+    expect(shouldRecallMemory('嘿嘿嘿~')).toBe(false);
     expect(shouldRecallMemory('帮我写一段快速排序')).toBe(false);
     expect(shouldRecallMemory('上次说的那个项目')).toBe(true);
     expect(shouldRecallMemory('我住在哪里')).toBe(true);
