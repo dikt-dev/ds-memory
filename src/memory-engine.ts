@@ -285,7 +285,9 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
   try {
     nextRaw = capRecallText(next.text);
     stages = next.stages;
-    nextItems = next.items;
+    // 记「封顶之后」的条数：pack 出来的 8 条会被 capRecallText 裁到 5，
+    // 记未裁的数字会让指标看起来永远顶满，误导判断。
+    nextItems = nextRaw.split('\n').filter((line) => line.startsWith('- ')).length;
     nextLinked = next.linked;
     nextHasVector = next.hasVector;
 
