@@ -337,3 +337,59 @@ GET /api/admin/memory/links?type=fact&id=fact_xxx
   replaceMemoryContext）与 `GET /api/admin/memory/snapshots`；KV 写锁 `memory:lock:write`
   防止与每日归档并发；`confirm: true` 缺省拒绝。
 - Phase 6：`GET /api/admin/memory/diff?date=`，看某天记忆改了什么（比回滚更常用于日常巡检）。
+
+## 召回延迟（2026-10-30 立，docs 计划在本文档内）
+
+### 现状数据
+
+- 新引擎召回耗时随索引增长近线性：10-25 69ms → 10-26 143 → 10-27 171 → 10-28 345 → 10-29 503ms（77 次）。
+- 规模：87 条 chunks（全部带向量），向量文本平均 1418 字符，每次召回读约 130KB。
+  **数据量解释不了 503ms**，大概率是往返次数（`expandLinkedChunks` 最多 6 次串行 D1）。
+- 召回条数已顶到封顶：10-29 平均 8.0 条（上限就是 8），说明开始有内容被截掉。
+- 旧引擎在这批 shadow 请求里 old_items/old_bytes 全为 0，待核实是"只注入 memory.md 不产出条目"还是"确实没召回到"。
+
+### 已做（未部署）
+
+- `033292f` 分段计时：`src/recall-samples.ts` + `resolveRecall` 分段测量 + `runNextEngine` 返回各段耗时；
+  `GET /api/admin/recall-samples?days=3` 返回 p50/p95 与各段占比；采样表留 14 天；6 个用例。
+- 采样是 await 写入，给请求路径加约 5-15ms；若 `total_ms` 与 `engine_metrics.ms` 差距明显，
+  改成 fire-and-forget（需透传 ExecutionContext，见下方 Phase 6 项）。
+
+### 待做（按 share 决定，不预先猜）
+
+| 时间 | 事项 | 判据 |
+|---|---|---|
+| 11-01 解冻 | 部署分段计时，跑满一天 | — |
+| 11-02 | 看 `/api/admin/recall-samples` 的 share | 见下表 |
+| 11-02 ~ 11-03 | 按 share 选 1-2 项动手 | — |
+| 11-04 | 分段保底：0-300ms 正常召回，300-1500ms 退到"最近 7 天 + memory.md 摘要"，超时只给摘要 | 现有策略是"超时=空召回" |
+| 11-05 | 复测，确认曲线拐下来 | — |
+
+| share 最大项 | 含义 | 对应方案 |
+|---|---|---|
+| expand | 6 次串行 D1 是瓶颈 | 关联批量 IN 查询，1 次往返（原 Phase 6 待办） |
+| legacy | 旧引擎比新引擎还贵 | 切 next 时自然消失，不单独修 |
+| embed | 向量调用太频繁 | 提高走向量的门槛，或两段式召回 |
+| load | 读全量 chunks 是大头 | 向量与正文分查；再上倒排索引 |
+
+### 结构性判断
+
+当前召回是 O(全部数据) 的：87 条 → 一个月 400+ 条 → 每次读 600KB 且往返不变。
+**倒排索引（token → chunk id 常驻 KV，按 id 取正文）不是优化项，是到期必须换的路径**，
+列入 Phase 6 正式任务，不要等它变成事故。
+
+### 部署清单（11-01 21:10 后一次性上）
+
+`abe665a` 口语时间+诚实性规则、`5f39def` putMemory 写后校验、`e2b6709` 召回统一入口、
+`ff0fbfc` 归档 v4-pro 带思考、`c908893` deadline 1500ms、`5d0d597` 提炼 token 分项、
+`605012a` 每日记忆快照、`033292f` 召回分段计时，
+以及网页端四个显示修复（`4cfa6be` 卡片独占一行+时间标签、`ac4be5d` 历史渲染、
+`ef87e69` 文件正文泄漏、`251aba8` 卡片前空行）。
+
+> 网页端四个修复已于 10-30 从生产版本 `f335707` 的 worktree **单独热部署**（版本 4cd5171c / 5dd4184e），
+> 引擎代码未动，不破坏观察期。11-01 的正式部署会把它们并进主干。
+
+### 其他待记录
+
+- App 已装 release 包（`21c0406`：渲染时剥时间标签 + 清理 SQL 改 GLOB 通配），无需再装。
+- 新增文档入口 `docs/README.md`；记忆快照与回滚方案在 `docs/memory/memory-rollback-plan.md`。
