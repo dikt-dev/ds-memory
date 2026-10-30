@@ -318,3 +318,14 @@ GET /api/admin/memory/links?type=fact&id=fact_xxx
 - P2-2 legacy/next 重复：等切 next 前验证；
 - P2-4 死代码清理：等记忆重构窗口；
 - DB/归档链路测试专项：下一轮测试专项。
+## 2026-10-30 追加
+
+- **11-05 前后回看分层**：memory.md 每天约 +2KB（7964→9695→11700），
+  `CORE_TARGET_BYTES = 24000`，预计 6–7 天后开始触发 `demoteSectionEntries`。
+  到时候看 `cron_runs.detail` 里的 `分层=N` 是否合理、有没有出现"档案未确认写入"。
+- **shadow 引擎挂后台（Phase 6）**：影子分支现在是 `await` 的，每条消息多付约 0.5 秒
+  （实测 10-29 77 条 × 503ms）。改成 `executionCtx.waitUntil` 需要给
+  `streamChat` / `runWebProactiveSlot` 等入口加 ExecutionContext 参数并改所有调用点，
+  不是小改，单独排期。
+- **提炼 token 分项已开始记录**：`cron_runs.detail` 里新增
+  `token 命中X/未命中Y/输出Z`，用来解释提炼费用的日间波动。

@@ -11,6 +11,8 @@ export interface DistillResult {
   text: string;
   cost: number; // 元（Workers AI 兜底时为 0）
   backend: DistillBackend;
+  /** 分项 token 用量：没有它就只能看到总价，解释不了"为什么今天贵/便宜" */
+  usage?: TokenUsage;
 }
 
 const DAY_DISTILL_SYSTEM = `你是用户的长期记忆整理助手。你会收到「当前记忆（memory.md 全文）」和「当天对话」。
@@ -64,7 +66,7 @@ async function deepseekDistill(
   user: string,
   maxTokens: number,
   opts: { thinking?: boolean } = {},
-): Promise<{ text: string; cost: number }> {
+): Promise<{ text: string; cost: number; usage: TokenUsage }> {
   const apiKey = env.DEEPSEEK_API_KEY;
   if (!apiKey) throw new Error('DEEPSEEK_API_KEY 未配置');
   const res = await fetch('https://api.deepseek.com/chat/completions', {
@@ -99,7 +101,11 @@ async function deepseekDistill(
     prompt_cache_miss_tokens: data.usage?.prompt_cache_miss_tokens ?? 0,
     completion_tokens: data.usage?.completion_tokens ?? 0,
   };
-  return { text: content.trim(), cost: calcCost(usage, pricingForModel(env, model), new Date()) };
+  return {
+    text: content.trim(),
+    cost: calcCost(usage, pricingForModel(env, model), new Date()),
+    usage,
+  };
 }
 
 /** Workers AI 兜底。 */
@@ -127,8 +133,15 @@ export async function distillText(
   opts: { thinking?: boolean } = {},
 ): Promise<DistillResult> {
   try {
-    const { text, cost } = await deepseekDistill(env, deepseekModel, system, user, maxTokens, opts);
-    return { text, cost, backend: 'deepseek' };
+    const { text, cost, usage } = await deepseekDistill(
+      env,
+      deepseekModel,
+      system,
+      user,
+      maxTokens,
+      opts,
+    );
+    return { text, cost, backend: 'deepseek', usage };
   } catch (e) {
     console.warn('[distill] DeepSeek 失败，回退 Workers AI：', e);
   }

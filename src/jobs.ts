@@ -269,6 +269,8 @@ export async function archiveOneDay(
     const before = byteLength(memory);
     let distilled = false;
     let distillCost = 0;
+    // 分项 token：光有"多少钱"解释不了价格波动，把命中/未命中/输出都记下来
+    const distillUsage = { hit: 0, miss: 0, out: 0 };
     let usedFallback = false;
     let distillError: string | null = null;
     // ★ 提炼只读当天归档文件（上面刚回读的 distilledRows），不碰其他日期
@@ -327,6 +329,11 @@ export async function archiveOneDay(
           );
         }
         distillCost += summary.cost;
+        if (summary.usage) {
+          distillUsage.hit += summary.usage.prompt_cache_hit_tokens ?? 0;
+          distillUsage.miss += summary.usage.prompt_cache_miss_tokens ?? 0;
+          distillUsage.out += summary.usage.completion_tokens ?? 0;
+        }
         if (summary.backend === 'workers-ai') usedFallback = true;
         // 把当天提炼结果写进 context/{date}.json（方便回溯当天要点；失败不影响归档）
         if (summary.text.trim()) {
@@ -580,7 +587,10 @@ export async function archiveOneDay(
     await addLlmCost(env, target, distillCost);
     const costInfo =
       distillCost > 0
-        ? `；提炼费用 ¥${distillCost.toFixed(4)}${usedFallback ? '（部分用 Workers AI 兜底）' : ''}`
+        ? `；提炼费用 ¥${distillCost.toFixed(4)}${usedFallback ? '（部分用 Workers AI 兜底）' : ''}` +
+          (distillUsage.out > 0
+            ? `；token 命中${distillUsage.hit}/未命中${distillUsage.miss}/输出${distillUsage.out}`
+            : '')
         : usedFallback
           ? '；提炼用 Workers AI 兜底'
           : '';
