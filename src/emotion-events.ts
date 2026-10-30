@@ -157,7 +157,8 @@ const RULES: Rule[] = [
     type: 'command',
     intensity: 1,
     target: 'ai',
-    words: ['快去', '给我', '马上', '赶紧', '别废话'],
+    // 去掉「马上」：它太常见了（马上吃饭/马上睡/马上给你点），一个月能刷出十几个假指令
+    words: ['快去', '给我', '赶紧', '别废话', '你马上'],
   },
 ];
 
@@ -198,6 +199,33 @@ function isNegatedAt(text: string, word: string): boolean {
   if (idx === -1) return false;
   const before = text.slice(Math.max(0, idx - 2), idx);
   return NEGATION_WORDS.some((n) => before.includes(n));
+}
+
+/**
+ * 单字词的复合词排除表：前面的字一旦命中，就不是这个词的意思。
+ *
+ * 「滚」是重灾区：回滚、滚动、翻滚、滚轮。之前「# 记忆快照与回滚方案」
+ * 被记成强度 3 的侮辱，一次 +24 委屈——她记的其实是你的技术文档。
+ */
+const COMPOUND_PREFIX: Record<string, Set<string>> = {
+  滚: new Set(['回', '翻', '打', '电', '滚']),
+  蠢: new Set(['愚']),
+};
+
+/** 命中复合词前缀时丢弃该词。 */
+function isCompoundWord(text: string, word: string): boolean {
+  const prefixes = COMPOUND_PREFIX[word];
+  if (!prefixes) return false;
+  let from = 0;
+  for (;;) {
+    const idx = text.indexOf(word, from);
+    if (idx === -1) return true;
+    if (idx > 0 && prefixes.has(text[idx - 1])) {
+      from = idx + 1;
+      continue;
+    }
+    return false;
+  }
 }
 
 /**「积累了不少经验」里的「累了」不是情绪，要排除。 */
@@ -261,6 +289,7 @@ export function extractEmotionEvents(text: string, at: number, target: EventTarg
       // 否定过滤：但 broken_promise 这类强规则不受否定影响
       if (!rule.strong && isNegatedAt(trimmed, word)) continue;
       if (isLeiCompound(trimmed, word)) continue;
+      if (isCompoundWord(trimmed, word)) continue;
 
       seen.add(rule.type);
       events.push({

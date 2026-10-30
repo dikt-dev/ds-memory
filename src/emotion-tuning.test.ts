@@ -21,6 +21,25 @@ describe('情感事件抽取调优', () => {
     expect(strong).toBeGreaterThan(weak);
   });
 
+  it('「回滚方案」不算侮辱（真实误判案例）', () => {
+    expect(extractEmotionEvents('# 记忆快照与回滚方案', T0).some((e) => e.type === 'insult')).toBe(false);
+    expect(extractEmotionEvents('- 先做只读、可回滚、不改变线上回复的事', T0).some((e) => e.type === 'insult')).toBe(false);
+    expect(extractEmotionEvents('回滚演练：在吗', T0)).toEqual([]);
+  });
+
+  it('真的说「滚」仍然是 insult', () => {
+    expect(extractEmotionEvents('滚', T0).some((e) => e.type === 'insult')).toBe(true);
+  });
+
+  it('「马上给你点」不再算指令', () => {
+    expect(extractEmotionEvents('好嘞，马上给你点', T0).some((e) => e.type === 'command')).toBe(false);
+    expect(extractEmotionEvents('马上睡马上睡', T0).some((e) => e.type === 'command')).toBe(false);
+  });
+
+  it('「你马上过来」仍然是指令', () => {
+    expect(extractEmotionEvents('你马上过来', T0).some((e) => e.type === 'command')).toBe(true);
+  });
+
   it('五小时前的道歉仍然能化解', () => {
     const at = T0 - 5 * 3600_000;
     const events = [
