@@ -83,7 +83,8 @@ const RULES: Rule[] = [
     type: 'insult',
     intensity: 3,
     target: 'ai',
-    words: ['你懂什么', '没用', '废物', '垃圾', '闭嘴', '滚', '蠢', '傻逼', '笨死了', '烦不烦', '你有病'],
+    // 有意不含「笨蛋/笨死了」：这类在情侣对话里基本是打情骂俏，归 tease
+    words: ['你懂什么', '没用', '废物', '垃圾', '闭嘴', '滚', '蠢', '傻逼', '烦不烦', '你有病'],
   },
   {
     type: 'apology',
@@ -150,7 +151,7 @@ const RULES: Rule[] = [
     type: 'tease',
     intensity: 1,
     target: 'ai',
-    words: ['哈哈哈', '笑死', '笨蛋', '傻子', '嫌弃你', '嫌弃', '小笨蛋'],
+    words: ['哈哈哈', '笑死', '笨蛋', '笨死了', '傻子', '嫌弃你', '嫌弃', '小笨蛋'],
   },
   {
     type: 'command',
@@ -207,11 +208,34 @@ function isLeiCompound(text: string, word: string): boolean {
   return LEI_COMPOUND_PREFIX.has(text[idx - 1]);
 }
 
-/** 强度加成：感叹号 / 重复字。 */
+/** 加强词：让「很累」和「有点累」落到不同强度。 */
+const STRONG_WORDS = ['很', '太', '特别', '超', '巨', '极其', '死了', '疯了', '爆'];
+const WEAK_WORDS = ['有点', '稍微', '有一点点', '些许', '略'];
+
+/** 强度调整：加强词 +1、削弱词 -1、连续感叹号 +1。 */
 function bumpIntensity(text: string, base: 1 | 2 | 3): 1 | 2 | 3 {
+  let b = base;
   const exclaim = (text.match(/[！!]/g) ?? []).length;
-  if (exclaim >= 2 && base < 3) return (base + 1) as 1 | 2 | 3;
-  return base;
+  if (exclaim >= 2) b += 1;
+  if (STRONG_WORDS.some((w) => text.includes(w))) b += 1;
+  if (WEAK_WORDS.some((w) => text.includes(w))) b -= 1;
+  return Math.min(3, Math.max(1, b)) as 1 | 2 | 3;
+}
+
+/** 玩笑标记：有这些信号时，「蠢/笨/没用」多半是打情骂俏，不是真的被冒犯。 */
+const PLAYFUL_HINTS = ['哈哈', '嘿嘿', '笑死', '开玩笑', '逗你', '别当真', '狗头', '233', 'hhh', '嘻嘻'];
+
+/**
+ * 玩笑降级：骂人词出现在明显的玩笑语境里 → 退成 tease(1)。
+ *
+ * 原来「你个笨蛋」「笨死了」按 insult 强度 3 记，一次就 +24 委屈；
+ * 而增益的另一半（tease）根本不产生委屈。真实对话里被记仇的多半是这类玩笑。
+ */
+function softenPlayfulInsult(text: string, events: EmotionEvent[]): EmotionEvent[] {
+  if (!PLAYFUL_HINTS.some((w) => text.includes(w))) return events;
+  return events.map((e) =>
+    e.type === 'insult' ? { ...e, type: 'tease' as const, intensity: 1 as const, resolved: true } : e,
+  );
 }
 
 /**
@@ -252,7 +276,7 @@ export function extractEmotionEvents(text: string, at: number, target: EventTarg
     }
   }
 
-  return neutralizeIrony(trimmed, events, at);
+  return neutralizeIrony(trimmed, softenPlayfulInsult(trimmed, events), at);
 }
 
 /** 反讽词：命中时「真厉害」这类字面表扬其实是阴阳。 */
@@ -428,7 +452,9 @@ export function reconcileWithApology(events: EmotionEvent[], now: number): Emoti
   const apology = events
     .filter((e) => e.type === 'apology')
     .sort((a, b) => b.at - a.at)
-    .find((e) => now - e.at <= 30 * 60_000);
+    // 30 分钟太短：真人吵架常常隔半天才道歉。这里放宽到 6 小时，
+    // 仍然只化解「道歉之前」的事件，道歉后新骂的还要重新哄。
+    .find((e) => now - e.at <= 6 * 3600_000);
   if (!apology) return events;
   return events.map((e) => {
     if (isNegativeEvent(e.type) && !e.resolved && e.at <= apology.at) {

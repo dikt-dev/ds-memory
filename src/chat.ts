@@ -166,6 +166,8 @@ export async function streamChat(
       month: beijingMonth(now),
     },
     wasIgnored: facts.wasIgnored,
+    // 只在规则判出负向事件时才会真的调 AI（见 processEmotionTurn）
+    allowAiReview: true,
   });
 
   // ★ 脾气：情绪 → 配合度。让她可以拒绝，而不是"委屈地答应"。

@@ -238,9 +238,30 @@ async function processEmotionTurnUnlocked(
 
   // ① 抽本轮事件（规则；关键路径默认不调 AI）
   let newEvents = extractEmotionEvents(userText ?? '', now);
-  if (input.allowAiReview && newEvents.length === 0 && (userText ?? '').trim()) {
-    const aiEvents = await reviewEventsWithAI(input.env, userText, now);
-    if (aiEvents.length > 0) newEvents = aiEvents;
+  // 规则判出负向事件时也要复核：误判成「真生气」的代价不对称——
+  // 她会对一句玩笑莫名其妙发火；反过来漏判只是没反应，代价小得多。
+  const hasNegative = newEvents.some((e) => isNegativeEvent(e.type));
+  if (input.allowAiReview && (userText ?? "").trim() && (newEvents.length === 0 || hasNegative)) {
+    try {
+      const aiEvents = await reviewEventsWithAI(input.env, userText, now);
+      if (hasNegative) {
+        const aiHasNegative = aiEvents.some((e) => isNegativeEvent(e.type));
+        if (aiHasNegative) {
+          newEvents = [...newEvents.filter((e) => !isNegativeEvent(e.type)), ...aiEvents];
+        } else {
+          // AI 说这不是真的冒犯 → 降级成玩笑，不留委屈
+          newEvents = newEvents.map((e) =>
+            isNegativeEvent(e.type)
+              ? { ...e, type: 'tease' as const, intensity: 1 as const, resolved: true }
+              : e,
+          );
+        }
+      } else if (aiEvents.length > 0) {
+        newEvents = aiEvents;
+      }
+    } catch {
+      // 复核失败就按规则来，不影响回复
+    }
   }
   if (wasIgnored) {
     newEvents = [
