@@ -45,6 +45,54 @@ function stripMemoryForPrompt(text: string): string {
   return out.join('\n').trim();
 }
 
+/**
+ * 会「小时内变化」的分区：单独放到易变段，避免它一变就把整段前缀缓存冲掉。
+ * 其余分区（人物底色/称呼/关于用户/偏好/共同经历/雷区）都按天级变化，留在稳定段。
+ * 未识别的分区默认归稳定段——宁可缓存吃亏，也不丢内容。
+ */
+export const VOLATILE_MEMORY_HEADERS: string[] = ['进行中的事项', '近期动态'];
+
+function splitSections(text: string): {
+  preamble: string[];
+  sections: Array<{ name: string; body: string }>;
+} {
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  const sections: Array<{ name: string; body: string }> = [];
+  const preamble: string[] = [];
+  let cur: { name: string; body: string } | null = null;
+  for (const line of lines) {
+    const m = /^##\s+(.+?)\s*$/.exec(line);
+    if (m) {
+      if (cur) sections.push(cur);
+      cur = { name: m[1].trim(), body: '' };
+    } else if (cur) {
+      cur.body += line + '\n';
+    } else {
+      preamble.push(line);
+    }
+  }
+  if (cur) sections.push(cur);
+  return { preamble, sections };
+}
+
+/** 按「变化频率」把 memory.md 拆成稳定段与易变段（不改原文件）。 */
+export function splitMemoryForPrompt(
+  text: string,
+  maxBytes = MEMORY_PROMPT_MAX_BYTES,
+): { stable: string; volatile: string } {
+  const { preamble, sections } = splitSections(text);
+  const stableParts: string[] = [preamble.join('\n')];
+  const volatileParts: string[] = [];
+  for (const section of sections) {
+    const chunk = `## ${section.name}\n${section.body}`;
+    (VOLATILE_MEMORY_HEADERS.includes(section.name) ? volatileParts : stableParts).push(chunk);
+  }
+  return {
+    stable: compactMemoryForPrompt(stableParts.join('\n'), maxBytes),
+    volatile: compactMemoryForPrompt(volatileParts.join('\n'), maxBytes),
+  };
+}
+
 export function compactMemoryForPrompt(
   text: string,
   maxBytes = MEMORY_PROMPT_MAX_BYTES,

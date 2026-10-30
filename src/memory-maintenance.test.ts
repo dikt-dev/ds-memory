@@ -9,6 +9,7 @@ import {
   parseRelationValues,
   pruneTransientSections,
   reportSectionBudgets,
+  splitMemoryForPrompt,
   trimOldestEntries,
 } from './memory-maintenance';
 
@@ -457,5 +458,69 @@ describe('键=值 覆盖式更新', () => {
     const after = mergeMemoryEntry(before, `## 关于用户\n- [26-10-23] 新事实\n`, '2026-10-23');
     expect(after).toContain('- [26-10-20] 旧事实');
     expect(after).toContain('- [26-10-23] 新事实');
+  });
+});
+
+describe('splitMemoryForPrompt（缓存分段）', () => {
+  const MEM = `# 长期记忆
+
+## 人物底色
+- 名字=大肥鱼；自称=本小姐。
+
+## 称呼与关系
+- 平时叫用户“大笨蛋”。
+
+## 关于用户
+- [26-10-20] 城=杭州。
+
+## 偏好与习惯
+- [26-10-20] 喜=喝奶茶。
+
+## 进行中的事项
+- [26-10-30] 正在重构记忆系统。
+
+## 近期动态
+- [26-10-30] 今天加班到十点。
+
+## 雷区与禁忌
+- 不要提跳槽。`;
+
+  it('小时内会变的分区进 volatile，其余进 stable', () => {
+    const { stable, volatile } = splitMemoryForPrompt(MEM);
+    expect(stable).toContain('## 人物底色');
+    expect(stable).toContain('## 称呼与关系');
+    expect(stable).toContain('## 雷区与禁忌');
+    expect(stable).not.toContain('## 进行中的事项');
+    expect(stable).not.toContain('## 近期动态');
+    expect(volatile).toContain('## 进行中的事项');
+    expect(volatile).toContain('## 近期动态');
+    expect(volatile).not.toContain('## 人物底色');
+  });
+
+  it('未识别的分区默认留在 stable（宁可缓存吃亏也不丢内容）', () => {
+    const { stable } = splitMemoryForPrompt(`${MEM}\n\n## 某个新分区\n- 新东西`);
+    expect(stable).toContain('## 某个新分区');
+    expect(stable).toContain('新东西');
+  });
+
+  it('两段拼起来不丢任何分区', () => {
+    const { stable, volatile } = splitMemoryForPrompt(MEM);
+    const both = stable + '\n' + volatile;
+    for (const h of ['人物底色', '称呼与关系', '关于用户', '偏好与习惯', '进行中的事项', '近期动态', '雷区与禁忌']) {
+      expect(both).toContain(`## ${h}`);
+    }
+  });
+
+  it('近期动态改一个字，stable 段字节完全不变', () => {
+    const a = splitMemoryForPrompt(MEM);
+    const b = splitMemoryForPrompt(MEM.replace('加班到十点', '加班到十一点'));
+    expect(b.stable).toBe(a.stable);
+    expect(b.volatile).not.toBe(a.volatile);
+  });
+
+  it('空字符串不炸', () => {
+    const { stable, volatile } = splitMemoryForPrompt('');
+    expect(stable).toBe('');
+    expect(volatile).toBe('');
   });
 });

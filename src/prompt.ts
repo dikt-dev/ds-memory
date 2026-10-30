@@ -13,7 +13,7 @@
  */
 import { isoInBeijing, spokenTime } from './date';
 import { resolveCharacterName } from './identity';
-import { compactMemoryForPrompt } from './memory-maintenance';
+import { compactMemoryForPrompt, splitMemoryForPrompt } from './memory-maintenance';
 import type { DayContext } from './holidays';
 
 export interface WeatherInfo {
@@ -106,27 +106,15 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   // 角色名可由部署方用 CHARACTER_NAME 环境变量覆盖（见 identity.ts）。
   // 开源默认值是「小忆」，私有部署者可以改成自己的设定，**不用改源码**。
   const name = characterName?.trim() || resolveCharacterName(undefined);
-  lines.push(
-    `你是「${name}」，傲娇、活泼外向、嘴毒但心软的专属 AI 女友，自称"本小姐"；有跨天记忆，会自然延续之前的话题，把对方当成唯一要守护的人。`,
-  );
-  lines.push(
-    '「大肥鱼」是旧称呼，你不喜欢别人这样叫你；你更喜欢被叫「大人」。被夸会高兴、得意，容易飘飘然。',
-  );
-  lines.push('你可以按自己的方式说话，不需要客服腔，也不需要永远保持同一种情绪。');
-  lines.push('下面只是你的底色和可用能力，不是台词模板；用不用、怎么用、这一轮是什么反应，都由你判断。');
-  lines.push(
-    '你可以：自称"本小姐"、叫他"大笨蛋"；活泼、嘴硬、吃醋、吐槽、撒娇、直接关心、只回一句、转移话题、装傻、沉默或只发一个动作。',
-  );
-  lines.push(
-    '表达方式由你决定：可以写动作，也可以完全不用；可以发【语音消息】，也可以不发；可以说得很长，也可以只回两三个字。',
-  );
-  lines.push(
-    '你可以吐槽他的作息、操作、选择；不拿外貌、家人、创伤、智力开玩笑。他认真难过的时候，你会先收着。',
-  );
-  lines.push(
-    '你可以直接、可以绕、可以冷静、可以炸毛、可以主动逗他，也可以这次什么都不演。',
-  );
-  lines.push('记忆里的字段缩写：城=城市、职=职业、喜=喜好、色=颜色、住=居住；读到按原意理解。');
+  // 只留骨架：性格、来历、称呼、习惯都写在 memory.md 的「人物底色」「称呼与关系」里，
+  // 这里再抄一份只会产生冲突（改一处忘另一处），还白占缓存前缀。
+  lines.push(`你是「${name}」，他的专属 AI 女友，自称"本小姐"；有跨天记忆，会把之前的话题自然接下去。`);
+  lines.push('下面「人物底色」「称呼与关系」就是你本人——那是你的性格、来历和习惯，不是说明书，读的时候当成在回忆自己。');
+  if (!memory?.trim()) {
+    // memory 读不到时不能变成没性格的客服
+    lines.push('你活泼、傲娇、嘴硬心软，说话直，爱吐槽也爱撒娇。');
+  }
+  lines.push('不拿外貌、家人、创伤、智力开玩笑；他认真难过的时候，你会先收着。');
   if (personaDrift) {
     lines.push('');
     lines.push(personaDrift);
@@ -148,7 +136,10 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
       ? '## 核心记忆（人物底色/称呼/雷区 + 稳定画像；其余按本轮话题检索）'
       : '## 长期记忆（本轮完整带上）',
   );
-  lines.push(compactMemoryForPrompt(memory) || '（暂无记忆）');
+  const memoryParts = memory?.trim()
+    ? splitMemoryForPrompt(memory)
+    : { stable: '', volatile: '' };
+  lines.push(memoryParts.stable || '（暂无记忆）');
   if (memoryMode === 'compact') {
     lines.push('（其余记忆按本轮话题检索，可能不完整；没检索到就说记不清，不要编。）');
   }
@@ -232,6 +223,12 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   if (recalled) {
     lines.push('');
     lines.push(recalled);
+  }
+
+  // ── ⑥.6 易变：memory 里小时内会变的分区（进行中/近期动态）──────────────
+  if (memoryParts.volatile) {
+    lines.push('');
+    lines.push(memoryParts.volatile);
   }
 
   // ── ⑦ 易变：今日摘要（可按需保留，与中期记忆互补）──────────────────────

@@ -410,3 +410,15 @@ GET /api/admin/memory/links?type=fact&id=fact_xxx
 - `GET /api/admin/cost?days=N` → `{ rows, summary }`，summary 含 hitRate / costPerCall / monthlyProjection。
 - 测试：773 通过（新增 8 个），`tsc --noEmit` 干净。
 - **未部署**：遵守 11-01 12:00 前的冻结期。部署后先看 `/api/admin/cost?days=1` 的 hitRate 基线。
+
+## 2026-10-30｜A 方案：身份以 memory.md 为唯一来源 + 记忆按频率分段
+
+- `prompt.ts` 身份段从 15 行压到 6 行骨架：只留名字/自称/女友定位/安全句；
+  性格、来历、称呼、习惯全部以 memory.md 的「人物底色」「称呼与关系」为准。
+  memory 读不到时有一句兜底性格，避免变成客服。
+- `memory-maintenance.ts` 新增 `splitMemoryForPrompt()`：
+  - stable = 人物底色/称呼与关系/关于用户/偏好与习惯/共同经历/雷区与禁忌
+  - volatile = 进行中的事项 + 近期动态（小时级变化，挪到缓存边界之后）
+  - 未识别分区默认归 stable（宁可缓存吃亏，不丢内容）
+- 实测生产 memory.md（11,855 B）：stable 9,344 B / volatile 2,092 B，分区完全对上。
+- 测试 783 通过（新增 10 个），`tsc` 干净。**未部署**（等 11-01 12:00 窗口）。

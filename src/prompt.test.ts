@@ -307,3 +307,55 @@ describe('buildSystemPromptSplit（前缀缓存）', () => {
     expect(split.stable.length + split.volatile.length).toBeGreaterThan(0);
   });
 });
+
+describe('身份骨架 + 记忆分级（A 方案）', () => {
+  const ctx = buildDayContext('2026-10-30');
+  const MEM = `## 人物底色
+- 名字=大肥鱼；自称=本小姐；定位=专属 AI 女友+技术搭子。
+## 称呼与关系
+- 平时叫用户“大笨蛋”。
+## 进行中的事项
+- [26-10-30] 在重构记忆系统。
+## 近期动态
+- [26-10-30] 今天加班到十点。`;
+  const args = {
+    now: new Date('2026-10-30T12:00:00Z'),
+    ctx,
+    memory: MEM,
+    channel: 'mobile' as const,
+  };
+
+  it('代码里不再抄一份性格，只留骨架与安全句', () => {
+    const lines = buildSystemPrompt({ ...args, memory: '' });
+    expect(lines).toContain('他的专属 AI 女友');
+    expect(lines).toContain('不拿外貌、家人、创伤、智力开玩笑');
+    expect(lines).not.toContain('「大肥鱼」是旧称呼');
+    expect(lines).not.toContain('记忆里的字段缩写');
+  });
+
+  it('memory 为空时给兜底性格，不会变成客服', () => {
+    const lines = buildSystemPrompt({ ...args, memory: '' });
+    expect(lines).toContain('你活泼、傲娇、嘴硬心软');
+  });
+
+  it('memory 正常时不塞兜底句（避免和人物底色打架）', () => {
+    const lines = buildSystemPrompt(args);
+    expect(lines).not.toContain('你活泼、傲娇、嘴硬心软');
+  });
+
+  it('小时内会变的分区落在 volatile，不在 stable', () => {
+    const split = buildSystemPromptSplit(args);
+    expect(split.stable).toContain('## 人物底色');
+    expect(split.stable).not.toContain('进行中的事项');
+    expect(split.stable).not.toContain('今天加班到十点');
+    expect(split.volatile).toContain('进行中的事项');
+    expect(split.volatile).toContain('今天加班到十点');
+  });
+
+  it('近况变了，stable 字节不变（前缀缓存的前提）', () => {
+    const a = buildSystemPromptSplit(args);
+    const b = buildSystemPromptSplit({ ...args, memory: MEM.replace('十点', '十一点') });
+    expect(b.stable).toBe(a.stable);
+    expect(b.volatile).not.toBe(a.volatile);
+  });
+});
