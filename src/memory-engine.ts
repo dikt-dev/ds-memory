@@ -31,7 +31,7 @@ import { logTrace } from './trace';
  * 随索引增长接近线性，1500ms 只剩 300ms 余量，一次抖动就整条作废。
  * 现在 legacy 与 next 并行，预算是 max 而不是 sum。
  */
-export const RECALL_DEADLINE_MS = 3000;
+export const RECALL_DEADLINE_MS = 3500;
 
 /**
  * 输出封顶：条数与每条字数。借鉴 dsh-fish 的"回忆不是读档"。
@@ -204,6 +204,16 @@ async function runNextEngine(
     });
   }
   stages.rank += performance.now() - t;
+
+  // 保底：候选里若有「进行中的事项」且已选中至少一条，就保证它进上下文。
+  // 她答应过的事被忘了，是用户最不能接受的一类遗忘。
+  if (picked.length > 0) {
+    const hasOngoing = picked.some((chunk) => chunk.section === '进行中的事项');
+    const ongoing = pool.find((chunk) => chunk.section === '进行中的事项');
+    if (!hasOngoing && ongoing) {
+      picked = [...picked.slice(0, Math.max(0, RECALL_MAX_ITEMS - 1)), ongoing];
+    }
+  }
 
   t = performance.now();
   const expanded = await expandLinkedChunks(env, picked, 2);

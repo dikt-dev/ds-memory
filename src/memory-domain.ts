@@ -477,6 +477,40 @@ export function shouldRecallMemory(query: string): boolean {
  * - 有向量时 MMR 去冗余；无向量自动退回关键词；
  * - 纯函数，便于 golden set / 延迟测试。
  */
+/** 永不衰减的分区：她是谁、怎么称呼、不能碰什么。 */
+const NEVER_DECAY_SECTIONS = new Set(CORE_SECTIONS);
+
+/**
+ * 记忆的「遗忘曲线」（P1.5）。
+ *
+ * 不是删除，是降权——条目还在、还能被检索到，只是更难点亮。
+ * 按来源给不同半衰期：事件淡得快，事实淡得慢，核心与雷区永不衰减。
+ *
+ * 参数选择偏保守：宁可多记一点，也不要过早淡忘（用户对"忘了重要的事"远比
+ * 对"记着小事"敏感）。
+ */
+export const DECAY_HALF_LIFE_DAYS: Record<string, number> = {
+  fact: 180,
+  event: 90,
+  summary: 120,
+};
+/** 衰减下限：再老也保留 15% 的分量，避免陈年条目彻底沉底。 */
+export const DECAY_FLOOR = 0.15;
+
+export function recallDecay(
+  chunk: Pick<MemoryChunk, 'source' | 'section' | 'date'>,
+  nowMs = Date.now(),
+): number {
+  if (NEVER_DECAY_SECTIONS.has(chunk.section)) return 1;
+  if (!chunk.date) return 1;
+  const ts = Date.parse(`${chunk.date}T00:00:00+08:00`);
+  if (!Number.isFinite(ts)) return 1;
+  const ageDays = Math.max(0, (nowMs - ts) / 86_400_000);
+  const halfLife = DECAY_HALF_LIFE_DAYS[chunk.source] ?? 120;
+  const factor = Math.pow(0.5, ageDays / halfLife);
+  return Math.max(DECAY_FLOOR, factor);
+}
+
 export function rankMemoryChunks(
   query: string,
   chunks: MemoryChunk[],
@@ -487,7 +521,11 @@ export function rankMemoryChunks(
   const q = (query || '').slice(-1000).trim();
   if (!q || chunks.length === 0) return [];
   const scored = chunks
-    .map((chunk) => ({ chunk, score: keywordScore(q, chunk, focus) }))
+    .map((chunk) => ({
+      chunk,
+      // ★ 遗忘曲线：同样的关键词命中，老条目排在后面（核心/雷区永不衰减）
+      score: keywordScore(q, chunk, focus) * recallDecay(chunk),
+    }))
     .filter((x) => x.score > 0)
     .sort(
       (a, b) =>
@@ -505,7 +543,8 @@ export function rankMemoryChunks(
   const vectorRanked = chunks
     .map((chunk) => {
       const vec = decodeVec(chunk.vec ?? null);
-      return { chunk, score: vec ? Math.max(0, cosineSimilarity(qVec, vec)) : 0 };
+      const sim = vec ? Math.max(0, cosineSimilarity(qVec, vec)) : 0;
+      return { chunk, score: sim * recallDecay(chunk) };
     })
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score);

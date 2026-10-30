@@ -12,8 +12,8 @@
 import type { Env } from './types';
 import { distillText } from './distill';
 
-/** 选择器超时：超时就用确定性的关键词排序，别让召回卡住。 */
-export const SELECT_TIMEOUT_MS = 1500;
+/** 选择器超时：超时就用确定性的关键词排序，别让召回卡住。延迟可以接受，放宽到 2.5s。 */
+export const SELECT_TIMEOUT_MS = 2500;
 
 export interface RecallCandidate {
   id: string;
@@ -120,6 +120,7 @@ export async function selectRecall(
     '第一步 intents：把用户这句话拆成 2~3 个检索意图（他到底想找什么），每条不超过 12 个字。',
     '第二步 picks：从候选里挑出「她此刻真的会想起来、说出来不突兀」的条目序号。',
     '规则：',
+    '- 通常只挑 1~3 条。只有用户明确在问「你还记得…」「上次…」时才考虑给满。',
     '- 宁缺毋滥，picks 允许是空数组（用户只是随口说话时，什么都别选）。',
     '- 只靠一个泛词碰上的不要选。',
     '- 稳定事实、正在做的事、共同的第一次，优先。',
