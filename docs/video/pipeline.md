@@ -394,9 +394,9 @@ return new Response(obj.body, {
 
 | # | 项 | 提交 | 状态 |
 |---|---|---|---|
-| 1 | `/api/app/media` 支持 Range/206/416 + ETag 304 + immutable | `c3ce525` | 代码+测试完成，**未部署** |
-| 2 | `[视频]`/`[GIF]`/`[语音]` 占位符压成标记（历史 + 提炼共用） | `c3ce525` | 同上 |
-| 2b | 提炼输入走同一份清洗（此前 `[图片:images/…]` 会进 memory.md） | `c3ce525` | 同上 |
+| 1 | `/api/app/media` 支持 Range/206/416 + ETag 304 + immutable | `c3ce525` | **已部署**（版本 e7f6557e） |
+| 2 | `[视频]`/`[GIF]`/`[语音]` 占位符压成标记（历史 + 提炼共用） | `c3ce525` | **已部署** |
+| 2b | 提炼输入走同一份清洗（此前 `[图片:images/…]` 会进 memory.md） | `c3ce525` | **已部署** |
 | 9 | App：宫格按 `index[]` 裁剪真实帧 + 每格标时间 | `ds-mobile` 提交 | 已装真机，待真实视频复验 |
 
 测试：`tsc` 0 错；vitest **62 文件 / 733 用例**全过（新增 `parseByteRange`、`sanitizeMessagePlaceholders` 两组）。

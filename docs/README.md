@@ -80,6 +80,34 @@
 | `runbooks/operations-notes.md` | 日常运维零散笔记 |
 | `eval/` | 评测夹具：`golden-memory.json`、`affect-scenarios.json`、`safety-cases.json`、`fixture-memory.md` |
 
+## 最近一次核对（2026-10-30）
+
+发布前把全部文档过了一遍，结果如下。
+
+**检查项**
+
+| 项 | 结果 |
+|---|---|
+| 相对链接 | 0 个坏链（扫描全部 .md） |
+| 提交号引用 | 文档里引用的提交都能在 git 里找到 |
+| 观察期时间 | 全库统一为 2026-11-01 **12:00**，无 21:10 残留 |
+| 过期状态声明 | 修 1 处：视频链路的 Range/ETag **早已部署**（e7f6557e），文档还写「未部署」 |
+| 过期数字 | 修 3 处：测试用例 722/699 → 765、提炼模型 v4-flash → v4-pro（带思考） |
+| 过期日期头 | 修 2 处：`pending-work.md`、`memory-backlog.md` |
+
+**权威顺序**（冲突时从上往下）
+
+1. 代码与线上版本
+2. `current-state.md` 第 0 节「现状速览」
+3. `pending-work.md`（待办与时间点）
+4. `handover-2026-10-29.md`（交接上下文）
+5. 各专题文档；`baseline.md`、`phases/`、`logs/` 属历史记录，不改结论
+
+**刻意保留的旧数字**
+
+`plans/refactor-master-plan.md`、`baseline.md`、`phases/p0-p4-report.md` 里的「631 个测试」「45 个文件」
+是当时的基线，**不要改成现在的数字**——它们是判断「重构有没有拖慢测试」的参照点。
+
 ## 约定
 
 - **状态类文档只有一份**：`current-state.md` 与 `pending-work.md` 是唯一入口，阶段报告不重复维护状态。

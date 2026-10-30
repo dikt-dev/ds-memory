@@ -1,24 +1,36 @@
-# 当前状态清单（Phase 0 基线）
+# 当前状态
 
-> 日期：2026-10-24（2026-10-26 随整理更新）  
-> 基线提交：`9155038`（pre-refactor checkpoint）  
-> 用途：Phase 0–5 重构的现状快照；后续变更需同步本文件  
-> 范围：`ds-memory`；移动端 `DS-Mobile` 只记录接口契约
+> **本次核对：2026-10-30**。下面第 0 节是现在的事实；第 1 节往后是 Phase 0 基线原文（10-24），
+> 路线、模型、测试数量等已被后续实现取代，与代码冲突时以代码为准。
+
+## 0. 现状速览（2026-10-30）
+
+| 项 | 现在 |
+|---|---|
+| 线上版本 | `5dd4184e`（10-30 网页热修）；引擎代码等同 `f335707`（10-29 部署） |
+| 观察期 | 2026-10-25 21:10 → **2026-11-01 12:00**（实际 6 天 14 小时 50 分） |
+| 开关 | `MEMORY_ENGINE_MOBILE=shadow`、`MEMORY_ENGINE_WEB=legacy`、`AFFECT_ENGINE_*`=shadow、`PROACTIVE_ENGINE=shadow`、`PROACTIVE_DELIVERY=queue` |
+| 模型分工 | 对话 `deepseek-flash`；每日提炼 `deepseek-v4-pro`（带思考）；滚动摘要 `deepseek-flash`；兜底 Workers AI |
+| 测试 | **69 个文件 / 765 个用例**通过，`tsc --noEmit` 干净 |
+| 记忆规模（10-29 归档） | facts 40 / events 45 / entries 84 / **chunks 87** / links 227；memory.md 11700 字节 |
+| 召回（shadow，10-29） | 77 次，平均 **503ms**，平均 8.0 条（已顶到封顶 8 条），`expandLinkedChunks` 疑似主要开销 |
+| 待发布 | 8 批提交，见 [pending-work.md](./pending-work.md)；发布手册 [runbooks/deploy-2026-11-01.md](./runbooks/deploy-2026-11-01.md) |
+| 已知缺口 | 召回是 O(全部数据)：倒排索引尚未做；`putMemory` 只校验写入不校验语义 |
+
+入口文档：`pending-work.md`（待办）、`handover-2026-10-29.md`（交接）、`memory-system-walkthrough.md`（实现细节）。
 
 ---
 
-## 1. 代码与运行形态
-
-| 项 | 当前值 |
+## 1. 代码与运行形态（Phase 0 基线，10-24 原文）
 |---|---|
 | Cloudflare Worker | `ds-memory`，Hono + TypeScript |
 | 入口 | `src/index.ts` |
 | 前端 | `public/index.html`，单页、零构建 |
 | 运行时 | Cloudflare Workers（免费计划） |
 | 存储 | D1 + R2（主/小号）+ KV + Workers AI |
-| 模型 | DeepSeek `deepseek-flash`（对话）、`deepseek-v4-flash`（每日提炼，默认）、Workers AI 兜底 |
+| 模型 | DeepSeek `deepseek-flash`（对话）、`deepseek-v4-pro`（每日提炼，2026-10-30 起改带思考）、Workers AI 兜底 |
 | 手机端 | DS-Mobile（Android App，`com.dsmobile.app`），经 `/api/app/*` 直连 |
-| 测试 | 60 个测试文件、722 个用例（Phase 5 生产 shadow 后；基线为 45/631） |
+| 测试 | 69 个测试文件、765 个用例（2026-10-30） |
 | 构建检查 | `tsc --noEmit` |
 
 ---
@@ -211,7 +223,7 @@ KV auth / memory cache / memo / summary / emotion / heartbeat / ...
 | 项 | 值 |
 |---|---|
 | 测试文件 | 58（基线 45；Phase 0 trace，Phase 1 auth/runtime，Phase 2 memory，Phase 3 affect，Phase 4 retrieval，Phase 5 flags/metrics） |
-| 测试用例 | 699（基线 631；Phase 0 +6，Phase 1 +8，Phase 2 +25，Phase 3 +7，Phase 4 +7，Phase 5 +11） |
+| 测试用例 | 699（基线 631；Phase 0 +6，Phase 1 +8，Phase 2 +25，Phase 3 +7，Phase 4 +7，Phase 5 +11。**2026-10-30 实为 765**） |
 | 类型检查 | `node node_modules/typescript/bin/tsc --noEmit` |
 | 测试命令 | `node node_modules/vitest/vitest.mjs run` |
 | 关键测试 | 短期历史、记忆合并/去重、摘要触发、召回、关系/情绪、归档、队列、API 解析 |

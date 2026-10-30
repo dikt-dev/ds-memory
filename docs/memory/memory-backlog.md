@@ -1,6 +1,6 @@
 # 记忆系统未完成项
 
-更新：2026-10-28
+更新：2026-10-28（2026-10-30 核对：条目仍有效）
 
 状态说明：本文件只记录尚未实施的事项。已完成项见 `docs/memory/memory-project-comparison.md` 的“已落地”和 `docs/phases/phase-5/phase-5-observation-day3.md`。
 

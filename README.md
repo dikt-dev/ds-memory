@@ -255,7 +255,7 @@ src/
 
 ```bash
 pnpm build   # tsc --noEmit
-pnpm test    # vitest（60 个测试文件 / 722 用例）
+pnpm test    # vitest（69 个测试文件 / 765 用例）
 ```
 
 ## 隐私与免责
