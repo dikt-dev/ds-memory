@@ -36,6 +36,8 @@ export interface RecallSample {
   legacySkipped: boolean;
   /** 这一轮拆出来的检索意图（P1-1）；没有就空数组。 */
   intents?: string[];
+  /** 选择器真正选中的条数（扩展前）。items 是扩展+封顶后的，两者差多少要看得见。 */
+  picked?: number;
 }
 
 export interface RecallSampleRow extends RecallSample {
@@ -77,6 +79,9 @@ export async function ensureRecallSampleTable(env: Env): Promise<void> {
   await env.DB.prepare('ALTER TABLE recall_samples ADD COLUMN intents TEXT')
     .run()
     .catch(() => undefined);
+  await env.DB.prepare('ALTER TABLE recall_samples ADD COLUMN picked INTEGER NOT NULL DEFAULT 0')
+    .run()
+    .catch(() => undefined);
   ensured = true;
 }
 
@@ -89,8 +94,8 @@ export async function recordRecallSample(env: Env, s: RecallSample, now = Date.n
       `INSERT INTO recall_samples
          (day_key, channel, mode, kind, legacy_ms, load_ms, rank_ms, embed_ms,
           expand_ms, total_ms, items, linked, has_vector, timed_out, legacy_skipped,
-          intents, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          intents, picked, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
       .bind(
         dateKeyInBeijing(new Date(now)),
@@ -109,6 +114,7 @@ export async function recordRecallSample(env: Env, s: RecallSample, now = Date.n
         s.timedOut ? 1 : 0,
         s.legacySkipped ? 1 : 0,
         s.intents && s.intents.length > 0 ? JSON.stringify(s.intents) : null,
+        Math.max(0, Math.round(s.picked ?? 0)),
         now,
       )
       .run();

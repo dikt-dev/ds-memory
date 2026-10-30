@@ -140,6 +140,7 @@ async function runNextEngine(
   linked: number;
   hasVector: boolean;
   intents: string[];
+  picked: number;
   stages: NextStageMs;
 }> {
   const stages: NextStageMs = { load: 0, rank: 0, embed: 0, expand: 0 };
@@ -149,7 +150,16 @@ async function runNextEngine(
   const chunks = await loadMemoryChunks(env);
   stages.load = performance.now() - t;
   if (chunks.length === 0) {
-    return { text: '', items: 0, dropped: 0, linked: 0, hasVector: false, intents: [], stages };
+    return {
+      text: '',
+      items: 0,
+      dropped: 0,
+      linked: 0,
+      hasVector: false,
+      intents: [],
+      picked: 0,
+      stages,
+    };
   }
 
   t = performance.now();
@@ -227,6 +237,7 @@ async function runNextEngine(
     linked: expanded.length - picked.length,
     hasVector: queryVec !== null,
     intents: selection?.intents ?? [],
+    picked: picked.length,
     stages,
   };
 }
@@ -258,6 +269,7 @@ function emptyNext(): Awaited<ReturnType<typeof runNextEngine>> {
     linked: 0,
     hasVector: false,
     intents: [],
+    picked: 0,
     stages: { load: 0, rank: 0, embed: 0, expand: 0 },
   };
 }
@@ -336,6 +348,7 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
   let nextItems = 0;
   let nextLinked = 0;
   let nextHasVector = false;
+  let nextPicked = 0;
   try {
     nextRaw = capRecallText(next.text);
     stages = next.stages;
@@ -346,6 +359,7 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
       .filter((line) => line.startsWith('- ') && !line.includes('条相关记忆没展开')).length;
     nextLinked = next.linked;
     nextHasVector = next.hasVector;
+    nextPicked = next.picked;
 
     const oldItems = result.legacyText.split('\n').filter((l) => l.startsWith('- ')).length;
     logTrace('memory.engine', {
@@ -392,6 +406,7 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
       // 所以这一位为 1 时 legacy_ms 仍然可能是几百毫秒。old_items=0 别直接读成「旧召回差」。
       legacySkipped: opts.skipMemorySource === true && result.legacyText.trim() === '',
       intents: next.intents,
+      picked: nextPicked,
     }, nowMs);
   } catch (e) {
     logTrace('memory.engine.error', {
