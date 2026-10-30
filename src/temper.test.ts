@@ -13,6 +13,22 @@ describe('computeTemper', () => {
     expect(t.allowRefuse).toBe(false);
   });
 
+  it('只是心情不好也能拒绝（不需要被冒犯过）', () => {
+    const v = { ...emptyEmotionVector(), valence: -25, attachment: 40 };
+    const t = computeTemper({ vector: v, facets });
+    expect(t.allowRefuse).toBe(true);
+  });
+
+  it('累了也能拒绝', () => {
+    const v = { ...emptyEmotionVector(), valence: 10, fatigue: 60 };
+    expect(computeTemper({ vector: v, facets }).allowRefuse).toBe(true);
+  });
+
+  it('没被得罪、心情平常时不许拿脾气挡正常请求', () => {
+    const v = { ...emptyEmotionVector(), valence: 15, attachment: 30 };
+    expect(computeTemper({ vector: v, facets }).allowRefuse).toBe(false);
+  });
+
   it('芥蒂很高 → cold，且允许直接拒绝', () => {
     const v = { ...emptyEmotionVector(), grievance: 85, valence: -30 };
     const t = computeTemper({ vector: v, facets });

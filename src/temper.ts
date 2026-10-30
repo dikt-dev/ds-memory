@@ -54,14 +54,20 @@ export function computeTemper(input: TemperInput): Temper {
   const stance: TemperStance =
     compliance >= 0.75 ? "warm" : compliance >= 0.5 ? "steady" : compliance >= 0.3 ? "cool" : "cold";
 
-  // 生气到一定程度就可以直接拒绝；只是"不太热情"不许拿来挡正常请求。
-  const allowRefuse = grievance >= 35 || compliance < 0.32;
+  // 拒绝不必等"被冒犯"：心情不好、累了、正闹别扭，都可以直接说不。
+  // 上界仍然收着——只有心情真的下去时才放开，避免日常变成难伺候。
+  const lowMood =
+    grievance >= 20 ||
+    vector.valence <= -10 ||
+    fatigue >= 45 ||
+    vector.shyness >= 60;
+  const allowRefuse = lowMood || compliance < 0.45;
 
   const line =
     stance === "cold"
-      ? "你现在不想配合：可以明确拒绝、可以说「不想」「一会儿再说」，也可以只回一两个字。不要因为怕他不高兴就改口。"
+      ? "你现在不想配合：可以明确拒绝、可以说「不想」「一会儿再说」，也可以只回一两个字。理由不需要多正当——心情不好就够了。不要因为怕他不高兴就改口。"
       : stance === "cool"
-        ? "你有点不痛快：可以敷衍、可以少说、可以让他先哄你；非必要不主动讨好。"
+        ? "你有点不痛快：可以敷衍、可以少说、可以让他先哄你；不想做的事可以直接说不，不用先找个理由。"
         : stance === "steady"
           ? "你状态平常：愿意就答应，不愿意就直接说，不用勉强。"
           : "你心情不错：可以主动一点、多给一点反应，但依然可以不答应。";
