@@ -133,17 +133,30 @@ describe('decideProactive —— 打分', () => {
     expect(d.score).toBeGreaterThanOrEqual(50);
   });
 
-  it('强度档影响阈值：active 更容易发', () => {
+  it('强度档影响阈值与基础分：active 更容易发', () => {
     const input = baseInput({
       profile: baseProfile({ minutesSinceLastUserMsg: 60 * 10 }),
       pendingTopics: [{ content: '某事', daysAgo: 5 }],
     });
     const quiet = decideProactive({ ...input, level: 'quiet' });
     const active = decideProactive({ ...input, level: 'active' });
-    expect(quiet.score).toBe(active.score); // 分数相同
-    if (quiet.shouldSend === false) {
-      expect(active.shouldSend === true || active.score < 35).toBe(true);
-    }
+    // 随机时段的基础分按档位给，分数不再相等
+    expect(active.score).toBeGreaterThan(quiet.score);
+    expect(active.shouldSend).toBe(true);
+  });
+
+  it('随机时段：没什么事由、只是半天没聊，也能过 normal 阈值', () => {
+    // 线上回归：以前只有早晚固定问候能发出来，白天永远凑不够 50 分
+    const decision = decideProactive({
+      profile: baseProfile({ minutesSinceLastUserMsg: 60 * 14 }),
+      env: { hour: 15, isRestDay: false, weatherChanged: false, isSpecialDay: false },
+      pendingTopics: [],
+      level: 'normal',
+      slot: 'random',
+    });
+    expect(decision.shouldSend).toBe(true);
+    expect(decision.score).toBeGreaterThanOrEqual(50);
+    expect(decision.reasons.join(' ')).toContain('想和你说句话');
   });
 });
 
@@ -228,9 +241,15 @@ describe('固定时段（早晚问候）', () => {
   });
 
   it('随机消息不受固定时段加成影响', () => {
-    const d = decideProactive(
+    const random = decideProactive(
       baseInput({ env: baseEnv({ hour: 15 }), slot: 'random' }),
     );
-    expect(d.shouldSend).toBe(false);
+    const evening = decideProactive(
+      baseInput({ env: baseEnv({ hour: 15 }), slot: 'evening' }),
+    );
+    // 随机档走的是「想说话」的基础分，不是「到点问候」的 55 分
+    expect(random.reasons.join(' ')).not.toContain('问候');
+    expect(random.reasons.join(' ')).toContain('想和你说句话');
+    expect(evening.score).toBeGreaterThan(random.score);
   });
 });

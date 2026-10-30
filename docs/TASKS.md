@@ -245,6 +245,7 @@
 | A-4 | 内嵌相机（API1 + 后置） | ⬜ | `CameraCapture.kt` + `uploadMedia(bytes)` 重载 + 「+」菜单入口；处理预览方向、JPEG 转正、相机被占 |
 | A-5 | 状态页 UI | 🔵 | 点顶栏头像或 AI 气泡头像 → 心情/关系/记忆/今天/余额；服务端 `GET /api/app/status` 已上线（`9f00499`） |
 | A-6 | 推 GitHub（`ds-mobile`，public） | ⬜ | 推前扫历史密钥、补 `.gitignore`（`local.properties` / `*.jks` / `build/`）、补 README + LICENSE |
+| P-1 | 白天随机主动消息几乎不发（P-08） | 🔵 | 根因两条：①随机时段没有基础分，要凑 50 分只能靠待办/天气/里程碑，实际几乎永远不达标；②未回复时冷却 ×3=540 分钟，早安没人回就把一整天锁死。修法：随机档基础分 20/32/40（quiet/normal/active）、冷却封顶 360 分钟、深夜改成硬否决 |
 | A-7 | 代码整理 | ⬜ | 先出审查报告（行数/死代码/注释不一致），再拆 `ChatActivity.kt`（3136 行）、`ds-memory/src` 目录重组 |
 
 ## 十九、App 侧的已知未验证项

@@ -87,6 +87,18 @@ export const SILENCE_MINUTES = 30;
 export const BASE_COOLDOWN_MINUTES = 180;
 /** 未回复时冷却翻倍的上限倍数。 */
 export const UNANSWERED_COOLDOWN_MULTIPLIER = 3;
+/**
+ * 冷却上限：未回复时 ×3 会让「早安没人回」把一整天锁死（540 分钟）。
+ * 封顶 6 小时，既不追着问，也留出下午/傍晚再试一次的机会。
+ */
+export const MAX_COOLDOWN_MINUTES = 360;
+/**
+ * 随机时段的基础分：她「想说话」本身就是事由，不该等凑够待办/天气才开口。
+ * 数值按档位给——安静档仍然难得开口，活跃档半天没聊就够格。
+ * 这里有基础分并不意味着会刷屏：条数由 randomCountFor（0-2 条/天）、
+ * 静默期 30 分钟、冷却 3 小时共同限制。
+ */
+const RANDOM_BASELINE = { quiet: 20, normal: 32, active: 40 } as const;
 
 /**
  * 计算用户活跃时段权重（0~1）。
@@ -118,11 +130,13 @@ export function decideProactive(input: DecisionInput): Decision {
   if (profile.minutesSinceLastProactive !== null) {
     const unanswered = profile.repliesAfterLastProactive === 0;
     const fb = feedbackMultiplier && feedbackMultiplier > 0 ? feedbackMultiplier : 1;
-    const cooldown =
+    const cooldown = Math.min(
+      MAX_COOLDOWN_MINUTES,
       BASE_COOLDOWN_MINUTES *
-      cfg.cooldownMultiplier *
-      (unanswered ? UNANSWERED_COOLDOWN_MULTIPLIER : 1) *
-      fb;
+        cfg.cooldownMultiplier *
+        (unanswered ? UNANSWERED_COOLDOWN_MULTIPLIER : 1) *
+        fb,
+    );
     if (profile.minutesSinceLastProactive < cooldown) {
       return {
         shouldSend: false,
@@ -135,6 +149,12 @@ export function decideProactive(input: DecisionInput): Decision {
     }
   }
 
+  // 3) 深夜不打扰（睡前的固定问候窗口除外：22:45-23:15 本来就是它该发的时间）
+  const eveningSlot = slot === 'evening' && (env.hour === 22 || env.hour === 23);
+  if ((env.hour >= 23 || env.hour < 7) && !eveningSlot) {
+    return { shouldSend: false, score: 0, reasons: ['深夜时段，不打扰'], topics: [] };
+  }
+
   // ---------- 加分项 ----------
   // 0) 固定时段：用户约好的早安/睡前问候，时间本身就是事由
   //    （以前只有随机消息，固定时段也要凑够 50 分，等于永远不发）
@@ -143,6 +163,15 @@ export function decideProactive(input: DecisionInput): Decision {
   if (fixedSlot) {
     score += 55;
     reasons.push(slot === 'morning' ? '到了早安问候时间' : '到了睡前问候时间');
+  } else {
+    // 随机时段没有"时间本身"当事由，以前只能靠待办/天气/里程碑凑 50 分，
+    // 结果是几乎永远不发（线上表现：只剩早晚两条固定问候）。
+    // 给一个基础分：她本来就有想说话的时候。
+    const baseline = RANDOM_BASELINE[level];
+    if (baseline > 0) {
+      score += baseline;
+      reasons.push('没什么事，只是想和你说句话');
+    }
   }
 
   // 1) 情绪信号（可能加分或否决）
@@ -220,12 +249,6 @@ export function decideProactive(input: DecisionInput): Decision {
     reasons.push('休息日早晨，降低打扰概率');
   }
 
-  // 深夜强降权（睡前的固定问候窗口除外：22:45-23:15 本来就是它该发的时间）
-  const isEveningSlot = slot === 'evening' && (env.hour === 22 || env.hour === 23);
-  if ((env.hour >= 23 || env.hour < 7) && !isEveningSlot) {
-    score -= 40;
-    reasons.push('深夜时段');
-  }
 
   // 5) 未回复惩罚（累积）
   if (profile.repliesAfterLastProactive === 0 && profile.minutesSinceLastProactive !== null) {
