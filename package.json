@@ -14,7 +14,8 @@
     "observe:p5": "node scripts/p5-observe.mjs",
     "memory:regression": "node scripts/memory-regression.mjs",
     "archive:check": "node scripts/archive-check.mjs",
-    "memory:check": "node scripts/memory-check.mjs"
+    "memory:check": "node scripts/memory-check.mjs",
+    "changelog": "node scripts/gen-changelog.mjs"
   },
   "dependencies": {
     "@types/spark-md5": "^3.0.5",

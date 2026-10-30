@@ -1,0 +1,1891 @@
+{
+  "generated_at": "2026-10-30T13:26:47.646Z",
+  "count": 230,
+  "days": [
+    {
+      "date": "2026-10-30",
+      "items": [
+        {
+          "hash": "92ddb77",
+          "date": "2026-10-30",
+          "type": "feat",
+          "area": "memory",
+          "title": "铭记系统 K-1~K-3（表/渲染/注入/规则/AI 候选/admin 接口）",
+          "why": "新表 memory_keepsakes（kind/tone/pinned/status/title_key），稳定段注入 ## 铭记（<=30 条、bitter<=8），KV keepsakes:block 缓存避免每轮查 D1，每日归档里 try/catch 接入（规则优先、AI 候选进 pending）。规则 5 条：首条消息/取名/首吵/首和解/首承诺。AI 候选：v4-pro 不开思考、JSON、evidence 必须逐字、单日 2 条/单周 5 条、bitter 单日 1 条/单周 2 条。负向条目事实永存、情绪仍归 grievance。4 个 admin 接口 + readiness 检查。853 测试通过。"
+        },
+        {
+          "hash": "eca0c55",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "memory",
+          "title": "铭记支持负向事件（tone=bitter），事实永存而情绪照常衰减",
+          "why": "新增 tone 字段（warm/neutral/bitter）与 5 个负向 kind（first_fight/hurt/parting/betrayal/first_apology）。核心区分：事实永存不衰减，情绪仍由 grievance 决定——否则一条负向铭记就变成永久记仇。渲染时 bitter 条目附「还气不气看你现在的情绪」+ 全局约束「不主动翻旧账、不当武器、可以不说」；bitter 最多 8 条、AI 单日 ≤1 单周 ≤2；kind 自带极性时强制 tone。补 4 条测试与 2 个验收问法。"
+        },
+        {
+          "hash": "89e9527",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "memory",
+          "title": "铭记 K-1~K-4 实施方案（DDL/模块/注入/接口/测试/回滚）",
+          "why": "施工图：migrations/010-keepsakes.sql（title_key 唯一索引）、src/keepsakes.ts（renderKeepsakesBlock 纯函数 + 5 条规则 + v4-pro 候选 + 校验去重）、prompt.ts 稳定段注入 + KV keepsakes:block 缓存避免每轮查 D1、jobs.ts 归档后 try/catch 接入、4 个 admin 接口、12 条测试、20 问验收、回滚开关。"
+        },
+        {
+          "hash": "ee7b746",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "memory",
+          "title": "铭记 AI 候选用独立 v4-pro 调用（含成本与校验规则）",
+          "why": "结论：可行。不合并进 distillDay：输出多块容易截断、失败连坐、输入多付 memory.md 前缀、解析易错位。独立调用只喂当天对话 + 已有标题，输出 JSON 候选；kind 白名单、evidence 必须逐字、标题相似度去重、单日 2 条/单周 5 条上限；入册 pending 默认不注入。成本约 ¥1.5-2.5/月。"
+        },
+        {
+          "hash": "ed52741",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "memory",
+          "title": "keepsake（铭记）可行性评估 + 排期",
+          "why": "结论：可行，约 3 天。新增 docs/memory/memory-milestones.md：新表 memory_keepsakes（kind/title/detail/happened_at/source/pinned），稳定段注入 ## 铭记（<=30 条、<=1.8KB、不衰减不压缩不参与召回），三条来源（manual/rule/ai），规则能覆盖首条消息/取名/首吵/首和解/首承诺。风险：误记、量失控、缓存打断，各有对策。排期 K-1+K-2 进 11-08，K-3+K-4 进 11-09。"
+        },
+        {
+          "hash": "0eddcd4",
+          "date": "2026-10-30",
+          "type": "fix",
+          "area": "affect",
+          "title": "keep plain chat lock-free, fatigue accrues during long sessions",
+          "why": "回归：聊天传 allowAiReview 后 mayWrite 恒为 true，普通闲聊也走加锁路径（每条消息 2 次 KV 写）。改成只有规则抽出事件才加锁；AI 复核改为只在判出负向事件时触发，并新增 reviewEmpty 给每日归档用。另加长聊疲惫：间隔 >=15 分钟时每 30 分钟补 3 点（单轮上限 6），原来只有环境会给疲惫，聊三小时也不累。831 测试通过。"
+        },
+        {
+          "hash": "31da9cb",
+          "date": "2026-10-30",
+          "type": "fix",
+          "area": "affect",
+          "title": "stop matching 滚 inside 回滚, drop 马上 from command words",
+          "why": "真实数据：最近 9 天 6 条 insult 里 5 条来自「记忆快照与回滚方案」「回滚演练」，「滚」被当成侮辱词（intensity 3，一次 +24 委屈）；10 条 command 全部来自「马上吃饭/马上给你点/马上睡」。加 COMPOUND_PREFIX 复合词排除表（滚：回/翻/打/电；蠢：愚），指令词去掉「马上」只留「你马上」。828 测试通过。"
+        },
+        {
+          "hash": "a9aeddc",
+          "date": "2026-10-30",
+          "type": "fix",
+          "area": "affect",
+          "title": "playful taunts stop scoring as insults, intensity follows adverbs, apology window 6h",
+          "why": "四处调优：1) 玩笑语境里的骂人词降级为 tease，不记委屈（原来「你个笨蛋」「笨死了」按 insult 强度 3 记，一次 +24 委屈）；2) 强度随程度词浮动，「有点累」比「累死了」轻；3) 聊天通道开启负向事件 AI 复核，只判「真冒犯还是玩笑」，误判代价不对称，其余情况不调 AI；4) 道歉有效期 30 分钟放宽到 6 小时，仍只化解道歉之前的事件。824 测试通过。"
+        },
+        {
+          "hash": "ca70627",
+          "date": "2026-10-30",
+          "type": "feat",
+          "area": "affect",
+          "title": "allow refusal from low mood alone, not only after being wronged",
+          "why": "拒绝条件从「被冒犯过」（grievance>=35）放宽到「心情不好就行」：grievance>=20、valence<=-10、fatigue>=45、shyness>=60 任一满足，或配合度<0.45，都允许直接拒绝/敷衍/只回一两个字，且明确写「理由不需要多正当——心情不好就够了」。819 测试通过。"
+        },
+        {
+          "hash": "1fc30cf",
+          "date": "2026-10-30",
+          "type": "feat",
+          "area": "affect",
+          "title": "give her a temper — emotion drives compliance, refusal allowed",
+          "why": "情绪原来只影响语气，不影响答不答应：哪怕 grievance 很高，也只是「委屈地答应」，本质还是有求必应。新增 temper.ts 把情绪换算成 0~1 配合度（委屈/疲惫压低，亲密/好心情抬高），grievance>=35 或配合度<0.32 时明确允许拒绝、允许敷衍、允许只回一两个字；人设稳定段加一句「可以不答应、可以拒绝、可以先让他哄你」；[END] 规则从「用户提问就必须回」放宽为「气头上可以不回」。实测当前状态 cold(0.27)。816 测试通过。"
+        },
+        {
+          "hash": "e823c43",
+          "date": "2026-10-30",
+          "type": "fix",
+          "area": "affect",
+          "title": "lock emotion state, slow grievance decay, widen review and evidence",
+          "why": "E-01 情感状态原来 load→改→save 无锁，两个渠道同时发消息会 last-write-wins 丢掉整轮事件；现在只在「这一轮可能产生事件」时加 10s 短锁（普通闲聊不加，避免每条消息多两次 KV 写）。E-02 芥蒂每天自动退 20%，5 天退到 33%，和「要人哄才消」的设计相反，改成 4%/天（一周 75%、一个月 30%）。E-03 每日 AI 复核上限 8→40。E-04 evidence 20→80 字。E-05 未化解的负向事件不再参与 30 条事件池裁剪。测试 811 通过。"
+        },
+        {
+          "hash": "7428c26",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "tasks",
+          "title": "add the emotion-system fixes to 11-06~11-07",
+          "why": "E-01 情感状态缺锁（并发丢事件）；E-02 芥蒂每天自动退 20% 与「要人哄才消」相反；E-03 每日 AI 复核上限 8 条是免费额度遗留；E-04 evidence 只留 20 字无法追溯；E-05 未化解芥蒂会被 30 条事件池挤掉。"
+        },
+        {
+          "hash": "58d5771",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "",
+          "title": "add TASKS.md as the single source of truth for scheduling",
+          "why": "按天分块、块内带执行序号：11-01 六步（先记基线→部署→验收→观察→回填）、11-02~11-15 逐日排到 Phase 6；已完成 13 项带提交号；归档 9 项写清重新评估条件。README 与 pending-work 都指向本表，冲突时以本表为准。"
+        },
+        {
+          "hash": "4777ec6",
+          "date": "2026-10-30",
+          "type": "feat",
+          "area": "memory",
+          "title": "shadow-write event memory (stage A) with admin backfill",
+          "why": "按 v2 设计先做零风险的部分：memory_events 表、按 45 分钟间隔和 40 条上限切事件、模型产出结构化事件（标题/摘要/逐字引文/实体/事实/重要度）、引文必须能在原文原样找到否则丢弃、按 (started_ms, ended_ms) 幂等写入。读路径完全没动。新增 GET /api/admin/memory/events 与 POST /api/admin/memory/events/backfill?confirm=1。测试 809 通过。排期写进 pending-work。"
+        },
+        {
+          "hash": "191a0ac",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "",
+          "title": "design event-level memory v2 (index + verbatim quotes, retrieval expands to source)",
+          "why": "不计 token、不计延迟的前提下的目标架构：记忆单位从一句话事实改成事件；事件同时存标题/摘要/逐字引文/原文消息 id；检索两段式（BM25+向量粗召回 → 多因子重排）→ 展开原文邻域 → 按「最相关放最靠近用户消息」布局以对抗 lost in the middle。含数据模型、写入/读取流水线、注入格式、冲突改口链、验收指标、迁移与分阶段实施。"
+        },
+        {
+          "hash": "d9d2747",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "",
+          "title": "add the mid-term memory batch to the 11-01 runbook and deploy list",
+          "why": "十四批；验证清单加一条跨天检查（隔一天再聊，问昨天那件事）。"
+        },
+        {
+          "hash": "0524ec4",
+          "date": "2026-10-30",
+          "type": "feat",
+          "area": "memory",
+          "title": "rebuild mid-term memory as a three-day rolling item list",
+          "why": "四条一起做：O1 容量 5~8 条×24 字 → 24 条×40 字且每条带时间锚，窗口 24 小时 → 3 天（TTL 96h）；O2 从全量重写改成只追加新条目，旧条目原文永不改写（记性忽好忽坏的根因）；O3 先用规则挑含决定/约定/状态的句子再交给模型压缩，筛不出来才退回最近 30 行；O4 落在当前会话时间范围内的条目不重复注入。旧格式惰性迁移，不写回。测试 799 通过。"
+        },
+        {
+          "hash": "8065b76",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "",
+          "title": "add the session-memory batch to the 11-01 runbook and deploy list",
+          "why": "十三批；验证清单加一条会话记忆检查（连聊 20 轮后追问第 2 轮的内容）。"
+        },
+        {
+          "hash": "5778ec2",
+          "date": "2026-10-30",
+          "type": "feat",
+          "area": "memory",
+          "title": "keep the whole session as short-term memory instead of a sliding 15-round window",
+          "why": "A+B+C 一起做：A 放开取数硬限（30→200 轮）；B 短期记忆改成会话级——距上条消息超过 6 小时才算新会话，会话内只追加不滑窗，这是前缀缓存能命中历史的唯一办法；C 超过 120 轮才退化成「确定性提要 + 尾部 40 轮」。提要只抽样不调模型、不落库，同一批行永远得到同一段文本。测试 789 通过。"
+        },
+        {
+          "hash": "a96ffc4",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "",
+          "title": "design the forgetting mechanism (decay / expiry / merge, never delete)",
+          "why": "M-09：盘点已有的软遗忘（归档降级、60/90 天粗衰减、top-8、覆盖式更新、情绪半衰期），列出四个缺口，定三层方案与红线（被追问时跳过衰减）。明确遗忘解决不了 O(N)，顺序是索引 > 合并 > 衰减 > 过期。"
+        },
+        {
+          "hash": "438805e",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "",
+          "title": "add the file-sentinel batch to the 11-01 runbook and deploy list",
+          "why": "补上 384b1c1（网页识别 App 文件块）：发布手册批次表改成十二批、验证清单加一条 App→网页的文件块显示检查；pending-work 的部署清单同步补齐 bec4a9a/fe08627/fd4f0b4/384b1c1。"
+        },
+        {
+          "hash": "384b1c1",
+          "date": "2026-10-30",
+          "type": "fix",
+          "area": "web",
+          "title": "render App file blocks with the new sentinel",
+          "why": "App 端文件块是 [文件:name|size|mime] + 【文件内容】 + 正文 + 【/文件】，网页只认【文件：】格式，导致 App 发来的文件正文整段当聊天内容显示。新增两条规则：新格式按结尾标记截断，旧消息（无标记）吃到末尾。"
+        },
+        {
+          "hash": "22f58df",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "",
+          "title": "expand the 11-01 runbook with the cache/prompt batches, cost baseline and persona checks",
+          "why": "补上 bec4a9a/fe08627/fd4f0b4 三批；发布前必须记 /api/usage 基线（chat_usage 从部署才开始记账）；加身份风险排查顺序、只回滚提示词的方式、命中率低时按什么顺序查。"
+        },
+        {
+          "hash": "fd4f0b4",
+          "date": "2026-10-30",
+          "type": "refactor",
+          "area": "prompt",
+          "title": "身份以 memory.md 为唯一来源，记忆按变化频率分段注入",
+          "why": "prompt.ts 的身份段从 15 行压到 6 行骨架（名字/自称/定位/安全句 + memory 读不到时的兜底），性格与称呼交给 memory.md 的人物底色与称呼与关系，消除两份互相冲突的设定。memory-maintenance 新增 splitMemoryForPrompt：进行中的事项与近期动态（小时级变化）挪到 volatile 段，其余进 stable；实测生产 memory.md stable 9344B / volatile 2092B。测试 783 通过，未部署。"
+        },
+        {
+          "hash": "fe08627",
+          "date": "2026-10-30",
+          "type": "refactor",
+          "area": "prompt",
+          "title": "去掉氛围管理，只留身份、能力与事实底线",
+          "why": "按「只告诉她是你是谁、能干什么，别管怎么干」的原则，删掉：傲娇配比、口癖与吃醋句式模板、不要重复用停顿词的微观指导、记忆权重 50/20/30 的伪精度、时间标签禁令（前端已 strip）。硬规则/禁止句式改成陈述句；实时事实从三重强调压成两行；STYLE_REMINDER 从 90 字压到一句。保留：[语音]/[END]/[face] 协议语法、不拿外貌家人开玩笑、记忆没写就说不记得。测试 773 通过。"
+        },
+        {
+          "hash": "bec4a9a",
+          "date": "2026-10-30",
+          "type": "perf",
+          "area": "prompt",
+          "title": "split stable/volatile prefix for cache hits; add cost dashboard",
+          "why": "系统提示原来把所有易变内容（时间/心情/召回/摘要）塞在第一条 system 里，每轮都打断 DeepSeek 的前缀缓存。拆成 stable（人设+长期记忆，每天才变）和 volatile（放历史之后、用户消息之前）。新增 chat_usage 表与 /api/admin/cost 端点，按天聚合命中/未命中 token 与费用，给出命中率、单次成本、月投影。测试 773 通过，未部署（等 11-01 窗口）。"
+        },
+        {
+          "hash": "cfed7ea",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "",
+          "title": "evaluate video-understanding approaches for our setup",
+          "why": ""
+        },
+        {
+          "hash": "5696ffc",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "",
+          "title": "audit all docs before the 11-01 release",
+          "why": ""
+        },
+        {
+          "hash": "d61bda4",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "",
+          "title": "link the release runbook and record why the cutoff moved",
+          "why": ""
+        },
+        {
+          "hash": "6d41d49",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "",
+          "title": "add the 11-01 release runbook",
+          "why": ""
+        },
+        {
+          "hash": "a9b0782",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "",
+          "title": "move observation cutoff to 2026-11-01 12:00",
+          "why": "按用户要求把 Phase 5 观察结束时间从 11-01 21:10 提前到 12:00。实际窗口 6 天 14 小时 50 分，不是满 7 天：少掉周日 12:00-21:10，周六整天仍在窗口内，11-01 04:00 的首个真实月度合并也仍在窗口内。全局改引用，并在 handover / pending-work / 终审模板里写明变更。"
+        },
+        {
+          "hash": "766f990",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "",
+          "title": "record recall latency data, plan and deploy checklist",
+          "why": ""
+        },
+        {
+          "hash": "033292f",
+          "date": "2026-10-30",
+          "type": "feat",
+          "area": "memory",
+          "title": "record per-stage recall latency",
+          "why": "engine_metrics 只有总耗时，503ms 花在哪一段看不出来。新增 recall_samples 逐条采样（legacy/load/rank/embed/expand + 总数 + 超时标记），resolveRecall 里分段计时，runNextEngine 返回各段耗时。新增 GET /api/admin/recall-samples?days=3 返回 p50/p95 与各段占比——延迟要看分位数，平均值会被长尾带偏。采样表只留 14 天，随每日归档清理。6 个用例覆盖分位数与汇总。未部署（冻结期）。"
+        },
+        {
+          "hash": "251aba8",
+          "date": "2026-10-30",
+          "type": "fix",
+          "area": "web",
+          "title": "drop the blank line before the file card",
+          "why": ""
+        },
+        {
+          "hash": "ef87e69",
+          "date": "2026-10-30",
+          "type": "fix",
+          "area": "web",
+          "title": "stop file body leaking into the bubble",
+          "why": "文件正文里本身就有 ` 代码块，而解析用非贪婪围栏配对，解析会在正文第一个代码块处收尾，剩下的正文被当成聊天内容显示。现在发送时在文件块末尾加【/文件】结束标记，解析优先按标记切；已落库的旧消息改用贪婪匹配（文件块总在消息末尾），两种格式都只留卡片。"
+        },
+        {
+          "hash": "ac4be5d",
+          "date": "2026-10-30",
+          "type": "fix",
+          "area": "web",
+          "title": "strip leaked time labels on history render too",
+          "why": ""
+        },
+        {
+          "hash": "4cfa6be",
+          "date": "2026-10-30",
+          "type": "fix",
+          "area": "web",
+          "title": "keep file cards on their own line and hide leaked time labels",
+          "why": "两个显示问题：1) .msg-file 用了 display:inline-block，卡片会跟正文挤在同一行，长文件名还会溢出气泡盖住最后一行文字——改成 flex+fit-content，独占一行且不溢出。2) 模型偶尔模仿历史时间标签（[10-30 09:47]），服务端 createStreamScrubber 是主防线，但用户这次还是看到了；在渲染前再兜一层 stripLeadTime，旧消息/缓存/非流式回放都不会显示。"
+        },
+        {
+          "hash": "5d8c5d4",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "",
+          "title": "fix relative links after reorganization",
+          "why": ""
+        },
+        {
+          "hash": "0b105c4",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "",
+          "title": "reorganize into folders and merge duplicates",
+          "why": "43 个平铺文件整理为 7 个目录 + 索引。合并：phase-0~4 五份报告、两次代码评估复核、三份视频文档。移动：计划类进 plans/、Phase 5 八份进 phases/phase-5/、记忆专题进 memory/、审计与问题记录进 logs/、运维笔记进 runbooks/。新增 docs/README.md 作为入口，说明先看哪个与维护约定。内部链接已批量修正。"
+        },
+        {
+          "hash": "605012a",
+          "date": "2026-10-30",
+          "type": "feat",
+          "area": "memory",
+          "title": "snapshot memory.md before each daily archive",
+          "why": "新增 src/memory-snapshot.ts：写前快照（一天一份、重跑不覆盖、失败不阻断归档）、45 天清理、MEMORY_SNAPSHOT=off 开关，并接进 runDailyArchive，detail 记录快照状态。清理只删严格匹配 memory/snapshots/YYYY-MM-DD.md 的 key。9 个用例覆盖。恢复接口与写锁按方案排 11-02~11-04。未部署：冻结期到 2026-11-01 21:10。"
+        },
+        {
+          "hash": "3affc56",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "",
+          "title": "add the memory snapshot and rollback plan",
+          "why": ""
+        },
+        {
+          "hash": "5d0d597",
+          "date": "2026-10-30",
+          "type": "feat",
+          "area": "distill",
+          "title": "record per-part token usage for the daily archive",
+          "why": "光记'提炼费用 ¥X'解释不了日间波动：10-28 ¥0.1044 / 10-29 ¥0.0661，而两天产出几乎一样（15条618字 vs 17条629字）。现在 cron_runs.detail 里同时记命中的输入 token、未命中的输入 token、输出 token，下次可以直接算出是缓存命中率变了还是输出变长了。docs/pending-work.md 补三条：11-05 回看分层、shadow waitUntil 改造、token 记录。"
+        },
+        {
+          "hash": "c908893",
+          "date": "2026-10-30",
+          "type": "fix",
+          "area": "memory-engine",
+          "title": "calibrate recall deadline to 1500ms from measured shadow latency",
+          "why": "engine_metrics 显示 shadow 记忆引擎平均耗时 10-27 171ms → 10-28 345ms → 10-29 503ms，800ms 在 legacy + 新引擎串行时必然撞线，撞线会静默退回 legacy。同时记录 shadow 分支目前是 await 的、每条消息多付约 0.5 秒，waitUntil 改造排 Phase 6。"
+        },
+        {
+          "hash": "ff0fbfc",
+          "date": "2026-10-30",
+          "type": "feat",
+          "area": "distill",
+          "title": "run the daily archive on v4-pro with thinking enabled",
+          "why": "distillDay 现在 thinking=enabled 且 max_tokens 从 4096 提到 8192：思维链算在 completion 里，4096 会被推理吃光后返回空内容、静默回退到 Workers AI。其余 distillText 调用（摘要/压缩/persona drift）保持 disabled 控成本。空内容报错带上 finish_reason。新增 distill.test.ts 3 例。未部署：Phase 5 冻结期到 2026-11-01 21:10。"
+        },
+        {
+          "hash": "e2b6709",
+          "date": "2026-10-30",
+          "type": "refactor",
+          "area": "memory",
+          "title": "one recall entry with gating, deadline and output cap",
+          "why": "P1-5: 新增 memory-engine.ts，chat/openai/webproactive 三份 ~60 行 shadow-next 分支合并为 resolveRecall()。P2-5: 门控对所有引擎生效，低信号提问不再触发全量召回。P1-1: 整条召回 800ms deadline，超时返回空召回。借鉴 dsh-fish: 输出封顶 8 条 x 200 字。新增 memory-engine.test.ts 9 例；65 文件 / 743 用例通过。未部署：Phase 5 冻结期到 2026-11-01 21:10。"
+        },
+        {
+          "hash": "d1645ac",
+          "date": "2026-10-30",
+          "type": "feat",
+          "area": "scripts",
+          "title": "add read-only memory health check, record dsh-fish takeaways",
+          "why": "scripts/memory-check.mjs 借鉴 dsh-fish 的记忆体检：规模与 KV 索引体积、chunk 缺向量、conversation 超期行、跨 origin 重复、弱记忆。纯只读。docs/borrowed-from-dsh-fish.md 记录 6 条借鉴项与排期，含提示词审查清单。"
+        },
+        {
+          "hash": "0a887e3",
+          "date": "2026-10-30",
+          "type": "other",
+          "area": "prompt",
+          "title": "speak time in half-hour granularity, drop the read-only rule",
+          "why": "spokenTime() 改为按半小时取整（<15 分整点、15–44 半点、>=45 进位），并删除「必须逐字读 HH:mm」那条硬规则：它会把回复逼成报时，且注入与实际错开时更僵硬。测试 64 文件 / 734 用例通过。仍未部署：Phase 5 冻结期到 2026-11-01 21:10。"
+        },
+        {
+          "hash": "abe665a",
+          "date": "2026-10-30",
+          "type": "feat",
+          "area": "prompt",
+          "title": "feed spoken time and forbid invented details",
+          "why": "date.ts 新增 spokenTime()，把 21:11 直接读成「晚上九点十一分」；模型自己做 24 小时制换算会算错（实测 21:10 说成快十点多）。prompt 的时间一节与实时事实块都带上口语读法并禁止自行换算。新增「记忆缺失时怎么说（硬规则）」：没依据的细节直接说不记得，可以描述感受但不能编造事实。测试 64 文件 / 730 用例通过。不部署：Phase 5 冻结期到 2026-11-01 21:10。"
+        },
+        {
+          "hash": "8a231aa",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "",
+          "title": "log the 10-30 issues (image flicker, time, honesty) with a schedule",
+          "why": ""
+        }
+      ]
+    },
+    {
+      "date": "2026-10-29",
+      "items": [
+        {
+          "hash": "5f39def",
+          "date": "2026-10-29",
+          "type": "refactor",
+          "area": "memory",
+          "title": "verify writes, drop dead code, and record the review verdicts",
+          "why": "putMemory 现在读回校验，失败返回 false 并由 jobs 跳过索引重建，避免索引里出现 R2 中不存在的记忆。删除 7 个无引用导出函数（保留 trimOldestEntries：它在 compactMemoryForPrompt 里活着）。新增 memory.test.ts 与 docs/memory-code-review-response-2026-10-29.md。未部署：Phase 5 冻结期到 11-01 21:10。"
+        },
+        {
+          "hash": "c5ed800",
+          "date": "2026-10-29",
+          "type": "docs",
+          "area": "",
+          "title": "record R2 usage snapshot, drop the TTL item",
+          "why": ""
+        },
+        {
+          "hash": "f335707",
+          "date": "2026-10-29",
+          "type": "docs",
+          "area": "",
+          "title": "record 10-29 video rollout and grid-misread fix",
+          "why": ""
+        },
+        {
+          "hash": "60f6d70",
+          "date": "2026-10-29",
+          "type": "docs",
+          "area": "",
+          "title": "diagnose missing bilibili summary and subtitle",
+          "why": ""
+        },
+        {
+          "hash": "c6eb2fd",
+          "date": "2026-10-29",
+          "type": "docs",
+          "area": "",
+          "title": "record video pipeline progress and deferred items",
+          "why": ""
+        },
+        {
+          "hash": "c3ce525",
+          "date": "2026-10-29",
+          "type": "fix",
+          "area": "media",
+          "title": "honor Range requests and sanitize media placeholders for memory",
+          "why": "- /api/app/media 支持单段 Range（206/416）、ETag 304、immutable 缓存 - 新增 parseByteRange 纯函数 + 测试 - 新增 sanitizeMessagePlaceholders：图片/视频/GIF/语音路径统一压成标记 - 每日提炼输入走同一份清洗，避免 UUID 路径进 memory.md"
+        },
+        {
+          "hash": "f5d0733",
+          "date": "2026-10-29",
+          "type": "docs",
+          "area": "",
+          "title": "review video pipeline issues and optimizations",
+          "why": ""
+        },
+        {
+          "hash": "73b2ee6",
+          "date": "2026-10-29",
+          "type": "docs",
+          "area": "",
+          "title": "revise video proposal to client-first (zero worker CPU)",
+          "why": ""
+        },
+        {
+          "hash": "5540367",
+          "date": "2026-10-29",
+          "type": "docs",
+          "area": "",
+          "title": "propose video storyboard integration",
+          "why": "对比 dsh-video-storyboard 与现有 B 站/图片链路，给出分阶段方案（排版纯函数→本地出图→接口透传→服务端合成→预算协议）。"
+        },
+        {
+          "hash": "a71be1d",
+          "date": "2026-10-29",
+          "type": "feat",
+          "area": "scripts",
+          "title": "add read-only daily archive check",
+          "why": "npm run archive:check [-- --date YYYY-MM-DD] 核对 cron 状态、归档条数、D1 对账、R2 日文件、no_vec 与记忆规模。"
+        },
+        {
+          "hash": "5faad98",
+          "date": "2026-10-29",
+          "type": "docs",
+          "area": "",
+          "title": "tidy workspace and add phase-5 final review template",
+          "why": "- 删除 output.txt 与空的 proactive/pause.json，忽略本地运行产物 - 测试计数更新为 60 文件 / 722 用例 - 新增 docs/phase-5-final-review.md 模板（含 10/29 实测快照）"
+        },
+        {
+          "hash": "4c2f8a2",
+          "date": "2026-10-29",
+          "type": "docs",
+          "area": "",
+          "title": "add post-observation runbook",
+          "why": ""
+        },
+        {
+          "hash": "24b5564",
+          "date": "2026-10-29",
+          "type": "docs",
+          "area": "",
+          "title": "add detailed project handover",
+          "why": ""
+        },
+        {
+          "hash": "80c097f",
+          "date": "2026-10-29",
+          "type": "docs",
+          "area": "",
+          "title": "record DeepSeek surrogate root cause",
+          "why": ""
+        },
+        {
+          "hash": "1dd1097",
+          "date": "2026-10-29",
+          "type": "fix",
+          "area": "deepseek",
+          "title": "strip lone surrogates before upstream request",
+          "why": ""
+        },
+        {
+          "hash": "fe75c1d",
+          "date": "2026-10-29",
+          "type": "docs",
+          "area": "",
+          "title": "record day four chat issues",
+          "why": ""
+        },
+        {
+          "hash": "191d247",
+          "date": "2026-10-29",
+          "type": "fix",
+          "area": "chat",
+          "title": "reconcile pending messages and retry DeepSeek 400",
+          "why": ""
+        }
+      ]
+    },
+    {
+      "date": "2026-10-28",
+      "items": [
+        {
+          "hash": "22a9b87",
+          "date": "2026-10-28",
+          "type": "fix",
+          "area": "web",
+          "title": "render file cards without escaping HTML",
+          "why": ""
+        },
+        {
+          "hash": "0b835af",
+          "date": "2026-10-28",
+          "type": "fix",
+          "area": "web",
+          "title": "render file attachments as cards in history",
+          "why": ""
+        },
+        {
+          "hash": "d6f3ab4",
+          "date": "2026-10-28",
+          "type": "fix",
+          "area": "web",
+          "title": "strip timestamps from streamed replies",
+          "why": ""
+        },
+        {
+          "hash": "789aebd",
+          "date": "2026-10-28",
+          "type": "docs",
+          "area": "",
+          "title": "record memory reorganization",
+          "why": ""
+        },
+        {
+          "hash": "3840f9f",
+          "date": "2026-10-28",
+          "type": "fix",
+          "area": "memory",
+          "title": "drop stale dated mood snapshots",
+          "why": ""
+        },
+        {
+          "hash": "67a282e",
+          "date": "2026-10-28",
+          "type": "fix",
+          "area": "memory",
+          "title": "merge headerless daily summaries and replay missed days",
+          "why": ""
+        },
+        {
+          "hash": "70fc502",
+          "date": "2026-10-28",
+          "type": "fix",
+          "area": "memory",
+          "title": "merge headerless distill summaries and replay missed days",
+          "why": ""
+        },
+        {
+          "hash": "ae3278c",
+          "date": "2026-10-28",
+          "type": "fix",
+          "area": "memory",
+          "title": "cleanup, incremental links, bounded MMR",
+          "why": ""
+        },
+        {
+          "hash": "32de2c2",
+          "date": "2026-10-28",
+          "type": "fix",
+          "area": "memory",
+          "title": "correct budget, correction section, monthly merge",
+          "why": ""
+        },
+        {
+          "hash": "edaa9d1",
+          "date": "2026-10-28",
+          "type": "docs",
+          "area": "",
+          "title": "review memory code assessment and prioritize fixes",
+          "why": ""
+        },
+        {
+          "hash": "f58d73e",
+          "date": "2026-10-28",
+          "type": "docs",
+          "area": "",
+          "title": "consolidate pending work with start windows",
+          "why": ""
+        },
+        {
+          "hash": "6cc03be",
+          "date": "2026-10-28",
+          "type": "docs",
+          "area": "",
+          "title": "add Companion memory design comparison",
+          "why": ""
+        },
+        {
+          "hash": "8460a8f",
+          "date": "2026-10-28",
+          "type": "fix",
+          "area": "archive",
+          "title": "backfill chunk embeddings after daily rebuild",
+          "why": ""
+        },
+        {
+          "hash": "6d5f931",
+          "date": "2026-10-28",
+          "type": "feat",
+          "area": "memory",
+          "title": "add context budget and regression skeleton",
+          "why": ""
+        },
+        {
+          "hash": "04c7166",
+          "date": "2026-10-28",
+          "type": "docs",
+          "area": "",
+          "title": "record remaining memory backlog",
+          "why": ""
+        },
+        {
+          "hash": "7b8592c",
+          "date": "2026-10-28",
+          "type": "feat",
+          "area": "memory",
+          "title": "expose link provenance and add regression plan",
+          "why": ""
+        },
+        {
+          "hash": "8dd5d0d",
+          "date": "2026-10-28",
+          "type": "fix",
+          "area": "chat",
+          "title": "strip leaked history timestamps",
+          "why": ""
+        },
+        {
+          "hash": "c26ba0a",
+          "date": "2026-10-28",
+          "type": "docs",
+          "area": "",
+          "title": "record memory link rollout",
+          "why": ""
+        },
+        {
+          "hash": "d684c53",
+          "date": "2026-10-28",
+          "type": "feat",
+          "area": "memory",
+          "title": "link facts/events and add audit trail",
+          "why": ""
+        },
+        {
+          "hash": "1f87bc5",
+          "date": "2026-10-28",
+          "type": "feat",
+          "area": "memory",
+          "title": "add explicit links and lightweight audit",
+          "why": ""
+        },
+        {
+          "hash": "5f614ea",
+          "date": "2026-10-28",
+          "type": "docs",
+          "area": "",
+          "title": "resolve day three issues and compare memory projects",
+          "why": ""
+        },
+        {
+          "hash": "1f73fe7",
+          "date": "2026-10-28",
+          "type": "fix",
+          "area": "chat",
+          "title": "only pure END marker is silent",
+          "why": ""
+        },
+        {
+          "hash": "fda66e4",
+          "date": "2026-10-28",
+          "type": "docs",
+          "area": "",
+          "title": "record phase 5 day 3 issues",
+          "why": ""
+        }
+      ]
+    },
+    {
+      "date": "2026-10-27",
+      "items": [
+        {
+          "hash": "7453410",
+          "date": "2026-10-27",
+          "type": "feat",
+          "area": "chat",
+          "title": "allow silent endings and show conversation gap",
+          "why": ""
+        },
+        {
+          "hash": "9d8f710",
+          "date": "2026-10-27",
+          "type": "feat",
+          "area": "chat",
+          "title": "adaptive short-term memory and history budget",
+          "why": ""
+        },
+        {
+          "hash": "9196e25",
+          "date": "2026-10-27",
+          "type": "fix",
+          "area": "archive",
+          "title": "support monthly rehydration and stale rollup guard",
+          "why": ""
+        },
+        {
+          "hash": "9de13da",
+          "date": "2026-10-27",
+          "type": "docs",
+          "area": "",
+          "title": "mark voice completed",
+          "why": ""
+        },
+        {
+          "hash": "555a948",
+          "date": "2026-10-27",
+          "type": "docs",
+          "area": "",
+          "title": "assess relation growth rate",
+          "why": ""
+        },
+        {
+          "hash": "cfe582e",
+          "date": "2026-10-27",
+          "type": "docs",
+          "area": "",
+          "title": "close day two smoothness issue",
+          "why": ""
+        },
+        {
+          "hash": "3fe1c3c",
+          "date": "2026-10-27",
+          "type": "docs",
+          "area": "",
+          "title": "record release build",
+          "why": ""
+        },
+        {
+          "hash": "6566b75",
+          "date": "2026-10-27",
+          "type": "feat",
+          "area": "app",
+          "title": "add location memory update endpoint",
+          "why": ""
+        },
+        {
+          "hash": "d0f9682",
+          "date": "2026-10-27",
+          "type": "docs",
+          "area": "",
+          "title": "record day two location and smoothness progress",
+          "why": ""
+        },
+        {
+          "hash": "4ca2222",
+          "date": "2026-10-27",
+          "type": "docs",
+          "area": "",
+          "title": "record day two progress",
+          "why": ""
+        },
+        {
+          "hash": "a525847",
+          "date": "2026-10-27",
+          "type": "docs",
+          "area": "",
+          "title": "cancel durable objects evaluation",
+          "why": ""
+        },
+        {
+          "hash": "1dd76b1",
+          "date": "2026-10-27",
+          "type": "fix",
+          "area": "bili",
+          "title": "keep full subtitles and update schedule memory",
+          "why": ""
+        },
+        {
+          "hash": "3c53ee2",
+          "date": "2026-10-27",
+          "type": "docs",
+          "area": "",
+          "title": "record day two issues and plans",
+          "why": ""
+        }
+      ]
+    },
+    {
+      "date": "2026-10-26",
+      "items": [
+        {
+          "hash": "595edf9",
+          "date": "2026-10-26",
+          "type": "fix",
+          "area": "memory",
+          "title": "keep completed item wording natural",
+          "why": ""
+        },
+        {
+          "hash": "e0874f9",
+          "date": "2026-10-26",
+          "type": "docs",
+          "area": "",
+          "title": "close day one and start day two observation",
+          "why": ""
+        },
+        {
+          "hash": "61c648c",
+          "date": "2026-10-26",
+          "type": "fix",
+          "area": "memory",
+          "title": "rehydrate archives and refresh rollups",
+          "why": ""
+        },
+        {
+          "hash": "598ae7d",
+          "date": "2026-10-26",
+          "type": "feat",
+          "area": "memory",
+          "title": "add explicit correction command",
+          "why": ""
+        },
+        {
+          "hash": "05c2a5e",
+          "date": "2026-10-26",
+          "type": "fix",
+          "area": "chat",
+          "title": "dedupe client messages and randomize proactive time",
+          "why": ""
+        },
+        {
+          "hash": "34cac19",
+          "date": "2026-10-26",
+          "type": "docs",
+          "area": "",
+          "title": "record observation day 1 issues and fixes",
+          "why": ""
+        }
+      ]
+    },
+    {
+      "date": "2026-10-25",
+      "items": [
+        {
+          "hash": "46659f7",
+          "date": "2026-10-25",
+          "type": "docs",
+          "area": "",
+          "title": "start observation after live context verification",
+          "why": ""
+        },
+        {
+          "hash": "5f242a9",
+          "date": "2026-10-25",
+          "type": "refactor",
+          "area": "persona",
+          "title": "keep boundaries only",
+          "why": ""
+        },
+        {
+          "hash": "31ddb87",
+          "date": "2026-10-25",
+          "type": "feat",
+          "area": "persona",
+          "title": "prefer 大人 and accept praise",
+          "why": ""
+        },
+        {
+          "hash": "cbdb480",
+          "date": "2026-10-25",
+          "type": "feat",
+          "area": "persona",
+          "title": "boundaries and options instead of reply requirements",
+          "why": ""
+        },
+        {
+          "hash": "4d5f61a",
+          "date": "2026-10-25",
+          "type": "docs",
+          "area": "",
+          "title": "start seven-day app shadow observation",
+          "why": ""
+        },
+        {
+          "hash": "a28c97a",
+          "date": "2026-10-25",
+          "type": "docs",
+          "area": "",
+          "title": "set app shadow observation start",
+          "why": ""
+        },
+        {
+          "hash": "5d59a69",
+          "date": "2026-10-25",
+          "type": "chore",
+          "area": "observe",
+          "title": "report mobile shadow fields",
+          "why": ""
+        },
+        {
+          "hash": "aa5b187",
+          "date": "2026-10-25",
+          "type": "fix",
+          "area": "security",
+          "title": "scope app token to proactive queue; start app shadow observation",
+          "why": ""
+        },
+        {
+          "hash": "67713a1",
+          "date": "2026-10-25",
+          "type": "feat",
+          "area": "app",
+          "title": "support before_id history backfill",
+          "why": ""
+        },
+        {
+          "hash": "b0cfa52",
+          "date": "2026-10-25",
+          "type": "feat",
+          "area": "proactive",
+          "title": "allow forced test send",
+          "why": ""
+        },
+        {
+          "hash": "82677d3",
+          "date": "2026-10-25",
+          "type": "fix",
+          "area": "sync",
+          "title": "page through web history backlog",
+          "why": ""
+        },
+        {
+          "hash": "7266df6",
+          "date": "2026-10-25",
+          "type": "fix",
+          "area": "sync",
+          "title": "poll web history every 5 seconds",
+          "why": ""
+        },
+        {
+          "hash": "1e9cebe",
+          "date": "2026-10-25",
+          "type": "feat",
+          "area": "mobile",
+          "title": "mobile engine flags, app heartbeat and proactive push queue",
+          "why": ""
+        },
+        {
+          "hash": "3b2dcc0",
+          "date": "2026-10-25",
+          "type": "feat",
+          "area": "",
+          "title": "expose Bilibili cover in preview",
+          "why": ""
+        },
+        {
+          "hash": "9523fa6",
+          "date": "2026-10-25",
+          "type": "feat",
+          "area": "",
+          "title": "Bilibili official summary/subtitle in preview",
+          "why": ""
+        },
+        {
+          "hash": "74b712b",
+          "date": "2026-10-25",
+          "type": "feat",
+          "area": "",
+          "title": "add web/douyin preview endpoint",
+          "why": ""
+        },
+        {
+          "hash": "05016d4",
+          "date": "2026-10-25",
+          "type": "feat",
+          "area": "",
+          "title": "Bilibili cookie preview and video/gif upload/playback routes",
+          "why": ""
+        },
+        {
+          "hash": "e7b04d3",
+          "date": "2026-10-25",
+          "type": "feat",
+          "area": "",
+          "title": "add Bilibili link preview endpoint",
+          "why": ""
+        },
+        {
+          "hash": "5013e0d",
+          "date": "2026-10-25",
+          "type": "perf",
+          "area": "",
+          "title": "add app TTS proxy with Azure secret",
+          "why": ""
+        },
+        {
+          "hash": "993ba60",
+          "date": "2026-10-25",
+          "type": "other",
+          "area": "",
+          "title": "allow [语音] directive for mobile channel",
+          "why": ""
+        },
+        {
+          "hash": "21c561b",
+          "date": "2026-10-25",
+          "type": "other",
+          "area": "",
+          "title": "add app-authenticated image playback endpoint",
+          "why": ""
+        },
+        {
+          "hash": "75d2063",
+          "date": "2026-10-25",
+          "type": "other",
+          "area": "",
+          "title": "client_message_id idempotent cached turns",
+          "why": ""
+        },
+        {
+          "hash": "d4de6a6",
+          "date": "2026-10-25",
+          "type": "other",
+          "area": "",
+          "title": "add DS-Mobile pair/events endpoints and device token auth",
+          "why": ""
+        },
+        {
+          "hash": "1dd5c9a",
+          "date": "2026-10-25",
+          "type": "fix",
+          "area": "voice",
+          "title": "parse full-width voice markers and enforce readable speech",
+          "why": ""
+        },
+        {
+          "hash": "374d5e2",
+          "date": "2026-10-25",
+          "type": "docs",
+          "area": "",
+          "title": "document phone-first tts and audio playback",
+          "why": ""
+        },
+        {
+          "hash": "12d9c5e",
+          "date": "2026-10-25",
+          "type": "feat",
+          "area": "tts",
+          "title": "phone-first queue with melotts fallback and web audio",
+          "why": ""
+        },
+        {
+          "hash": "13b75bf",
+          "date": "2026-10-25",
+          "type": "feat",
+          "area": "web",
+          "title": "read-aloud and voice segment playback",
+          "why": ""
+        },
+        {
+          "hash": "3aa0145",
+          "date": "2026-10-25",
+          "type": "feat",
+          "area": "web",
+          "title": "add browser tts playback for replies",
+          "why": ""
+        },
+        {
+          "hash": "87ad21b",
+          "date": "2026-10-25",
+          "type": "feat",
+          "area": "persona",
+          "title": "raise tsundere intensity and voice punctuation",
+          "why": ""
+        },
+        {
+          "hash": "1e7e5b2",
+          "date": "2026-10-25",
+          "type": "docs",
+          "area": "",
+          "title": "update persona test count",
+          "why": ""
+        },
+        {
+          "hash": "37159d7",
+          "date": "2026-10-25",
+          "type": "feat",
+          "area": "persona",
+          "title": "strengthen tsundere and sharp-tongued style",
+          "why": ""
+        },
+        {
+          "hash": "5471a3b",
+          "date": "2026-10-25",
+          "type": "docs",
+          "area": "p5",
+          "title": "document archive catch-up and metrics migration",
+          "why": ""
+        },
+        {
+          "hash": "4fad157",
+          "date": "2026-10-25",
+          "type": "docs",
+          "area": "p5",
+          "title": "record archive catch-up and metrics migration",
+          "why": ""
+        },
+        {
+          "hash": "43d8ddc",
+          "date": "2026-10-25",
+          "type": "fix",
+          "area": "p5",
+          "title": "allow provisional archive rerun and proactive metrics",
+          "why": ""
+        },
+        {
+          "hash": "e5a3622",
+          "date": "2026-10-25",
+          "type": "docs",
+          "area": "p5",
+          "title": "record proactive shadow state",
+          "why": ""
+        }
+      ]
+    },
+    {
+      "date": "2026-10-24",
+      "items": [
+        {
+          "hash": "45be3b8",
+          "date": "2026-10-24",
+          "type": "docs",
+          "area": "",
+          "title": "document proactive engine flag",
+          "why": ""
+        },
+        {
+          "hash": "d0004d7",
+          "date": "2026-10-24",
+          "type": "refactor",
+          "area": "p5",
+          "title": "add proactive engine flag and new context path",
+          "why": ""
+        },
+        {
+          "hash": "f4fdd65",
+          "date": "2026-10-24",
+          "type": "docs",
+          "area": "p5",
+          "title": "record first observation snapshot",
+          "why": ""
+        },
+        {
+          "hash": "4c8d233",
+          "date": "2026-10-24",
+          "type": "feat",
+          "area": "p5",
+          "title": "add daily observation snapshot",
+          "why": ""
+        },
+        {
+          "hash": "1d06e84",
+          "date": "2026-10-24",
+          "type": "docs",
+          "area": "p5",
+          "title": "add deferred cleanup manifest",
+          "why": ""
+        },
+        {
+          "hash": "4c91f40",
+          "date": "2026-10-24",
+          "type": "docs",
+          "area": "p5",
+          "title": "record free-tier usage",
+          "why": ""
+        },
+        {
+          "hash": "8bc16eb",
+          "date": "2026-10-24",
+          "type": "docs",
+          "area": "p5",
+          "title": "document engines, raw upload, and operations",
+          "why": ""
+        },
+        {
+          "hash": "eaf1503",
+          "date": "2026-10-24",
+          "type": "docs",
+          "area": "",
+          "title": "update phase 5 test count",
+          "why": ""
+        },
+        {
+          "hash": "fb38f2e",
+          "date": "2026-10-24",
+          "type": "docs",
+          "area": "p5",
+          "title": "record rollback deployment versions",
+          "why": ""
+        },
+        {
+          "hash": "c4aa480",
+          "date": "2026-10-24",
+          "type": "docs",
+          "area": "p5",
+          "title": "record rollback drill and gif fix",
+          "why": ""
+        },
+        {
+          "hash": "e94845c",
+          "date": "2026-10-24",
+          "type": "docs",
+          "area": "",
+          "title": "record proactive and storage operations",
+          "why": ""
+        },
+        {
+          "hash": "a9019cd",
+          "date": "2026-10-24",
+          "type": "fix",
+          "area": "storage",
+          "title": "fallback to main when secondary put fails",
+          "why": ""
+        },
+        {
+          "hash": "aa81c7c",
+          "date": "2026-10-24",
+          "type": "fix",
+          "area": "proactive",
+          "title": "include window tail tick; probe secondary R2",
+          "why": ""
+        },
+        {
+          "hash": "2a0568e",
+          "date": "2026-10-24",
+          "type": "fix",
+          "area": "media",
+          "title": "record uploaded image keys",
+          "why": ""
+        },
+        {
+          "hash": "a67cee1",
+          "date": "2026-10-24",
+          "type": "fix",
+          "area": "media",
+          "title": "raw gif upload and r2 reference",
+          "why": ""
+        },
+        {
+          "hash": "8970e87",
+          "date": "2026-10-24",
+          "type": "docs",
+          "area": "p5",
+          "title": "verify periodic watchdog execution",
+          "why": ""
+        },
+        {
+          "hash": "e1999d7",
+          "date": "2026-10-24",
+          "type": "docs",
+          "area": "p5",
+          "title": "verify run-all supervisor recovery",
+          "why": ""
+        },
+        {
+          "hash": "3124adf",
+          "date": "2026-10-24",
+          "type": "docs",
+          "area": "p5",
+          "title": "verify phone client self-heal",
+          "why": ""
+        },
+        {
+          "hash": "aaf9a17",
+          "date": "2026-10-24",
+          "type": "docs",
+          "area": "p5",
+          "title": "verify phone watchdog scheduler",
+          "why": ""
+        },
+        {
+          "hash": "680e71f",
+          "date": "2026-10-24",
+          "type": "docs",
+          "area": "p5",
+          "title": "phone watchdog and status fix",
+          "why": ""
+        },
+        {
+          "hash": "435aff5",
+          "date": "2026-10-24",
+          "type": "refactor",
+          "area": "p5c",
+          "title": "production cutover and qq shadow",
+          "why": ""
+        },
+        {
+          "hash": "20d79a7",
+          "date": "2026-10-24",
+          "type": "refactor",
+          "area": "p5b",
+          "title": "engine shadow metrics",
+          "why": ""
+        },
+        {
+          "hash": "6a420a5",
+          "date": "2026-10-24",
+          "type": "docs",
+          "area": "p5",
+          "title": "record phone preflight and dry-run",
+          "why": ""
+        },
+        {
+          "hash": "0b4470f",
+          "date": "2026-10-24",
+          "type": "refactor",
+          "area": "p5a",
+          "title": "cutover preflight and channel flags",
+          "why": ""
+        },
+        {
+          "hash": "8414ba8",
+          "date": "2026-10-24",
+          "type": "refactor",
+          "area": "p4",
+          "title": "hybrid retrieval and context packing",
+          "why": ""
+        },
+        {
+          "hash": "745613b",
+          "date": "2026-10-24",
+          "type": "refactor",
+          "area": "p3",
+          "title": "affect context and attitude policy",
+          "why": ""
+        },
+        {
+          "hash": "439f29c",
+          "date": "2026-10-24",
+          "type": "refactor",
+          "area": "p2",
+          "title": "memory context and shadow gate",
+          "why": ""
+        },
+        {
+          "hash": "1de4ae7",
+          "date": "2026-10-24",
+          "type": "refactor",
+          "area": "p2c",
+          "title": "validity, extraction, projection writeback",
+          "why": ""
+        },
+        {
+          "hash": "e928a60",
+          "date": "2026-10-24",
+          "type": "refactor",
+          "area": "p2b",
+          "title": "memory jobs, provenance, shadow eval",
+          "why": ""
+        },
+        {
+          "hash": "517eb42",
+          "date": "2026-10-24",
+          "type": "refactor",
+          "area": "p2a",
+          "title": "memory context core",
+          "why": ""
+        },
+        {
+          "hash": "ee4c8bd",
+          "date": "2026-10-24",
+          "type": "refactor",
+          "area": "p1",
+          "title": "runtime state, signed auth, kv diet",
+          "why": ""
+        },
+        {
+          "hash": "46056ab",
+          "date": "2026-10-24",
+          "type": "refactor",
+          "area": "p0",
+          "title": "baseline, trace, and evaluation set",
+          "why": ""
+        },
+        {
+          "hash": "9155038",
+          "date": "2026-10-24",
+          "type": "chore",
+          "area": "",
+          "title": "checkpoint before refactor phases 0-5",
+          "why": ""
+        },
+        {
+          "hash": "d948c25",
+          "date": "2026-10-24",
+          "type": "feat",
+          "area": "retention",
+          "title": "D1只保留今天和昨天，旧日期确认归档后自动删除",
+          "why": ""
+        },
+        {
+          "hash": "b6b3e27",
+          "date": "2026-10-24",
+          "type": "other",
+          "area": "",
+          "title": "降低温度/惩罚，提示词要求先通顺再口语化",
+          "why": ""
+        },
+        {
+          "hash": "52eb9a1",
+          "date": "2026-10-24",
+          "type": "fix",
+          "area": "history",
+          "title": "去掉逐条时间标签改单条时间说明，清理孤立代理项，避免时间泄漏与发送失败",
+          "why": ""
+        },
+        {
+          "hash": "51a7224",
+          "date": "2026-10-24",
+          "type": "fix",
+          "area": "history",
+          "title": "短期历史加真实时间标签，按created_ms排序，避免把旧导入当上一句",
+          "why": ""
+        },
+        {
+          "hash": "d95844a",
+          "date": "2026-10-24",
+          "type": "other",
+          "area": "proactive",
+          "title": "去掉一句话/40字硬限制，长度交由模型自然把控",
+          "why": ""
+        },
+        {
+          "hash": "00e100e",
+          "date": "2026-10-24",
+          "type": "feat",
+          "area": "prompt",
+          "title": "语音内容必须用引号包起来（唯一保留的格式限制）",
+          "why": "- 系统提示词：发语音必须写成 [语音]「要说的话」，系统只念引号里的内容 - 每轮提醒同步这句 - 不再限制语音里能不能带动作描写（客户端合成前会剥掉，失败则原样发原文） - 实测：让它用语音回晚安时，输出 [语音]「晚安啦，主人～记得盖好被子…」，格式正确"
+        },
+        {
+          "hash": "68e1703",
+          "date": "2026-10-24",
+          "type": "other",
+          "area": "prompt",
+          "title": "不限制 AI 的语音写法，只在播放前剥掉动作描写",
+          "why": "- 提示词恢复成只告知能力：[语音] 开头就是发语音，不再要求引号包裹、不再要求语音里只说话 - 剥离逻辑放在客户端合成前（语音里不念（动作）/【】），TTS 失败则原样发回原文本 - 修一个 bug：语音界定符里不能把（）当引号用——人设的（动作）会被误当成语音内容"
+        },
+        {
+          "hash": "09acd5d",
+          "date": "2026-10-24",
+          "type": "fix",
+          "area": "qq",
+          "title": "语音只念该念的内容",
+          "why": "- 提示词：语音要写成 [语音]「要说的话」，并说明语音里只说话、别带（动作）/表情标记 - 服务端每轮提醒同步这句能力说明 - 删掉遗留的「必须带 [face:情绪]」硬性格式块（与「尽量少限制」冲突）"
+        },
+        {
+          "hash": "aa67519",
+          "date": "2026-10-24",
+          "type": "refactor",
+          "area": "prompt",
+          "title": "只保留人设与记忆两条底线，其余交给模型自由发挥",
+          "why": "- 语言层从「禁用词清单 + 颜文字频率 + 口头禅表 + 断句规则 + 长度限制」缩到两句： 按记忆里那个人说话、想短就短想长就长 - 提示词顶部写明两条底线：必须符合人物底色（不许 OOC）、记忆事实不能编不能混 - QQ 渠道只保留「能力告知」：可写 [face:表情名] 换表情、可整条 [语音] 开头发音； 发不发、发哪种、发多长都不限制 - 回复长度不设限（max_tokens=8192，等于模型上限），删掉按用户字数估算预算的 replyTokenBudget - 记忆注入与态度链路维持原设计（核心分区常驻 + 索引召回；5 轴 + 情绪向量 + 情绪快照） - 文档同步：写明最终取向与「刻意不做的取舍」 服务端 608 用例全绿；客户端 243 用例全绿（含标记容错：全角括号/句中 [语音]）。 已部署 1aa236ad，实测人设与记忆引用正常。"
+        },
+        {
+          "hash": "c2527ae",
+          "date": "2026-10-24",
+          "type": "fix",
+          "area": "qq",
+          "title": "[face]/[语音] 触发不了——把格式要求挪到每轮提醒里",
+          "why": "排查结论：代码没坏（日志 16:11/16:19 还有「1 个表情」），问题在指令位置。 每轮贴在用户消息前的 STYLE_REMINDER（【本轮语气】…）是模型最后读到的指令， 它没提表情/语音；而系统提示词中段的格式要求会被淹没。 - openai.ts：astrobot 渠道在 STYLE_REMINDER 后追加【本轮格式】：结尾必须带 [face:情绪]； 有 10 字内亲昵话时单独发一条以 [语音] 开头（仅在客户端声明支持语音时） - prompt.ts：base 末尾补同样的收尾块（双保险，网页端不受影响） - 语音触发条件从「很短很亲昵的话」改成「每 4~6 条挑一句 10 字内的话」， 并给出示例「[语音]主人晚安啦~」——人设偏长回复，原来的条件永远不成立 实测：改前 0/6 带表情，改后 3/3 带 [face]，语音也出现。618 用例全绿。"
+        },
+        {
+          "hash": "38f02b2",
+          "date": "2026-10-24",
+          "type": "fix",
+          "area": "archive",
+          "title": "提炼输入改为当天归档文件的聊天记录（含跨天补全）",
+          "why": ""
+        },
+        {
+          "hash": "5206050",
+          "date": "2026-10-24",
+          "type": "fix",
+          "area": "archive",
+          "title": "提炼只使用当天消息，跨天补全仅进日志",
+          "why": ""
+        },
+        {
+          "hash": "19635bf",
+          "date": "2026-10-24",
+          "type": "feat",
+          "area": "admin",
+          "title": "重建日归档并逐天重新提炼记忆（跨天回复补全）",
+          "why": ""
+        },
+        {
+          "hash": "48616cd",
+          "date": "2026-10-24",
+          "type": "fix",
+          "area": "archive",
+          "title": "跨天回复补进当天日志，归档以AI收尾且对话完整",
+          "why": ""
+        },
+        {
+          "hash": "e305631",
+          "date": "2026-10-24",
+          "type": "feat",
+          "area": "history",
+          "title": "跨天短期记忆，D1不足时从R2日/月归档补齐昨天最后几条",
+          "why": ""
+        },
+        {
+          "hash": "2320961",
+          "date": "2026-10-24",
+          "type": "feat",
+          "area": "persona",
+          "title": "性格缓慢漂移（周结算±2，底色不变，潜移默化）",
+          "why": ""
+        },
+        {
+          "hash": "c8f358f",
+          "date": "2026-10-24",
+          "type": "other",
+          "area": "",
+          "title": "加大大咧咧/傲娇权重，强制断句可读，每轮贴语气提醒",
+          "why": ""
+        },
+        {
+          "hash": "14aab30",
+          "date": "2026-10-24",
+          "type": "feat",
+          "area": "recall",
+          "title": "LLM重排恢复默认开启，可用 LLM_RERANK=0 关闭",
+          "why": ""
+        },
+        {
+          "hash": "20cfe01",
+          "date": "2026-10-24",
+          "type": "fix",
+          "area": "recall",
+          "title": "重要度不再单独成候选；LLM重排默认关闭，避免每轮多一次调用",
+          "why": ""
+        },
+        {
+          "hash": "d9ba7d8",
+          "date": "2026-10-24",
+          "type": "perf",
+          "area": "memory",
+          "title": "20条候选+MMR重排+条件LLM筛选，进行中事项保底",
+          "why": ""
+        },
+        {
+          "hash": "0dca8c3",
+          "date": "2026-10-24",
+          "type": "fix",
+          "area": "time",
+          "title": "实时事实置顶+意图注入+天气缓存兜底，防止模型翻旧时间/天气",
+          "why": ""
+        },
+        {
+          "hash": "9817c7b",
+          "date": "2026-10-24",
+          "type": "perf",
+          "area": "memory",
+          "title": "分层重要性+跨层去重+语义去重+子句级召回+字段缩写+老化衰减+会话粘性",
+          "why": ""
+        },
+        {
+          "hash": "4c2d7eb",
+          "date": "2026-10-24",
+          "type": "test",
+          "area": "voice",
+          "title": "高亲密档口癖断言更新为“哼哼”",
+          "why": ""
+        },
+        {
+          "hash": "9774983",
+          "date": "2026-10-24",
+          "type": "other",
+          "area": "",
+          "title": "高亲密档口癖改为“哼哼”，对齐大肥鱼语气",
+          "why": ""
+        },
+        {
+          "hash": "36bb59b",
+          "date": "2026-10-24",
+          "type": "feat",
+          "area": "memory",
+          "title": "时间金字塔周/月摘要 + 管理接口合并(reload/rollup)",
+          "why": ""
+        },
+        {
+          "hash": "0239bf7",
+          "date": "2026-10-24",
+          "type": "perf",
+          "area": "memory-index",
+          "title": "向量int8量化（~1.4KB/条）+ 查询embedding内存/KV缓存",
+          "why": ""
+        },
+        {
+          "hash": "a7c04c4",
+          "date": "2026-10-24",
+          "type": "fix",
+          "area": "memory-index",
+          "title": "保留已有向量不被覆盖、清理幽灵条目、无日期行解析、分批写入",
+          "why": ""
+        },
+        {
+          "hash": "273044f",
+          "date": "2026-10-24",
+          "type": "feat",
+          "area": "",
+          "title": "常驻核心+按需检索注入（D1条目索引+向量双路召回+KV热缓存）；memory.md不限大小",
+          "why": ""
+        },
+        {
+          "hash": "55efe5c",
+          "date": "2026-10-24",
+          "type": "feat",
+          "area": "",
+          "title": "复刻大肥鱼人设 + wipe-data 管理接口 + 记忆上限放开到24KB",
+          "why": ""
+        },
+        {
+          "hash": "e8f08cb",
+          "date": "2026-10-24",
+          "type": "other",
+          "area": "",
+          "title": "docs+chore: 补写「态度怎么算」章节，并清掉心情漂移额度的死代码",
+          "why": "文档（architecture.md）： - 新增第七节「情感系统：AI 对用户的态度是怎么算出来的」： 5 轴关系 → 8 维情绪 → 环境驱动 → 心情投影 → 情绪快照 → 时间尺度 - 明确写清**当天天气与节假日/周末**如何影响情绪（雷暴 −20、晴 +10、休息日白天 +12…）， 以及折算比例与按间隔缩放 - KV 表删掉废弃的 session:mood / mood:drift，补 emotion:state； 概览、上下文组装清单、定时任务流程、记忆保护机制同步为 5 轴说法 代码： - mood-env.ts 删掉已无人调用的漂移额度四件套（applyMoodDrift / 额度读写 / 累计应用） 与 scaleDriftByInterval，只留纯环境计算；jobs.ts 去掉对应无用 import - 新增 2 个测试：节假日白天比工作日更轻快、雷雨天比晴天更沉"
+        },
+        {
+          "hash": "79bda2f",
+          "date": "2026-10-24",
+          "type": "chore",
+          "area": "",
+          "title": "删除已被情绪向量取代的 session-state 模块",
+          "why": "- 删掉 src/session-state.ts 与其 21 个测试（系统提示词里的情绪残留早已由 emotion-vector + emotion-context 承担，这个模块没有任何调用方） - 文档同步：README/architecture 目录树补上 emotion-*/relation-facets/sse-scrub， 去掉 session-state；活人感计划里的阶段 2 产出与三通道表格改成现状 - 测试数从 622 → 601（净减 21，数量对得上）"
+        },
+        {
+          "hash": "72e4deb",
+          "date": "2026-10-24",
+          "type": "docs",
+          "area": "liveliness",
+          "title": "记忆保持电报体，明确不做口语化",
+          "why": "- 阶段 1 任务表：『记忆条目也口语化』改为『记忆保持电报体（密度优先）』 - 补一节取舍说明：记忆层只装事实，文风问题留给回复层； 与 memory.md 12KB 质量优先直接冲突，故不做"
+        },
+        {
+          "hash": "402ebeb",
+          "date": "2026-10-24",
+          "type": "fix",
+          "area": "liveliness",
+          "title": "补齐阶段4——离线生活接入心情；文档按现状更新",
+          "why": "复验 liveliness-plan 四阶段，发现阶段 4 的「离线生活」实际只用时段+日期， 心情值传进去也没用，与文档描述（时段+心情+记忆）不符： - offlineLife(dateKey, hour, mood)：低落走安静池（发呆/看不进去/趴桌上眯）， 高兴走活跃池（哼歌/收拾屋子/阳台吹风），中间走通用池；同时段筛选仍优先 - 新增 3 个回归测试（低落不出活跃场景、高兴不出安静场景、同日同时段稳定） - 「记忆」那层明确由情绪快照的「心里还记着」承担，不在离线生活里重复注入 - 文档 3 处更新：阶段4 任务表、当前进度（标明 session-state 已被情绪向量取代）、 三通道覆盖表（去掉旧情绪残留行，补情绪快照/processEmotionTurn）"
+        },
+        {
+          "hash": "f3becf1",
+          "date": "2026-10-24",
+          "type": "feat",
+          "area": "voice",
+          "title": "分句方式交给模型随机混用（空格/换行/逗号）",
+          "why": "- 提示词：别每条一个格式，空格、换行、逗号混着来 - 客户端撤回「中文空格强制转换行」，只保留收敛多余空行（分句尊重模型选择） - 测试改为验证三种分隔符都原样保留"
+        },
+        {
+          "hash": "379f167",
+          "date": "2026-10-24",
+          "type": "feat",
+          "area": "voice",
+          "title": "分句一律用换行，不用空格挤成一行",
+          "why": "- 提示词：一句一行、换行断开；空格把几句挤在一行最像「写文章」 - 客户端兜底 chat_style：中文之间的空格转成换行（英文两侧的空格保留）， 连续 3 个以上换行压成 2 个 - 新增 3 个客户端单测（CJK 空格转换行 / 英文空格保留 / 多余换行收敛）"
+        },
+        {
+          "hash": "d5d589f",
+          "date": "2026-10-24",
+          "type": "feat",
+          "area": "voice",
+          "title": "允许口头语与纯反应式短回复",
+          "why": "- 口头语：「就那个啥」「不是我说」「咋说呢」「你懂吧」，约每 4~5 条一个 - 纯反应：「笑死」「啊？」「真的假的」「绝了」，不用每条都补内容 - 体积仍在 2KB 内"
+        },
+        {
+          "hash": "ecd3014",
+          "date": "2026-10-24",
+          "type": "feat",
+          "area": "voice",
+          "title": "聊天体松弛化（不写句号、可用 ~ 和 -）",
+          "why": "- 语言层重写得更紧凑：日常回复几乎不写句号，句子之间用换行/空格断开 - 允许 ~ 和 - 代替标点（「好呀~」「笑死 真的-」）、拖长音（好耶——） - 强调「像发微信不像写文章」：逗号能省就省、先给反应再给看法、别每句完整主谓宾 - 体积仍压在 2KB 内（旧版 3.2KB） - 客户端配套：每条气泡做一次聊天体收尾（去掉句末句号、收紧连续标点）"
+        },
+        {
+          "hash": "a247037",
+          "date": "2026-10-24",
+          "type": "feat",
+          "area": "liveliness",
+          "title": "火力调高 + 流式回复的服务端配套",
+          "why": "- /v1 流式分支也带上回复预算（否则 QQ 切流式后又会变长篇大论） - 语言层加两条：有劲儿一点（好笑就笑出声、惊到就「啊？」）；先给反应再讲道理 - 颜文字从「不熟就禁用」改成按亲密度分频率（每 6~8 条 → 每 3~4 条） - QQ 渠道的 [face:xx] 从「想用时加」改成「大约每 2~3 条带一个」，提高实际命中率"
+        }
+      ]
+    },
+    {
+      "date": "2026-10-23",
+      "items": [
+        {
+          "hash": "808e5b7",
+          "date": "2026-10-23",
+          "type": "fix",
+          "area": "liveliness",
+          "title": "中文标点后的多余空格 + 禁止给人格下判断",
+          "why": "真机 QQ 测试发现两处小瑕疵： - 回复里出现「摆着看的。 不过…」这种中文句号后跟半角空格（模型中英混排残留） → 清洗层统一吃掉中文标点后的空白 - 模型容易用「你这人挺较真」「我感觉你…」这种给人格下判断的句式 → 语言层加了一条负向约束，让它顺着事聊"
+        },
+        {
+          "hash": "9595d55",
+          "date": "2026-10-23",
+          "type": "feat",
+          "area": "",
+          "title": "情感系统重构 + 活人感打磨 + 记忆质量落地",
+          "why": "一次合并提交，含四个方向： 【1】记忆质量（12KB 优先，不做有损压缩） - memory.md 目标 6.5KB → 12KB；注入前 compactMemoryForPrompt 去注释/空行/引用行 - 日期前缀改 [YY-MM-DD]，与旧 [YYYY-MM-DD] 双向兼容 - 档案层取消行数上限；同内容不同日期保留两条，注入时同内容只取一次 - 停用 LLM 全量压缩（compressMemory 已删），超限只走无损分层 - 中期纪要 5~8 条 / 每条 24 字；历史消息压缩到 400 字 【2】情感系统：从 3 个标量到事件驱动 - emotion-events.ts：14 类情感事件（褒/谢/歉/倾诉/表白/调侃/使唤/拒绝/辱骂/爽约…）， 带强度、对象、原话；规则词典优先，Workers AI 只在每日任务里复核歧义消息 （单日 ≤8 次，不进聊天关键路径） -"
+        },
+        {
+          "hash": "fe34509",
+          "date": "2026-10-23",
+          "type": "fix",
+          "area": "file-plugin",
+          "title": "优化文件读取插件的 5 个点",
+          "why": "审查 astrbot_plugin_file_reader 后逐项优化： 1. 兜底正则误读无关路径 原来 TEMP_PATH_RE 会把消息里任何 /root/... 都当文件去读， 用户说「我把项目放在 /home/me/project 里了」就会注入一条 「读取失败：文件不存在」。现在要求路径必须以已知扩展名结尾。 2. 同一文件重复注入 消息链组件、File Attachment 标记、裸路径三个来源可能给出 不同写法的同一路径（/root/a.txt vs /root/./a.txt）， 不归一化会读两遍、注入两遍。新增 _normalize_posix_path 去重。 ★ 修这个时发现一个真 bug：原打算用 os.path.normpath， 但它在 Windows 上会把 /root/a.txt 变成 \\root\\a.txt， 而 AstrBot 跑 Linux，路径必须"
+        },
+        {
+          "hash": "057f255",
+          "date": "2026-10-23",
+          "type": "fix",
+          "area": "proactive",
+          "title": "修复主动消息投递链路的 7 个缺陷",
+          "why": "审查 astrbot_plugin_memory_push 与 Worker 队列实现，逐项修复： 【安全】 1. 群聊劫持（P0）：auto_learn 监听所有消息并无条件覆盖 target_umo， 加入的群里有人随口说一句，主动消息（私密对话内容）就会发到那个群。 新增 is_private_umo()：只有私聊会话可自动学习，群聊/频道必须显式 /肥鱼记住这里。无法识别时按非私聊处理（宁可不学，不能发错）。 2. /肥鱼立即推送 语义错误（P0）：原来用 yield event.plain_result()， 那是「回复当前消息」而非主动发到 target_umo，在群里调试会当众发出。 改为统一走 _send_to_target()，与轮询同一条路径。 【可靠性】 3. 30 天清理永不生效：sent_at 存 ， 而 SQL 用 datetime('now','-30 day"
+        },
+        {
+          "hash": "928b382",
+          "date": "2026-10-23",
+          "type": "docs",
+          "area": "",
+          "title": "按当前代码修正 4 份文档中与实现不符的内容",
+          "why": "architecture.md - 测试数 30 → 32（新增 identity / relation-store 等） - 目录结构补 identity.ts、relation-store.ts - KV 表补全：原 9 个 → 19 个，含 relation:active_days（永久）、 session:mood、mood:drift、profile:*、aversion:candidates 等 - R2 结构补 memory/archive.md（档案层），说明归档清理范围 - 关系值章节细化：好感度由质量驱动（±5）、亲密度由量驱动（+4/天， 上限 300+天数×2）、心情双通道各 ±80；补充「天数不会倒退」机制 - 标题与头像注释去掉写死的角色名（现由 CHARACTER_NAME 决定） liveliness-plan.md - 状态卡示例改为代码实际输出字段（原为"
+        },
+        {
+          "hash": "55e6cc3",
+          "date": "2026-10-23",
+          "type": "fix",
+          "area": "liveliness",
+          "title": "修复活人感验收发现的 3 个缺陷",
+          "why": "按 docs/liveliness-plan.md 验收，发现实现打折，逐项修复： 1.【P0】心情值对状态卡几乎不敏感（影响验收标准 1） 原来只有 350/600 两个阈值参与判断，心情在 350~600 之间对状态卡 毫无影响，而情绪残留幅度只有 ±40，基本落不到阈值上——导致文档说的 「上一轮情绪会漏到下一轮」名义上实现、体感上没有。 新增 moodTier() 五档（low/meh/calm/good/great）： - timeOfDayState 每档独立描述 - dispositionFor 按档位调整亲昵倾向权重（×1 / ×2 / ×4）， 心情偏低时抑制亲昵倾向 实测状态卡变化点从 3 个增加到 5 个，亲昵倾向占比 550→100/200、700→132/200、900→160/200。 2.【P1】情绪残留衰减比文档慢 3 倍 文档要求「约 12 分钟指数衰减」"
+        },
+        {
+          "hash": "8e993b1",
+          "date": "2026-10-23",
+          "type": "fix",
+          "area": "relation",
+          "title": "修复关系值计算系统的 5 个缺陷",
+          "why": "审查发现的问题与修复： 1. 【严重】亲密度上限随 D1 清理倒退 activeDays 原本从 D1 messages 全表统计，但月度归档会删 3 个月前数据， 导致上限从 1000 跌回 480，聊得越久反而越涨不动。 新增 relation-store.ts：把历史累计天数持久化到 KV（只增不减）， 与 D1 现值取较大者，D1 被清也能自愈。 2. 【严重】中等聊天频率下亲密度完全不涨 computeIntimacyGain 原来只按「每 10 轮 +1」，每天 8 轮算出 0， 聊满一年亲密度纹丝不动。改为「当天聊过保底 +1」，轮次作为额外加成。 3. 亲密度重复衰减 applyIntimacyChange 与 applyRelationDecay 都会按失联天数扣分， 两者都在归档流程里执行，同一天扣两次。现统一由 applyRelationDecay 负责。 4. 心情"
+        },
+        {
+          "hash": "1e54ade",
+          "date": "2026-10-23",
+          "type": "docs",
+          "area": "",
+          "title": "修正与代码不符的四处过期描述",
+          "why": "- architecture: KV 键移除已废弃的 proactive:sent:*，改为说明幂等已迁移到 D1 proactive_log 的 UNIQUE 约束（补上 memo:24h）；测试数 29 → 30 - design-notes: Workers AI 的 llama-3.1-8b 已被 Cloudflare 下架（错误 5007）， 改为实际的 @cf/meta/llama-3.2-3b-instruct；对话模型 deepseek-chat → deepseek-flash。该文件是初始决策记录，保留原貌并加注当前实际值 - README: AstrBot 的模型字段服务端不校验，如实说明按 DEEPSEEK_MODEL 转发"
+        },
+        {
+          "hash": "f4f41d8",
+          "date": "2026-10-23",
+          "type": "feat",
+          "area": "",
+          "title": "角色名与称呼抽成环境变量（CHARACTER_NAME / USER_ADDRESS）",
+          "why": "- 新增 src/identity.ts：解析角色名，开源默认「小忆」，缺失/空白自动回退 - prompt.ts / character-card.ts 不再写死角色名，改为参数注入 - index.ts 新增兜底路由：HTML 透传时替换角色名，网页标题也跟着变； /api/* 与 /v1/* 不在此列，保持 JSON 404 - wrangler.toml 配 run_worker_first 只让首页走 Worker，静态资源仍由 CDN 直出 - 补 identity 单测与 prompt 的角色名/称呼测试（425 个测试全通过）"
+        },
+        {
+          "hash": "ba70d0d",
+          "date": "2026-10-23",
+          "type": "chore",
+          "area": "",
+          "title": "补齐网页头像资源",
+          "why": ""
+        },
+        {
+          "hash": "f81bc04",
+          "date": "2026-10-23",
+          "type": "chore",
+          "area": "",
+          "title": "仓库地址更新为 dikt-dev/ds-memory",
+          "why": ""
+        },
+        {
+          "hash": "3227d5e",
+          "date": "2026-10-23",
+          "type": "chore",
+          "area": "",
+          "title": "插件元数据指向开源仓库",
+          "why": ""
+        },
+        {
+          "hash": "68f0f0b",
+          "date": "2026-10-23",
+          "type": "chore",
+          "area": "",
+          "title": "忽略本地部署配置 wrangler.local.toml",
+          "why": ""
+        },
+        {
+          "hash": "0d689df",
+          "date": "2026-10-23",
+          "type": "other",
+          "area": "",
+          "title": "同步最新代码（记忆/召回/图片/主动消息/网页修复）",
+          "why": "- 记忆：密度优先 + 分区配额 + 分层按需检索 + 最近 24h 中期记忆 - 图片：清洗系统 notice、蒙太奇只看第一帧 - 主动消息：拉取不再计尝试次数、新增 nack、失效会话自动重学 - 网页：修复发送后消息重复渲染（流结束回传消息 id 推进游标） - 情绪：非流式请求也更新会话情绪残留 - 语言层：短句保留活气，偶尔用颜文字"
+        }
+      ]
+    },
+    {
+      "date": "2026-10-22",
+      "items": [
+        {
+          "hash": "2ad1456",
+          "date": "2026-10-22",
+          "type": "chore",
+          "area": "",
+          "title": "插件元数据同步改名",
+          "why": ""
+        },
+        {
+          "hash": "8de8ad6",
+          "date": "2026-10-22",
+          "type": "other",
+          "area": "",
+          "title": "Initial commit: ds-memory — 给 DeepSeek 加上长期记忆的 Cloudflare Worker",
+          "why": "- 四层记忆：memory.md 核心 / R2 档案按需检索 / 24h 中期纪要 / 最近原文 - 每日 04:00 自动归档提炼，密度优先写作 + 分区配额 + 分层搬移 - 关系数值（好感度/亲密度/心情值）与「活人感」语言层 - 主动消息打分决策 + AstrBot 队列/直连两种投递 - 网页 SSE 聊天 + OpenAI 兼容端点 + 图片/文件 - 411 个单元测试"
+        }
+      ]
+    }
+  ]
+}

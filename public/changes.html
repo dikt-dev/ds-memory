@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>修改记录</title>
+<script>
+  // 与聊天页共用同一个主题键，进来不会闪
+  (function () {
+    var m = localStorage.getItem('ds-memory-theme') || 'system';
+    document.documentElement.dataset.theme = m === 'dark' ? 'dark'
+      : m === 'light' ? 'light'
+      : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  })();
+</script>
+<style>
+  :root {
+    --bg: #f7f7f8; --panel: #fff; --text: #1d1d20; --text-soft: #55555c;
+    --muted: #8a8a93; --border: #e6e6ea; --hover: #f0f0f3;
+    --feat: #2f7d4f; --fix: #b4552f; --docs: #3b6ea5; --other: #6b6b75;
+  }
+  [data-theme="dark"] {
+    --bg: #141416; --panel: #1c1c20; --text: #ececf1; --text-soft: #b6b6c0;
+    --muted: #8b8b96; --border: #2b2b32; --hover: #24242b;
+    --feat: #6fcf97; --fix: #f2997a; --docs: #8ab4f8; --other: #9a9aa5;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  header {
+    position: sticky; top: 0; z-index: 9; backdrop-filter: blur(8px);
+    background: color-mix(in oklab, var(--bg) 88%, transparent);
+    border-bottom: 1px solid var(--border);
+  }
+  .bar { max-width: 880px; margin: 0 auto; padding: .7rem 1rem; display: flex; align-items: center; gap: .6rem; }
+  .bar h1 { font-size: 1rem; margin: 0; font-weight: 600; }
+  .bar .count { color: var(--muted); font-size: .8rem; }
+  .bar .spacer { flex: 1; }
+  .bar a, .bar button {
+    background: transparent; border: 1px solid var(--border); color: var(--text-soft);
+    border-radius: 9px; padding: .3rem .6rem; font-size: .78rem; cursor: pointer;
+    text-decoration: none; white-space: nowrap;
+  }
+  .bar a:hover, .bar button:hover { background: var(--hover); }
+  .tools { max-width: 880px; margin: 0 auto; padding: .8rem 1rem 0; display: flex; flex-wrap: wrap; gap: .5rem; }
+  .tools input {
+    flex: 1 1 220px; min-width: 0; background: var(--panel); color: var(--text);
+    border: 1px solid var(--border); border-radius: 10px; padding: .45rem .7rem; font-size: .86rem;
+  }
+  .chips { display: flex; gap: .35rem; flex-wrap: wrap; }
+  .chips button {
+    background: transparent; border: 1px solid var(--border); color: var(--text-soft);
+    border-radius: 999px; padding: .22rem .6rem; font-size: .74rem; cursor: pointer;
+  }
+  .chips button[aria-pressed="true"] { background: var(--hover); color: var(--text); border-color: var(--text-soft); }
+  main { max-width: 880px; margin: 0 auto; padding: 1rem; }
+  .day { margin: 1.4rem 0 0; }
+  .day h2 { font-size: .8rem; color: var(--muted); font-weight: 600; margin: 0 0 .5rem; letter-spacing: .04em; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: .7rem .85rem; margin-bottom: .5rem;
+  }
+  .card .head { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; }
+  .badge { font-size: .68rem; padding: .08rem .4rem; border-radius: 6px; border: 1px solid currentColor; }
+  .badge.feat { color: var(--feat); } .badge.fix { color: var(--fix); }
+  .badge.docs { color: var(--docs); } .badge.other { color: var(--other); }
+  .card .area { color: var(--muted); font-size: .72rem; }
+  .card .hash { color: var(--muted); font-size: .72rem; font-family: ui-monospace, monospace; margin-left: auto; }
+  .card .title { margin: .35rem 0 0; }
+  .card .why { margin: .3rem 0 0; color: var(--text-soft); font-size: .84rem; display: none; white-space: pre-wrap; }
+  .card.open .why { display: block; }
+  .card .toggle { background: none; border: 0; color: var(--muted); font-size: .74rem; cursor: pointer; padding: 0; margin-top: .3rem; }
+  .empty { color: var(--muted); text-align: center; padding: 3rem 0; font-size: .86rem; }
+  footer { color: var(--muted); text-align: center; font-size: .72rem; padding: 2rem 1rem 3rem; }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1>修改记录</h1>
+    <span class="count" id="count"></span>
+    <span class="spacer"></span>
+    <a href="/">← 回聊天</a>
+    <button id="themeBtn" title="切换主题">🎨</button>
+  </div>
+</header>
+
+<div class="tools">
+  <input id="q" type="search" placeholder="搜索改动内容 / 原因 / 提交号…" autocomplete="off" />
+  <div class="chips" id="chips"></div>
+</div>
+
+<main id="list"><div class="empty">加载中…</div></main>
+<footer id="foot"></footer>
+
+<script>
+const TYPE_LABEL = { feat: '新功能', fix: '修复', docs: '文档', refactor: '重构', perf: '性能', test: '测试', chore: '杂务', other: '其他' };
+const $ = (id) => document.getElementById(id);
+let all = [];
+let activeType = 'all';
+let keyword = '';
+
+/* 主题：与聊天页同一个 key，循环 跟随系统 → 深色 → 浅色 */
+const THEME_KEY = 'ds-memory-theme';
+const THEME_LABELS = { system: '🎨', dark: '🌙', light: '☀️' };
+const mode = () => localStorage.getItem(THEME_KEY) || 'system';
+const resolve = (m) => m === 'dark' ? 'dark' : m === 'light' ? 'light'
+  : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+function applyTheme(m) {
+  document.documentElement.dataset.theme = resolve(m);
+  $('themeBtn').textContent = THEME_LABELS[m] || '🎨';
+  localStorage.setItem(THEME_KEY, m);
+}
+$('themeBtn').addEventListener('click', () => {
+  const next = { system: 'dark', dark: 'light', light: 'system' }[mode()] || 'system';
+  applyTheme(next);
+});
+applyTheme(mode());
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+async function load() {
+  try {
+    const res = await fetch('changelog.json', { cache: 'no-cache' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    all = (data.days || []).flatMap((d) => d.items || []);
+    $('foot').textContent = '共 ' + (data.count ?? all.length) + ' 条改动 · 生成于 ' + (data.generated_at || '').slice(0, 16).replace('T', ' ');
+    renderChips();
+    render();
+  } catch (e) {
+    $('list').innerHTML = '<div class="empty">读取 changelog.json 失败：' + esc(e.message) + '</div>';
+  }
+}
+
+function renderChips() {
+  const types = ['all', ...new Set(all.map((i) => i.type))];
+  $('chips').innerHTML = types.map((t) =>
+    '<button data-type="' + t + '" aria-pressed="' + (t === activeType) + '">' +
+    (t === 'all' ? '全部' : (TYPE_LABEL[t] || t)) + '</button>').join('');
+  $('chips').querySelectorAll('button').forEach((b) => {
+    b.addEventListener('click', () => { activeType = b.dataset.type; renderChips(); render(); });
+  });
+}
+
+function matches(item) {
+  if (activeType !== 'all' && item.type !== activeType) return false;
+  if (!keyword) return true;
+  const hay = (item.title + ' ' + item.why + ' ' + item.area + ' ' + item.hash).toLowerCase();
+  return hay.includes(keyword);
+}
+
+function render() {
+  const items = all.filter(matches);
+  $('count').textContent = items.length + ' / ' + all.length;
+  if (items.length === 0) { $('list').innerHTML = '<div class="empty">没有匹配的改动</div>'; return; }
+  const days = [];
+  const idx = new Map();
+  for (const it of items) {
+    if (!idx.has(it.date)) { const d = { date: it.date, items: [] }; idx.set(it.date, d); days.push(d); }
+    idx.get(it.date).items.push(it);
+  }
+  $('list').innerHTML = days.map((d) =>
+    '<section class="day"><h2>' + esc(d.date) + ' · ' + d.items.length + ' 条</h2>' +
+    d.items.map((it) =>
+      '<article class="card">' +
+      '<div class="head">' +
+      '<span class="badge ' + esc(it.type) + '">' + esc(TYPE_LABEL[it.type] || it.type) + '</span>' +
+      (it.area ? '<span class="area">' + esc(it.area) + '</span>' : '') +
+      '<span class="hash">' + esc(it.hash) + '</span>' +
+      '</div>' +
+      '<p class="title">' + esc(it.title) + '</p>' +
+      (it.why ? '<p class="why">' + esc(it.why) + '</p><button class="toggle">展开原因</button>' : '') +
+      '</article>').join('') +
+    '</section>').join('');
+  $('list').querySelectorAll('.toggle').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const card = btn.closest('.card');
+      card.classList.toggle('open');
+      btn.textContent = card.classList.contains('open') ? '收起' : '展开原因';
+    });
+  });
+}
+
+$('q').addEventListener('input', (e) => { keyword = e.target.value.trim().toLowerCase(); render(); });
+load();
+</script>
+</body>
+</html>

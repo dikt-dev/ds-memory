@@ -145,13 +145,14 @@
   #usageInfo:hover, #balanceInfo:hover { color: var(--text-soft); background: var(--hover); }
 
   .actions { display: flex; align-items: center; gap: .4rem; margin-left: auto; flex: 0 0 auto; }
-  .actions button {
+  .actions button, .actions a {
     background: transparent; border: 1px solid var(--chip-border); color: var(--text-soft);
     border-radius: 9px; padding: .34rem .62rem; cursor: pointer; font-size: .78rem;
     transition: background .15s ease, border-color .15s ease, transform .1s ease;
     touch-action: manipulation; white-space: nowrap;
   }
-  .actions button:hover { background: var(--hover); border-color: var(--border-strong); }
+  .actions button:hover, .actions a:hover { background: var(--hover); border-color: var(--border-strong); }
+  .actions a { text-decoration: none; display: inline-flex; align-items: center; }
   .actions button:active { transform: scale(.96); }
   #logout { color: var(--muted); }
 
@@ -419,6 +420,7 @@
     <div class="actions">
       <button id="themeBtn" title="切换主题（跟随系统 / 深色 / 浅色）">🎨</button>
       <button id="setCity" title="修改天气城市">📍 城市</button>
+      <a id="changesLink" href="/changes" title="看过往每次改动和原因">📋 记录</a>
       <button id="runDaily" title="立即归档昨天并提炼记忆">⚡ 归档</button>
       <button id="logout">退出</button>
     </div>
