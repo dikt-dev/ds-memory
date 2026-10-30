@@ -26,14 +26,19 @@ import { logTrace } from './trace';
 /**
  * 整条召回的时间预算。超时就当没召回——空召回是合法降级，卡住不是。
  *
- * 2026-10-30 按实测校准：shadow 路径（只跑新引擎，不含 legacy）的平均耗时
- * 10-27 171ms → 10-28 345ms → 10-29 503ms，随索引增长接近线性上升。
- * 800ms 在 legacy + 新引擎串行时几乎必然撞线，所以放宽到 1500ms。
+ * 2026-10-31 校准到 3000ms：实测（10-27 171ms → 10-29 503ms → 10-31 1190ms）
+ * 随索引增长接近线性，1500ms 只剩 300ms 余量，一次抖动就整条作废。
+ * 现在 legacy 与 next 并行，预算是 max 而不是 sum。
  */
-export const RECALL_DEADLINE_MS = 1500;
+export const RECALL_DEADLINE_MS = 3000;
 
-/** 输出封顶：条数与每条字数。借鉴 dsh-fish 的"回忆不是读档"。 */
-export const RECALL_MAX_ITEMS = 8;
+/**
+ * 输出封顶：条数与每条字数。借鉴 dsh-fish 的"回忆不是读档"。
+ *
+ * 2026-10-31 从 8 降到 5：近一周 new_items 几乎每次都顶满 8，
+ * 说明是上限在替排序做筛选。少给几条、让每条都有理由，比塞满更接近"想起来"。
+ */
+export const RECALL_MAX_ITEMS = 5;
 export const RECALL_ITEM_CHARS = 200;
 
 export type RecallMode = 'legacy' | 'shadow' | 'next';
@@ -178,6 +183,31 @@ async function runNextEngine(
   };
 }
 
+/**
+ * 并行版 next 引擎：带自己的 deadline、自己的兜底。
+ *
+ * 和 legacy 同时起跑，超时或抛错都只影响这一侧，不拖累另一侧。
+ */
+async function runNextEngineSafe(
+  env: Env,
+  query: string,
+  focus: string,
+  deadlineMs: number,
+  onTimeout: () => void,
+): Promise<Awaited<ReturnType<typeof runNextEngine>>> {
+  const empty = {
+    text: '',
+    items: 0,
+    dropped: 0,
+    linked: 0,
+    hasVector: false,
+    stages: { load: 0, rank: 0, embed: 0, expand: 0 },
+  };
+  return withDeadline(runNextEngine(env, query, focus), deadlineMs, empty, onTimeout).catch(
+    () => empty,
+  );
+}
+
 /** 查询向量：失败就当没有，退回纯关键词。 */
 async function embedFor(env: Env, query: string): Promise<number[] | null> {
   const vecs = await embedTexts(env, [query]).catch(() => []);
@@ -216,7 +246,7 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
   }
 
   const legacyStart = performance.now();
-  const legacyRaw = await withDeadline(
+  const legacyPromise = withDeadline(
     recallMemoryForChat(env, query, undefined, focus, {
       skipMemorySource: opts.skipMemorySource,
     }).catch(() => ''),
@@ -226,38 +256,33 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
       result.timedOut = true;
     },
   );
-  const legacyMs = performance.now() - legacyStart;
-  result.legacyText = capRecallText(legacyRaw);
 
-  if (opts.mode === 'legacy' || result.timedOut) {
+  if (opts.mode === 'legacy') {
+    const legacyRaw = await legacyPromise;
+    result.legacyText = capRecallText(legacyRaw);
     result.text = result.legacyText;
     result.ms = Math.round(performance.now() - started);
     return result;
   }
 
-  const remaining = Math.max(1, deadlineMs - (performance.now() - started));
+  // ★ 两段并行。串行时延迟是 legacy + next（实测 708ms + 482ms = 1190ms），
+  //   并行后是 max(legacy, next)。shadow / next 都要跑两套，必须并行。
   const engineQuery = (opts.nextQuery ?? '').trim() || query;
+  const [legacyRaw, next] = await Promise.all([
+    legacyPromise,
+    runNextEngineSafe(env, engineQuery, focus, deadlineMs, () => {
+      result.timedOut = true;
+    }),
+  ]);
+  const legacyMs = performance.now() - legacyStart;
+  result.legacyText = capRecallText(legacyRaw);
+
   let nextRaw = '';
   let stages: NextStageMs = { load: 0, rank: 0, embed: 0, expand: 0 };
   let nextItems = 0;
   let nextLinked = 0;
   let nextHasVector = false;
   try {
-    const next = await withDeadline(
-      runNextEngine(env, engineQuery, focus),
-      remaining,
-      {
-        text: '',
-        items: 0,
-        dropped: 0,
-        linked: 0,
-        hasVector: false,
-        stages: { load: 0, rank: 0, embed: 0, expand: 0 },
-      },
-      () => {
-        result.timedOut = true;
-      },
-    );
     nextRaw = capRecallText(next.text);
     stages = next.stages;
     nextItems = next.items;
