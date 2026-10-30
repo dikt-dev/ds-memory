@@ -91,6 +91,7 @@ import {
 } from './emotion-context';
 import { explainAttitude } from './attitude-policy';
 import { listAffectTimeline, recordAttitudeSnapshot } from './affect-store';
+import { readRecallSamples, summarizeSamples } from './recall-samples';
 import { readEngineMetrics } from './engine-metrics';
 import {
   ackTtsJob,
@@ -1261,6 +1262,13 @@ app.get('/api/admin/engine-metrics', requireAuth, async (c) => {
   const days = Math.min(30, Math.max(1, Number(c.req.query('days') ?? 7) || 7));
   const rows = await readEngineMetrics(c.env, days);
   return c.json({ ok: true, days, rows });
+});
+
+/** 召回分段耗时：p50/p95 与各段占比（只读，不含正文）。 */
+app.get('/api/admin/recall-samples', requireAuth, async (c) => {
+  const days = Math.min(14, Math.max(1, Number(c.req.query('days') ?? 3) || 3));
+  const rows = await readRecallSamples(c.env, days);
+  return c.json({ ok: true, days, samples: rows.length, summary: summarizeSamples(rows) });
 });
 
 /** Phase 5 预检：只读检查迁移/开关/密钥，不做任何写入。 */

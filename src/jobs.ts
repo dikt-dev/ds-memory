@@ -53,6 +53,7 @@ import { applyRelationDecay } from './memory-maintenance';
 import { getDaySummaryRaw, summaryKey } from './summary';
 import { checkStorageCapacity, cleanupStaleObjects, deleteObject, getObject, listKeys, putObject } from './storage';
 import { pruneSnapshots, writeDailySnapshot } from './memory-snapshot';
+import { pruneRecallSamples } from './recall-samples';
 import { messagesByDate, assistantReplyTo, sanitizeMessagePlaceholders, type MessageRow } from './db';
 import { backfillFeedback } from './feedback';
 import { cleanupQueue } from './queue';
@@ -740,6 +741,8 @@ export async function runDailyArchive(env: Env, now: Date): Promise<DailyArchive
   await cleanupQueue(env).catch((e) => console.error('[queue] cleanup failed:', e));
   await cleanupStaleObjects(env, now).catch((e) => console.error('[r2] cleanup failed:', e));
   await cleanupRuntimeState(env, now.getTime()).catch((e) => console.error('[runtime] cleanup failed:', e));
+  // 召回分段采样只留 14 天（一天约 100 行）
+  await pruneRecallSamples(env).catch((e) => console.error('[recall-samples] prune failed:', e));
   await cleanupMemoryTables(env, now.getTime()).catch((e) =>
     console.error('[memory] table cleanup failed:', e),
   );

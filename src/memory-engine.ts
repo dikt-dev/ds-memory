@@ -14,6 +14,7 @@
  */
 import type { Env } from './types';
 import { recordEngineMetric } from './engine-metrics';
+import { recordRecallSample } from './recall-samples';
 import { packMemoryChunks } from './context-packer';
 import { loadMemoryChunks } from './memory-context-store';
 import { expandLinkedChunks } from './memory-links';
@@ -114,25 +115,58 @@ export function capRecallText(
     .join('\n');
 }
 
+export interface NextStageMs {
+  load: number;
+  rank: number;
+  embed: number;
+  expand: number;
+}
+
 /** 跑新引擎：关键词优先，弱召回才补向量，再扩关联、打包、格式化。 */
 async function runNextEngine(
   env: Env,
   query: string,
   focus: string,
-): Promise<{ text: string; items: number; dropped: number; linked: number; hasVector: boolean }> {
-  const chunks = await loadMemoryChunks(env);
-  if (chunks.length === 0) return { text: '', items: 0, dropped: 0, linked: 0, hasVector: false };
+): Promise<{
+  text: string;
+  items: number;
+  dropped: number;
+  linked: number;
+  hasVector: boolean;
+  stages: NextStageMs;
+}> {
+  const stages: NextStageMs = { load: 0, rank: 0, embed: 0, expand: 0 };
 
+  // 分段计时：延迟要按段优化，先得知道哪段贵（见 recall-samples.ts）。
+  let t = performance.now();
+  const chunks = await loadMemoryChunks(env);
+  stages.load = performance.now() - t;
+  if (chunks.length === 0) {
+    return { text: '', items: 0, dropped: 0, linked: 0, hasVector: false, stages };
+  }
+
+  t = performance.now();
   const keywordPicked = rankMemoryChunks(query, chunks, 6, focus);
+  stages.rank = performance.now() - t;
+
   // 关键词已经够强时不再付 query embedding 延迟；弱召回才走向量。
   const hasVectors = chunks.some((chunk) => Boolean(chunk.vec));
-  const queryVec =
-    hasVectors && keywordPicked.length < 3
-      ? ((await embedFor(env, query)) ?? null)
-      : null;
+  let queryVec: number[] | null = null;
+  if (hasVectors && keywordPicked.length < 3) {
+    t = performance.now();
+    queryVec = (await embedFor(env, query)) ?? null;
+    stages.embed = performance.now() - t;
+  }
+
+  t = performance.now();
   const picked =
     queryVec !== null ? rankMemoryChunks(query, chunks, 6, focus, { queryVec }) : keywordPicked;
+  stages.rank += performance.now() - t;
+
+  t = performance.now();
   const expanded = await expandLinkedChunks(env, picked, 2);
+  stages.expand = performance.now() - t;
+
   const packed = packMemoryChunks(expanded);
   return {
     text: formatMemoryChunks(packed.chunks),
@@ -140,6 +174,7 @@ async function runNextEngine(
     dropped: packed.dropped,
     linked: expanded.length - picked.length,
     hasVector: queryVec !== null,
+    stages,
   };
 }
 
@@ -180,6 +215,7 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
     return result;
   }
 
+  const legacyStart = performance.now();
   const legacyRaw = await withDeadline(
     recallMemoryForChat(env, query, undefined, focus, {
       skipMemorySource: opts.skipMemorySource,
@@ -190,6 +226,7 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
       result.timedOut = true;
     },
   );
+  const legacyMs = performance.now() - legacyStart;
   result.legacyText = capRecallText(legacyRaw);
 
   if (opts.mode === 'legacy' || result.timedOut) {
@@ -201,16 +238,31 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
   const remaining = Math.max(1, deadlineMs - (performance.now() - started));
   const engineQuery = (opts.nextQuery ?? '').trim() || query;
   let nextRaw = '';
+  let stages: NextStageMs = { load: 0, rank: 0, embed: 0, expand: 0 };
+  let nextItems = 0;
+  let nextLinked = 0;
+  let nextHasVector = false;
   try {
     const next = await withDeadline(
       runNextEngine(env, engineQuery, focus),
       remaining,
-      { text: '', items: 0, dropped: 0, linked: 0, hasVector: false },
+      {
+        text: '',
+        items: 0,
+        dropped: 0,
+        linked: 0,
+        hasVector: false,
+        stages: { load: 0, rank: 0, embed: 0, expand: 0 },
+      },
       () => {
         result.timedOut = true;
       },
     );
     nextRaw = capRecallText(next.text);
+    stages = next.stages;
+    nextItems = next.items;
+    nextLinked = next.linked;
+    nextHasVector = next.hasVector;
 
     const oldItems = result.legacyText.split('\n').filter((l) => l.startsWith('- ')).length;
     logTrace('memory.engine', {
@@ -237,6 +289,22 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
       ms: Math.round(performance.now() - started),
       now: nowMs,
     });
+    // 分段采样：聚合表看趋势，这里看分布（p50/p95）与各段占比。
+    await recordRecallSample(env, {
+      channel: opts.channel,
+      mode: opts.mode,
+      kind,
+      legacyMs,
+      loadMs: stages.load,
+      rankMs: stages.rank,
+      embedMs: stages.embed,
+      expandMs: stages.expand,
+      totalMs: performance.now() - started,
+      items: nextItems,
+      linked: nextLinked,
+      hasVector: nextHasVector,
+      timedOut: result.timedOut,
+    }, nowMs);
   } catch (e) {
     logTrace('memory.engine.error', {
       requestId,
