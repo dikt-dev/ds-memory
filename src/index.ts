@@ -116,6 +116,7 @@ import { applyEventsToVector, extractEmotionEvents, reconcileWithApology, type E
 import { buildEmotionSnapshot, describeEmotionState } from './emotion-snapshot';
 import { decayEmotion, emptyEmotionVector, type EmotionVector } from './emotion-vector';
 import { elapsedMs, logTrace, REQUEST_ID_HEADER, shouldLogHttp, startTrace } from './trace';
+import { pruneRequestLog, readPathStats, readRecentRequests, recordRequest } from './request-log';
 import { deleteRuntimeState, getRuntimeState, putRuntimeState } from './runtime-store';
 import { getHeartbeat } from './profile-cache';
 
@@ -164,13 +165,30 @@ app.use('*', async (c, next) => {
   await next();
   const status = c.res.status;
   if (shouldLogHttp(c.req.path, status)) {
+    const ms = elapsedMs(trace);
     logTrace('http', {
       requestId: trace.requestId,
       method: c.req.method,
       path: c.req.path,
       status,
-      ms: elapsedMs(trace),
+      ms,
     });
+    // 这条网络连不上 wrangler tail，日志只有落 D1 才看得见（见 src/request-log.ts）
+    const write = recordRequest(c.env, {
+      requestId: trace.requestId,
+      kind: 'http',
+      method: c.req.method,
+      path: c.req.path,
+      status,
+      ms,
+      channel: c.req.header('x-client-channel') || undefined,
+      ok: status < 400,
+    });
+    try {
+      c.executionCtx.waitUntil(write);
+    } catch {
+      await write;
+    }
   }
 });
 
@@ -1994,6 +2012,18 @@ app.get('/api/admin/kv-audit', requireAuth, async (c) => {
   });
 });
 
+/** 请求级 trace：默认最近 24 小时，按路径聚合（p50/p95/错误）+ 最近 N 条明细。 */
+app.get('/api/admin/requests', requireAuth, async (c) => {
+  const hours = Math.min(168, Math.max(1, Number(c.req.query('hours') ?? 24) || 24));
+  const limit = Math.min(200, Math.max(1, Number(c.req.query('limit') ?? 30) || 30));
+  const now = Date.now();
+  const [stats, recent] = await Promise.all([
+    readPathStats(c.env, { windowMs: hours * 3600_000, now }),
+    readRecentRequests(c.env, limit),
+  ]);
+  return c.json({ ok: true, hours, limit, stats, recent });
+});
+
 app.get('/api/admin/stats', requireAuth, async (c) => {
   const [countRow, oldestRow, runs, logKeys, entryRow] = await Promise.all([
     c.env.DB.prepare('SELECT COUNT(*) AS c FROM messages').first<{ c: number }>(),
@@ -2240,6 +2270,19 @@ async function runChannelCheck(env: Env, now: Date): Promise<void> {
   if (result === 'alerted') console.warn('[cron] 聊天通道掉线，已生成提醒');
 }
 
+/** 把一次 cron 的执行记进 request_log（线上没有 wrangler tail）。 */
+function logCron(env: Env, ctx: ExecutionContext, cron: string, startedAt: number, ok = true): void {
+  ctx.waitUntil(
+    recordRequest(env, {
+      requestId: `cron:${startedAt}`,
+      kind: 'cron',
+      path: cron,
+      ms: Date.now() - startedAt,
+      ok,
+    }),
+  );
+}
+
 export default {
   fetch: app.fetch,
   /**
@@ -2251,6 +2294,7 @@ export default {
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext) {
     const now = new Date(controller.scheduledTime); // scheduledTime 是 epoch 毫秒数
     const cron = controller.cron;
+    const startedAt = Date.now();
 
     if (cron === '0 20 * * *') {
       // 每天 04:00 归档前一天；每月 1 日必须等归档完成后再做上月合并，
@@ -2262,8 +2306,10 @@ export default {
             new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', day: '2-digit' }).format(now),
           );
           if (dayOfMonth === 1) await runMonthlyMerge(env, now);
+          await pruneRequestLog(env);
         })(),
       );
+      logCron(env, ctx, cron, startedAt);
       return;
     }
 
@@ -2274,6 +2320,7 @@ export default {
       ctx.waitUntil(runWebProactiveRandom(env, now));
       // 这条 cron 实际覆盖 UTC 8 点 → 北京 16:00 的 context 刷新
       ctx.waitUntil(maybeRefreshContext(env, now));
+      logCron(env, ctx, cron, startedAt);
       return;
     }
 
@@ -2284,9 +2331,11 @@ export default {
       ctx.waitUntil(runWebProactiveSlot(env, now));
       // 这条 cron 覆盖 UTC 0 / 16 点 → 北京 08:00 / 24:00 的 context 刷新
       ctx.waitUntil(maybeRefreshContext(env, now));
+      logCron(env, ctx, cron, startedAt);
       return;
     }
 
     console.warn('[cron] unknown cron expression:', cron);
+    logCron(env, ctx, cron, startedAt, false);
   },
 } satisfies ExportedHandler<Env>;

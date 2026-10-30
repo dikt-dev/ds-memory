@@ -48,6 +48,7 @@ import { packMemoryChunks } from './context-packer';
 import { affectEngineFor, memoryEngineFor } from './engine-flags';
 import { recordEngineMetric } from './engine-metrics';
 import { logTrace } from './trace';
+import { recordRequest } from './request-log';
 
 export interface ChatImage {
   key: string; // R2 对象键（images/日期/时间戳.jpg）
@@ -148,6 +149,26 @@ export async function streamChat(
     budgetChars: contextBudget.totalChars,
     budget: formatBudgetManifest(contextBudget.manifest),
   });
+  // 同一条 /api/chat 还有一条 http 记录（只有总耗时）；这条只记分段，回答「慢在哪一段」。
+  // 只写计数与字节数，不写正文。
+  await recordRequest(env, {
+    requestId: requestId ?? 'none',
+    kind: 'chat',
+    path: '/api/chat#recall',
+    ms: Math.round(recall.ms),
+    channel,
+    ok: !recall.timedOut,
+    detail: JSON.stringify({
+      memoryEngine,
+      promptBytes: byteLength(promptMemory.text),
+      historyRounds: groupTurns(history).length,
+      recalledItems: recalled.split('\n').filter((line) => line.startsWith('- ')).length,
+      hasMemo: Boolean(recentMemo),
+      hasSummary: Boolean(todaySummary),
+      recallTimedOut: recall.timedOut,
+      budgetChars: contextBudget.totalChars,
+    }),
+  }).catch(() => {});
 
   // ★ 活人感：在落库本条前采集「距上次聊天间隔 + 今日轮数」
   const relationVals = parseRelationValues(memory);
