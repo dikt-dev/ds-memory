@@ -11,7 +11,13 @@
  */
 
 import type { Env } from './types';
-import { deleteRuntimeState, getRuntimeState, putRuntimeState } from './runtime-store';
+import {
+  acquireRuntimeLock,
+  deleteRuntimeState,
+  getRuntimeState,
+  putRuntimeState,
+  releaseRuntimeLock,
+} from './runtime-store';
 import { recordEmotionEvents, recordFacetDelta } from './affect-store';
 import {
   applyEnvironmentToEmotion,
@@ -24,6 +30,7 @@ import {
 import {
   applyEventsToVector,
   extractEmotionEvents,
+  isNegativeEvent,
   needsAiEventReview,
   reconcileWithApology,
   reviewEventsWithAI,
@@ -75,12 +82,28 @@ function sanitizeEvents(raw: unknown): EmotionEvent[] {
       type: e.type as EmotionEvent['type'],
       intensity: (e.intensity === 3 ? 3 : e.intensity === 2 ? 2 : 1) as 1 | 2 | 3,
       target: e.target === 'ai' || e.target === 'world' ? e.target : 'user',
-      evidence: typeof e.evidence === 'string' ? e.evidence.slice(0, 20) : '',
+      evidence: typeof e.evidence === 'string' ? e.evidence.slice(0, 80) : '',
       at: e.at,
       resolved: e.resolved === true,
     });
   }
   return out.slice(-MAX_EVENTS);
+}
+
+/**
+ * 事件池裁剪：保留最近 MAX_EVENTS 条，但**未化解的负向事件不参与裁剪**。
+ *
+ * 原来一律 slice(-30)：聊得多的一天就能产生 30+ 事件，旧的未化解事件被挤掉，
+ * 表现为「明明在闹别扭，第二天她就当没发生过」。
+ */
+const MAX_OPEN_NEGATIVES = 5;
+export function trimEvents(events: EmotionEvent[], max = MAX_EVENTS): EmotionEvent[] {
+  const tail = events.slice(-max);
+  const tailSet = new Set(tail);
+  const openNegatives = events
+    .filter((e) => isNegativeEvent(e.type) && e.resolved !== true && !tailSet.has(e))
+    .slice(-MAX_OPEN_NEGATIVES);
+  return [...openNegatives, ...tail].sort((a, b) => a.at - b.at);
 }
 
 function sanitizeFacetDelta(raw: unknown): FacetAccum {
@@ -176,7 +199,39 @@ function addFacetDelta(target: FacetAccum, src: Partial<Record<FacetKey, number>
  * 注意：这里只更新 D1 runtime_state 里的运行时状态，**不写 memory.md**；
  * memory.md 的整数由每日任务统一结算（见 settleEmotionDaily）。
  */
+/**
+ * 情感状态的并发保护。
+ *
+ * 原来 load→改→save 没有锁：两个渠道同时发消息时，后写的会用旧状态覆盖前一个，
+ * 整轮情绪事件凭空消失（App + 网页同时在线、手机重发都会触发）。
+ */
+const EMOTION_LOCK = 'emotion:lock';
+const EMOTION_LOCK_TTL = 10;
+
 export async function processEmotionTurn(input: EmotionTurnInput): Promise<EmotionTurnResult> {
+  // 只有「这一轮可能真的产生事件」时才加锁：普通闲聊不加锁，
+  // 否则每条消息都要额外两次 KV 写（锁 + 解锁），免费额度扛不住。
+  const mayWrite =
+    input.wasIgnored === true ||
+    input.allowAiReview === true ||
+    extractEmotionEvents(input.userText ?? "", input.now).length > 0;
+  if (!mayWrite) return processEmotionTurnUnlocked(input, true);
+  const locked = await acquireRuntimeLock(input.env, EMOTION_LOCK, EMOTION_LOCK_TTL);
+  if (!locked) {
+    // 拿不到锁：照常算，但不写状态。宁可这一轮不记账，也不要覆盖别人的结果。
+    return processEmotionTurnUnlocked(input, false);
+  }
+  try {
+    return await processEmotionTurnUnlocked(input, true);
+  } finally {
+    await releaseRuntimeLock(input.env, EMOTION_LOCK).catch(() => {});
+  }
+}
+
+async function processEmotionTurnUnlocked(
+  input: EmotionTurnInput,
+  canSave: boolean,
+): Promise<EmotionTurnResult> {
   const { now, base, userText, environment, wasIgnored } = input;
   const state = await loadEmotionState(input.env, now);
   const prevVector = state.vector;
@@ -226,14 +281,14 @@ export async function processEmotionTurn(input: EmotionTurnInput): Promise<Emoti
 
   const nextState: EmotionState = {
     vector,
-    events: allEvents.slice(-MAX_EVENTS),
+    events: trimEvents(allEvents),
     facetDelta,
     at: now,
   };
 
   // ④ 脏检查：没有新事件、向量也没变 → 不写 D1
   const changed = newEvents.length > 0 || vectorChanged(prevVector, vector);
-  if (changed) await saveEmotionState(input.env, nextState);
+  if (changed && canSave) await saveEmotionState(input.env, nextState);
 
   const facets = effectiveFacets(base, facetDelta);
   return {
@@ -293,7 +348,7 @@ export async function commitEmotionSettle(env: Env, state: EmotionState): Promis
   const now = Date.now();
   await saveEmotionState(env, {
     vector: decayGrievanceDaily(state.vector),
-    events: state.events.slice(-MAX_EVENTS),
+    events: trimEvents(state.events),
     facetDelta: {},
     at: now,
   });
@@ -303,7 +358,7 @@ export async function commitEmotionSettle(env: Env, state: EmotionState): Promis
  * 每日归档时用 Workers AI 复核当天消息（补词典漏检）。
  *
  * 只对「有歧义」的消息调用：否定 / 反讽 / 正负冲突。
- * 单日最多 8 条，避免把一个月的免费额度烧在某一天。
+ * 单日最多 40 条（原来是 8 条，那是 Workers AI 免费额度时代的限制，长对话会大量漏检）。
  */
 export async function reviewDayEvents(
   env: Env,
@@ -313,14 +368,14 @@ export async function reviewDayEvents(
   const out: EmotionEvent[] = [];
   let calls = 0;
   for (const text of texts) {
-    if (calls >= 8) break;
+    if (calls >= 40) break;
     const t = (text ?? '').trim();
     if (t.length < 4) continue;
     const rule = extractEmotionEvents(t, at);
     if (!needsAiEventReview(t, rule)) continue;
     calls += 1;
     const ai = await reviewEventsWithAI(env, t, at);
-    for (const e of ai) out.push({ ...e, evidence: t.slice(0, 20) });
+    for (const e of ai) out.push({ ...e, evidence: t.slice(0, 80) });
   }
   return out;
 }

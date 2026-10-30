@@ -138,8 +138,14 @@ export function applyEmotionDelta(
   return next;
 }
 
-/** 芥蒂的每日衰减：默认只退 20%（且低于 8 直接归零）。道歉另有一次性大幅抵扣。 */
-export function decayGrievanceDaily(vector: EmotionVector, rate = 0.2): EmotionVector {
+/**
+ * 芥蒂的每日衰减：默认只退 4%（且低于 8 直接归零）。道歉另有一次性大幅抵扣。
+ *
+ * 原来是 20%/天——5 天就退到 33%，「闹别扭 → 哄 → 和好」这条弧线实际不存在：
+ * 不哄她也会自己好。改成 4% 后一周还剩 75%、一个月约 30%，
+ * 「要人哄才消」才成立，同时不至于记仇一辈子。
+ */
+export function decayGrievanceDaily(vector: EmotionVector, rate = 0.04): EmotionVector {
   const next = { ...vector };
   const v = next.grievance * (1 - Math.min(Math.max(rate, 0), 1));
   next.grievance = Math.abs(v) < 8 ? 0 : clampEmotion(v);

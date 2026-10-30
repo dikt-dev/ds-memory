@@ -57,12 +57,13 @@ describe('applyEmotionDelta —— 单轮限幅', () => {
 });
 
 describe('decayGrievanceDaily', () => {
-  it('每天只退 20%', () => {
-    expect(decayGrievanceDaily({ ...emptyEmotionVector(), grievance: 80 }).grievance).toBe(64);
+  it('每天只退 4%（不哄也会慢慢淡，但不至于几天就忘）', () => {
+    expect(decayGrievanceDaily({ ...emptyEmotionVector(), grievance: 80 }).grievance).toBe(77);
   });
 
-  it('低于 8 直接归零（小情绪不跨天）', () => {
-    expect(decayGrievanceDaily({ ...emptyEmotionVector(), grievance: 9 }).grievance).toBe(0);
+  it('退完低于 8 就归零（小情绪不跨天）', () => {
+    expect(decayGrievanceDaily({ ...emptyEmotionVector(), grievance: 8 }).grievance).toBe(0);
+    expect(decayGrievanceDaily({ ...emptyEmotionVector(), grievance: 9 }).grievance).toBe(9);
   });
 });
 

@@ -8,6 +8,7 @@ import {
   processEmotionTurn,
   saveEmotionState,
   settleEmotionDaily,
+  trimEvents,
 } from './emotion-context';
 import { FACET_DEFAULTS, type RelationFacets } from './relation-facets';
 
@@ -155,7 +156,7 @@ describe('effectiveFacets / settleEmotionDaily', () => {
     expect(settled.changed).toBe(false);
   });
 
-  it('commitEmotionSettle 清空增量并让芥蒂退 20%', async () => {
+  it('commitEmotionSettle 清空增量并让芥蒂只退 4%', async () => {
     const { env } = fakeEnv();
     await saveEmotionState(env, {
       vector: { ...emptyEmotionState(T0).vector, grievance: 50 },
@@ -167,6 +168,31 @@ describe('effectiveFacets / settleEmotionDaily', () => {
     await commitEmotionSettle(env, state);
     const after = await loadEmotionState(env, T0);
     expect(after.facetDelta).toEqual({});
-    expect(after.vector.grievance).toBe(40);
+    expect(after.vector.grievance).toBe(48);
+  });
+});
+
+describe('事件池裁剪（E-05）', () => {
+  const ev = (type: string, at: number, resolved = false) => ({
+    type: type as never,
+    intensity: 1 as const,
+    target: 'ai' as const,
+    evidence: '',
+    at,
+    resolved,
+  });
+
+  it('未化解的负向事件不会被挤出池子', () => {
+    const oldGrievance = ev('insult', 1);
+    const filler = Array.from({ length: 40 }, (_, i) => ev('praise', 100 + i));
+    const trimmed = trimEvents([oldGrievance, ...filler]);
+    expect(trimmed.some((e) => e.at === 1)).toBe(true);
+  });
+
+  it('已化解的负向事件照常参与裁剪', () => {
+    const resolved = ev('insult', 1, true);
+    const filler = Array.from({ length: 40 }, (_, i) => ev('praise', 100 + i));
+    const trimmed = trimEvents([resolved, ...filler]);
+    expect(trimmed.some((e) => e.at === 1)).toBe(false);
   });
 });
