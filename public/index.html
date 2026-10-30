@@ -201,10 +201,15 @@
     border-bottom-left-radius: 6px;
   }
   .msg.error .bubble { background: var(--error-bg); border: 1px solid var(--error-border); color: var(--error-text); }
+  /* 文件卡片必须独占一行：inline-block 会跟正文挤在同一行，
+     长文件名还会溢出气泡、盖住最后一行文字。 */
   .msg-file {
-    margin-top: .45rem; font-size: .82rem; color: var(--text-soft);
+    display: flex; align-items: center; gap: .35rem;
+    width: fit-content; max-width: 100%;
+    margin-top: .5rem; font-size: .82rem; color: var(--text-soft);
     background: var(--code-bg); border: 1px solid var(--code-border);
-    border-radius: 8px; padding: .3rem .6rem; display: inline-block;
+    border-radius: 8px; padding: .3rem .6rem;
+    overflow-wrap: anywhere; word-break: break-word;
   }
   /* ★ 活人感：正在输入的三点跳动动画 */
   .typing { color: var(--text-muted, #888); font-size: .9rem; }
@@ -517,6 +522,18 @@ function escapeHtml(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
           .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+// 模型偶尔模仿历史时间标签（[10-30 09:47] / [09:47]）。服务端已清洗是主防线，
+// 这里兜第二层：旧消息、缓存、非流式回放都可能带着它，界面上不该显示。
+const LEAD_TIME_RE = /^\s*[\[【]\s*(?:(?:\d{2,4}[-/])?\d{1,2}[-/]\d{1,2}\s*)?\d{1,2}:\d{2}(?::\d{2})?\s*[\]】]\s*/;
+function stripLeadTime(text) {
+  let s = String(text || '');
+  for (let i = 0; i < 3; i++) {
+    const next = s.replace(LEAD_TIME_RE, '');
+    if (next === s) break;
+    s = next;
+  }
+  return s;
+}
 function inline(s) {
   return s
     .replace(/`([^`]+)`/g, '<code>$1</code>')
@@ -626,7 +643,7 @@ function voiceCardHtml(text, index, audioKey) {
     + '</div>';
 }
 function renderAssistantContent(raw, audioKeys = []) {
-  const src = String(raw || '');
+  const src = stripLeadTime(String(raw || ''));
   const voices = [];
   let html = '';
   let last = 0;
@@ -846,6 +863,7 @@ function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
 
 /* 用户消息渲染：处理 [图片:images/…] 标记与换行；无路径的 [图片] 显示占位提示 */
 function renderUserContent(content) {
+  content = stripLeadTime(content);
   // 落库内容里包含文件原文（给 AI 读），历史渲染只显示文件卡片；
   // 否则刷新后整个文件正文会铺满聊天气泡。
   const fileCards = [];
