@@ -109,6 +109,75 @@ export async function loadRecentRounds(
   return takeLastRounds(merged, n);
 }
 
+/** 会话边界：距上一条消息超过 6 小时就算新会话。 */
+export const SESSION_GAP_MS = 6 * 60 * 60 * 1000;
+/** 一次最多往回取多少轮（只为找会话起点，不直接注入）。 */
+export const SESSION_FETCH_ROUNDS = 200;
+/** 单会话注入硬上限；超了才启用提要（缓存会断，但属极端情况）。 */
+export const SESSION_MAX_ROUNDS = 120;
+/** 超限时保留的尾部轮数。 */
+export const SESSION_KEEP_ROUNDS = 40;
+
+export interface SessionHistory {
+  /** 注入用的历史消息（时间升序）。 */
+  rows: MessageRow[];
+  /** 被压掉那段的提要；没有超限时为空串。 */
+  brief: string;
+  /** 本会话总轮数。 */
+  rounds: number;
+}
+
+/** 从最近一次长间隔之后切出当前会话；没有长间隔就返回全部。 */
+export function sliceCurrentSession(rows: MessageRow[]): MessageRow[] {
+  let start = 0;
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i].created_ms - rows[i - 1].created_ms > SESSION_GAP_MS) start = i;
+  }
+  return rows.slice(start);
+}
+
+function shortClock(createdAt: string): string {
+  const m = /(\d{2}:\d{2})/.exec(createdAt || "");
+  return m ? m[1] : "";
+}
+
+/**
+ * 把被挤出去的那段压成提要（确定性函数：不调模型、不落库）。
+ * 均匀抽样到最多 maxLines 行，越长抽样越稀，字数可控。
+ */
+export function buildSessionBrief(rows: MessageRow[], maxLines = 12, maxChars = 700): string {
+  const turns = groupTurns(rows);
+  if (turns.length === 0) return "";
+  const step = Math.max(1, Math.ceil(turns.length / maxLines));
+  const picked = turns.filter((_, i) => i % step === 0).slice(0, maxLines);
+  const lines = picked.map((turn) => {
+    const user = turn.find((m) => m.role === "user");
+    const bot = turn.find((m) => m.role !== "user");
+    const u = (user?.content ?? "").replace(/\s+/g, " ").slice(0, 28);
+    const b = (bot?.content ?? "").replace(/\s+/g, " ").slice(0, 20);
+    const clock = shortClock((user?.created_at ?? bot?.created_at) || "");
+    return "- " + clock + " " + u + (b ? " → " + b : "");
+  });
+  const text = "## 本会话更早的（提要，原文已不在上下文）\n" + lines.join("\n");
+  return text.length > maxChars ? text.slice(0, maxChars) : text;
+}
+
+/**
+ * 会话级短期记忆：同一段会话里只追加、不滑窗——这是前缀缓存能命中的前提。
+ * 只有超过 SESSION_MAX_ROUNDS 才退化成「提要 + 尾部原文」。
+ */
+export async function loadSessionHistory(env: Env, now: Date = new Date()): Promise<SessionHistory> {
+  const fetched = await recentRoundMessages(env, SESSION_FETCH_ROUNDS);
+  const sessionRows = sliceCurrentSession(fetched);
+  const turns = groupTurns(sessionRows);
+  if (turns.length <= SESSION_MAX_ROUNDS) {
+    return { rows: sessionRows, brief: "", rounds: turns.length };
+  }
+  const dropped = turns.slice(0, turns.length - SESSION_KEEP_ROUNDS).flat();
+  const kept = turns.slice(-SESSION_KEEP_ROUNDS).flat();
+  return { rows: kept, brief: buildSessionBrief(dropped), rounds: turns.length };
+}
+
 /**
  * 兼容旧调用：按“消息条数”估算轮数。
  * 新代码请直接用 loadRecentRounds。

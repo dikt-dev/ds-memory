@@ -7,7 +7,12 @@ import {
   withHistoryTimestamp,
   type MessageRow,
 } from './db';
-import { conversationGapNote, resolveRecentRounds } from './recent-context';
+import {
+  buildSessionBrief,
+  conversationGapNote,
+  resolveRecentRounds,
+  sliceCurrentSession,
+} from './recent-context';
 
 const mk = (
   id: number,
@@ -124,5 +129,61 @@ describe('conversationGapNote', () => {
 
   it('没有历史时明确标成第一次对话', () => {
     expect(conversationGapNote([], new Date())).toContain('第一次对话');
+  });
+});
+
+describe('会话级短期记忆（A+B+C）', () => {
+  const row = (id: number, turn: number, role: 'user' | 'assistant', text: string, at: string) =>
+    mk(id, turn, role, text, at);
+
+  it('超过 6 小时的长间隔切出新会话', () => {
+    const rows = [
+      row(1, 1, 'user', '早上那句', '2026-10-30T08:00:00+08:00'),
+      row(2, 2, 'user', '下午第一句', '2026-10-30T15:00:00+08:00'),
+      row(3, 3, 'user', '下午第二句', '2026-10-30T15:05:00+08:00'),
+    ];
+    const session = sliceCurrentSession(rows);
+    expect(session.map((m) => m.content)).toEqual(['下午第一句', '下午第二句']);
+  });
+
+  it('间隔不足 6 小时不切，整段留着', () => {
+    const rows = [
+      row(1, 1, 'user', 'a', '2026-10-30T08:00:00+08:00'),
+      row(2, 2, 'user', 'b', '2026-10-30T13:59:00+08:00'),
+    ];
+    expect(sliceCurrentSession(rows)).toHaveLength(2);
+  });
+
+  it('只追加不滑窗：下一轮的历史以上一轮为前缀（缓存命中的前提）', () => {
+    const base = [
+      row(1, 1, 'user', 'a', '2026-10-30T08:00:00+08:00'),
+      row(2, 1, 'assistant', 'a2', '2026-10-30T08:01:00+08:00'),
+    ];
+    const next = [...base, row(3, 3, 'user', 'b', '2026-10-30T08:05:00+08:00')];
+    const prevSession = sliceCurrentSession(base);
+    const nextSession = sliceCurrentSession(next);
+    expect(nextSession.slice(0, prevSession.length).map((m) => m.id)).toEqual(prevSession.map((m) => m.id));
+  });
+
+  it('提要是确定性函数：同样的行永远得到同样的文本', () => {
+    const rows = [
+      row(1, 1, 'user', '想换工作', '2026-10-30T08:00:00+08:00'),
+      row(2, 1, 'assistant', '那就先看看岗位', '2026-10-30T08:01:00+08:00'),
+    ];
+    expect(buildSessionBrief(rows)).toBe(buildSessionBrief(rows));
+    expect(buildSessionBrief(rows)).toContain('提要');
+  });
+
+  it('提要长度受控，80 轮也不会爆', () => {
+    const rows = [];
+    for (let i = 1; i <= 160; i++) {
+      rows.push(row(i, i, i % 2 ? 'user' : 'assistant', '第' + i + '条消息内容', '2026-10-30T08:00:00+08:00'));
+    }
+    const brief = buildSessionBrief(rows);
+    expect(brief.length).toBeLessThanOrEqual(700);
+  });
+
+  it('空输入返回空串', () => {
+    expect(buildSessionBrief([])).toBe('');
   });
 });

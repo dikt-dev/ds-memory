@@ -21,7 +21,7 @@ import {
   HISTORY_FILE_MAX_CHARS,
   HISTORY_MESSAGE_MAX_CHARS,
 } from './db';
-import { conversationGapNote, loadRecentRounds, resolveRecentRounds } from './recent-context';
+import { conversationGapNote, loadSessionHistory } from './recent-context';
 import { calcCost, loadPricing } from './pricing';
 import { recordChatUsage } from './usage-stats';
 import { streamDeepSeek, type DeepSeekMessage } from './deepseek';
@@ -65,16 +65,18 @@ export async function streamChat(
   // 1) 组装上下文（先取历史，再落 user 消息，避免历史里重复出现本条）
   const dateKey = dateKeyInBeijing(now);
   // 这些读取互不依赖：并行发起，减少手机 QQ 场景的首字延迟。
-  const [memory, dayCtxFile, fetchedWeather, history, recentMemoRaw, summaryRaw, personaState] =
+  const [memory, dayCtxFile, fetchedWeather, session, recentMemoRaw, summaryRaw, personaState] =
     await Promise.all([
       getMemory(env),
       getOrCreateDayContext(env, dateKey),
       fetchWeather(env),
-      loadRecentRounds(env, resolveRecentRounds(content), now),
+      loadSessionHistory(env, now),
       getRecentMemo(env),
       getTodaySummary(env, dateKey),
       loadPersonaState(env),
     ]);
+  // 短期记忆 = 本次会话全部（只追加不滑窗，缓存才命得中）；超出上限才有提要
+  const history = session.rows;
   // 小记忆全量带上，大记忆只带核心+稳定画像，其余靠召回
   const promptMemory = extractPromptMemory(memory);
   // 拉取失败时回退到当天缓存，避免提示词里直接没有天气、让模型去翻旧记忆
@@ -275,7 +277,9 @@ export async function streamChat(
       role: 'system',
       content: promptSplit.stable + silentEndRule(channel),
     },
-    // 最近 10 轮按时间从旧到新排列；每条带发送时间，模型才能判断上一句/上上句。
+    // 会话太长被压掉的那段：一次提要，之后不再变（变了会打断前缀缓存）
+    ...(session.brief ? [{ role: 'system' as const, content: session.brief }] : []),
+    // 会话内全部历史按时间从旧到新排列；每条带发送时间，模型才能判断上一句/上上句。
     // 单条只做超长保护（默认 2400 字，带文件 4200 字），不做过去那种 400 字过度压缩。
     ...history.map((m) => ({
       role: m.role,
