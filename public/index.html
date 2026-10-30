@@ -212,6 +212,9 @@
     border-radius: 8px; padding: .3rem .6rem;
     overflow-wrap: anywhere; word-break: break-word;
   }
+  a.msg-file { text-decoration: none; }
+  a.msg-file:hover { border-color: var(--border-strong); }
+  .msg-file .meta-sub { color: var(--muted); font-size: .74rem; }
   /* ★ 活人感：正在输入的三点跳动动画 */
   .typing { color: var(--text-muted, #888); font-size: .9rem; }
   .typing .dot { display: inline-block; animation: typing-blink 1.4s infinite; }
@@ -874,6 +877,21 @@ function renderUserContent(content) {
     fileCards.push(`<div class="msg-file">📄 ${escapeHtml(name)}</div>`);
     return token;
   };
+  // 链接资料块（B站/网页）：正文是给 AI 读的元数据，界面上只留一张小卡片，
+  // 否则整段 Markdown 会铺满气泡（App 早就这么做了，网页之前是原样展开）。
+  const metaCard = (body, kind) => {
+    const pick = (key) => (body.match(new RegExp('^\\s*[-*]\\s*' + key + '\\s*[:：]\\s*(.+)$', 'm')) || [])[1];
+    const title = (pick('标题') || '').trim();
+    const sub = [pick('UP主') || pick('来源'), pick('时长')].map((s) => (s || '').trim()).filter(Boolean).join(' · ');
+    const link = (pick('链接') || '').trim();
+    const text = (kind === 'video' ? '🎬 ' : '🔗 ') + (title || (kind === 'video' ? 'B站视频' : '网页'));
+    const href = /^https?:\/\//.test(link) ? ' href="' + escapeHtml(link) + '" target="_blank" rel="noopener noreferrer"' : '';
+    const token = `\u0000DSFILE${fileCards.length}\u0000`;
+    fileCards.push('<a class="msg-file"' + href + '>' + escapeHtml(text) + (sub ? '<span class="meta-sub">' + escapeHtml(sub) + '</span>' : '') + '</a>');
+    return token;
+  };
+  content = content.replace(/\[BILI_META\]([\s\S]*?)\[\/BILI_META\]/gi, (_a, body) => metaCard(body, 'video'));
+  content = content.replace(/\[WEB_META\]([\s\S]*?)\[\/WEB_META\]/gi, (_a, body) => metaCard(body, 'web'));
   // App 端格式（2026-10-30 起带结束标记）：[文件:name|size|mime] + 【文件内容】 + 正文 + 【/文件】
   content = content.replace(/\[文件:([^|\]]+)\|[^\]]*]\s*\n?【文件内容】\n[\s\S]*?【\/文件】/g, (_a, name) => pushCard(name));
   // App 端旧消息没有结束标记：文件块总在消息末尾，吃到结尾才对。
