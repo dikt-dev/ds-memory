@@ -52,6 +52,7 @@ import { FACET_KEYS } from './relation-facets';
 import { applyRelationDecay } from './memory-maintenance';
 import { getDaySummaryRaw, summaryKey } from './summary';
 import { checkStorageCapacity, cleanupStaleObjects, deleteObject, getObject, listKeys, putObject } from './storage';
+import { pruneSnapshots, writeDailySnapshot } from './memory-snapshot';
 import { messagesByDate, assistantReplyTo, sanitizeMessagePlaceholders, type MessageRow } from './db';
 import { backfillFeedback } from './feedback';
 import { cleanupQueue } from './queue';
@@ -514,6 +515,15 @@ export async function archiveOneDay(
       console.error('[daily] memory demote failed:', e);
     }
 
+    // 6.5) 写前快照：保留「当天开始时的记忆」，一天一份、重跑不覆盖；失败不阻断归档
+    const snap = await writeDailySnapshot(env, target, memory);
+    try {
+      const pruned = await pruneSnapshots(env);
+      if (pruned.length > 0) console.log(`[daily] 快照清理：删除 ${pruned.length} 份超期快照`);
+    } catch (e) {
+      console.error('[daily] 快照清理失败（不影响归档）:', e);
+    }
+
     // 7) 写回 R2 + 强制刷新 KV 缓存（24h TTL）
     const saved = await putMemory(env, memory);
     if (!saved) {
@@ -595,7 +605,8 @@ export async function archiveOneDay(
           ? '；提炼用 Workers AI 兜底'
           : '';
     const errorInfo = distillError ? `；提炼错误=${distillError.slice(0, 160)}` : '';
-    const detail = `归档 ${rows.length} 条消息；记忆 ${before}→${after} 字节；提炼=${distilled}${costInfo}；去重=${compactedRemoved}；分层=${archivedCount}；裁剪=${trimmed}${errorInfo}`;
+    const snapInfo = snap.written ? '；快照=写入' : snap.skipped === 'exists' ? '；快照=已存在' : snap.skipped === 'disabled' ? '' : '；快照=失败';
+    const detail = `归档 ${rows.length} 条消息；记忆 ${before}→${after} 字节；提炼=${distilled}${costInfo}；去重=${compactedRemoved}；分层=${archivedCount}；裁剪=${trimmed}${snapInfo}${errorInfo}`;
     // 提炼失败时不把任务标 done：runDailyArchive 下次会把它当 failed 补跑
     await finishJob(env, 'daily_archive', target, detail, !distillError);
     return {

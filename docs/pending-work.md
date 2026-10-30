@@ -329,3 +329,11 @@ GET /api/admin/memory/links?type=fact&id=fact_xxx
   不是小改，单独排期。
 - **提炼 token 分项已开始记录**：`cron_runs.detail` 里新增
   `token 命中X/未命中Y/输出Z`，用来解释提炼费用的日间波动。
+## 记忆快照（docs/memory-rollback-plan.md）
+
+- 已完成 2026-10-30：`src/memory-snapshot.ts` —— 写前快照、一天只写一次、失败不阻断归档、
+  45 天清理、`MEMORY_SNAPSHOT=off` 开关；已接进 `runDailyArchive`，9 个用例覆盖。未部署（冻结期）。
+- 11-02 ~ 11-04：`POST /api/admin/memory/restore`（备份当前 → putMemory → reindex +
+  replaceMemoryContext）与 `GET /api/admin/memory/snapshots`；KV 写锁 `memory:lock:write`
+  防止与每日归档并发；`confirm: true` 缺省拒绝。
+- Phase 6：`GET /api/admin/memory/diff?date=`，看某天记忆改了什么（比回滚更常用于日常巡检）。
