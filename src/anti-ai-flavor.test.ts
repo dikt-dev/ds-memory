@@ -144,6 +144,24 @@ describe('createStreamScrubber —— 流式清洗', () => {
     expect(out).toContain('你好呀');
   });
 
+  it('首个 delta 是空串时，后面的时间标签也要清掉（线上真实情况）', () => {
+    const scrubber = createStreamScrubber(8);
+    const out = [
+      scrubber.push(''),
+      scrubber.push('[10-30 21:36] （先是一怔，然后慢慢抬起眼）哦——原来是这样啊。'),
+    ].join('');
+    const tail = scrubber.flush();
+    expect(out + tail).not.toContain('10-30');
+    expect(out + tail).toContain('（先是一怔');
+  });
+
+  it('全角方括号的时间标签同样清掉', () => {
+    const scrubber = createStreamScrubber(8);
+    const out = scrubber.push('［10-30 21:36］今天好累啊') + scrubber.flush();
+    expect(out).not.toContain('21:36');
+    expect(out).toContain('今天好累啊');
+  });
+
   it('中文标点后面的半角空格会被吃掉', () => {
     expect(scrubAiFlavor('摆着看的。 不过也挺好').text).toBe('摆着看的。不过也挺好');
     expect(scrubAiFlavor('嗯， 好吧').text).toBe('嗯，好吧');

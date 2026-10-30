@@ -113,7 +113,7 @@ function applyRules(raw: string): { text: string; cleaned: boolean } {
  */
 export function stripLeadingTimeLabels(raw: string): string {
   const re =
-    /^\s*[\[【]\s*(?:(?:\d{2,4}[-/])?\d{1,2}[-/]\d{1,2}\s*)?\d{1,2}:\d{2}(?::\d{2})?\s*[\]】]\s*/;
+    /^\s*[\[【［]\s*(?:(?:\d{2,4}[-/])?\d{1,2}[-/]\d{1,2}\s*)?\d{1,2}:\d{2}(?::\d{2})?\s*[\]】］]\s*/;
   let text = raw;
   for (let i = 0; i < 3; i++) {
     const next = text.replace(re, '');
@@ -160,20 +160,22 @@ export interface StreamScrubber {
  */
 export function createStreamScrubber(hold = 18): StreamScrubber {
   let buf = '';
-  let started = false;
+  // 还没真正吐出过内容：这段时间里所有「开头时间标签」都要继续剥。
+  // 不能只在第一个 delta 剥一次——模型常常先发一个空 delta，
+  // 之后再发 `[10-30 21:36]（先是一怔…`，只剥一次就会漏给用户看。
+  let emitted = false;
   return {
     push(delta: string): string {
-      if (!started) {
-        // 首个 delta 可能只包含一半时间标签。先扣住前缀，等完整标签再清洗，
-        // 否则切点落在 `[10-28` 中间时，后半截会永久残留。
-        buf += delta;
+      buf += delta;
+      if (!emitted) {
         buf = stripLeadingTimeLabels(buf);
-        const openBracket = buf.startsWith('[') || buf.startsWith('【');
-        const closed = buf.includes(']') || buf.includes('】');
+        const head = buf.trimStart();
+        if (!head) return '';
+        const openBracket = head.startsWith('[') || head.startsWith('【') || head.startsWith('［');
+        const closed = head.includes(']') || head.includes('】') || head.includes('］');
+        // 只扣住「看起来像半截标签」的前缀；超过 40 字就按正文处理
         if (openBracket && !closed && buf.length < 40) return '';
-        started = true;
-      } else {
-        buf += delta;
+        emitted = true;
       }
       if (buf.length <= hold) return '';
       const cut = buf.length - hold;
@@ -182,7 +184,7 @@ export function createStreamScrubber(hold = 18): StreamScrubber {
       return out;
     },
     flush(): string {
-      if (!started) buf = stripLeadingTimeLabels(buf);
+      if (!emitted) buf = stripLeadingTimeLabels(buf);
       const out = applyRules(buf).text;
       buf = '';
       return out;

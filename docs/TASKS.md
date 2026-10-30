@@ -183,6 +183,7 @@
 | D-11 | 发布手册扩到 15 批 | 一次性上 15 批必须有执行顺序 | 10-30 | `22f58df` 等 |
 | D-12 | OpenCode Go 评估 | ToS 面向编程 Agent，不接 | 10-30 | 评估记录 |
 | D-13 | personaDrift 是否需要挪段 | 周级变化，不破坏缓存 | 10-30 | 无需改动 |
+| D-22 | 流式时间标签漏出（E-17）：首帧为空时剥不掉 | 模型先发一个空 delta，`started` 被提前置 true，之后 `[10-30 21:36]` 原样透传给网页（D1 里干净，App 走落库文本所以正常）。改成「吐出第一段正文之前一直剥」+ 支持全角［］+ 网页 repaint 兜底 | 10-30 | 待部署 |
 | D-21 | 部署记录（M-11b）：`scripts/record-deploy.mjs` 往 `public/deploys.json` 追加，生成脚本合并成「上线」条目 | 页面能把「代码改了」和「什么时候上线」分开 | 10-30 | 待提交 |
 | D-20 | 修改记录页（M-11）：`/changes` + git 自动生成 | `scripts/gen-changelog.mjs` 把 230 条提交解析成「类型/模块/改了什么/为什么」，`public/changes.html` 支持搜索与类型筛选，聊天页 header 加「📋 记录」入口；部署前跑一次生成 | 10-30 | 待提交 |
 | D-19 | 铭记 K-1~K-3（M-10）：表 + 渲染 + 注入 + 规则 + AI 候选 + 4 个 admin 接口 | `memory_keepsakes`（tone/pinned/status/title_key）、`src/keepsakes.ts`、稳定段 `## 铭记`、KV `keepsakes:block` 缓存、每日归档 try/catch 接入、5 条规则、v4-pro 候选默认 pending；22 条测试 | 10-30 | 待提交 |

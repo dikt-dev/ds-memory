@@ -1488,7 +1488,8 @@ async function send() {
     if (frame) return;
     frame = requestAnimationFrame(() => {
       frame = 0;
-      bubble.innerHTML = renderMarkdown(text) || (firstToken ? '' : '<span class="typing">正在输入<span class="dot">…</span></span>');
+      // 服务端已清洗是主防线；这里再兜一层，防止流式首帧被切开时漏出来
+      bubble.innerHTML = renderMarkdown(stripLeadTime(text)) || (firstToken ? '' : '<span class="typing">正在输入<span class="dot">…</span></span>');
       bubble.dataset.raw = text;
       refreshVoiceButton(bubble);
       scrollToBottom();
