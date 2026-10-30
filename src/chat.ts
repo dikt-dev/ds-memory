@@ -3,6 +3,7 @@
  * 落库顺序：先读历史（不含本条）→ 落 user 消息 → 流结束后落 assistant 回复并计费。
  * 图片：已压缩存入 R2（images/日期/时间戳.jpg），发给 DeepSeek 时从 R2 读回；D1 只记录 R2 路径。
  */
+import { resolveRecall } from './memory-engine';
 import type { Env } from './types';
 import { buildSystemPrompt, type MessageChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, STYLE_REMINDER } from './prompt';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
@@ -99,79 +100,19 @@ export async function streamChat(
       .slice(-3)
       .map((m) => m.content),
   ].join(' ');
-  let recalledRaw = await recallMemoryForChat(
-    env,
-    recallQuery,
-    undefined,
-    history.slice(-8).map((m) => m.content).join(' '),
-    // 全量记忆已经带上所有 memory 条目，召回只补档案层的旧事
-    { skipMemorySource: promptMemory.mode === 'full' },
-  );
-
-  // Phase 2：Memory Context 影子/新引擎。默认 legacy，不改变线上回复。
   const memoryEngine = memoryEngineFor(env, channel);
-  if (memoryEngine === 'shadow' || memoryEngine === 'next') {
-    if (!shouldRecallMemory(recallQuery)) {
-      logTrace('memory.engine.skip', {
-        requestId: requestId ?? 'none',
-        engine: memoryEngine,
-        reason: 'low_signal_query',
-      });
-    } else {
-    const oldBytes = byteLength(recalledRaw);
-    const startedAt = performance.now();
-    try {
-      const chunks = await loadMemoryChunks(env);
-      const focus = history.slice(-8).map((m) => m.content).join(' ');
-      const keywordPicked = rankMemoryChunks(recallQuery, chunks, 6, focus);
-      // 关键词已经够强时不再付 query embedding 延迟；弱召回才走向量。
-      const hasVectors = chunks.some((chunk) => Boolean(chunk.vec));
-      const queryVec =
-        hasVectors && keywordPicked.length < 3
-          ? ((await embedTexts(env, [recallQuery]))[0] ?? null)
-          : null;
-      const picked =
-        queryVec !== null
-          ? rankMemoryChunks(recallQuery, chunks, 6, focus, { queryVec })
-          : keywordPicked;
-      const expanded = await expandLinkedChunks(env, picked, 2);
-      const packed = packMemoryChunks(expanded);
-      const nextRaw = formatMemoryChunks(packed.chunks);
-      const shadowMs = Math.round(performance.now() - startedAt);
-      const oldItems = recalledRaw.split('\n').filter((line) => line.startsWith('- ')).length;
-      logTrace('memory.engine', {
-        requestId: requestId ?? 'none',
-        engine: memoryEngine,
-        oldItems,
-        nextItems: packed.chunks.length,
-        oldBytes,
-        nextBytes: byteLength(nextRaw),
-        packedDropped: packed.dropped,
-        linkedItems: expanded.length - picked.length,
-        hasVector: Boolean(queryVec),
-        shadowMs,
-      });
-      await recordEngineMetric(env, {
-        channel,
-        kind: 'memory',
-        mode: memoryEngine,
-        oldItems,
-        newItems: packed.chunks.length,
-        oldBytes,
-        newBytes: byteLength(nextRaw),
-        ms: shadowMs,
-        now: now.getTime(),
-      });
-      if (memoryEngine === 'next' && nextRaw) recalledRaw = nextRaw;
-    } catch (e) {
-      logTrace('memory.engine.error', {
-        requestId: requestId ?? 'none',
-        engine: memoryEngine,
-        message: e instanceof Error ? e.message : String(e),
-      });
-    }
-    }
-  }
+  // 门控 / deadline / shadow-next / 输出封顶都在 resolveRecall 里，三个渠道共用一份
+  const recall = await resolveRecall(env, {
+    query: recallQuery,
+    focus: history.slice(-8).map((m) => m.content).join(' '),
+    mode: memoryEngine,
+    channel,
+    requestId,
+    // 全量记忆已经带上所有 memory 条目，召回只补档案层的旧事
+    skipMemorySource: promptMemory.mode === 'full',
+    nowMs: now.getTime(),
+  });
+  const recalledRaw = recall.text;
 
   const recalled = stripDuplicateRecall(
     recalledRaw,

@@ -4,6 +4,7 @@
  * 注入：长期记忆 + 日期/节假日/天气；保留调用方自带的人格/系统消息。
  * 落库：只记录增量（最后一条 user 消息 + 本次回复），保证每日归档/提炼覆盖 AstrBot 对话。
  */
+import { resolveRecall } from './memory-engine';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
@@ -556,73 +557,17 @@ openaiApp.post('/chat/completions', async (c) => {
     lastUserCleaned,
     ...historyMessages.map((m) => (typeof m.content === 'string' ? m.content : contentToText(m.content))),
   ].join(' ');
-  let recalledRaw = await recallMemoryForChat(c.env, recallQuery, undefined, focus, {
-    skipMemorySource: promptMemory.mode === 'full',
-  });
-
-  // Phase 2：Memory Context 影子/新引擎。默认 legacy，不改变线上回复。
   const memoryEngine = memoryEngineFor(c.env, channel);
-  if (memoryEngine === 'shadow' || memoryEngine === 'next') {
-    if (!shouldRecallMemory(recallQuery)) {
-      logTrace('memory.engine.skip', {
-        requestId,
-        engine: memoryEngine,
-        reason: 'low_signal_query',
-      });
-    } else {
-    const oldBytes = byteLength(recalledRaw);
-    const startedAt = performance.now();
-    try {
-      const chunks = await loadMemoryChunks(c.env);
-      const keywordPicked = rankMemoryChunks(recallQuery, chunks, 6, focus);
-      // 关键词已经够强时不再付 query embedding 延迟；弱召回才走向量。
-      const hasVectors = chunks.some((chunk) => Boolean(chunk.vec));
-      const queryVec =
-        hasVectors && keywordPicked.length < 3
-          ? ((await embedTexts(c.env, [recallQuery]))[0] ?? null)
-          : null;
-      const picked =
-        queryVec !== null
-          ? rankMemoryChunks(recallQuery, chunks, 6, focus, { queryVec })
-          : keywordPicked;
-      const expanded = await expandLinkedChunks(c.env, picked, 2);
-      const packed = packMemoryChunks(expanded);
-      const nextRaw = formatMemoryChunks(packed.chunks);
-      const shadowMs = Math.round(performance.now() - startedAt);
-      const oldItems = recalledRaw.split('\n').filter((line) => line.startsWith('- ')).length;
-      logTrace('memory.engine', {
-        requestId,
-        engine: memoryEngine,
-        oldItems,
-        nextItems: packed.chunks.length,
-        oldBytes,
-        nextBytes: byteLength(nextRaw),
-        packedDropped: packed.dropped,
-        linkedItems: expanded.length - picked.length,
-        hasVector: Boolean(queryVec),
-        shadowMs,
-      });
-      await recordEngineMetric(c.env, {
-        channel,
-        kind: 'memory',
-        mode: memoryEngine,
-        oldItems,
-        newItems: packed.chunks.length,
-        oldBytes,
-        newBytes: byteLength(nextRaw),
-        ms: shadowMs,
-        now: now.getTime(),
-      });
-      if (memoryEngine === 'next' && nextRaw) recalledRaw = nextRaw;
-    } catch (e) {
-      logTrace('memory.engine.error', {
-        requestId,
-        engine: memoryEngine,
-        message: e instanceof Error ? e.message : String(e),
-      });
-    }
-    }
-  }
+  const recall = await resolveRecall(c.env, {
+    query: recallQuery,
+    focus,
+    mode: memoryEngine,
+    channel,
+    requestId,
+    skipMemorySource: promptMemory.mode === 'full',
+    nowMs: now.getTime(),
+  });
+  const recalledRaw = recall.text;
 
   const recalled = stripDuplicateRecall(
     recalledRaw,

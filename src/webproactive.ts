@@ -12,6 +12,7 @@
  * 4. 分数达标 → 生成消息（带事由）→ 落库 + 记录 proactive_log；
  * 5. 不达标 → 跳过（大多数时候都是这个结果）。
  */
+import { resolveRecall } from './memory-engine';
 import type { Env } from './types';
 import { dateKeyInBeijing, isoInBeijing } from './date';
 import { buildBaseSystemPrompt } from './prompt';
@@ -232,46 +233,29 @@ async function generateProactive(
   const personaDrift = buildPersonaDriftLine(await loadPersonaState(env));
   // 主动消息也带上相关往事：用最近几条对话当检索词
   const focus = history.slice(-8).map((m) => m.content).join(' ');
-  const recalledRaw = await recallMemoryForChat(
-    env,
-    history
-      .slice(-4)
-      .map((m) => m.content)
-      .join(' '),
-    undefined,
+  const proactiveEngine = proactiveEngineFor(env);
+  // 主动消息也走同一个召回入口：门控、deadline、封顶、指标都不用再抄一遍
+  const recall = await resolveRecall(env, {
+    query: history.slice(-4).map((m) => m.content).join(' '),
+    nextQuery: [
+      ...decision.topics,
+      ...history.filter((m) => m.role === 'user').slice(-4).map((m) => m.content),
+    ].join(' ').trim(),
     focus,
-    { skipMemorySource: promptMemory.mode === 'full' },
-  );
+    mode: proactiveEngine,
+    channel: 'web',
+    kind: 'proactive',
+    skipMemorySource: promptMemory.mode === 'full',
+    nowMs: now.getTime(),
+  });
   const recalled = stripDuplicateRecall(
-    recalledRaw,
+    recall.text,
     [...history.map((m) => m.content), recentMemo, promptMemory.text].filter(Boolean),
   );
 
   // Phase 5：主动消息最后切。shadow 只计算新上下文，next 才真正替换 prompt。
-  const proactiveEngine = proactiveEngineFor(env);
-  let nextRecalled = '';
   let nextAttitude = '';
   if (proactiveEngine !== 'legacy') {
-    const focusQuery = [
-      ...decision.topics,
-      ...history
-        .filter((m) => m.role === 'user')
-        .slice(-4)
-        .map((m) => m.content),
-    ]
-      .join(' ')
-      .trim();
-    if (focusQuery && shouldRecallMemory(focusQuery)) {
-      try {
-        const chunks = await loadMemoryChunks(env);
-        const picked = rankMemoryChunks(focusQuery, chunks, 6, focus);
-        const expanded = await expandLinkedChunks(env, picked, 2);
-        const packed = packMemoryChunks(expanded);
-        nextRecalled = formatMemoryChunks(packed.chunks);
-      } catch (e) {
-        console.warn('[proactive] 新记忆检索失败，回退 legacy:', e);
-      }
-    }
     try {
       nextAttitude = buildAttitudePolicy({
         facets: emotion.facets,
@@ -283,20 +267,9 @@ async function generateProactive(
     } catch (e) {
       console.warn('[proactive] 新态度策略失败，回退 legacy:', e);
     }
-    await recordEngineMetric(env, {
-      channel: 'web',
-      kind: 'proactive',
-      mode: proactiveEngine,
-      oldItems: recalled.split('\n').filter((line) => line.startsWith('- ')).length,
-      newItems: nextRecalled.split('\n').filter((line) => line.startsWith('- ')).length,
-      oldBytes: byteLength(recalled),
-      newBytes: byteLength(nextRecalled),
-      ms: 0,
-      now: now.getTime(),
-    }).catch((e) => console.warn('[proactive] 指标写入失败:', e));
   }
   const useNextProactive = proactiveEngine === 'next';
-  const proactiveRecall = useNextProactive && nextRecalled ? nextRecalled : recalled;
+  const proactiveRecall = useNextProactive && recall.nextText ? recall.nextText : recall.text;
   const contextBudget = budgetContext({
     core: promptMemory.text,
     recent: todaySummary ?? '',
