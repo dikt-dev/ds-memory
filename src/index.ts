@@ -93,6 +93,7 @@ import { explainAttitude } from './attitude-policy';
 import { listAffectTimeline, recordAttitudeSnapshot } from './affect-store';
 import { readRecallSamples, summarizeSamples } from './recall-samples';
 import { readUsageStats, summarizeUsage } from './usage-stats';
+import { backfillEvents, readEventStats } from './memory-events';
 import { readEngineMetrics } from './engine-metrics';
 import {
   ackTtsJob,
@@ -1272,6 +1273,23 @@ app.get('/api/admin/recall-samples', requireAuth, async (c) => {
   return c.json({ ok: true, days, samples: rows.length, summary: summarizeSamples(rows) });
 });
 
+/** 事件记忆（v2 阶段 A，影子）：看影子数据攒了多少。 */
+app.get('/api/admin/memory/events', requireAuth, async (c) => {
+  const days = Math.min(30, Math.max(1, Number(c.req.query('days') ?? 7) || 7));
+  return c.json({ ok: true, days, stats: await readEventStats(c.env, days) });
+});
+
+/** 事件记忆（v2 阶段 A，影子）：把最近几天整理成事件。只写不读，需 confirm=1。 */
+app.post('/api/admin/memory/events/backfill', requireAuth, async (c) => {
+  if (c.req.query('confirm') !== '1') {
+    return c.json({ ok: false, error: 'need confirm=1（会调用模型产生费用）' }, 400);
+  }
+  const days = Math.min(30, Math.max(1, Number(c.req.query('days') ?? 3) || 3));
+  const maxEvents = Math.min(200, Math.max(1, Number(c.req.query('max') ?? 30) || 30));
+  const result = await backfillEvents(c.env, { days, maxEvents });
+  return c.json({ ok: true, ...result });
+});
+
 /** 成本看板：按天聚合 token / 费用 / 缓存命中率（只读）。 */
 app.get('/api/admin/cost', requireAuth, async (c) => {
   const days = Math.min(30, Math.max(1, Number(c.req.query('days') ?? 7) || 7));
@@ -1293,6 +1311,7 @@ app.get('/api/admin/readiness', requireAuth, async (c) => {
     'attitude_snapshots',
     'engine_metrics',
     'chat_usage',
+    'memory_events',
   ];
   const checks: Record<string, string> = {};
   for (const table of tables) {
