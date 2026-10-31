@@ -341,17 +341,17 @@
 
 | 顺序 | 任务 | 状态 | 步骤 | 验收 |
 |---|---|---|---|---|
-| 1 | **A1 扩展封顶** | ✅ `4a1c20d6` | `expansionBudget()`：只有挑中 1 条时才扩展，挑中 ≥2 条不扩 | 3 个单测 + 全量 931 绿 |
-| 2 | **D5 删 4MB JVM 日志** | ⬜ | 定位文件 → 确认无引用 → 删除 → 提交 | 仓库体积下降；`git ls-files` 无残留 |
-| 3 | **D3 console.log → logTrace** | ⬜ | 列出 24 处 → 逐处换成结构化 trace（保留 level/字段） | grep 生产代码无裸 console.log（脚本除外） |
-| 4 | **A3 分段保底召回** | ⬜ | ① rank 支持"只近 7 天"参数 ② resolveRecall 按已耗时选档：≤300ms 全量 / 300–1500ms 近 7 天 / >1500ms 只给核心+摘要 ③ 单测三档 | 超时不再等于空召回；p95 不退化 |
-| 5 | **A2 记忆恢复 API** | ⬜ | ① `GET /api/admin/memory/snapshots` 列日期/字节 ② `POST /api/admin/memory/restore`：KV 写锁 60s + 恢复前先备份 + 写回 + 刷缓存 + 重建索引 ③ 幂等与并发测试 | 恢复后字节数与快照一致；并发被锁拒绝；二次调用幂等 |
-| 6 | **A5 20 条难例** | ⬜ | ① 跨月指代 5 / 同名事件 5 / 否定更正 5 / 长时间跨度 5 ② 跑 legacy vs next ③ 出结论 | 命中/误召表 + 切 next 的明确结论 |
-| 7 | **A6 双引擎调用合并** | ⬜ | ① legacy rerank 语义并入 selectRecall 提示词 ② shadow 两侧复用同一次调用 ③ 评估集回归 | 每条消息 LLM 调用 2→1；评估集命中不下降 |
-| 8 | **D4 util 去重 + BiliClient 抽取** | ⬜ | ① 找重复实现 → 合并到单一 util ② BiliClient 从 ChatActivity 抽出独立文件 ③ 编译 + 真机冒烟 | 无重复函数；编译过；发图/链接正常 |
-| 9 | **D6 情绪收尾 E-10/11/15/16** | ⬜ | ① E-10 芥蒂高时轻度扣 trust（日结算） ② E-11 每日存一份 emotion vector 历史 ③ E-15 状态与 affect_events 对账 ④ E-16 结算兜底（漏跑补算） | 每项单测 + 一次真实结算日志核对 |
-| 10 | **D1 ChatActivity 拆分** | ⬜ | ① 出职责清单与依赖表 ② 拆成 4 个文件（发送流程 / 同步 / 附件 / 设置面板） ③ 纯移动不改逻辑 ④ 真机冒烟全流程 | 行数下降；行为不变；发送/已读/附件/切页全过 |
-| 11 | **D2 index.ts 拆 router** | ⬜ | ① 按域分组（chat / memory / admin / proactive / media / misc） ② 拆文件后统一 mount ③ 路由清单 diff 必须为空 | 路由数与路径和拆分前完全一致；全量测试绿 |
+| 1 | **A1 扩展封顶** | ✅ `4a1c20d6` | `expansionBudget()`：只挑中 1 条时才扩展 | 3 个单测 + 全量 953 绿 |
+| 2 | **D5 删 JVM 崩溃转储** | ✅ `81a5110` | 删掉 9 个 `hs_err_pid*.log`（1.88MB）+ 加 .gitignore | 仓库无残留，已提交 |
+| 3 | **D3 console.log → 结构化日志** | ✅ `1bc21a2` | 新增 `logJob()`；jobs/memory-index/storage/summary 共 24 处改造；加 `log-hygiene.test.ts` 守卫 | 业务代码 0 处裸 console.log |
+| 4 | **A3 分段保底召回** | ✅ `4b500171` | `recallTier()`：≤300ms 全量 / 300–1500ms 只近 7 天 / ≥1500ms 只给核心层；超时不再等于空召回 | 4 个单测 + 线上部署 |
+| 5 | **A2 记忆恢复 API** | ✅ `4de5e8f` | `GET /api/admin/memory/snapshots`、`POST /api/admin/memory/restore`（KV 锁 60s + 恢复前备份 + 读回校验 + 重建索引）；**已真机实测恢复 2026-10-30 快照成功** | 6 个单测 + 线上 200 |
+| 6 | **A5 难例 + 100 条评估** | ✅ 已跑 | 用例扩到 100 条（新增 20 难例 + 50 扩充）；97 条有效样本：**legacy 84/97（86.6%，平均 5.1 条） vs next 91/97（93.8%，平均 2.7 条）**，误召 0 | 结论：下一轮可以切 next |
+| 7 | **A6 去掉冗余引擎链路** | ✅ `90d0020` | 实测 legacy 侧**没有 LLM 调用**（纯 BM25+向量），原「合并两次 LLM」前提不成立；改为 `mode=next` 时不再并行跑 legacy | tsc + 953 测试绿 |
+| 8 | **D4 去重核查 + 文本层抽取** | ✅ `0c0f89a` | 全仓扫描：无重复函数体、无重名顶层函数（B站网络层早就在 ApiClient）；改为把 `ChatText.kt`（纯文本解析 347 行）从 ChatActivity 抽出 | release 构建通过 + 真机无崩溃 |
+| 9 | **D6 情绪收尾 E-10/11/15/16** | ✅ `90d0020` | 芥蒂扣信任（≤-2/天）/ 情绪日线 JSON / 账本对账（KV 落后以 D1 为准）/ 漏跑补结算（上限 7 天，仅日结算链路） | 11 个单测 |
+| 10 | **D1 ChatActivity 拆分** | 🔵 部分 | 已抽 `ChatText.kt`（1778 → 1377 行）；剩余 `ChatScreen` 的状态闭包（发送/同步/附件）要先把 20+ 个 `mutableStateOf` 收进状态容器才能继续拆，硬拆会动到界面行为 | 下一轮单独做，需你目测界面 |
+| 11 | **D2 index.ts 拆 router** | ✅ `aa9690d` | 抽出 `admin-routes.ts`（46 条）/`middleware.ts`/`auth.ts`；新增 182 条路由清单快照测试 | 2304 → 1630 行，路由一条不差 |
 
 ### 归档代码审查（2026-11-01）
 
