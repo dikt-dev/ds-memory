@@ -11,6 +11,8 @@
  */
 
 import type { Env } from './types';
+import { putObject } from './storage';
+import { logTrace } from './trace';
 import {
   acquireRuntimeLock,
   deleteRuntimeState,
@@ -371,15 +373,80 @@ export function settleEmotionDaily(state: EmotionState, base: RelationFacets): E
   return { facets, applied, changed };
 }
 
-/** 每日：芥蒂按 20% 退，事件池裁到上限，清空增量累积器。 */
-export async function commitEmotionSettle(env: Env, state: EmotionState): Promise<void> {
+/**
+ * 错过几天结算：04:00 没跑到（部署、报错、手动补跑）时，芥蒂不能原地冻着。
+ *
+ * 只重放「每日衰减」这一件确定性的事；增量累积器本来就是按天取整的，
+ * 多日累积会在下一次结算一次性截断到单日上限，不会爆表。
+ */
+export function missedSettleRounds(
+  lastAt: number,
+  now: number,
+  max = 7,
+): number {
+  if (!Number.isFinite(lastAt) || lastAt <= 0) return 0;
+  const days = Math.floor((now - lastAt) / 86_400_000);
+  return Math.max(0, Math.min(max, days));
+}
+
+/**
+ * 芥蒂联动关系轴：委屈高时轻微扣信任。
+ *
+ * 原来的账是两套：她「记着仇」，但 trust 一分不掉，时间一长就变成
+ * 嘴上闹别扭、数值上毫无代价。这里按委屈程度给一个每天最多 -2 的惩罚，
+ * 既留得住芥蒂，也不至于一次吵架把信任打穿。
+ */
+export function grievanceTrustPenalty(vector: EmotionVector): number {
+  const g = Math.max(0, vector.grievance);
+  if (g < 20) return 0;
+  return -Math.min(2, Math.round((g / 100) * 3 * 10) / 10);
+}
+
+/**
+ * 每日：芥蒂按 20% 退，事件池裁到上限，清空增量累积器。
+ *
+ * catchUp=true 时把「漏跑的天数」补上——只有每日归档那条链路会打开它，
+ * 聊天里的即时结算仍然是单次，避免一次交互把芥蒂多退几轮。
+ */
+export async function commitEmotionSettle(
+  env: Env,
+  state: EmotionState,
+  opts: { catchUp?: boolean } = {},
+): Promise<number> {
   const now = Date.now();
+  const rounds = opts.catchUp ? 1 + missedSettleRounds(state.at, now) : 1;
+  let vector = state.vector;
+  for (let i = 0; i < rounds; i++) vector = decayGrievanceDaily(vector);
   await saveEmotionState(env, {
-    vector: decayGrievanceDaily(state.vector),
+    vector,
     events: trimEvents(state.events),
     facetDelta: {},
     at: now,
   });
+  if (rounds > 1) {
+    logTrace('emotion.settle.catchup', { rounds, lastAt: state.at });
+  }
+  return rounds;
+}
+
+/** 情绪日线：每天存一份向量，供趋势查看与复盘（memory/emotion-history/YYYY-MM-DD.json）。 */
+export async function saveEmotionHistory(
+  env: Env,
+  dateKey: string,
+  data: { vector: EmotionVector; facets: RelationFacets; mood: number },
+): Promise<boolean> {
+  try {
+    await putObject(
+      env,
+      `memory/emotion-history/${dateKey}.json`,
+      JSON.stringify({ date: dateKey, ...data, at: Date.now() }),
+      { contentType: 'application/json' },
+    );
+    return true;
+  } catch (e) {
+    console.error('[emotion] 日线写入失败:', e);
+    return false;
+  }
 }
 
 /**

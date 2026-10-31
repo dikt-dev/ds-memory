@@ -378,17 +378,22 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
     return result;
   }
 
+  // 'next' 模式不再并行跑 legacy：那条链路要扫全表做 BM25 + 向量打分，
+  // 只为指标留着它等于白烧一份 CPU。只有 shadow 才需要两边都有。
+  const needLegacy = opts.mode !== 'next';
   const legacyStart = performance.now();
-  const legacyPromise = withDeadline(
-    recallMemoryForChat(env, query, undefined, focus, {
-      skipMemorySource: opts.skipMemorySource,
-    }).catch(() => ''),
-    deadlineMs,
-    '',
-    () => {
-      result.timedOut = true;
-    },
-  );
+  const legacyPromise = needLegacy
+    ? withDeadline(
+        recallMemoryForChat(env, query, undefined, focus, {
+          skipMemorySource: opts.skipMemorySource,
+        }).catch(() => ''),
+        deadlineMs,
+        '',
+        () => {
+          result.timedOut = true;
+        },
+      )
+    : Promise.resolve('');
 
   if (opts.mode === 'legacy') {
     const legacyRaw = await legacyPromise;

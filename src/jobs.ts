@@ -46,6 +46,8 @@ import { collectDayRelationStats } from './relation-stats';
 import { maybeReviewPersonaDrift } from './persona-drift';
 import {
   commitEmotionSettle,
+  grievanceTrustPenalty,
+  saveEmotionHistory,
   facetsOf,
   loadEmotionState,
   reviewDayEvents,
@@ -53,6 +55,7 @@ import {
   type FacetAccum,
 } from './emotion-context';
 import { applyEventsToVector, sumFacetDelta } from './emotion-events';
+import { sumPendingFacetDelta } from './affect-store';
 import { moodFromVector } from './emotion-vector';
 import { FACET_KEYS } from './relation-facets';
 import { applyRelationDecay } from './memory-maintenance';
@@ -399,6 +402,31 @@ export async function archiveOneDay(
         facetAccum.affection = Math.min(Math.max(facetAccum.affection, -2), 2);
       }
 
+      // E-15 对账：KV 里的累积器可能因写失败落后于 D1 账本，以账本为准。
+      const ledgerDelta = await sumPendingFacetDelta(env, emotionState.at - 60_000);
+      if (ledgerDelta) {
+        const keys = new Set([...Object.keys(ledgerDelta), ...Object.keys(facetAccum)]);
+        let drift = 0;
+        for (const key of keys) {
+          drift += Math.abs(
+            (ledgerDelta[key as keyof typeof ledgerDelta] ?? 0) -
+              (facetAccum[key as keyof typeof facetAccum] ?? 0),
+          );
+        }
+        if (drift >= 0.5) {
+          logInfo(`[daily] emotion reconcile——KV 与账本不一致(drift=${drift.toFixed(1)})，改用账本`);
+          for (const key of Object.keys(facetAccum)) delete facetAccum[key as keyof typeof facetAccum];
+          Object.assign(facetAccum, ledgerDelta);
+        }
+      }
+
+      // E-10 芥蒂联动关系轴：委屈高时轻微扣信任（每天最多 -2）
+      const trustPenalty = grievanceTrustPenalty(vector);
+      if (trustPenalty !== 0) {
+        facetAccum.trust = (facetAccum.trust ?? 0) + trustPenalty;
+        logInfo(`[daily] 芥蒂扣信任 ${trustPenalty}（委屈=${Math.round(vector.grievance)}）`);
+      }
+
       const working = {
         ...emotionState,
         vector,
@@ -421,7 +449,13 @@ export async function archiveOneDay(
         distilled = true;
         logInfo(`[daily] emotion settle — ${JSON.stringify(settled.applied)}`);
       }
-      await commitEmotionSettle(env, working);
+      // E-11 情绪日线：每天存一份，趋势与复盘都靠它
+      await saveEmotionHistory(env, target, {
+        vector,
+        facets: settled.facets,
+        mood: nextMood,
+      });
+      await commitEmotionSettle(env, working, { catchUp: true });
       if (settled.changed || nextMood !== baseVals.mood) {
         logInfo(`[daily] emotion settle — ${JSON.stringify(settled.applied)} mood=${nextMood}`);
       }

@@ -63,6 +63,45 @@ export async function recordFacetDelta(
   }
 }
 
+/**
+ * 对账用：账本里「上次结算之后」累积的关系增量。
+ *
+ * 运行时状态存在 KV，账本存在 D1：KV 写失败时两边就会不一致（她会"记着"
+ * 但数值没动）。结算前用账本重算一遍，以账本为准。
+ */
+export async function sumPendingFacetDelta(
+  env: Env,
+  sinceMs: number,
+): Promise<FacetDelta | null> {
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT delta_json FROM affect_events
+       WHERE kind = 'relationship' AND type = 'facet_delta' AND created_at > ?
+       ORDER BY created_at ASC LIMIT 500`,
+    )
+      .bind(sinceMs)
+      .all<{ delta_json: string }>();
+    const list = rows.results ?? [];
+    if (list.length === 0) return null;
+    const sum: FacetDelta = {};
+    for (const row of list) {
+      let delta: FacetDelta = {};
+      try {
+        delta = JSON.parse(row.delta_json) as FacetDelta;
+      } catch {
+        continue;
+      }
+      for (const key of Object.keys(delta) as FacetKey[]) {
+        const v = Number(delta[key]);
+        if (Number.isFinite(v) && v !== 0) sum[key] = (sum[key] ?? 0) + v;
+      }
+    }
+    return sum;
+  } catch {
+    return null;
+  }
+}
+
 export async function recordAttitudeSnapshot(
   env: Env,
   policy: AttitudePolicy,
