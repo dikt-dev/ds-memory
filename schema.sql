@@ -360,3 +360,11 @@ CREATE TABLE IF NOT EXISTS memory_rollups (
 CREATE INDEX IF NOT EXISTS idx_memory_rollups_period ON memory_rollups(period);
 
 CREATE INDEX IF NOT EXISTS idx_memory_entries_dup ON memory_entries(dup_of);
+
+CREATE TABLE IF NOT EXISTS degradation_log (
+  day_key TEXT NOT NULL,
+  component TEXT NOT NULL,
+  hits INTEGER NOT NULL DEFAULT 0,
+  last_at INTEGER NOT NULL,
+  PRIMARY KEY (day_key, component)
+);
