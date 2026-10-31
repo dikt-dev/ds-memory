@@ -86,6 +86,10 @@ export async function ensureActionsTable(env: Env): Promise<void> {
        created_at INTEGER NOT NULL
      )`,
   ).run();
+  // 审计表按时间倒序查，没索引就是全表扫。
+  await env.DB.prepare(
+    'CREATE INDEX IF NOT EXISTS idx_memory_actions_created ON memory_actions(created_at)',
+  ).run();
 }
 
 export async function recordAction(

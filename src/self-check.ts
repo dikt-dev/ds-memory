@@ -211,25 +211,38 @@ export async function runSelfCheck(env: Env, now = Date.now()): Promise<SelfChec
   // 4) 自愈：可疑事件降权 + 孤儿事实降权（不删）
   const badEventIds = [...new Set(quoteMismatches.map((m) => m.eventId))];
   let eventsMarked = 0;
-  for (const id of badEventIds) {
-    const res = await env.DB.prepare(
-      `UPDATE memory_event_log SET importance = MAX(1, importance - 2) WHERE id = ?`,
-    )
-      .bind(id)
-      .run();
-    eventsMarked += Number(res?.meta?.changes ?? 0);
+  if (badEventIds.length > 0) {
+    // 一次 batch 而不是逐条往返
+    const results = await env.DB.batch(
+      badEventIds.map((id) =>
+        env.DB.prepare(
+          `UPDATE memory_event_log SET importance = MAX(1, importance - 2) WHERE id = ?`,
+        ).bind(id),
+      ),
+    );
+    eventsMarked = results.reduce(
+      (sum, r) => sum + Number((r as { meta?: { changes?: number } })?.meta?.changes ?? 0),
+      0,
+    );
   }
 
+  // 一次降一档（不直接打到地板）：孤儿可能是回填问题，别一夜之间把真事实废掉。
+  const orphanFactIds = orphans.filter((o) => o.kind === 'fact').map((o) => o.id);
   let factsExpired = 0;
-  for (const orphan of orphans) {
-    if (orphan.kind !== 'fact') continue;
-    // 一次降一档（不直接打到地板）：孤儿可能是回填问题，别一夜之间把真事实废掉。
-    const res = await env.DB.prepare(
-      `UPDATE memory_facts SET confidence = MAX(0.2, confidence - 0.15), updated_at = ? WHERE id = ?`,
-    )
-      .bind(now, orphan.id)
-      .run();
-    factsExpired += Number(res?.meta?.changes ?? 0);
+  if (orphanFactIds.length > 0) {
+    const results = await env.DB.batch(
+      orphanFactIds.map((id) =>
+        // 一天最多降一次：同一天手动重跑几次不该把真事实连降三档。
+        env.DB.prepare(
+          `UPDATE memory_facts SET confidence = MAX(0.2, confidence - 0.15), updated_at = ?
+           WHERE id = ? AND updated_at < ?`,
+        ).bind(now, id, now - 12 * 3600 * 1000),
+      ),
+    );
+    factsExpired = results.reduce(
+      (sum, r) => sum + Number((r as { meta?: { changes?: number } })?.meta?.changes ?? 0),
+      0,
+    );
   }
 
   const report: SelfCheckReport = {

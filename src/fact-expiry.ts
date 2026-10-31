@@ -137,17 +137,16 @@ export async function applyExpiry(
   nowMs: number,
 ): Promise<number> {
   if (steps.length === 0) return 0;
-  let changed = 0;
-  for (const step of steps) {
-    const res = await env.DB.prepare(
-      `UPDATE memory_facts SET valid_to = ?, updated_at = ?
-       WHERE id = ? AND (valid_to IS NULL OR valid_to = '')`,
-    )
-      .bind(step.validTo, nowMs, step.id)
-      .run();
-    changed += Number(res?.meta?.changes ?? 0);
-  }
-  return changed;
+  // 一次 batch 发完：逐条 await 在 D1 上是 N 次往返，事实一多就成瓶颈。
+  const results = await env.DB.batch(
+    steps.map((step) =>
+      env.DB.prepare(
+        `UPDATE memory_facts SET valid_to = ?, updated_at = ?
+         WHERE id = ? AND (valid_to IS NULL OR valid_to = '')`,
+      ).bind(step.validTo, nowMs, step.id),
+    ),
+  );
+  return results.reduce((sum, r) => sum + Number((r as { meta?: { changes?: number } })?.meta?.changes ?? 0), 0);
 }
 
 /** 给对话抽取的事实补上失效链，并把动作写进审计表。 */

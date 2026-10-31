@@ -70,6 +70,10 @@ export async function ensureRecallSampleTable(env: Env): Promise<void> {
        created_at  INTEGER NOT NULL)
    `.trim(),
   ).run();
+  // 按天/模式聚合是热路径（健康分、样本统计都查这张表）。
+  await env.DB.prepare(
+    'CREATE INDEX IF NOT EXISTS idx_recall_samples_day ON recall_samples(day_key, mode)',
+  ).run();
   // 老表没有这一列（CREATE IF NOT EXISTS 不会补列），单独加一次；已存在会抛，忽略。
   await env.DB.prepare(
     'ALTER TABLE recall_samples ADD COLUMN legacy_skipped INTEGER NOT NULL DEFAULT 0',
