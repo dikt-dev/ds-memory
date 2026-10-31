@@ -362,3 +362,29 @@ pinned 0、keepsakes 4 条（全 approved、全 pinned）、health 94.29 good。
 11-01 07:16 起，8 条新消息后计数开始递增（1/2/3），`last_used_at` 有值，`degradation_log` 无 recall 失败记录。
 
 结论：之前恒 0 是部署前的旧版本问题，现版本正常。静默 catch 已改成留痕，若再发生会进 `degradation_log`。
+
+
+### 八点十五、接线自检（npm run dead-code）
+
+**为什么做**：SECTION_BUDGETS / demoteSectionEntries 定义齐全、单测齐全，但生产路径从没调用过——单测全绿也发现不了。扫一遍导出函数，按引用来源分档。
+
+| 档 | 数量 | 含义 |
+| --- | --- | --- |
+| A 完全无引用 | 5 | 纯废弃，可删 |
+| B 只有测试引用 | 17 | 生产没接上，或兼容壳，或重复实现 |
+| C 只在文档提到 | 0 | — |
+
+**A（建议删）**：memoryEngineForChannel / tailByMessage / policyEnforced / getOfflineAlertedAt / setOfflineAlertedAt（后两个是 QQ 离线提醒退役后的残留）。
+
+**B 里值得警惕的重复实现**（同一个判断有两份代码，容易漂移）：
+
+| 函数 | 生产实际用的是 |
+| --- | --- |
+| `shouldSkipMemoryRecall` | chat.ts / openai.ts 里内联算 `skipMemorySource` |
+| `promptModeFor` | memory-index.ts 直接读 `env.MEMORY_PROMPT_MODE` |
+| `sanitizeProactiveText` | 主动消息走 `scrubAiFlavor` |
+| `intimacyDecay` / `estimateDaysToReach` | memory-domain 的 `recallDecay` |
+
+**兼容壳（正常，不用管）**：`buildSystemPrompt`（内部调 `buildSystemPromptSplit`，测试用它断言整篇）。
+
+**下一步**：A 类删除；B 类逐个确认是「兼容壳」还是「重复实现」，重复的收成一份。
