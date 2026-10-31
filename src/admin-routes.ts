@@ -20,6 +20,7 @@ import { readEngineMetrics } from './engine-metrics';
 import { readRecallSamples, summarizeSamples } from './recall-samples';
 import { listActions, markReverted } from './memory-actions';
 import { policyTable, type ActionKind } from './policy';
+import { loadHealth } from './health';
 import { backfillEvents, readEventStats } from './memory-events';
 import { insertKeepsake, loadKeepsakes, refreshKeepsakesBlock, setKeepsakePinned, setKeepsakeStatus } from './keepsakes';
 import { readUsageStats, summarizeUsage } from './usage-stats';
@@ -388,6 +389,13 @@ app.get('/api/admin/readiness', requireAuth, async (c) => {
     ready ? 200 : 503,
   );
 });
+/** 记忆健康分：判据全是外部事实（召回命中、失忆抱怨、延迟），不由模型自评。 */
+app.get('/api/admin/memory/health', requireAuth, async (c) => {
+  const days = Number(c.req.query('days') ?? 7) || 7;
+  const result = await loadHealth(c.env, days);
+  return c.json({ ok: true, ...result });
+});
+
 /** 提示词记忆预览：切 evidence 模式前后到底带了多少（不落库、不改记忆）。 */
 app.get('/api/admin/memory/prompt-preview', requireAuth, async (c) => {
   const memory = await getMemory(c.env);

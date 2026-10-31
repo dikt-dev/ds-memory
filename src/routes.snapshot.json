@@ -65,6 +65,14 @@
   ],
   [
     "GET",
+    "/api/admin/memory/health"
+  ],
+  [
+    "GET",
+    "/api/admin/memory/health"
+  ],
+  [
+    "GET",
     "/api/admin/memory/jobs"
   ],
   [
