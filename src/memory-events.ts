@@ -7,6 +7,7 @@
  */
 import type { Env } from './types';
 import { assertAllowed } from './policy';
+import { quoteGate } from './fact-confidence';
 import { distillText } from './distill';
 import { addLlmCost } from './llm-cost';
 import { dateKeyInBeijing } from './date';
@@ -170,6 +171,10 @@ export async function extractEvent(env: Env, rows: EventSourceRow[]): Promise<Me
   const title = typeof parsed.title === "string" ? parsed.title.trim().slice(0, 20) : "";
   const summary = typeof parsed.summary === "string" ? parsed.summary.trim().slice(0, 120) : "";
   if (!title || !summary) return null;
+  const proposedQuotes = strList(parsed.quotes, EVENT_MAX_QUOTES, 200);
+  const gate = quoteGate(proposedQuotes, validateQuotes(proposedQuotes, rows));
+  // 一句都对不上 = 这条事件是编的：宁可少记一件，也不许把编的留在记忆里。
+  if (!gate.ok) return null;
   const importanceRaw = Number(parsed.importance ?? 3);
   const importance = Number.isFinite(importanceRaw) ? Math.min(5, Math.max(1, Math.round(importanceRaw))) : 3;
   return {
@@ -178,7 +183,7 @@ export async function extractEvent(env: Env, rows: EventSourceRow[]): Promise<Me
     ended_ms: rows[rows.length - 1].created_ms,
     title,
     summary,
-    quotes: validateQuotes(strList(parsed.quotes, EVENT_MAX_QUOTES, 200), rows),
+    quotes: gate.kept,
     msg_ids: rows.map((r) => r.id),
     entities: strList(parsed.entities, 8, 20),
     facts: strList(parsed.facts, 3, 30),

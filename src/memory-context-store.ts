@@ -7,6 +7,7 @@
 import type { Env } from './types';
 import { assertAllowed } from './policy';
 import { expireSupersededFacts } from './fact-expiry';
+import { confidenceForSource, mergeConfidence } from './fact-confidence';
 import { autoTags, bigrams } from './memory-archive';
 import { embedTexts, quantizeVec } from './memory-index';
 import { rollupSourceHash } from './memory-rollups';
@@ -196,14 +197,21 @@ async function deleteIds(env: Env, table: string, ids: string[]): Promise<void> 
 export async function upsertConversationFacts(env: Env, facts: MemoryFact[]): Promise<number> {
   if (facts.length === 0) return 0;
   const existing = await env.DB.prepare(
-    `SELECT id, source_message_ids FROM memory_facts WHERE origin = 'conversation'`,
-  ).all<{ id: string; source_message_ids: string }>();
+    `SELECT id, source_message_ids, confidence FROM memory_facts WHERE origin = 'conversation'`,
+  ).all<{ id: string; source_message_ids: string; confidence: number }>();
   const old = new Map(
     (existing.results ?? []).map((r) => [r.id, parseArray<number>(r.source_message_ids)]),
+  );
+  const oldConfidence = new Map(
+    (existing.results ?? []).map((r) => [r.id, Number(r.confidence) || 0]),
   );
   for (const fact of facts) {
     const previous = old.get(fact.id) ?? [];
     fact.sourceMessageIds = [...new Set([...previous, ...fact.sourceMessageIds])].sort((a, b) => a - b);
+    // ADR-001 S5：同一事实再次出现只轻微上浮，绝不让"她自己重复"变成"更可信"。
+    const prior = oldConfidence.get(fact.id);
+    if (prior !== undefined) fact.confidence = mergeConfidence(prior, fact.confidence);
+    else if (!fact.confidence) fact.confidence = confidenceForSource('conversation');
   }
   await insertFacts(env, facts, 'conversation');
   await insertChunks(env, buildMemoryChunks({ facts, events: [] }), 'conversation');

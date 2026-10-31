@@ -14,6 +14,7 @@ import { embedMemoryChunks, replaceMemoryContext, syncRollupSummaries } from './
 import { reindexMemory } from './memory-index';
 import { generateRollup, weekStartKey } from './memory-rollups';
 import { auditHash, recordMemoryAudit } from './memory-audit';
+import { penalizeCorrectedFact } from './fact-correction';
 
 const CORRECTION_HEADER = '## 用户更正（最高优先级）';
 const MAX_LEN = 500;
@@ -92,6 +93,10 @@ export async function applyMemoryCorrection(
     detail: text,
   });
   // 纠正属于低频操作，直接同步重建，避免下一轮仍召回旧事实。
+  // ADR-001 S5：被纠正的那条事实永久降权，之后再被提起也不会回到高可信。
+  await penalizeCorrectedFact(env, kv ? kv[1].trim() : text, now).catch((e) => {
+    console.error('[memory] correction penalty failed:', e);
+  });
   await replaceMemoryContext(env, next, 'correction').catch((e) => {
     console.error('[memory] correction context rebuild failed:', e);
   });
