@@ -58,7 +58,16 @@
 
 ## 阶段二：让"事实"能被正确修改（她自由的前提）
 
-### S4 事实失效链
+### S4 事实失效链 ✅ 已完成（10 个测试，线上验证不删行只失效）
+
+> 已落地：`fact-expiry.ts`（planExpiry 纯函数 + applyExpiry 批量 UPDATE + 审计记录）；
+> 对话抽取的新事实会顶掉同 (subject, predicate) 的旧事实，写 `valid_to` 但**不删行**；
+> `replaceMemoryContext` 清理旧事实时也改为失效而非删除（`expireFactRows`）。
+> 线上实测：往 D1 塞一条不在 memory.md 里的测试事实 → 触发 rebuild-context →
+> 该行 `valid_to=2026-10-31` 且**行还在**（不变量 2 成立），测试行已清理。
+> 顺手修掉一个 S1 回归：memory.md 来源的事实本来没有消息 id，被出处校验拦成 500；
+> 现在只有 `origin='conversation'` 强制要求出处，文档来源按"已归档来源"放行。
+
 - **做什么**：同一 `subject + predicate` 的新事实入库时，自动给旧事实写 `valid_to`，保留可查；`memory-correction.ts` 的纠正自动触发失效。
 - **产出**：失效逻辑 + 迁移脚本（回填历史冲突）+ 测试（新旧共存、时间旅行查询）。
 - **验收**：构造"先北京后成都"，注入时只出现成都；问"去年在哪"能答北京。

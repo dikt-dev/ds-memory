@@ -57,6 +57,14 @@ describe('记忆写入必须过 policy 闸口', () => {
     }
   });
 
+  it('旧事实不物理删除，只写 valid_to（不变量 2）', () => {
+    const store = sources().find((s) => s.file === 'memory-context-store.ts');
+    expect(store).toBeTruthy();
+    // 事实必须走 expireFactRows；删表只允许发生在派生层（chunk）和老事件表。
+    expect(/deleteIds\(env, 'memory_facts'/.test(store!.text)).toBe(false);
+    expect(store!.text).toContain('expireFactRows');
+  });
+
   it('policy.ts 自己不写记忆（闸口不该有副作用）', () => {
     const policy = sources().find((s) => s.file === 'policy.ts');
     expect(policy).toBeTruthy();

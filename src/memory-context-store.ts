@@ -6,6 +6,7 @@
  */
 import type { Env } from './types';
 import { assertAllowed } from './policy';
+import { expireSupersededFacts } from './fact-expiry';
 import { autoTags, bigrams } from './memory-archive';
 import { embedTexts, quantizeVec } from './memory-index';
 import { rollupSourceHash } from './memory-rollups';
@@ -55,10 +56,11 @@ function parseArray<T>(raw: string): T[] {
 }
 
 async function insertFacts(env: Env, facts: MemoryFact[], origin: string): Promise<void> {
-  // 不变量 4：事实必须带出处；legacy 迁移是老数据，允许一次性导入。
+  // 不变量 4：对话抽取的事实必须能指回消息；memory.md / correction 来源的出处是
+  // 文档本身（memory.md 就是人写的记录），所以按"已归档来源"放行。
   const provenance = facts.flatMap((f) => f.sourceMessageIds ?? []);
   assertAllowed(
-    { kind: 'fact.upsert', sourceMessageIds: provenance, legacyOrigin: origin === 'legacy' },
+    { kind: 'fact.upsert', sourceMessageIds: provenance, legacyOrigin: origin !== 'conversation' },
     { actor: 'job' },
   );
   for (const batch of chunksOf(facts)) {
@@ -88,6 +90,16 @@ async function insertFacts(env: Env, facts: MemoryFact[], origin: string): Promi
         ),
       ),
     );
+  }
+  // ADR-001 S4：对话抽取的新事实会顶掉同 (subject, predicate) 的旧事实。
+  // 只在 conversation origin 上跑——memory.md 重建时的事实顺序不代表时间顺序。
+  if (origin === 'conversation') {
+    await expireSupersededFacts(
+      env,
+      facts,
+      Date.now(),
+      new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10),
+    ).catch(() => 0);
   }
 }
 
@@ -151,6 +163,21 @@ async function staleIds(env: Env, table: string, origin: string, keep: Set<strin
     .bind(origin)
     .all<{ id: string }>();
   return (rows.results ?? []).map((r) => r.id).filter((id) => !keep.has(id));
+}
+
+/** 把一批事实标记为失效（保留行与出处，供时间旅行查询）。 */
+async function expireFactRows(env: Env, ids: string[], nowMs: number): Promise<void> {
+  if (ids.length === 0) return;
+  const iso = new Date(nowMs + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  for (const batch of chunksOf(ids)) {
+    const placeholders = batch.map(() => '?').join(',');
+    await env.DB.prepare(
+      `UPDATE memory_facts SET valid_to = COALESCE(valid_to, ?), updated_at = ?
+       WHERE id IN (${placeholders})`,
+    )
+      .bind(iso, nowMs, ...batch)
+      .run();
+  }
 }
 
 async function deleteIds(env: Env, table: string, ids: string[]): Promise<void> {
@@ -238,7 +265,8 @@ export async function replaceMemoryContext(
     await linkFactToNeighbors(env, fact).catch(() => 0);
   }
 
-  await deleteIds(env, 'memory_facts', oldFacts);
+  // 不变量 2：旧事实不删，写 valid_to 留档（ADR-001 S4）。
+  await expireFactRows(env, oldFacts, now);
   await deleteIds(env, 'memory_events', oldEvents);
   await deleteIds(env, 'memory_chunks', oldChunks);
 
