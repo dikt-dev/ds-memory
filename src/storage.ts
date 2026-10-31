@@ -5,10 +5,12 @@
  * - 删除/列出两个桶都会处理（合并去重）。
  */
 import type { Env } from './types';
+import { recordDegradation } from './degradations';
 import { logTrace } from './trace';
 
 const logInfo = (msg: string): void => logTrace('storage', { msg });
 import { AwsClient } from 'aws4fetch';
+import { logError, logWarn } from './error-log';
 
 export type StorageMode = 'main' | 'secondary';
 export const STORAGE_MODE_KV = 'storage:mode';
@@ -92,9 +94,9 @@ export async function putObject(
         body,
       });
       if (res.ok) return;
-      console.error(`[storage] secondary R2 put failed: ${res.status}，回退主账号`);
+      logError(`[storage] secondary R2 put failed: ${res.status}，回退主账号`);
     } catch (e) {
-      console.error('[storage] secondary R2 put error，回退主账号:', e);
+      logError('[storage] secondary R2 put error，回退主账号:', e);
     }
   }
   await env.R2.put(key, body, opts?.contentType ? { httpMetadata: { contentType: opts.contentType } } : undefined);
@@ -127,7 +129,11 @@ export async function getObject(env: Env, key: string): Promise<StoredObject | n
     if (sec) return sec;
   }
 
-  const main = await env.R2.get(key).catch(() => null);
+  const main = await env.R2.get(key).catch((e) => {
+    void recordDegradation(env, 'r2_read');
+    logError('[storage] main R2 get failed:', e);
+    return null;
+  });
   if (main) return main;
   if (!secondaryEnabled(env) || secondaryFirst) return null;
   return getSecondaryObject(env, key);
@@ -140,7 +146,11 @@ export async function headObject(env: Env, key: string): Promise<{ size: number 
     if (res?.ok) return { size: Number(res.headers.get('content-length') ?? 0) };
   }
 
-  const main = await env.R2.head(key).catch(() => null);
+  const main = await env.R2.head(key).catch((e) => {
+    void recordDegradation(env, 'r2_read');
+    logError('[storage] main R2 head failed:', e);
+    return null;
+  });
   if (main) return { size: main.size };
   if (!secondaryEnabled(env) || secondaryFirst) return null;
   const res = await s3Client(env).fetch(s3Url(env, key), { method: 'HEAD' }).catch(() => null);

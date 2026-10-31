@@ -13,6 +13,7 @@
  * 需要时再跑新引擎，最后统一做输出封顶与指标记录。
  */
 import type { Env } from './types';
+import { recordDegradation } from './degradations';
 import { recordEngineMetric } from './engine-metrics';
 import { recordRecallSample } from './recall-samples';
 import { packMemoryChunks } from './context-packer';
@@ -343,7 +344,10 @@ function recentChunks(
 
 /** 查询向量：失败就当没有，退回纯关键词。 */
 async function embedFor(env: Env, query: string): Promise<number[] | null> {
-  const vecs = await embedTexts(env, [query]).catch(() => []);
+  const vecs = await embedTexts(env, [query]).catch(() => {
+    void recordDegradation(env, 'embed');
+    return [];
+  });
   return vecs[0] ?? null;
 }
 

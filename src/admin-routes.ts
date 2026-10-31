@@ -21,6 +21,7 @@ import { readRecallSamples, summarizeSamples } from './recall-samples';
 import { listActions, markReverted } from './memory-actions';
 import { policyTable, type ActionKind } from './policy';
 import { loadHealth } from './health';
+import { degradationBreakdown, readDegradations, totalDegradations } from './degradations';
 import { runSelfCheck } from './self-check';
 import { runSelfReview } from './self-review';
 import { loadVariants, proposeVariant, decideById, rollbackVariant } from './variants';
@@ -43,6 +44,7 @@ import { explainAttitude } from './attitude-policy';
 import { listAffectTimeline, recordAttitudeSnapshot } from './affect-store';
 import { getOrCreateDayContext } from './context';
 import { readPathStats, readRecentRequests } from './request-log';
+import { logError, logWarn } from './error-log';
 
 export function registerAdminRoutes(app: Hono<AppEnv>): void {
 // —— 阶段 2/3：手动触发与统计 ——
@@ -94,12 +96,12 @@ app.post('/api/admin/memory/restore', requireAuth, async (c) => {
   try {
     reindexed = await reindexMemory(c.env);
   } catch (e) {
-    console.error('[memory] restore reindex failed:', e);
+    logError('[memory] restore reindex failed:', e);
   }
   try {
     context = await replaceMemoryContext(c.env, await getMemory(c.env), 'memory');
   } catch (e) {
-    console.error('[memory] restore context failed:', e);
+    logError('[memory] restore context failed:', e);
   }
   return c.json({ ok: true, ...result, reindexed, context });
 });
@@ -137,16 +139,16 @@ app.post('/api/admin/memory/replay-distill', requireAuth, async (c) => {
         applied.push(date);
       }
     } catch (e) {
-      console.error('[memory] replay distill failed:', date, e);
+      logError('[memory] replay distill failed:', date, e);
     }
   }
   if (applied.length > 0) {
     await putMemory(c.env, memory);
     await replaceMemoryContext(c.env, memory, 'memory').catch(() => {});
     // 重建 chunks 后必须补索引和向量，否则 replay 会留下 no_vec。
-    await reindexMemory(c.env).catch((e) => console.error('[memory] replay reindex failed:', e));
+    await reindexMemory(c.env).catch((e) => logError('[memory] replay reindex failed:', e));
     await embedMemoryChunks(c.env, 200).catch((e) =>
-      console.error('[memory] replay embed failed:', e),
+      logError('[memory] replay embed failed:', e),
     );
   }
   return c.json({
@@ -492,6 +494,18 @@ app.post('/api/admin/memory/self-check', requireAuth, async (c) => {
 });
 
 /** 记忆健康分：判据全是外部事实（召回命中、失忆抱怨、延迟），不由模型自评。 */
+/** 静默降级分布：健康分里扣了分，这里看是哪一块在坏。 */
+app.get('/api/admin/memory/degradations', requireAuth, async (c) => {
+  const days = Number(c.req.query('days') ?? 7) || 7;
+  const rows = await readDegradations(c.env, days);
+  return c.json({
+    days: Math.min(30, Math.max(1, Math.floor(days))),
+    total: totalDegradations(rows),
+    breakdown: degradationBreakdown(rows),
+    rows,
+  });
+});
+
 app.get('/api/admin/memory/health', requireAuth, async (c) => {
   const days = Number(c.req.query('days') ?? 7) || 7;
   const result = await loadHealth(c.env, days);

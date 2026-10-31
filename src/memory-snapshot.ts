@@ -12,6 +12,7 @@
 import type { Env } from './types';
 import { deleteObject, getObject, headObject, listKeys, putObject } from './storage';
 import { getMemory, putMemory } from './memory';
+import { logError, logWarn } from './error-log';
 
 export const SNAPSHOT_PREFIX = 'memory/snapshots/';
 /** 保留天数：每天约 12KB，45 天约 540KB */
@@ -50,7 +51,7 @@ export async function writeDailySnapshot(
     await putObject(env, key, text, { contentType: 'text/markdown' });
     return { written: true, key };
   } catch (e) {
-    console.error('[snapshot] write failed (archive continues):', e);
+    logError('[snapshot] write failed (archive continues):', e);
     return { written: false, key, skipped: 'failed' };
   }
 }

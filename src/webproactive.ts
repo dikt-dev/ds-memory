@@ -65,6 +65,7 @@ import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { readSessionFacts } from './session-facts';
 import { facetsOf, processEmotionTurn } from './emotion-context';
 import { moodFromVector } from './emotion-vector';
+import { logError, logWarn } from './error-log';
 
 export interface ProactiveResult {
   skipped?: string;
@@ -89,7 +90,7 @@ async function collectUserProfile(env: Env, now: Date): Promise<UserProfile> {
   const hourly = new Array(24).fill(0) as number[];
   const since = new Date(now.getTime() - 14 * 86400000);
   const rows = await env.DB.prepare(
-    `SELECT created_at FROM messages WHERE role = 'user' AND created_ms >= ?`,
+    `SELECT created_at FROM messages WHERE role = 'user' AND created_ms >= ? LIMIT 20000`,
   )
     .bind(since.getTime())
     .all<{ created_at: string }>();
@@ -256,7 +257,7 @@ async function generateProactive(
         wasIgnored: facts.wasIgnored,
       }).text;
     } catch (e) {
-      console.warn('[proactive] 新态度策略失败，回退 legacy:', e);
+      logWarn('[proactive] 新态度策略失败，回退 legacy:', e);
     }
   }
   const useNextProactive = proactiveEngine === 'next';

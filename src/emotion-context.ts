@@ -53,6 +53,7 @@ import {
 } from './relation-facets';
 import { buildEmotionSnapshot } from './emotion-snapshot';
 import type { MoodEnvironment } from './mood-env';
+import { logError, logWarn } from './error-log';
 
 const STATE_KEY = 'emotion:state';
 const STATE_TTL_SECONDS = 90 * 24 * 60 * 60;
@@ -147,7 +148,7 @@ export async function saveEmotionState(env: Env, state: EmotionState): Promise<v
     at: state.at,
   });
   await putRuntimeState(env, STATE_KEY, payload, STATE_TTL_SECONDS).catch((e) => {
-    console.error('[emotion] 保存状态失败:', e);
+    logError('[emotion] 保存状态失败:', e);
   });
 }
 
@@ -444,7 +445,7 @@ export async function saveEmotionHistory(
     );
     return true;
   } catch (e) {
-    console.error('[emotion] 日线写入失败:', e);
+    logError('[emotion] 日线写入失败:', e);
     return false;
   }
 }

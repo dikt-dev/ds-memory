@@ -4,6 +4,7 @@
  */
 import type { Env } from './types';
 import { stableHash } from './memory-domain';
+import { logError, logWarn } from './error-log';
 
 export interface MemoryAuditInput {
   action: 'correct' | 'link_backfill' | 'rebuild' | 'archive';
@@ -36,7 +37,7 @@ export async function recordMemoryAudit(env: Env, input: MemoryAuditInput): Prom
       Date.now(),
     )
     .run()
-    .catch((e) => console.warn('[memory:audit] write failed:', e));
+    .catch((e) => logWarn('[memory:audit] write failed:', e));
 }
 
 export function auditHash(text: string): string {

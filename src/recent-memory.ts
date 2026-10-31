@@ -22,6 +22,7 @@ import { distillText } from './distill';
 import { addLlmCost } from './llm-cost';
 import { dateKeyInBeijing } from './date';
 import { acquireRuntimeLock, getRuntimeState, putRuntimeState, releaseRuntimeLock } from './runtime-store';
+import { logError, logWarn } from './error-log';
 
 /** 新格式（条目数组）；旧 key 只读，用于一次性迁移。 */
 const MEMO_KV = 'memo:24h:v2';
@@ -344,6 +345,6 @@ export async function maybeRefreshRecentMemo(env: Env, now: Date = new Date()): 
       await releaseRuntimeLock(env, LOCK_KV);
     }
   } catch (e) {
-    console.error("[memo] refresh failed:", e);
+    logError("[memo] refresh failed:", e);
   }
 }

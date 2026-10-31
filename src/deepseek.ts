@@ -6,6 +6,7 @@ import type { Env } from './types';
 import { calcCost, loadPricing, type TokenUsage } from './pricing';
 import { scrubAiFlavor } from './anti-ai-flavor';
 import { createSseRewriter } from './sse-scrub';
+import { logError, logWarn } from './error-log';
 
 export type MessageContentPart =
   | { type: 'text'; text: string }
@@ -114,7 +115,7 @@ export async function streamDeepSeek(
     upstream = await requestDeepSeek(env, apiKey, messages, true, opts.maxTokens);
     if (upstream.status === 400) {
       const detail = await upstream.clone().text().catch(() => '');
-      console.error('[deepseek] upstream 400, retry compact:', detail.slice(0, 300));
+      logError('[deepseek] upstream 400, retry compact:', detail.slice(0, 300));
       upstream = await requestDeepSeek(
         env,
         apiKey,
@@ -124,12 +125,12 @@ export async function streamDeepSeek(
       );
     }
   } catch (e) {
-    console.error('[deepseek] fetch failed:', e);
+    logError('[deepseek] fetch failed:', e);
     return Response.json({ error: { message: 'DeepSeek 请求失败，请稍后重试', type: 'server_error' } }, { status: 502 });
   }
   if (!upstream.ok) {
     const detail = await upstream.text().catch(() => '');
-    console.error('[deepseek] upstream error:', upstream.status, detail);
+    logError('[deepseek] upstream error:', upstream.status, detail);
     return Response.json(
       {
         error: {
@@ -180,7 +181,7 @@ export async function streamDeepSeek(
           ids = r.ids;
         }
       } catch (e) {
-        console.error('[deepseek] onFinish failed:', e);
+        logError('[deepseek] onFinish failed:', e);
       }
       if (opts.appendUsageEvent) {
         // 带上刚落库的消息 id：前端靠它推进轮询游标，否则 3 秒后的增量拉取会把
@@ -225,7 +226,7 @@ export async function completeDeepSeek(
     res = await requestDeepSeek(env, apiKey, messages, false, maxTokens);
     if (res.status === 400) {
       const detail = await res.clone().text().catch(() => '');
-      console.error('[deepseek] upstream 400, retry compact:', detail.slice(0, 300));
+      logError('[deepseek] upstream 400, retry compact:', detail.slice(0, 300));
       res = await requestDeepSeek(
         env,
         apiKey,
@@ -235,12 +236,12 @@ export async function completeDeepSeek(
       );
     }
   } catch (e) {
-    console.error('[deepseek] fetch failed:', e);
+    logError('[deepseek] fetch failed:', e);
     return { error: 'DeepSeek 请求失败，请稍后重试', status: 502 };
   }
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
-    console.error('[deepseek] upstream error:', res.status, detail);
+    logError('[deepseek] upstream error:', res.status, detail);
     return {
       error: `DeepSeek 返回错误（${res.status}）${detail ? `：${detail.slice(0, 160)}` : ''}`,
       status: 502,

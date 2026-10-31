@@ -6,6 +6,7 @@
  * 用户有没有说"你忘了"、延迟有没有爆。
  */
 import type { Env } from './types';
+import { readDegradations, totalDegradations } from './degradations';
 
 export interface HealthSignals {
   /** 统计天数。 */
@@ -29,6 +30,10 @@ export interface HealthSignals {
   forgetPer100: number;
   /** 期间自主动作数。 */
   actions: number;
+  /** 期间静默降级总次数（R2/KV/召回/嵌入…）。 */
+  degradations?: number;
+  /** 平均每天的降级次数。 */
+  degradationsPerDay?: number;
 }
 
 export interface HealthComponent {
@@ -52,30 +57,31 @@ const round = (v: number): number => Math.round(v * 100) / 100;
 /**
  * 打分（纯函数）。
  *
- * 命中率 40 分：她是靠召回才记得住事的，这条最重。
- * 失忆抱怨 30 分：用户亲口说"你忘了"是最硬的质量信号。
+ * 命中率 35 分：她是靠召回才记得住事的，这条最重。
+ * 失忆抱怨 25 分：用户亲口说"你忘了"是最硬的质量信号。
  * 延迟 15 分：慢不致命但会伤体验。
  * 超时 15 分：超时等于这轮裸聊。
+ * 静默降级 10 分：结果没坏但某个子系统在悄悄失败，只有计数能看见。
  */
 export function scoreHealth(signals: HealthSignals): HealthResult {
   const components: HealthComponent[] = [];
   const warnings: string[] = [];
 
   // 命中率：>=90% 满分，<=50% 归零
-  const hitScore = clamp01((signals.hitRate - 0.5) / 0.4) * 40;
+  const hitScore = clamp01((signals.hitRate - 0.5) / 0.4) * 35;
   components.push({
     name: '召回命中率',
     score: round(hitScore),
-    weight: 40,
+    weight: 35,
     note: `${Math.round(signals.hitRate * 100)}% 的请求至少召回一条`,
   });
 
   // 失忆抱怨：每百条 0 次满分；>=5 次归零
-  const forgetScore = clamp01(1 - signals.forgetPer100 / 5) * 30;
+  const forgetScore = clamp01(1 - signals.forgetPer100 / 5) * 25;
   components.push({
     name: '失忆抱怨',
     score: round(forgetScore),
-    weight: 30,
+    weight: 25,
     note: `每百条用户消息 ${round(signals.forgetPer100)} 次「忘了/不记得」`,
   });
 
@@ -97,6 +103,16 @@ export function scoreHealth(signals: HealthSignals): HealthResult {
     note: `${round(signals.timeoutRate * 100)}% 的请求超时`,
   });
 
+  // 降级：每天 0 次满分，>=20 次归零。它不直接伤回复，但意味着某块在坏。
+  const perDay = signals.degradationsPerDay ?? 0;
+  const degradationScore = clamp01(1 - perDay / 20) * 10;
+  components.push({
+    name: '静默降级',
+    score: round(degradationScore),
+    weight: 10,
+    note: `平均每天 ${round(perDay)} 次降级（R2/KV/召回/嵌入等）`,
+  });
+
   const score = round(components.reduce((sum, c) => sum + c.score, 0));
 
   if (signals.samples === 0) warnings.push('没有召回样本：可能是流量太低或采样没落库');
@@ -104,6 +120,7 @@ export function scoreHealth(signals: HealthSignals): HealthResult {
   if (signals.forgetPer100 >= 3) warnings.push('失忆抱怨偏多：她会说「忘了」说明证据没被带到');
   if (signals.timeoutRate > 0.02) warnings.push('超时率超过 2%：检查召回预算与模型延迟');
   if (signals.p95Ms > 2500) warnings.push('p95 延迟超过 2.5s：用户能感觉到卡');
+  if (perDay >= 5) warnings.push(`每天 ${round(perDay)} 次静默降级：看 /api/admin/memory/degradations 定位部件`);
 
   const grade: HealthResult['grade'] = score >= 75 ? 'good' : score >= 50 ? 'watch' : 'bad';
   return { score, grade, components, signals, warnings };
@@ -133,7 +150,8 @@ export async function loadHealth(env: Env, days = 7): Promise<HealthResult> {
   try {
     const res = await env.DB.prepare(
       `SELECT total_ms, items, timed_out FROM recall_samples
-       WHERE day_key >= ? AND day_key <= ?`,
+       WHERE day_key >= ? AND day_key <= ?
+       LIMIT 5000`,
     )
       .bind(from, to)
       .all<{ total_ms: number; items: number; timed_out: number }>();
@@ -181,6 +199,9 @@ export async function loadHealth(env: Env, days = 7): Promise<HealthResult> {
     actions = 0;
   }
 
+  const degradationRows = await readDegradations(env, window);
+  const degradations = totalDegradations(degradationRows);
+
   const signals: HealthSignals = {
     days: window,
     samples: total,
@@ -193,6 +214,8 @@ export async function loadHealth(env: Env, days = 7): Promise<HealthResult> {
     userMessages,
     forgetPer100: userMessages === 0 ? 0 : round((forgetComplaints / userMessages) * 100),
     actions,
+    degradations,
+    degradationsPerDay: round(degradations / window),
   };
   return scoreHealth(signals);
 }

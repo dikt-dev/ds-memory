@@ -9,6 +9,7 @@
  * 判据仍然来自外部（健康分、自检报告、召回 miss），不是她自己打分。
  */
 import type { Env } from './types';
+import { recordDegradation } from './degradations';
 import { distillText } from './distill';
 import { addLlmCost } from './llm-cost';
 import { dateKeyInBeijing } from './date';
@@ -100,8 +101,14 @@ export interface EvidenceBundle {
 }
 
 export async function collectEvidence(env: Env, now = Date.now()): Promise<EvidenceBundle> {
-  const health = await loadHealth(env, 7).catch(() => null);
-  const check = await runSelfCheck(env, now).catch(() => null);
+  const health = await loadHealth(env, 7).catch(() => {
+    void recordDegradation(env, 'self_check');
+    return null;
+  });
+  const check = await runSelfCheck(env, now).catch(() => {
+    void recordDegradation(env, 'self_check');
+    return null;
+  });
 
   let recallMisses: EvidenceBundle['recallMisses'] = [];
   try {

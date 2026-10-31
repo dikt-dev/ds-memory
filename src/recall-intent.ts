@@ -11,6 +11,7 @@
  */
 import type { Env } from './types';
 import { distillText } from './distill';
+import { logError, logWarn } from './error-log';
 
 /** 选择器超时：超时就用确定性的关键词排序，别让召回卡住。延迟可以接受，放宽到 2.5s。 */
 export const SELECT_TIMEOUT_MS = 2500;
@@ -143,7 +144,7 @@ export async function selectRecall(
       new Promise<null>((resolve) => setTimeout(() => resolve(null), opts.timeoutMs ?? SELECT_TIMEOUT_MS)),
     ]);
   } catch (e) {
-    console.warn('[recall-intent] select failed:', e);
+    logWarn('[recall-intent] select failed:', e);
     return null;
   }
   if (!result) return null;

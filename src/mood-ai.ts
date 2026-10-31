@@ -21,6 +21,7 @@
 import type { Env } from './types';
 import { analyzeMood, type MoodLabel, type MoodResult } from './mood';
 import { getRuntimeState, putRuntimeState } from './runtime-store';
+import { logError, logWarn } from './error-log';
 
 /** 歧义缓存键前缀。 */
 const MOOD_AI_CACHE_PREFIX = 'mood:ai:';
@@ -154,7 +155,7 @@ export async function verifyMoodWithAI(
     await putRuntimeState(env, cacheKey, label, CACHE_TTL_SECONDS).catch(() => {});
     return label;
   } catch (e) {
-    console.warn('[mood-ai] Workers AI 复核失败，回退关键词结果：', e);
+    logWarn('[mood-ai] Workers AI 复核失败，回退关键词结果：', e);
     return null;
   }
 }

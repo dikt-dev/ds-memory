@@ -11,6 +11,7 @@
 import type { Env } from './types';
 import type { MessageRow } from './db';
 import { getObject } from './storage';
+import { logError, logWarn } from './error-log';
 
 interface ArchivedLog {
   date?: string;
@@ -65,7 +66,7 @@ export async function archivedMessagesBefore(
       .filter((s): s is ArchiveSource => Boolean(s))
       .sort((a, b) => b.sortKey.localeCompare(a.sortKey));
   } catch (e) {
-    console.error('[archive] list failed:', e);
+    logError('[archive] list failed:', e);
     return { messages: [], hasMore: false };
   }
 

@@ -209,7 +209,8 @@ export async function recentRoundMessages(env: Env, rounds: number): Promise<Mes
   const res = await env.DB.prepare(
     `SELECT ${SELECT_COLS} FROM messages
      WHERE ${turnExpr} IN (${placeholders})
-     ORDER BY created_ms ASC, id ASC`,
+     ORDER BY created_ms ASC, id ASC
+     LIMIT 500`,
   )
     .bind(...turnIds)
     .all<MessageRow>();
@@ -344,7 +345,7 @@ export async function usageByDay(
 /** 某天的全部消息（归档用）。 */
 export async function messagesByDate(env: Env, dateKey: string): Promise<MessageRow[]> {
   const res = await env.DB.prepare(
-    `SELECT ${SELECT_COLS} FROM messages WHERE date_key = ? ORDER BY id ASC`,
+    `SELECT ${SELECT_COLS} FROM messages WHERE date_key = ? ORDER BY id ASC LIMIT 2000`,
   )
     .bind(dateKey)
     .all<MessageRow>();

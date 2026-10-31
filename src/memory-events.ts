@@ -256,7 +256,8 @@ export async function backfillEvents(
     try {
       const res = await env.DB.prepare(
         `SELECT id, role, content, created_ms, turn_type FROM messages
-         WHERE date_key = ? ORDER BY created_ms ASC, id ASC`,
+         WHERE date_key = ? ORDER BY created_ms ASC, id ASC
+         LIMIT 2000`,
       )
         .bind(day)
         .all<EventSourceRow>();

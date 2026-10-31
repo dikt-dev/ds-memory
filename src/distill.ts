@@ -4,6 +4,7 @@
  */
 import type { Env } from './types';
 import { calcCost, pricingForModel, type TokenUsage } from './pricing';
+import { logError, logWarn } from './error-log';
 
 export type DistillBackend = 'deepseek' | 'workers-ai';
 
@@ -143,7 +144,7 @@ export async function distillText(
     );
     return { text, cost, backend: 'deepseek', usage };
   } catch (e) {
-    console.warn('[distill] DeepSeek 失败，回退 Workers AI：', e);
+    logWarn('[distill] DeepSeek 失败，回退 Workers AI：', e);
   }
   const text = await workersAiDistill(env, system, user, maxTokens);
   return { text, cost: 0, backend: 'workers-ai' };

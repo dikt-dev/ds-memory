@@ -57,6 +57,14 @@
   ],
   [
     "GET",
+    "/api/admin/memory/degradations"
+  ],
+  [
+    "GET",
+    "/api/admin/memory/degradations"
+  ],
+  [
+    "GET",
     "/api/admin/memory/events"
   ],
   [

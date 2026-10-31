@@ -123,7 +123,8 @@ export async function loadExpiryCandidates(
   const res = await env.DB.prepare(
     `SELECT id, subject, predicate, object, valid_from, valid_to
      FROM memory_facts
-     WHERE lower(subject) IN (${placeholders})`,
+     WHERE lower(subject) IN (${placeholders})
+     LIMIT 500`,
   )
     .bind(...subjects.map((s) => s.toLowerCase()))
     .all<FactKeyRow>();

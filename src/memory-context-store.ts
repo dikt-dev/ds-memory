@@ -197,7 +197,7 @@ async function deleteIds(env: Env, table: string, ids: string[]): Promise<void> 
 export async function upsertConversationFacts(env: Env, facts: MemoryFact[]): Promise<number> {
   if (facts.length === 0) return 0;
   const existing = await env.DB.prepare(
-    `SELECT id, source_message_ids, confidence FROM memory_facts WHERE origin = 'conversation'`,
+    `SELECT id, source_message_ids, confidence FROM memory_facts WHERE origin = 'conversation' LIMIT 5000`,
   ).all<{ id: string; source_message_ids: string; confidence: number }>();
   const old = new Map(
     (existing.results ?? []).map((r) => [r.id, parseArray<number>(r.source_message_ids)]),
@@ -241,7 +241,7 @@ export async function replaceMemoryContext(
   // 保留已回填的来源：reparse 出来的 fact 默认 source_message_ids=[]，
   // 若不合并，每日重建会把 provenance 清空。
   const existing = await env.DB.prepare(
-    `SELECT id, source_message_ids FROM memory_facts WHERE origin = ?`,
+    `SELECT id, source_message_ids FROM memory_facts WHERE origin = ? LIMIT 5000`,
   )
     .bind(origin)
     .all<{ id: string; source_message_ids: string }>();
@@ -512,7 +512,7 @@ export async function syncRollupSummaries(env: Env, now = Date.now()): Promise<n
   }
 
   const old = await env.DB.prepare(
-    `SELECT id FROM memory_chunks WHERE origin = 'rollup' AND source = 'summary'`,
+    `SELECT id FROM memory_chunks WHERE origin = 'rollup' AND source = 'summary' LIMIT 2000`,
   ).all<{ id: string }>();
   const keep = new Set(chunks.map((c) => c.id));
   const stale = (old.results ?? []).map((r) => r.id).filter((id) => !keep.has(id));

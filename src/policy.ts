@@ -10,6 +10,7 @@
  *   4. 写入必须带出处  5. 对外不越界   6. 动作可撤销 + 留痕
  */
 import type { Env } from './types';
+import { logError, logWarn } from './error-log';
 
 /** 动作的权限档位：A 自由生效、B 隔离验证、C 禁止。 */
 export type PolicyTier = 'A' | 'B' | 'C';
@@ -155,7 +156,7 @@ export function assertAllowed(
 ): { tier: PolicyTier } {
   const verdict = checkPolicy(action, ctx);
   if (!verdict.ok) {
-    console.warn('[policy] denied', {
+    logWarn('[policy] denied', {
       kind: action.kind,
       actor: ctx.actor,
       channel: ctx.channel ?? 'none',

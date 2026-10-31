@@ -85,7 +85,7 @@ export async function getDayUserMessages(
   dateKey: string,
 ): Promise<{ count: number; texts: string[] }> {
   const rows = await env.DB.prepare(
-    `SELECT content FROM messages WHERE role = 'user' AND date_key = ? ORDER BY id ASC`,
+    `SELECT content FROM messages WHERE role = 'user' AND date_key = ? ORDER BY id ASC LIMIT 500`,
   )
     .bind(dateKey)
     .all<{ content: string }>();

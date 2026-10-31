@@ -6,6 +6,7 @@ import type { Env } from './types';
 import type { WeatherInfo } from './prompt';
 import { getCityConfig } from './settings';
 import { getRuntimeState, putRuntimeState } from './runtime-store';
+import { logError, logWarn } from './error-log';
 
 const KV_PREFIX = 'weather:';
 export const WEATHER_CACHE_TTL_SECONDS = 30 * 60;
@@ -98,7 +99,7 @@ export async function fetchWeather(env: Env): Promise<WeatherInfo | null> {
     await putRuntimeState(env, key, JSON.stringify(info), WEATHER_CACHE_TTL_SECONDS);
     return { city: info.city, temp_c: info.temp_c, desc: info.desc };
   } catch (e) {
-    console.error('[weather] fetch failed:', e);
+    logError('[weather] fetch failed:', e);
     // 降级：返回过期缓存（若有）
     if (cached) return { city: cached.city, temp_c: cached.temp_c, desc: cached.desc };
     return null;

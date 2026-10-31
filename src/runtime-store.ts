@@ -8,6 +8,7 @@
  * - 所有值都是字符串，复杂对象由调用方 JSON 序列化。
  */
 import type { Env } from './types';
+import { recordDegradation } from './degradations';
 
 const TABLE = 'runtime_state';
 
@@ -35,7 +36,10 @@ export async function getRuntimeState(env: Env, key: string): Promise<string | n
       // 表未迁移/本地假 DB：回退 KV
     }
   }
-  return env.KV.get(key).catch(() => null);
+  return env.KV.get(key).catch(() => {
+    void recordDegradation(env, 'kv_read');
+    return null;
+  });
 }
 
 /** 写入运行时状态；ttlSeconds 为空表示不过期。D1 失败时回退 KV。 */

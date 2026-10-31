@@ -21,6 +21,7 @@
 
 import type { Env } from './types';
 import { EMOTION_MAX_STEP_PER_TURN, applyEmotionDelta, type EmotionVector } from './emotion-vector';
+import { logError, logWarn } from './error-log';
 
 export type EmotionEventType =
   | 'praise'
@@ -580,7 +581,7 @@ export async function reviewEventsWithAI(env: Env, text: string, at: number): Pr
     const raw = (res as { response?: string }).response ?? '';
     return parseAiEventLabels(raw, at);
   } catch (e) {
-    console.warn('[emotion-events] Workers AI 复核失败，回退词典结果：', e);
+    logWarn('[emotion-events] Workers AI 复核失败，回退词典结果：', e);
     return [];
   }
 }

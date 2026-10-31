@@ -9,6 +9,7 @@
 
 import type { Env } from './types';
 import { enqueueProactive } from './queue';
+import { logError, logWarn } from './error-log';
 
 export type ProactiveSlot = 'morning' | 'evening';
 
@@ -158,7 +159,7 @@ export async function deliverProactive(
     if (!id) return { ok: false, mode: 'queue', status: 'failed' };
     return { ok: true, mode: 'queue', status: 'queued' };
   } catch (e) {
-    console.error('[proactive] 入队失败:', e);
+    logError('[proactive] 入队失败:', e);
     return { ok: false, mode: 'queue', status: 'failed' };
   }
 }
@@ -178,12 +179,12 @@ async function sendToAstrBot(env: Env, text: string): Promise<boolean> {
     });
     if (!res.ok) {
       const detail = await res.text().catch(() => '');
-      console.error('[proactive] AstrBot send failed:', res.status, detail.slice(0, 200));
+      logError('[proactive] AstrBot send failed:', res.status, detail.slice(0, 200));
       return false;
     }
     return true;
   } catch (e) {
-    console.error('[proactive] AstrBot fetch failed:', e);
+    logError('[proactive] AstrBot fetch failed:', e);
     return false;
   }
 }

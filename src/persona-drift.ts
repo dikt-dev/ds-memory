@@ -12,6 +12,7 @@ import type { Env } from './types';
 import { distillText } from './distill';
 import { dateKeyInBeijing } from './date';
 import { getRuntimeState, putRuntimeState } from './runtime-store';
+import { logError, logWarn } from './error-log';
 
 export const TRAIT_KEYS = ['傲娇', '活泼', '黏人', '大大咧咧', '温柔', '毒舌'] as const;
 export type TraitKey = (typeof TRAIT_KEYS)[number];
@@ -180,7 +181,7 @@ export async function maybeReviewPersonaDrift(
     const match = res.text.match(/\{[\s\S]*\}/);
     if (match) deltas = clampDeltas(JSON.parse(match[0]) as Record<string, unknown>);
   } catch (e) {
-    console.warn('[persona] llm review failed, fallback heuristic:', e);
+    logWarn('[persona] llm review failed, fallback heuristic:', e);
   }
   if (!deltas) deltas = heuristicDeltas(userTexts);
 

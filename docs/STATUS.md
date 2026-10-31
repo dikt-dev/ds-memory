@@ -9,8 +9,8 @@
 | 技术栈 | Cloudflare Workers + Hono + TS ESM；D1 / KV / R2 / Workers AI / DeepSeek | Kotlin + Compose、Room、OkHttp、AlarmManager |
 | 线上 | `https://fae.us.ci` | release APK 56.36 MB（R8） |
 | 当前版本 | `3c37d2e8` | commit `d8171b3` |
-| 代码规模 | 108 个源文件 / 25 100 行（index.ts 1629 → 649） | ChatActivity 1245 行、ApiClient 1049 行 |
-| 质量 | **1076 个测试 / 99 个文件全绿**，`tsc --noEmit` 干净 | 无单测基建，靠编译 + 真机验证 |
+| 代码规模 | 111 个源文件 / 25608 行（index.ts 1629 → 651） | ChatActivity 1245 行、ApiClient 1049 行 |
+| 质量 | **1092 个测试 / 101 个文件全绿**，`tsc --noEmit` 干净 | 无单测基建，靠编译 + 真机验证 |
 | 协议 | 私有部署 | Apache-2.0（LICENSE + README 已就位） |
 
 ## 二、运行开关
@@ -87,7 +87,17 @@ L3 每轮工作记忆                                     → 宪法 + 召回证
    → **已修**：抽出 `src/context-pack.ts`（`buildMemoryPack` + `budgetFromPack` + `shouldSkipMemoryRecall`），
    三个渠道共用同一份"取记忆 → 中期/摘要二选一 → evidence 判定 → 去重 → 预算"，共删约 110 行重复代码。
 
-### 建议后续处理（未改）
+### 已处理（本轮继续）
+
+6. **静默降级**：新增 `src/degradations.ts` —— 按天把降级次数记进 D1 的 `degradation_log`，
+   健康分新增「静默降级」10 分（权重改为 35/25/15/15/10）。
+   已在 R2 读、KV 读、向量嵌入、自检依赖四处埋点；管理端 `GET /api/admin/memory/degradations` 看部件分布。
+7. **日志非结构化**：新增 `src/error-log.ts`，`logError/logWarn` 与 `console.error` 参数形状相同，
+   全库 108 处（28 个文件）已机械替换，输出固定字段 JSON（level / at / component / msg / detail）。
+8. **无 LIMIT 的增长型查询**：逐条核过 15 处候选，给 11 处补了上限（messages 2000、facts 5000、
+   chunks 2000、engine_metrics 2000、recall_samples 5000），其余是 `IN (...)` 由参数长度约束或聚合查询，不改。
+
+### 仍然待办
 
 5. **`index.ts` 1629 → 649 行**：已拆出 `routes-app.ts`（设备 Token 那一组）、`routes-proactive.ts`（队列 + 鉴权）、
    `routes-media.ts`（上传/回放/TTS/外链预览）、`queue-auth.ts`（队列与设备鉴权）。

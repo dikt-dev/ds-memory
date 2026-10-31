@@ -11,6 +11,7 @@
  */
 import type { Env } from './types';
 import { getRuntimeState, putRuntimeState } from './runtime-store';
+import { logError, logWarn } from './error-log';
 
 const costKey = (dateKey: string) => `cost:llm:${dateKey}`;
 const TTL_SECONDS = 8 * 24 * 60 * 60;
@@ -22,7 +23,7 @@ export async function addLlmCost(env: Env, dateKey: string, cost: number): Promi
     const prev = Number(await getRuntimeState(env, costKey(dateKey))) || 0;
     await putRuntimeState(env, costKey(dateKey), String(prev + cost), TTL_SECONDS);
   } catch (e) {
-    console.error('[llm-cost] accumulate failed:', e);
+    logError('[llm-cost] accumulate failed:', e);
   }
 }
 

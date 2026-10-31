@@ -10,6 +10,7 @@
  * 语义：记录「已经出现过消息的日期集合」的规模，只增不减。
  */
 import type { Env } from './types';
+import { logError, logWarn } from './error-log';
 
 /** 历史累计的有效聊天天数（与 D1 现有行数取最大值）。 */
 const ACTIVE_DAYS_KEY = 'relation:active_days';
@@ -44,7 +45,7 @@ export async function setActiveDaysState(env: Env, state: ActiveDaysState): Prom
   };
   // 永久保存（不带 expirationTtl）：这份数据一旦丢失就会让亲密度上限倒退
   await env.KV.put(ACTIVE_DAYS_KEY, JSON.stringify(payload)).catch((e) => {
-    console.error('[relation-store] 写入累计天数失败:', e);
+    logError('[relation-store] 写入累计天数失败:', e);
   });
 }
 

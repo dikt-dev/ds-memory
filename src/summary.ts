@@ -12,6 +12,7 @@ import { distillText } from './distill';
 import { addLlmCost } from './llm-cost';
 import { acquireRuntimeLock, getRuntimeState, putRuntimeState, releaseRuntimeLock } from './runtime-store';
 import { logTrace } from './trace';
+import { logError, logWarn } from './error-log';
 
 const logInfo = (msg: string): void => logTrace('summary', { msg });
 
@@ -141,7 +142,7 @@ export async function maybeSummarizeToday(env: Env, dateKey: string): Promise<vo
       await releaseRuntimeLock(env, lock);
     }
   } catch (e) {
-    console.error('[summary] maybeSummarizeToday failed:', e);
+    logError('[summary] maybeSummarizeToday failed:', e);
   }
 }
 

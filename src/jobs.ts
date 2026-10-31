@@ -74,6 +74,7 @@ import { addLlmCost } from './llm-cost';
 import { cleanupRuntimeState, deleteRuntimeState } from './runtime-store';
 import { appendArchiveLines, archiveHasLine, CORE_TARGET_BYTES, getArchiveLines } from './memory-archive';
 import { logJob } from './trace';
+import { logError, logWarn } from './error-log';
 
 /** 后台任务的日志出口：统一走 [job] 结构化格式，便于按 event 过滤。 */
 const logInfo = (msg: string): void => logJob('job.daily', { msg });
@@ -122,7 +123,7 @@ async function claimJob(env: Env, jobType: string, target: string): Promise<bool
     // 白天（尤其归档目标当天）跑的归档只覆盖当时已有的消息，不能算最终完成。
     // 次日 04:00 必须允许重跑；否则后半天的消息会永久漏归档。
     if (!isProvisionalArchiveRun(row.run_at, target)) return false;
-    console.warn(`[daily] ${target} 的 done 记录是当天 ${row.run_at} 跑的，视为临时归档，允许重跑`);
+    logWarn(`[daily] ${target} 的 done 记录是当天 ${row.run_at} 跑的，视为临时归档，允许重跑`);
   }
   if (row?.status === 'running') {
     const age = Date.now() - new Date(row.run_at).getTime();
@@ -206,10 +207,10 @@ export async function archiveOneDay(
           if (archivedRows.length > 0) {
             rows = archivedRows;
             recoveredFromArchive = true;
-            console.warn(`[daily] ${target} D1 已清理，从已有归档恢复 ${rows.length} 条消息`);
+            logWarn(`[daily] ${target} D1 已清理，从已有归档恢复 ${rows.length} 条消息`);
           }
         } catch (e) {
-          console.error(`[daily] ${target} 已有归档解析失败:`, e);
+          logError(`[daily] ${target} 已有归档解析失败:`, e);
         }
       }
     }
@@ -281,7 +282,7 @@ export async function archiveOneDay(
         }
       }
     } catch (e) {
-      console.error('[daily] read back archive for distill failed, use in-memory rows:', e);
+      logError('[daily] read back archive for distill failed, use in-memory rows:', e);
     }
 
     // 4) AI 提炼当天对话 → 合并进 memory.md（失败不阻断归档）
@@ -320,7 +321,7 @@ export async function archiveOneDay(
           for (const k of aiHits) await insertKeepsake(env, k);
           if (ruleHits.length > 0 || aiHits.length > 0) await refreshKeepsakesBlock(env);
         } catch (e) {
-          console.error('[daily] keepsake detect failed:', e);
+          logError('[daily] keepsake detect failed:', e);
         }
 
         // 收集关系驱动统计（量 → 亲密度，质 → 好感度）
@@ -369,12 +370,12 @@ export async function archiveOneDay(
             const digest = sanitizeDistilledSummary(summary.text.trim());
             if (digest) await attachDistillation(env, target, digest, now);
           } catch (e) {
-            console.error('[daily] attach distillation to context failed:', e);
+            logError('[daily] attach distillation to context failed:', e);
           }
         }
       } catch (e) {
         distillError = e instanceof Error ? e.message : String(e);
-        console.error('[daily] distill failed:', e);
+        logError('[daily] distill failed:', e);
       }
     }
 
@@ -463,7 +464,7 @@ export async function archiveOneDay(
         logInfo(`[daily] emotion settle — ${JSON.stringify(settled.applied)} mood=${nextMood}`);
       }
     } catch (e) {
-      console.error('[daily] emotion settle failed:', e);
+      logError('[daily] emotion settle failed:', e);
     }
 
     // 5) 短期区块到期：先把「近期动态」超过 7 天的条目无损搬进档案，再清理
@@ -477,11 +478,11 @@ export async function archiveOneDay(
           memory = pruned.text;
           logInfo(`[daily] 近期动态 ${pruned.removed} 条过期条目搬进档案`);
         } else {
-          console.error('[daily] 近期动态清理中止：档案未确认写入，保留核心层');
+          logError('[daily] 近期动态清理中止：档案未确认写入，保留核心层');
         }
       }
     } catch (e) {
-      console.error('[daily] prune transient failed:', e);
+      logError('[daily] prune transient failed:', e);
     }
 
     // 5.5) 已完成事项自动归档：「进行中的事项」里标 [已完成] 且过宽限期的 → 移到「共同经历」
@@ -492,7 +493,7 @@ export async function archiveOneDay(
         logInfo(`[daily] 已完成事项归档 ${archived.moved} 条：${archived.titles.join('、')}`);
       }
     } catch (e) {
-      console.error('[daily] archive completed failed:', e);
+      logError('[daily] archive completed failed:', e);
     }
 
     // 5.6) 雷区主动学习：扫描当天反感信号，累计后提升写入「雷区与禁忌」
@@ -512,7 +513,7 @@ export async function archiveOneDay(
         }
       }
     } catch (e) {
-      console.error('[daily] aversion learn failed:', e);
+      logError('[daily] aversion learn failed:', e);
     }
 
     // 5.7/5.8) 记忆质量优先：memory.md 不限大小、不压缩、不删除、不搬档。
@@ -528,7 +529,7 @@ export async function archiveOneDay(
         logInfo(`[daily] relation decay: ${decay.note}`);
       }
     } catch (e) {
-      console.error('[daily] relation decay failed:', e);
+      logError('[daily] relation decay failed:', e);
     }
 
     // 6.5) 保守去重：只合并重复条目，不改事实；受保护分区不动。
@@ -546,7 +547,7 @@ export async function archiveOneDay(
         );
       }
     } catch (e) {
-      console.error('[daily] memory compact failed:', e);
+      logError('[daily] memory compact failed:', e);
     }
 
     // 6.6) 超过 24KB 时，把最旧的往事无损搬进档案（只搬不删）；
@@ -561,7 +562,7 @@ export async function archiveOneDay(
         const archive = await getArchiveLines(env);
         const preserved = demoted.removed.every((line) => archiveHasLine(archive, line));
         if (!preserved) {
-          console.error(`[daily] ${header} 分层中止：档案未确认写入，保留核心层`);
+          logError(`[daily] ${header} 分层中止：档案未确认写入，保留核心层`);
           break;
         }
         memory = demoted.text;
@@ -571,7 +572,7 @@ export async function archiveOneDay(
         logInfo(`[daily] 记忆分层：${archivedCount} 条旧往事搬进档案，memory=${byteLength(memory)}B`);
       }
     } catch (e) {
-      console.error('[daily] memory demote failed:', e);
+      logError('[daily] memory demote failed:', e);
     }
 
     // 6.5) 写前快照：保留「当天开始时的记忆」，一天一份、重跑不覆盖；失败不阻断归档
@@ -580,24 +581,24 @@ export async function archiveOneDay(
       const pruned = await pruneSnapshots(env);
       if (pruned.length > 0) logInfo(`[daily] 快照清理：删除 ${pruned.length} 份超期快照`);
     } catch (e) {
-      console.error('[daily] 快照清理失败（不影响归档）:', e);
+      logError('[daily] 快照清理失败（不影响归档）:', e);
     }
 
     // 7) 写回 R2 + 强制刷新 KV 缓存（24h TTL）
     const memoryChanged = memory !== memoryBefore;
     const saved = await putMemory(env, memory);
     if (!saved) {
-      console.error('[daily] 记忆写回失败（R2 读回校验未通过），跳过索引与 context 重建，避免两者不一致');
+      logError('[daily] 记忆写回失败（R2 读回校验未通过），跳过索引与 context 重建，避免两者不一致');
     }
     // 重建 D1 记忆检索索引（幂等；失败不影响归档，下次可手动 /api/admin/memory/reindex）
     // memory 没变就不重建：全量 reindex + context 重写是这条链路里最贵的一步，
     // 而"当天没有新记忆"（比如整天都在闲聊）并不罕见。
     if (saved && memoryChanged) try {
       const idx = await reindexMemory(env);
-      if (idx.errors) console.error('[daily] memory reindex failed:', idx.errors);
+      if (idx.errors) logError('[daily] memory reindex failed:', idx.errors);
       else logInfo(`[daily] 记忆索引重建：${idx.entries} 条，含向量 ${idx.withVec} 条`);
     } catch (e) {
-      console.error('[daily] memory reindex error:', e);
+      logError('[daily] memory reindex error:', e);
     } else if (saved) {
       logInfo('[daily] memory 未变化，跳过索引重建');
     }
@@ -608,15 +609,15 @@ export async function archiveOneDay(
         `[daily] memory context：facts=${ctx.facts} events=${ctx.events} chunks=${ctx.chunks}`,
       );
     } catch (e) {
-      console.error('[daily] memory context sync failed:', e);
+      logError('[daily] memory context sync failed:', e);
     }
     // 时间金字塔：周一滚上周摘要、每月 1 日滚上月摘要（幂等，失败不影响归档）
     try {
       const rl = await maybeGenerateRollups(env, now);
       if (rl.generated.length) logInfo(`[daily] 记忆摘要滚动：${rl.generated.join('、')}`);
-      if (rl.errors.length) console.error('[daily] rollup errors:', rl.errors.join(';'));
+      if (rl.errors.length) logError('[daily] rollup errors:', rl.errors.join(';'));
     } catch (e) {
-      console.error('[daily] rollup error:', e);
+      logError('[daily] rollup error:', e);
     }
     // Phase 2B：摘要同步 + 来源回填走可重试任务；表未迁移时回退直接执行。
     try {
@@ -633,13 +634,13 @@ export async function archiveOneDay(
         const jobs = await runMemoryJobs(env, now, 5);
         processed += jobs.processed;
         failedJobs += jobs.failed;
-        if (jobs.failed) console.error('[daily] memory jobs failed:', JSON.stringify(jobs.details));
+        if (jobs.failed) logError('[daily] memory jobs failed:', JSON.stringify(jobs.details));
         if (jobs.processed === 0 || Date.now() > jobDeadline) break;
       }
       logInfo(`[daily] memory jobs：${processed} 个完成，失败 ${failedJobs}`);
       // 兜底：任务队列失败时也保证重建后的 chunks 有向量，避免静默退化到纯关键词。
       const embedded = await embedMemoryChunks(env, 200).catch((e) => {
-        console.error('[daily] embedding fallback failed:', e);
+        logError('[daily] embedding fallback failed:', e);
         return 0;
       });
       if (embedded > 0) logInfo(`[daily] embedding fallback：${embedded} 条`);
@@ -648,7 +649,7 @@ export async function archiveOneDay(
         const doc = await rebuildFactsDoc(env, dateKeyInBeijing(now));
         logInfo(`[daily] facts.md：${doc.facts} 条 / ${doc.bytes} 字节`);
       } catch (e) {
-        console.error('[daily] facts.md rebuild failed:', e);
+        logError('[daily] facts.md rebuild failed:', e);
       }
       // ADR-001 S9：自审（默认关，SELF_REVIEW=on 才跑；只执行 A 档动作）。
       if (env.SELF_REVIEW === 'on') {
@@ -658,7 +659,7 @@ export async function archiveOneDay(
             `[daily] 自审：提案 ${review.proposals}，接受 ${review.accepted.length}，执行 ${review.applied}`,
           );
         } catch (e) {
-          console.error('[daily] self-review failed:', e);
+          logError('[daily] self-review failed:', e);
         }
       }
       // ADR-001 S8：每夜自检——引文回查、孤儿、断链，坏了就自己降权。
@@ -668,10 +669,10 @@ export async function archiveOneDay(
           `[daily] 自检：事件 ${check.events} / 引文不一致 ${check.quoteMismatches.length} / 孤儿 ${check.orphans.length} / 断链 ${check.brokenLinks}`,
         );
       } catch (e) {
-        console.error('[daily] self-check failed:', e);
+        logError('[daily] self-check failed:', e);
       }
     } catch (e) {
-      console.error('[daily] memory jobs unavailable, fallback direct:', e);
+      logError('[daily] memory jobs unavailable, fallback direct:', e);
       try {
         const summaries = await syncRollupSummaries(env);
         const linked = await backfillMemoryProvenance(env);
@@ -680,7 +681,7 @@ export async function archiveOneDay(
           `[daily] memory context fallback：summaries=${summaries} provenance=${linked} embedded=${embedded}`,
         );
       } catch (fallbackError) {
-        console.error('[daily] memory context fallback failed:', fallbackError);
+        logError('[daily] memory context fallback failed:', fallbackError);
       }
     }
     // 当天已归档，清理滚动摘要（新的一天用新键）
@@ -690,7 +691,7 @@ export async function archiveOneDay(
       const relation = parseRelationValues(memory);
       await attachRelation(env, target, buildRelationStatus(relation.affinity, relation.intimacy, relation.mood), now);
     } catch (e) {
-      console.error('[daily] attach relation failed:', e);
+      logError('[daily] attach relation failed:', e);
     }
     const after = byteLength(memory);
     // 提炼/压缩的费用不在 messages 表里，单独记账到 KV，供 /api/usage 汇总
@@ -722,7 +723,7 @@ export async function archiveOneDay(
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error('[daily] archive failed for', target, e);
+    logError('[daily] archive failed for', target, e);
     await finishJob(env, 'daily_archive', target, msg, false).catch(() => {});
     throw e;
   }
@@ -831,19 +832,19 @@ export async function findArchiveCatchupTargets(env: Env, now: Date): Promise<st
 /** 每日归档入口：先补跑历史失败/缺失日期（最旧优先，≤7 个），再归档前一天。 */
 export async function runDailyArchive(env: Env, now: Date): Promise<DailyArchiveResult> {
   // 存储容量检查：主账号接近上限时，把后续写入切换到小号 R2
-  await checkStorageCapacity(env).catch((e) => console.error('[storage] capacity check failed:', e));
+  await checkStorageCapacity(env).catch((e) => logError('[storage] capacity check failed:', e));
 
   // 回填主动消息质量反馈（发出 2 小时后检查用户是否回复）
-  await backfillFeedback(env, now).catch((e) => console.error('[feedback] backfill failed:', e));
+  await backfillFeedback(env, now).catch((e) => logError('[feedback] backfill failed:', e));
 
   // 清理：30 天前的已发送队列记录、过期的 context/images 文件
-  await cleanupQueue(env).catch((e) => console.error('[queue] cleanup failed:', e));
-  await cleanupStaleObjects(env, now).catch((e) => console.error('[r2] cleanup failed:', e));
-  await cleanupRuntimeState(env, now.getTime()).catch((e) => console.error('[runtime] cleanup failed:', e));
+  await cleanupQueue(env).catch((e) => logError('[queue] cleanup failed:', e));
+  await cleanupStaleObjects(env, now).catch((e) => logError('[r2] cleanup failed:', e));
+  await cleanupRuntimeState(env, now.getTime()).catch((e) => logError('[runtime] cleanup failed:', e));
   // 召回分段采样只留 14 天（一天约 100 行）
-  await pruneRecallSamples(env).catch((e) => console.error('[recall-samples] prune failed:', e));
+  await pruneRecallSamples(env).catch((e) => logError('[recall-samples] prune failed:', e));
   await cleanupMemoryTables(env, now.getTime()).catch((e) =>
-    console.error('[memory] table cleanup failed:', e),
+    logError('[memory] table cleanup failed:', e),
   );
 
   const catchupTargets = await findArchiveCatchupTargets(env, now);
@@ -853,7 +854,7 @@ export async function runDailyArchive(env: Env, now: Date): Promise<DailyArchive
       const r = await archiveOneDay(env, target, now);
       catchup.push(`${r.target}(${r.messages}条${r.distill_error ? '，提炼待补' : ''})`);
     } catch (e) {
-      console.error('[daily] catch-up failed for', target, e);
+      logError('[daily] catch-up failed for', target, e);
     }
   }
 
@@ -861,11 +862,11 @@ export async function runDailyArchive(env: Env, now: Date): Promise<DailyArchive
   const main = await archiveOneDay(env, target, now);
   // 性格缓慢漂移：至少 7 天、15 条用户消息才结算一次，每次每维最多 ±2
   await maybeReviewPersonaDrift(env, now).catch((e) =>
-    console.error('[persona] weekly review failed:', e),
+    logError('[persona] weekly review failed:', e),
   );
   // D1 只保留今天和昨天；更早的必须先有归档才删
   const cleanup = await cleanupOldMessages(env, now).catch((e) => {
-    console.error('[daily] cleanup old messages failed:', e);
+    logError('[daily] cleanup old messages failed:', e);
     return { deleted: 0, keptFrom: target, dates: [] as string[] };
   });
   const cleanupNote = cleanup.deleted
@@ -937,7 +938,7 @@ async function mergeMonth(env: Env, month: string, now: Date): Promise<MonthlyMe
       try {
         await archiveOneDay(env, date, now);
       } catch (e) {
-        console.error('[monthly] 补归档失败', date, e);
+        logError('[monthly] 补归档失败', date, e);
       }
     }
     keys = (await listKeys(env, prefix)).filter((k) => k.endsWith('.log'));
@@ -1000,7 +1001,7 @@ async function mergeMonth(env: Env, month: string, now: Date): Promise<MonthlyMe
     return { month, daily_logs: keys.length, messages: all.length, merged: true, cleaned_d1: cleaned };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error('[monthly] merge failed for', month, e);
+    logError('[monthly] merge failed for', month, e);
     await finishJob(env, 'monthly_merge', month, msg, false).catch(() => {});
     throw e;
   }
@@ -1016,7 +1017,7 @@ export async function runMonthlyMerge(env: Env, now: Date): Promise<MonthlyMerge
     try {
       await mergeMonth(env, row.target, now);
     } catch (e) {
-      console.error('[monthly] catch-up failed for', row.target, e);
+      logError('[monthly] catch-up failed for', row.target, e);
     }
   }
   const today = dateKeyInBeijing(now);
@@ -1032,7 +1033,7 @@ export async function runMonthlyMerge(env: Env, now: Date): Promise<MonthlyMerge
 export async function runContextRefresh(env: Env, now: Date): Promise<void> {
   const dateKey = dateKeyInBeijing(now);
   const weather = await fetchWeather(env);
-  if (weather) await attachWeather(env, dateKey, weather).catch((e) => console.error('[context] weather failed:', e));
+  if (weather) await attachWeather(env, dateKey, weather).catch((e) => logError('[context] weather failed:', e));
 
   try {
     const memory = await getMemory(env);
@@ -1064,6 +1065,6 @@ export async function runContextRefresh(env: Env, now: Date): Promise<void> {
       now,
     );
   } catch (e) {
-    console.error('[context] relation refresh failed:', e);
+    logError('[context] relation refresh failed:', e);
   }
 }

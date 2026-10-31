@@ -16,6 +16,7 @@
 import type { Env } from './types';
 import { getObject, putObject } from './storage';
 import { ENTRY_RE, ENTRY_PREFIX_RE, normalizeDateKey } from './memory-maintenance';
+import { logError, logWarn } from './error-log';
 
 export const ARCHIVE_R2_KEY = 'memory/archive.md';
 const ARCHIVE_KV_KEY = 'archive:cache';
@@ -244,7 +245,7 @@ export async function getArchiveLines(env: Env): Promise<string[]> {
     archiveMemoryCache = { at: Date.now(), text };
     return parseArchiveLines(text);
   } catch (e) {
-    console.error('[archive] read failed:', e);
+    logError('[archive] read failed:', e);
     return [];
   }
 }
@@ -269,7 +270,7 @@ export async function appendArchiveLines(env: Env, incoming: string[]): Promise<
     archiveMemoryCache = null; // 让下次读到新内容
     return added;
   } catch (e) {
-    console.error('[archive] append failed:', e);
+    logError('[archive] append failed:', e);
     return 0;
   }
 }

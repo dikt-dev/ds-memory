@@ -79,7 +79,8 @@ export async function readEngineMetrics(env: Env, days = 7): Promise<EngineMetri
               old_bytes, new_bytes, ms_sum
        FROM engine_metrics
        WHERE day_key >= ?
-       ORDER BY day_key DESC, channel, kind, mode`,
+       ORDER BY day_key DESC, channel, kind, mode
+       LIMIT 2000`,
     )
       .bind(cutoff)
       .all<{

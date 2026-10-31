@@ -27,6 +27,7 @@ import { DATE_PREFIX_RE, ENTRY_RE, byteLength, normalizeDateKey } from './memory
 import { loadRollups } from './memory-rollups';
 import { distillText } from './distill';
 import { logTrace } from './trace';
+import { logError, logWarn } from './error-log';
 
 const logInfo = (msg: string): void => logTrace('memory.index', { msg });
 
@@ -208,7 +209,7 @@ export async function embedTexts(env: Env, texts: string[]): Promise<number[][]>
     };
     if (Array.isArray(res?.data) && res.data.length === texts.length) return res.data;
   } catch (e) {
-    console.warn('[memory-index] embedding failed, fallback to keyword recall:', e);
+    logWarn('[memory-index] embedding failed, fallback to keyword recall:', e);
   }
   return [];
 }
@@ -327,7 +328,7 @@ export async function reindexMemory(
         }
       }
     } else {
-      console.warn(
+      logWarn(
         `[memory-index] ${rows.length} 条超过语义去重上限 ${MAX_SEMANTIC_DEDUP_ENTRIES}，本轮跳过 O(n²) 去重`,
       );
     }
@@ -377,7 +378,7 @@ export async function reindexMemory(
     await putIndexKv(env, rows);
     return { entries: rows.length, withVec: vecCount?.c ?? 0, errors: null };
   } catch (e) {
-    console.error('[memory-index] reindex failed:', e);
+    logError('[memory-index] reindex failed:', e);
     return { entries: 0, withVec: 0, errors: e instanceof Error ? e.message : String(e) };
   }
 }
@@ -471,7 +472,7 @@ async function putIndexKv(env: Env, rows: MemoryEntryRow[]): Promise<void> {
     let payload = JSON.stringify({ v: 1, at: Date.now(), rows });
     if (byteLength(payload) > KV_INDEX_MAX_BYTES) {
       // 太大就丢弃向量，关键词召回仍可用（向量路径只在 D1 回源时生效）
-      console.warn('[memory-index] KV index too large, dropping vec in cache');
+      logWarn('[memory-index] KV index too large, dropping vec in cache');
       payload = JSON.stringify({
         v: 1,
         at: Date.now(),
@@ -480,7 +481,7 @@ async function putIndexKv(env: Env, rows: MemoryEntryRow[]): Promise<void> {
     }
     await env.KV.put(INDEX_KV_KEY, payload, { expirationTtl: INDEX_KV_TTL_SECONDS }).catch(() => {});
   } catch (e) {
-    console.warn('[memory-index] putIndexKv failed:', e);
+    logWarn('[memory-index] putIndexKv failed:', e);
   }
 }
 
@@ -708,7 +709,7 @@ async function llmRerank(
       new Promise<null>((resolve) => setTimeout(() => resolve(null), RERANK_TIMEOUT_MS)),
     ]);
     if (!res) {
-      console.warn(`[memory-index] llm rerank timeout ${RERANK_TIMEOUT_MS}ms, fallback`);
+      logWarn(`[memory-index] llm rerank timeout ${RERANK_TIMEOUT_MS}ms, fallback`);
       return null;
     }
     const nums = [...res.text.matchAll(/\d+/g)]
@@ -718,7 +719,7 @@ async function llmRerank(
     if (nums.length === 0) return null;
     return nums.map((n) => pool[n - 1]);
   } catch (e) {
-    console.warn('[memory-index] llm rerank failed, fallback deterministic:', e);
+    logWarn('[memory-index] llm rerank failed, fallback deterministic:', e);
     return null;
   }
 }
@@ -901,7 +902,7 @@ export async function recallMemoryForChat(
     if (lines.length === 0) return '';
     return ['## 相关记忆（按话题检索）', ...lines].join('\n');
   } catch (e) {
-    console.warn('[memory-index] recall failed:', e);
+    logWarn('[memory-index] recall failed:', e);
     return '';
   }
 }

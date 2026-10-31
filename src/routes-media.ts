@@ -16,6 +16,7 @@ import { getObject, putObject } from './storage';
 import { ackTtsJob, claimTtsJob, createTtsJob, fallbackTtsJob, getTtsJob, nackTtsJob } from './tts';
 import { loadTtsConfig, saveTtsConfig, speakWithCache } from './tts-config';
 import { getStatusSnapshot } from './status';
+import { logError, logWarn } from './error-log';
 
 type AppEnv = { Bindings: Env; Variables: { requestId: string } };
 
@@ -531,7 +532,7 @@ export function registerMediaRoutes(app: Hono<AppEnv>): void {
         },
       });
     } catch (e) {
-      console.error('[tts] speak failed:', e);
+      logError('[tts] speak failed:', e);
       return c.json({ error: 'tts failed' }, 502);
     }
   });

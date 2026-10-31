@@ -7,6 +7,7 @@
 import type { Env } from './types';
 import { getObject, putObject } from './storage';
 import { assertAllowed, type Actor } from './policy';
+import { logError, logWarn } from './error-log';
 
 export const MEMORY_R2_KEY = 'memory.md';
 export const MEMORY_KV_KEY = 'memory:cache';
@@ -18,7 +19,7 @@ export async function getMemory(env: Env): Promise<string> {
     const cached = await env.KV.get(MEMORY_KV_KEY);
     if (cached !== null) return cached;
   } catch (e) {
-    console.error('[memory] KV read failed:', e);
+    logError('[memory] KV read failed:', e);
   }
   // 2) 回源 R2（主账号优先，小号兜底）并重建缓存
   try {
@@ -28,7 +29,7 @@ export async function getMemory(env: Env): Promise<string> {
     await env.KV.put(MEMORY_KV_KEY, text, { expirationTtl: MEMORY_KV_TTL_SECONDS }).catch(() => {});
     return text;
   } catch (e) {
-    console.error('[memory] R2 read failed:', e);
+    logError('[memory] R2 read failed:', e);
     return ''; // 记忆不可用时降级为空，聊天照常
   }
 }
@@ -52,7 +53,7 @@ export async function putMemory(
   try {
     await putObject(env, MEMORY_R2_KEY, text);
   } catch (e) {
-    console.error('[memory] R2 put failed, cache left untouched:', e);
+    logError('[memory] R2 put failed, cache left untouched:', e);
     return false;
   }
 
@@ -60,7 +61,7 @@ export async function putMemory(
   const echo = await getObject(env, MEMORY_R2_KEY).catch(() => null);
   const stored = echo ? await echo.text().catch(() => null) : null;
   if (stored !== text) {
-    console.error(
+    logError(
       `[memory] R2 write verify failed (wrote ${text.length} chars, read back ${stored === null ? 'null' : stored.length})`,
     );
     // 缓存里可能是旧版也可能是半截新版，一律作废，下次回源看真实内容。
@@ -72,7 +73,7 @@ export async function putMemory(
   try {
     await env.KV.put(MEMORY_KV_KEY, text, { expirationTtl: MEMORY_KV_TTL_SECONDS });
   } catch (e) {
-    console.error('[memory] KV write failed (cache cleared, next read re-sources R2):', e);
+    logError('[memory] KV write failed (cache cleared, next read re-sources R2):', e);
     await env.KV.delete(MEMORY_KV_KEY).catch(() => {});
   }
   return true;

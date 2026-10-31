@@ -131,6 +131,7 @@ import { elapsedMs, logTrace, REQUEST_ID_HEADER, shouldLogHttp, startTrace } fro
 import { pruneRequestLog, readPathStats, readRecentRequests, recordRequest } from './request-log';
 import { deleteRuntimeState, getRuntimeState, putRuntimeState } from './runtime-store';
 import { getHeartbeat } from './profile-cache';
+import { logError, logWarn } from './error-log';
 
 type AppEnv = { Bindings: Env; Variables: { requestId: string } };
 
@@ -276,7 +277,7 @@ app.get('/api/balance', requireAuth, async (c) => {
       'cache-control': 'private, max-age=60',
     });
   } catch (e) {
-    console.error('[balance] fetch failed:', e);
+    logError('[balance] fetch failed:', e);
     return c.json({ error: '余额查询失败' }, 502);
   }
 });
@@ -555,7 +556,7 @@ app.get('*', async (c) => {
 });
 
 app.onError((err, c) => {
-  console.error('[worker] unhandled error:', err);
+  logError('[worker] unhandled error:', err);
   return c.json({ error: 'internal error' }, 500);
 });
 
@@ -576,7 +577,7 @@ async function maybeRefreshContext(env: Env, now: Date): Promise<void> {
 
 async function runChannelCheck(env: Env, now: Date): Promise<void> {
   const result = await checkChannelOffline(env, now).catch(() => 'skip' as const);
-  if (result === 'alerted') console.warn('[cron] 聊天通道掉线，已生成提醒');
+  if (result === 'alerted') logWarn('[cron] 聊天通道掉线，已生成提醒');
 }
 
 /** 把一次 cron 的执行记进 request_log（线上没有 wrangler tail）。 */
@@ -644,7 +645,7 @@ export default {
       return;
     }
 
-    console.warn('[cron] unknown cron expression:', cron);
+    logWarn('[cron] unknown cron expression:', cron);
     logCron(env, ctx, cron, startedAt, false);
   },
 } satisfies ExportedHandler<Env>;
