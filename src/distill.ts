@@ -150,6 +150,24 @@ export async function distillText(
 }
 
 /** 提炼当天对话 → 结构化记忆条目（输入包含 memory.md 全文；默认 v4-pro 质量档；失败回退 Workers AI）。 */
+/**
+ * 按整条消息从尾部取：`slice(-N)` 会把某句话从中间切开，
+ * 模型看到半截「助手：……」容易把残缺内容当成当天发生的事。
+ */
+export function tailByMessage(conversation: string, maxChars: number): string {
+  if (conversation.length <= maxChars) return conversation;
+  const parts = conversation.split('\n\n');
+  const kept: string[] = [];
+  let used = 0;
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const piece = parts[i];
+    if (used + piece.length + 2 > maxChars && kept.length > 0) break;
+    kept.unshift(piece);
+    used += piece.length + 2;
+  }
+  return kept.join('\n\n');
+}
+
 export async function distillDay(
   env: Env,
   dateKey: string,
@@ -162,7 +180,7 @@ export async function distillDay(
 ${memory || '（暂无）'}
 
 ## 当天对话
-${conversation.slice(-60000)}
+${tailByMessage(conversation, 60000)}
 
 请对照当前记忆，只输出需要新增或修正的条目（不要重复已有内容），格式 "- [YY-MM-DD] 内容"。`;
   // 每日归档是一天只跑一次的重活：开思考模式，并给思维链留出额度（4096 会被推理吃掉）

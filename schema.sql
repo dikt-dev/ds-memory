@@ -108,6 +108,21 @@ CREATE TABLE IF NOT EXISTS proactive_queue (
 CREATE INDEX IF NOT EXISTS idx_proactive_pending ON proactive_queue(sent_at, id);
 CREATE INDEX IF NOT EXISTS idx_proactive_queue_msg ON proactive_queue(message_id);
 
+-- ---------- 成本看板：按 天×渠道×模型 聚合 token/费用/缓存命中 ----------
+-- 为什么要在 D1 里建：命中价和未命中价差 50 倍，看不见就优化不了。
+CREATE TABLE IF NOT EXISTS chat_usage (
+  day_key     TEXT    NOT NULL,
+  channel     TEXT    NOT NULL,
+  model       TEXT    NOT NULL,
+  calls       INTEGER NOT NULL DEFAULT 0,
+  prompt_hit  INTEGER NOT NULL DEFAULT 0,
+  prompt_miss INTEGER NOT NULL DEFAULT 0,
+  completion  INTEGER NOT NULL DEFAULT 0,
+  cost_rmb    REAL    NOT NULL DEFAULT 0,
+  updated_at  INTEGER NOT NULL,
+  PRIMARY KEY (day_key, channel, model)
+);
+
 -- ---------- 运行时状态（Phase 1：替代高频 KV） ----------
 CREATE TABLE IF NOT EXISTS runtime_state (
   key        TEXT PRIMARY KEY,

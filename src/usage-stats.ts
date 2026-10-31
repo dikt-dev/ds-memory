@@ -92,8 +92,9 @@ export async function recordChatUsage(env: Env, input: UsageInput): Promise<void
         input.now ?? Date.now(),
       )
       .run();
-  } catch {
-    // 记账失败不影响聊天
+  } catch (e) {
+    // 记账失败不影响聊天，但必须留痕：静默吞错会让成本看板空一周都没人发现。
+    console.error('[usage] record failed:', e);
   }
 }
 

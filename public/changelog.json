@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-10-31T04:00:47.576Z",
-  "count": 273,
+  "generated_at": "2026-10-31T04:18:47.067Z",
+  "count": 274,
   "days": [
     {
       "date": "2026-10-31",
       "items": [
+        {
+          "hash": "b727154",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "web",
+          "title": "网页图标 + 修改记录页重新生成并防再漏",
+          "why": "- 从头像裁出 icon-64/icon-180，聊天页与修改记录页都挂上 favicon + apple-touch-icon + theme-color - changelog.json 重新生成：273 条 / 10 天，含今天 31 条（旧文件是 10-30 的且编码坏了） - npm run deploy 现在先生成 changelog，避免记录页再落后"
+        },
         {
           "hash": "ed0ac99",
           "date": "2026-10-31",

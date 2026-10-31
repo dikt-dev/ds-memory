@@ -128,7 +128,8 @@ async function claimJob(env: Env, jobType: string, target: string): Promise<bool
 
 /**
  * 归档补全：一天的最后一条如果是用户消息，而 AI 的回复落在下一天，
- * 把这条回复也补进当天日志，保证归档以 AI 的话收尾、对话完整。
+ * 把这条回复也补进当天日志，让对话完整。
+ * 注意：她主动选择沉默（silent end）时本来就没有回复，此时保持原样、不补。
  * 只追加，不删除、不改写 D1；月度合并会按 id 去重。
  */
 export function completeConversationRows(
