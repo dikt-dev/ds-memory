@@ -169,6 +169,14 @@
   ],
   [
     "GET",
+    "/api/admin/memory/subject-audit"
+  ],
+  [
+    "GET",
+    "/api/admin/memory/subject-audit"
+  ],
+  [
+    "GET",
     "/api/admin/memory/variants"
   ],
   [

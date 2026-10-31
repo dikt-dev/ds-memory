@@ -136,6 +136,19 @@ export function eventId(section: string, date: string, content: string): string 
   return `event_${stableHash(`${section}|${date}|${content}`)}`;
 }
 
+/**
+ * 从条目文本推断主体（用户/她）。只做粗判，判不出就留 null——
+ * 留空比判错安全：facts 的 subject 只用于展示与检索，不参与事实有效性。
+ */
+function inferSubject(content: string): string | null {
+  const user = /用户|你/.test(content);
+  const self = /(^|[^用])她|我|助手/.test(content);
+  if (user && self) return '双方';
+  if (user) return '用户';
+  if (self) return '她';
+  return null;
+}
+
 function parseKeyValue(content: string): { key: string; value: string } | null {
   const m = content.match(/^([^=＝\n]{1,16})[=＝]\s*(.+)$/);
   if (!m) return null;
@@ -185,7 +198,7 @@ export function parseMemoryContext(text: string, now = Date.now()): ParsedMemory
         id: factId(section, date, content),
         section,
         content,
-        subject: kv ? kv.key : null,
+        subject: kv ? kv.key : inferSubject(content),
         predicate: kv ? kv.key : null,
         object: kv ? kv.value : null,
         validFrom: date,

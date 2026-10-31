@@ -1,10 +1,42 @@
 {
-  "generated_at": "2026-10-31T07:18:37.752Z",
-  "count": 301,
+  "generated_at": "2026-10-31T11:52:23.643Z",
+  "count": 305,
   "days": [
     {
       "date": "2026-10-31",
       "items": [
+        {
+          "hash": "8fb0a16",
+          "date": "2026-10-31",
+          "type": "chore",
+          "area": "",
+          "title": "degradation_log 建表进 schema 与迁移 011",
+          "why": ""
+        },
+        {
+          "hash": "260cc83",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "",
+          "title": "静默降级记账 + 结构化日志 + 增长型查询补 LIMIT（审查 6/7/8）",
+          "why": "三个都是\"看不见的坏\"： - degradations.ts：按天累计 R2/KV/嵌入/自检降级次数，健康分新增「静默降级」10 分 （权重 40/30/15/15 → 35/25/15/15/10）。业务照旧降级，但分数会掉。 管理端 GET /api/admin/memory/degradations 看是哪个部件在坏。 - error-log.ts：logError/logWarn 与 console.error 参数形状一致，28 个文件 108 处直接替换， 输出固定 JSON（level/at/component/msg/detail），线上能按部件 grep。 - LIMIT：15 处候选逐条核过，11 处补上限（messages 2000、facts 5000、chunks 2000、 engine_metrics 2000、recall_samples 5000）；IN"
+        },
+        {
+          "hash": "f5f358f",
+          "date": "2026-10-31",
+          "type": "refactor",
+          "area": "",
+          "title": "拆 index.ts（1629 → 649 行）",
+          "why": "按\"信任链 + 主题\"拆成四个模块，路由清单快照测试（188 条）全绿，证明没有漏挂： - routes-app.ts：App 客户端接口（配对/心跳/增量消息/对账/记忆纠正）， 自成一类因为它只认设备 Token，跟网页 Cookie 是两条信任链 - routes-proactive.ts：主动消息队列（拉取/ack/nack/drop/心跳/计划/诊断） - routes-media.ts：上传、回放、TTS 任务与链接预览（含 B 站签名助手， 这块原本夹在 index 中间，是拆分时最容易漏的地方） - queue-auth.ts：checkQueueAuth / checkAppOrQueueAuth，index 与 routes-proactive 共用 残留的登录/聊天/历史/统计 + 静态资源兜底 + cron 入口留在 index.ts： 它们依赖 app 之外的执行"
+        },
+        {
+          "hash": "9327626",
+          "date": "2026-10-31",
+          "type": "refactor",
+          "area": "",
+          "title": "抽出三渠道共用的记忆上下文组装（context-pack）",
+          "why": "chat / openai / webproactive 各自抄了一遍\"取记忆 → 中期或今日摘要二选一 → evidence 判定 → 召回去重 → 字节预算\"，S6 加 evidence 模式时三处都改了一遍。 现在收成一个模块： - buildMemoryPack(): 并行取 memory/dayCtx/weather/memo/summary/persona， 返回 memory、ctx（date/weekday/holiday）、promptMemory、recentMemo/todaySummary、 personaDrift；天气回退与 memo 格式化只在里面做一次 - budgetFromPack(): 召回文本去重 + 预算，三个渠道同一口径 - shouldSkipMemoryRecall(): 全量注入才跳过 memory 来源召回 渠道差异（会话历史、文件、主动"
+        },
         {
           "hash": "a03308b",
           "date": "2026-10-31",

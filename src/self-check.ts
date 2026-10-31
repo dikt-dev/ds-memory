@@ -12,6 +12,8 @@ import type { Env } from './types';
 import { recordAction } from './memory-actions';
 import { putObject } from './storage';
 import { dateKeyInBeijing } from './date';
+import { auditSubjects } from './subject-guard';
+import { getMemory } from './memory';
 
 export interface SelfCheckEvent {
   id: number;
@@ -99,6 +101,8 @@ export interface SelfCheckReport {
   quoteMismatches: QuoteMismatch[];
   orphans: OrphanRow[];
   brokenLinks: number;
+  /** 动作条目没写清主体（谁做的）的行；只报告，不改记忆。 */
+  subjectIssues: Array<{ section: string; line: string; reason: string }>;
   repaired: { eventsMarked: number; factsExpired: number; linksDeleted: number };
   ok: boolean;
 }
@@ -143,6 +147,15 @@ export async function runSelfCheck(env: Env, now = Date.now()): Promise<SelfChec
   }
 
   const quoteMismatches = findQuoteMismatches(events, messagesById);
+
+  // 2b) 主体审计：她有没有把用户做的事记成自己做的
+  // 只报告不修：主体判断牵扯事实归属，误改比漏改更糟。
+  const memoryText = await getMemory(env).catch(() => '');
+  const subjectIssues = auditSubjects(memoryText).map((i) => ({
+    section: i.section,
+    line: i.line,
+    reason: i.reason,
+  }));
 
   // 2) 事实/片段孤儿检测：只抽查近期写入的
   // 只查 conversation 来源：memory.md 派生的事实出处是文档本身，不是某条消息，
@@ -255,7 +268,9 @@ export async function runSelfCheck(env: Env, now = Date.now()): Promise<SelfChec
     quoteMismatches: quoteMismatches.slice(0, 50),
     orphans: orphans.slice(0, 50),
     brokenLinks,
+    subjectIssues: subjectIssues.slice(0, 50),
     repaired: { eventsMarked, factsExpired, linksDeleted },
+    // 主体不明不算"坏了"：它是质量提醒，不该让自检整体判负。
     ok: quoteMismatches.length === 0 && orphans.length === 0 && brokenLinks === 0,
   };
 

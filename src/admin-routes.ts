@@ -22,6 +22,7 @@ import { listActions, markReverted } from './memory-actions';
 import { policyTable, type ActionKind } from './policy';
 import { loadHealth } from './health';
 import { degradationBreakdown, readDegradations, totalDegradations } from './degradations';
+import { auditSubjects, suggestRewrite } from './subject-guard';
 import { runSelfCheck } from './self-check';
 import { runSelfReview } from './self-review';
 import { loadVariants, proposeVariant, decideById, rollbackVariant } from './variants';
@@ -494,6 +495,13 @@ app.post('/api/admin/memory/self-check', requireAuth, async (c) => {
 });
 
 /** 记忆健康分：判据全是外部事实（召回命中、失忆抱怨、延迟），不由模型自评。 */
+/** 记忆主体审计：把「用户做的事被记成她做的」条目挑出来，只报告不改。 */
+app.get('/api/admin/memory/subject-audit', requireAuth, async (c) => {
+  const text = await getMemory(c.env).catch(() => '');
+  const issues = auditSubjects(text).map((i) => ({ ...i, suggestion: suggestRewrite(i.line) }));
+  return c.json({ ok: true, total: issues.length, issues });
+});
+
 /** 静默降级分布：健康分里扣了分，这里看是哪一块在坏。 */
 app.get('/api/admin/memory/degradations', requireAuth, async (c) => {
   const days = Number(c.req.query('days') ?? 7) || 7;
