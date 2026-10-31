@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createStreamScrubber, isMeaninglessResidue, scrubAiFlavor, stripLeadingTimeLabels } from './anti-ai-flavor';
+import { createStreamScrubber, isMeaninglessResidue, limitStageDirections, scrubAiFlavor, stripLeadingTimeLabels } from './anti-ai-flavor';
 
 describe('scrubAiFlavor —— AI 味兜底清洗', () => {
   it('删除客服套话', () => {
@@ -165,5 +165,30 @@ describe('createStreamScrubber —— 流式清洗', () => {
   it('中文标点后面的半角空格会被吃掉', () => {
     expect(scrubAiFlavor('摆着看的。 不过也挺好').text).toBe('摆着看的。不过也挺好');
     expect(scrubAiFlavor('嗯， 好吧').text).toBe('嗯，好吧');
+  });
+});
+
+describe('limitStageDirections（舞台指示限流）', () => {
+  it('语气说明直接去掉', () => {
+    const out = limitStageDirections('行吧本小姐不问了（语气软下来，尾音带着点懒）你早点睡。');
+    expect(out).not.toContain('尾音');
+    expect(out).toContain('行吧本小姐不问了');
+    expect(out).toContain('你早点睡。');
+  });
+
+  it('动作括号最多留两个', () => {
+    const out = limitStageDirections('（歪头）（抱枕一搂）（顿了一下）说完了。');
+    expect((out.match(/[（(]/g) ?? []).length).toBe(2);
+    expect(out).toContain('说完了。');
+  });
+
+  it('不超量时原样返回', () => {
+    const say = '（笑）行啊，那就这么定了。';
+    expect(limitStageDirections(say)).toBe(say);
+  });
+
+  it('删完不留重复标点', () => {
+    const out = limitStageDirections('嗯（语气轻快））就这样，好。');
+    expect(out).not.toMatch(/，\s*，/);
   });
 });

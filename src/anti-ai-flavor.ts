@@ -131,8 +131,42 @@ export function stripLeadingTimeLabels(raw: string): string {
  *   调用方（chat.ts / openai.ts）的 `if (text.trim())` 就会跳过落库，
  *   避免「？」单独成为一条消息。
  */
+
+/** 括号里的纯语气说明：这些是舞台指示，不是说话内容。 */
+const TONE_PAREN = /[（(](?:语气|声音|语调|尾音|嗓音|嗓门|音量)[^）)]{0,40}[）)]/g;
+
+/**
+ * 舞台指示限流（确定性兜底）。
+ *
+ * 提示词已经要求"一条最多一个动作、不要用括号解释语气"，模型仍会超量——
+ * 这里只做**减法**，不改语义：语气括号直接去掉，动作括号最多留两个（留前面的，
+ * 后面的一般是补充描述）。
+ */
+export function limitStageDirections(text: string, max = 2): string {
+  let out = text.replace(TONE_PAREN, '');
+  const parens = /[（(][^）)]{0,60}[）)]/g;
+  const found = out.match(parens) ?? [];
+  if (found.length <= max) return tidySpaces(out);
+  let kept = 0;
+  out = out.replace(parens, (m) => {
+    kept += 1;
+    return kept <= max ? m : '';
+  });
+  return tidySpaces(out);
+}
+
+/** 删掉括号后留下的重复标点与多余空格。 */
+function tidySpaces(text: string): string {
+  return text
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/，\s*，/g, '，')
+    .replace(/^[，。、\s]+/, '')
+    .replace(/\s+([，。！？])/g, '$1')
+    .trim();
+}
+
 export function scrubAiFlavor(raw: string): { text: string; cleaned: boolean } {
-  const withoutTime = stripLeadingTimeLabels(raw);
+  const withoutTime = limitStageDirections(stripLeadingTimeLabels(raw));
   const applied = applyRules(withoutTime);
   const finalText = applied.text.trim();
 
