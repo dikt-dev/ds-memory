@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { listSnapshots, pruneSnapshots, snapshotKey, writeDailySnapshot } from './memory-snapshot';
+import {
+  listSnapshots,
+  pruneSnapshots,
+  restoreSnapshot,
+  snapshotKey,
+  writeDailySnapshot,
+} from './memory-snapshot';
 import type { Env } from './types';
 
 function fakeEnv(initial: Record<string, string> = {}, opts: { failPut?: boolean } = {}) {
@@ -110,3 +116,62 @@ describe('listSnapshots', () => {
     expect(list.map((x) => x.date)).toEqual(['2026-10-30', '2026-10-29', '2026-10-28']);
   });
 });
+describe('restoreSnapshot', () => {
+  it('恢复成功：写入目标快照内容，并先备份现役记忆', async () => {
+    const { env, store } = fakeEnv({
+      'memory/snapshots/2026-10-29.md': '# 记忆\n旧版本',
+      'memory.md': '# 记忆\n当前版本',
+    });
+    const r = await restoreSnapshot(env, '2026-10-29');
+    expect(r.restored).toBe(true);
+    expect(r.bytes).toBe('# 记忆\n旧版本'.length);
+    expect(store.get('memory.md')).toBe('# 记忆\n旧版本');
+    expect(r.backupKey).not.toBeNull();
+    expect(store.get(r.backupKey!)).toBe('# 记忆\n当前版本');
+  });
+
+  it('日期格式不对直接拒绝，不动任何数据', async () => {
+    const { env, store } = fakeEnv({ 'memory.md': '现在' });
+    const r = await restoreSnapshot(env, '2026-13-99x');
+    expect(r.reason).toBe('bad_date');
+    expect(store.get('memory.md')).toBe('现在');
+  });
+
+  it('快照不存在时明确报 missing，不覆盖现役记忆', async () => {
+    const { env, store } = fakeEnv({ 'memory.md': '现在' });
+    const r = await restoreSnapshot(env, '2026-01-01');
+    expect(r.reason).toBe('missing');
+    expect(store.get('memory.md')).toBe('现在');
+  });
+
+  it('已有一把锁时拒绝并发恢复', async () => {
+    const { env, store } = fakeEnv({
+      'memory/snapshots/2026-10-29.md': '旧',
+      'memory.md': '现在',
+    });
+    await (env as any).KV.put('memory:restore-lock', '1');
+    const r = await restoreSnapshot(env, '2026-10-29');
+    expect(r.reason).toBe('locked');
+    expect(store.get('memory.md')).toBe('现在');
+  });
+
+  it('恢复完成后释放锁（可以再恢复一次）', async () => {
+    const { env } = fakeEnv({
+      'memory/snapshots/2026-10-29.md': '旧',
+      'memory.md': '现在',
+    });
+    await restoreSnapshot(env, '2026-10-29');
+    expect(await (env as any).KV.get('memory:restore-lock')).toBeNull();
+    const again = await restoreSnapshot(env, '2026-10-29');
+    expect(again.restored).toBe(true);
+  });
+
+  it('空快照不覆盖现役记忆', async () => {
+    const { env, store } = fakeEnv({ 'memory/snapshots/2026-10-29.md': '   ', 'memory.md': '现在' });
+    const r = await restoreSnapshot(env, '2026-10-29');
+    expect(r.reason).toBe('empty');
+    expect(store.get('memory.md')).toBe('现在');
+  });
+});
+
+

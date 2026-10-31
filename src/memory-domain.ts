@@ -73,7 +73,7 @@ export interface ParsedMemoryContext {
   events: MemoryEvent[];
 }
 
-const CORE_SECTIONS = new Set([
+export const CORE_SECTIONS = new Set([
   '用户更正（最高优先级）',
   '人物底色',
   '称呼与关系',

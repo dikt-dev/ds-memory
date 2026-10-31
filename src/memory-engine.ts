@@ -18,7 +18,12 @@ import { recordRecallSample } from './recall-samples';
 import { packMemoryChunks } from './context-packer';
 import { loadMemoryChunks } from './memory-context-store';
 import { expandLinkedChunks, expansionBudget } from './memory-links';
-import { formatMemoryChunks, rankMemoryChunks, shouldRecallMemory } from './memory-domain';
+import {
+  CORE_SECTIONS,
+  formatMemoryChunks,
+  rankMemoryChunks,
+  shouldRecallMemory,
+} from './memory-domain';
 import { CANDIDATE_TOP_K, embedTexts, recallMemoryForChat } from './memory-index';
 import { selectRecall } from './recall-intent';
 import { byteLength } from './memory-maintenance';
@@ -32,6 +37,27 @@ import { logTrace } from './trace';
  * 现在 legacy 与 next 并行，预算是 max 而不是 sum。
  */
 export const RECALL_DEADLINE_MS = 3500;
+
+/** 分级召回的两个阈值：都按"已经花掉多少毫秒"判断，而不是等超时。 */
+export const RECALL_SOFT_MS = 300;
+export const RECALL_HARD_MS = 1500;
+
+/**
+ * 分段保底：超时不再等于空召回。
+ *
+ * - full：预算充足，正常走「粗召回 → 选择器 → 关联扩展」
+ * - recent：只排最近 7 天，跳过选择器（一次 LLM 往返 0.5–1.5s，最贵）
+ * - summary：只给核心层（人物底色/称呼关系/雷区/更正）——忘了细节也不能忘了她是谁
+ */
+export function recallTier(
+  elapsedMs: number,
+  softMs = RECALL_SOFT_MS,
+  hardMs = RECALL_HARD_MS,
+): 'full' | 'recent' | 'summary' {
+  if (elapsedMs >= hardMs) return 'summary';
+  if (elapsedMs >= softMs) return 'recent';
+  return 'full';
+}
 
 /**
  * 输出封顶：条数与每条字数。借鉴 dsh-fish 的"回忆不是读档"。
@@ -142,8 +168,10 @@ async function runNextEngine(
   intents: string[];
   picked: number;
   stages: NextStageMs;
+  tier: 'full' | 'recent' | 'summary';
 }> {
   const stages: NextStageMs = { load: 0, rank: 0, embed: 0, expand: 0 };
+  const started = performance.now();
 
   // 分段计时：延迟要按段优化，先得知道哪段贵（见 recall-samples.ts）。
   let t = performance.now();
@@ -159,12 +187,36 @@ async function runNextEngine(
       intents: [],
       picked: 0,
       stages,
+      tier: 'full' as const,
     };
   }
 
+  // 加载已经花掉太多预算：不再排序，直接给核心层。
+  let tier = recallTier(performance.now() - started);
+  if (tier === 'summary') {
+    const floor = packMemoryChunks(
+      chunks.filter((chunk) => CORE_SECTIONS.has(chunk.section)).slice(0, RECALL_MAX_ITEMS),
+    );
+    logTrace('memory.recall.tier', { tier, items: floor.chunks.length, loadMs: stages.load });
+    return {
+      text: formatMemoryChunks(floor.chunks),
+      items: floor.chunks.length,
+      dropped: floor.dropped,
+      linked: 0,
+      hasVector: false,
+      intents: [],
+      picked: floor.chunks.length,
+      stages,
+      tier,
+    };
+  }
+
+  // recent 档：只在最近 7 天里排，池子小一个数量级，纯关键词也够用。
+  const poolSource = tier === 'recent' ? recentChunks(chunks, 7) : chunks;
+
   t = performance.now();
   // 粗召回放宽到 20 条：选择器要在一个较大的池子里挑，而不是在 6 条里挑 5 条。
-  const keywordPicked = rankMemoryChunks(query, chunks, CANDIDATE_TOP_K, focus);
+  const keywordPicked = rankMemoryChunks(query, poolSource, CANDIDATE_TOP_K, focus);
   stages.rank = performance.now() - t;
 
   // 关键词已经够强时不再付 query embedding 延迟；弱召回才走向量。
@@ -179,15 +231,18 @@ async function runNextEngine(
   t = performance.now();
   const pool =
     queryVec !== null
-      ? rankMemoryChunks(query, chunks, CANDIDATE_TOP_K, focus, { queryVec })
+      ? rankMemoryChunks(query, poolSource, CANDIDATE_TOP_K, focus, { queryVec })
       : keywordPicked;
   stages.rank += performance.now() - t;
+
+  // 排序后再看一次预算：这时还在软阈值内才有资格付选择器的 LLM 往返。
+  tier = recallTier(performance.now() - started);
 
   // 一次调用同时做「想清楚要找什么」和「挑哪几条」；失败就退回确定性排序。
   t = performance.now();
   let picked = pool.slice(0, RECALL_MAX_ITEMS);
   let selection: Awaited<ReturnType<typeof selectRecall>> = null;
-  selection = await selectRecall(env, {
+  if (tier === 'full') selection = await selectRecall(env, {
     query,
     focus,
     candidates: pool.map((chunk) => ({
@@ -239,6 +294,7 @@ async function runNextEngine(
     intents: selection?.intents ?? [],
     picked: picked.length,
     stages,
+    tier,
   };
 }
 
@@ -271,7 +327,18 @@ function emptyNext(): Awaited<ReturnType<typeof runNextEngine>> {
     intents: [],
     picked: 0,
     stages: { load: 0, rank: 0, embed: 0, expand: 0 },
+    tier: 'full' as const,
   };
+}
+
+/** 最近 N 天的 chunks；太旧的不进 recent 档（全空时退回全量，宁可慢一点也别空）。 */
+function recentChunks(
+  chunks: Awaited<ReturnType<typeof loadMemoryChunks>>,
+  days: number,
+): Awaited<ReturnType<typeof loadMemoryChunks>> {
+  const cutoff = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+  const recent = chunks.filter((chunk) => (chunk.date ?? '') >= cutoff);
+  return recent.length > 0 ? recent : chunks;
 }
 
 /** 查询向量：失败就当没有，退回纯关键词。 */
@@ -374,6 +441,7 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
       hasVector: next.hasVector,
       shadowMs: Math.round(performance.now() - started),
       timedOut: result.timedOut,
+      tier: next.tier,
     });
     await recordEngineMetric(env, {
       channel: opts.channel,

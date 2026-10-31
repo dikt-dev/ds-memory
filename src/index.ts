@@ -32,6 +32,7 @@ import {
   deleteObject,
   getObject,
   getStorageMode,
+  headObject,
   listKeys,
   probeSecondaryR2,
   putObject,
@@ -44,6 +45,7 @@ import {
   SEMANTIC_DUP_COSINE,
   reindexMemory,
 } from './memory-index';
+import { listSnapshots, restoreSnapshot } from './memory-snapshot';
 import {
   backfillMemoryProvenance,
   embedMemoryChunks,
@@ -1330,6 +1332,51 @@ app.post('/api/admin/memory/refresh', requireAuth, async (c) => {
 app.post('/api/admin/memory/reindex', requireAuth, async (c) => {
   const result = await reindexMemory(c.env);
   return c.json({ ok: true, ...result });
+});
+
+/**
+ * 记忆快照列表：恢复前的"可选清单"。
+ * 带上字节数，才能一眼看出哪天的记忆被写残了（正常约 12KB）。
+ */
+app.get('/api/admin/memory/snapshots', requireAuth, async (c) => {
+  const snapshots = await listSnapshots(c.env);
+  const withSize = await Promise.all(
+    snapshots.map(async (s) => {
+      const head = await headObject(c.env, s.key).catch(() => null);
+      return { date: s.date, key: s.key, bytes: head?.size ?? null };
+    }),
+  );
+  return c.json({ ok: true, current: byteLength(await getMemory(c.env)), snapshots: withSize });
+});
+
+/**
+ * 从快照恢复记忆。破坏性操作，必须带 confirm:true。
+ * 恢复成功后重建索引与 Memory Context，链路和归档写回完全一致。
+ */
+app.post('/api/admin/memory/restore', requireAuth, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as
+    | { date?: unknown; confirm?: unknown }
+    | null;
+  const date = typeof body?.date === 'string' ? body.date.trim() : '';
+  if (body?.confirm !== true) {
+    return c.json({ error: 'confirm:true required（会覆盖当前记忆）' }, 400);
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return c.json({ error: 'date(YYYY-MM-DD) required' }, 400);
+  const result = await restoreSnapshot(c.env, date);
+  if (!result.restored) return c.json({ ok: false, ...result }, 409);
+  let reindexed: Awaited<ReturnType<typeof reindexMemory>> | null = null;
+  let context: Awaited<ReturnType<typeof replaceMemoryContext>> | null = null;
+  try {
+    reindexed = await reindexMemory(c.env);
+  } catch (e) {
+    console.error('[memory] restore reindex failed:', e);
+  }
+  try {
+    context = await replaceMemoryContext(c.env, await getMemory(c.env), 'memory');
+  } catch (e) {
+    console.error('[memory] restore context failed:', e);
+  }
+  return c.json({ ok: true, ...result, reindexed, context });
 });
 /** Phase 2：查看 Memory Context 表规模。 */
 app.get('/api/admin/memory/context-stats', requireAuth, async (c) => {
