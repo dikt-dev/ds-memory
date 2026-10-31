@@ -129,6 +129,14 @@
   ],
   [
     "GET",
+    "/api/admin/memory/self-review"
+  ],
+  [
+    "GET",
+    "/api/admin/memory/self-review"
+  ],
+  [
+    "GET",
     "/api/admin/memory/snapshots"
   ],
   [
@@ -546,6 +554,14 @@
   [
     "POST",
     "/api/admin/memory/self-check"
+  ],
+  [
+    "POST",
+    "/api/admin/memory/self-review"
+  ],
+  [
+    "POST",
+    "/api/admin/memory/self-review"
   ],
   [
     "POST",

@@ -19,6 +19,7 @@ export type ActionKind =
   | 'fact.upsert'
   | 'fact.expire'
   | 'chunk.upsert'
+  | 'chunk.tune'
   | 'event.write'
   | 'memory.write'
   | 'param.tune'
@@ -72,6 +73,7 @@ const TIERS: Record<ActionKind, PolicyTier> = {
   'fact.upsert': 'A',
   'fact.expire': 'A',
   'chunk.upsert': 'A',
+  'chunk.tune': 'A',
   'event.write': 'A',
   'memory.write': 'A',
   'param.tune': 'A',

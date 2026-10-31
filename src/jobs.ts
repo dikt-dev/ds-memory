@@ -27,6 +27,7 @@ import { reindexMemory } from './memory-index';
 import { backfillMemoryProvenance, embedMemoryChunks, replaceMemoryContext, syncRollupSummaries } from './memory-context-store';
 import { cleanupMemoryTables, enqueueMemoryJob, runMemoryJobs } from './memory-jobs';
 import { runSelfCheck } from './self-check';
+import { runSelfReview } from './self-review';
 import { maybeGenerateRollups } from './memory-rollups';
 import { buildRelationStatus } from './attitude';
 import { distillDay } from './distill';
@@ -641,6 +642,17 @@ export async function archiveOneDay(
         return 0;
       });
       if (embedded > 0) logInfo(`[daily] embedding fallback：${embedded} 条`);
+      // ADR-001 S9：自审（默认关，SELF_REVIEW=on 才跑；只执行 A 档动作）。
+      if (env.SELF_REVIEW === 'on') {
+        try {
+          const review = await runSelfReview(env, now.getTime());
+          logInfo(
+            `[daily] 自审：提案 ${review.proposals}，接受 ${review.accepted.length}，执行 ${review.applied}`,
+          );
+        } catch (e) {
+          console.error('[daily] self-review failed:', e);
+        }
+      }
       // ADR-001 S8：每夜自检——引文回查、孤儿、断链，坏了就自己降权。
       try {
         const check = await runSelfCheck(env, now.getTime());

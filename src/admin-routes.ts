@@ -22,6 +22,8 @@ import { listActions, markReverted } from './memory-actions';
 import { policyTable, type ActionKind } from './policy';
 import { loadHealth } from './health';
 import { runSelfCheck } from './self-check';
+import { runSelfReview } from './self-review';
+import { dateKeyInBeijing } from './date';
 import { backfillEvents, readEventStats } from './memory-events';
 import { insertKeepsake, loadKeepsakes, refreshKeepsakesBlock, setKeepsakePinned, setKeepsakeStatus } from './keepsakes';
 import { readUsageStats, summarizeUsage } from './usage-stats';
@@ -29,7 +31,6 @@ import { getArchiveLines } from './memory-archive';
 import { enqueueMemoryJob, runMemoryJobs } from './memory-jobs';
 import { applyMemoryProjection, buildMemoryProjection } from './memory-projection';
 import { generateRollup, previousPeriods } from './memory-rollups';
-import { dateKeyInBeijing } from './date';
 import { archiveOneDay, runContextRefresh, runDailyArchive, runMonthlyMerge } from './jobs';
 import { analyzeMood } from './mood';
 import { mergeMood, needsAiVerification, verifyMoodWithAI } from './mood-ai';
@@ -390,6 +391,22 @@ app.get('/api/admin/readiness', requireAuth, async (c) => {
     ready ? 200 : 503,
   );
 });
+/** 自审：GET 取当天报告；POST?confirm=1 立即跑一次（只在 A 档内动作）。 */
+app.get('/api/admin/memory/self-review', requireAuth, async (c) => {
+  const date = c.req.query('date') ?? dateKeyInBeijing(new Date());
+  const res = await getObject(c.env, `memory/self-review/${date}.json`).catch(() => null);
+  if (!res) return c.json({ ok: false, error: 'no report for that date' }, 404);
+  return c.json({ ok: true, report: JSON.parse(await res.text()) });
+});
+
+app.post('/api/admin/memory/self-review', requireAuth, async (c) => {
+  if (c.req.query('confirm') !== '1') {
+    return c.json({ ok: false, error: 'need confirm=1（会调用模型并可能改动片段重要度）' }, 400);
+  }
+  const report = await runSelfReview(c.env);
+  return c.json({ ok: true, report });
+});
+
 /** 每夜自检：引文回查 / 孤儿 / 断链，报告写 R2；POST 可立即跑一次。 */
 app.get('/api/admin/memory/self-check', requireAuth, async (c) => {
   const res = await getObject(c.env, `memory/self-check/${c.req.query('date') ?? ''}.json`).catch(() => null);

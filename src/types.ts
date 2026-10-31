@@ -18,6 +18,7 @@ export interface Env {
   DISTILL_DEEPSEEK_MODEL: string; // 每日提炼使用的 DeepSeek 模型（默认 v4-pro，质量优先）
   SUMMARY_DEEPSEEK_MODEL: string; // 滚动摘要使用的 DeepSeek 模型（默认 flash，成本优先）
   EMBEDDING_MODEL?: string; // 记忆检索语义向量模型（默认 @cf/baai/bge-m3；缺失/失败自动降级关键词召回）
+  SELF_REVIEW?: string; // 'on' 开启每夜自审（只执行 A 档动作，默认关）
   MEMORY_PROMPT_MODE?: string; // 'evidence' 只注入宪法四节，其余靠召回（默认 full）
   MEMORY_SNAPSHOT?: string; // 'off' 关闭每日记忆快照（默认开启，见 docs/memory-rollback-plan.md）
   LLM_RERANK?: string; // 条件 LLM 重排开关：默认开，设 '0' 关闭（省一次调用的延迟）
