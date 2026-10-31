@@ -58,7 +58,7 @@ import {
 import { buildCharacterCard } from './character-card';
 import { buildVoiceDirective } from './voice';
 import { formatRecentMemoBlock, getRecentMemo } from './recent-memory';
-import { extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
+import { extractPromptMemory, buildPromptMemoryFor, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 import { getRuntimeState } from './runtime-store';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { readSessionFacts } from './session-facts';
@@ -188,7 +188,8 @@ async function generateProactive(
     recentProactiveMessages(env, 6),
   ]);
   const relation = parseRelationValues(memory);
-  const promptMemory = extractPromptMemory(memory);
+  // ADR-001 S6：evidence 模式下只带宪法，事实靠召回证据集。
+  const promptMemory = buildPromptMemoryFor(memory, env);
   // 中期记忆优先：它存在时跳过今日摘要，避免重复
   const recentMemo = formatRecentMemoBlock(recentMemoRaw);
   const todaySummary = recentMemo ? null : todaySummaryRaw;
@@ -245,7 +246,7 @@ async function generateProactive(
     mode: proactiveEngine,
     channel: 'web',
     kind: 'proactive',
-    skipMemorySource: promptMemory.mode === 'full',
+    skipMemorySource: promptMemory.mode === 'full' && !promptMemory.evidence,
     nowMs: now.getTime(),
   });
   const recalled = stripDuplicateRecall(

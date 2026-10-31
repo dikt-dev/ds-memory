@@ -9,7 +9,7 @@ import type { AppEnv } from './types';
 import { requireAuth } from './middleware';
 import { MEMORY_KV_KEY, getMemory, putMemory } from './memory';
 import { byteLength, mergeMemoryEntry, parseRelationValues, setRelationValues } from './memory-maintenance';
-import { reindexMemory } from './memory-index';
+import { reindexMemory, buildPromptMemoryFor } from './memory-index';
 import { listSnapshots, restoreSnapshot } from './memory-snapshot';
 import { deleteObject, getObject, headObject, listKeys, putObject } from './storage';
 import { MemoryContextStats, MemoryJobStats, backfillMemoryProvenance, embedMemoryChunks, loadMemoryChunks, memoryContextStats, memoryJobStats, replaceMemoryContext, syncArchiveContext, syncRollupSummaries } from './memory-context-store';
@@ -388,6 +388,22 @@ app.get('/api/admin/readiness', requireAuth, async (c) => {
     ready ? 200 : 503,
   );
 });
+/** 提示词记忆预览：切 evidence 模式前后到底带了多少（不落库、不改记忆）。 */
+app.get('/api/admin/memory/prompt-preview', requireAuth, async (c) => {
+  const memory = await getMemory(c.env);
+  const promptMemory = buildPromptMemoryFor(memory, c.env);
+  const sections = (text: string) =>
+    text.split('\n').filter((line) => line.startsWith('## ')).map((line) => line.slice(3).trim());
+  return c.json({
+    ok: true,
+    mode: promptMemory.evidence ? 'evidence' : promptMemory.mode,
+    memoryBytes: new TextEncoder().encode(memory).byteLength,
+    promptBytes: new TextEncoder().encode(promptMemory.text).byteLength,
+    sectionsInPrompt: sections(promptMemory.text),
+    sectionsInMemory: sections(memory),
+  });
+});
+
 /** Phase 2：从 memory.md 重建 facts/events/chunks（幂等）。 */
 app.post('/api/admin/memory/rebuild-context', requireAuth, async (c) => {
   const memory = await getMemory(c.env);

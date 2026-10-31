@@ -5,6 +5,7 @@
  */
 import { resolveRecall } from './memory-engine';
 import type { Env } from './types';
+import { buildPromptMemoryFor } from './memory-index';
 import { buildSystemPromptSplit, type MessageChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, STYLE_REMINDER } from './prompt';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
@@ -81,7 +82,8 @@ export async function streamChat(
   // 短期记忆 = 本次会话全部（只追加不滑窗，缓存才命得中）；超出上限才有提要
   const history = session.rows;
   // 小记忆全量带上，大记忆只带核心+稳定画像，其余靠召回
-  const promptMemory = extractPromptMemory(memory);
+  // ADR-001 S6：evidence 模式下只带宪法，事实靠召回证据集。
+  const promptMemory = buildPromptMemoryFor(memory, env);
   // 拉取失败时回退到当天缓存，避免提示词里直接没有天气、让模型去翻旧记忆
   const weather = fetchedWeather ?? dayCtxFile.weather ?? null;
   if (fetchedWeather) await attachWeather(env, dateKey, fetchedWeather, dayCtxFile);
@@ -117,7 +119,7 @@ export async function streamChat(
     channel,
     requestId,
     // 全量记忆已经带上所有 memory 条目，召回只补档案层的旧事
-    skipMemorySource: promptMemory.mode === 'full',
+    skipMemorySource: promptMemory.mode === 'full' && !promptMemory.evidence,
     nowMs: now.getTime(),
   });
   const recalledRaw = recall.text;

@@ -97,6 +97,14 @@
   ],
   [
     "GET",
+    "/api/admin/memory/prompt-preview"
+  ],
+  [
+    "GET",
+    "/api/admin/memory/prompt-preview"
+  ],
+  [
+    "GET",
     "/api/admin/memory/recall"
   ],
   [

@@ -9,6 +9,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { Env } from './types';
+import { buildPromptMemoryFor } from './memory-index';
 import { buildBaseSystemPrompt, normalizeChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, stripSilentEndToken, STYLE_REMINDER } from './prompt';
 import { stripLeadingTimeLabels } from './anti-ai-flavor';
 import { budgetContext, formatBudgetManifest } from './context-budget';
@@ -415,7 +416,8 @@ openaiApp.post('/chat/completions', async (c) => {
       loadPersonaState(c.env),
       readSessionFacts(c.env, now, dateKey),
     ]);
-  const promptMemory = extractPromptMemory(memory);
+  // ADR-001 S6：evidence 模式下只带宪法，事实靠召回证据集。
+  const promptMemory = buildPromptMemoryFor(memory, c.env);
   // 拉取失败时回退当天缓存，避免“没有天气”时模型去翻旧记忆
   const weather = fetchedWeather ?? dayCtx.weather ?? null;
   if (fetchedWeather) await attachWeather(c.env, dateKey, fetchedWeather, dayCtx);
@@ -564,7 +566,7 @@ openaiApp.post('/chat/completions', async (c) => {
     mode: memoryEngine,
     channel,
     requestId,
-    skipMemorySource: promptMemory.mode === 'full',
+    skipMemorySource: promptMemory.mode === 'full' && !promptMemory.evidence,
     nowMs: now.getTime(),
   });
   const recalledRaw = recall.text;

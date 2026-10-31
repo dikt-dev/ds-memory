@@ -128,6 +128,26 @@ export function extractPromptMemory(
   return { text: extractSections(text, STABLE_SECTIONS), mode: 'compact' };
 }
 
+/**
+ * S6：按开关决定本轮提示词带哪份记忆。
+ *
+ * evidence 模式只带宪法四节（人物底色 / 称呼与关系 / 雷区与禁忌 / 用户更正），
+ * 其余事实交给召回；模型从"读档案"变成"看证据"。
+ */
+export function buildPromptMemoryFor(
+  text: string,
+  env: { MEMORY_PROMPT_MODE?: string },
+  inlineMaxBytes = MEMORY_INLINE_MAX_BYTES,
+): { text: string; mode: 'full' | 'compact'; evidence?: boolean } {
+  if (env.MEMORY_PROMPT_MODE === 'evidence') {
+    const core = extractCoreMemory(text);
+    // 核心区块缺失时退回全量：宁可多带，不许把人物底色弄丢。
+    if (core.trim() === '') return { text, mode: 'full' };
+    return { text: core, mode: 'compact', evidence: true };
+  }
+  return extractPromptMemory(text, inlineMaxBytes);
+}
+
 /** 把记忆文本解析成条目（非核心分区才进索引）。 */
 export function parseMemoryEntries(
   text: string,
