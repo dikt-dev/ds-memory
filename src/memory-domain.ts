@@ -69,6 +69,10 @@ export interface MemoryChunk {
   useCount?: number;
   /** 最后一次被召回的时间（毫秒）。 */
   lastUsedAt?: number | null;
+  /** 用户明确确认过的次数。 */
+  confirmedCount?: number;
+  /** 铭记锁：永不淡忘。 */
+  pinned?: boolean;
   vec?: string | null;
 }
 
@@ -516,6 +520,9 @@ export const DECAY_HALF_LIFE_DAYS: Record<string, number> = {
 /** 衰减下限：再老也保留 15% 的分量，避免陈年条目彻底沉底。 */
 export const DECAY_FLOOR = 0.15;
 
+/** 铭记加成：上锁条目在同等关键词命中下的优先级倍数。 */
+export const PINNED_RECALL_BOOST = 1.5;
+
 /**
  * 复习加成：被想起得越多，忘得越慢。
  *
@@ -545,16 +552,23 @@ export function recallDecay(
   chunk: Pick<MemoryChunk, 'source' | 'section' | 'date'> & {
     useCount?: number;
     importance?: number;
+    confirmedCount?: number;
+    pinned?: boolean;
   },
   nowMs = Date.now(),
 ): number {
+  // 铭记：上锁的条目永不淡忘（和宪法同级）
+  if (chunk.pinned) return 1;
   if (NEVER_DECAY_SECTIONS.has(chunk.section)) return 1;
   if (!chunk.date) return 1;
   const ts = Date.parse(`${chunk.date}T00:00:00+08:00`);
   if (!Number.isFinite(ts)) return 1;
   const ageDays = Math.max(0, (nowMs - ts) / 86_400_000);
   // ★ 复习过的条目半衰期更长：同样是 180 天的旧事，被想起过 10 次的更难淡出。
-  const halfLife = (DECAY_HALF_LIFE_DAYS[chunk.source] ?? 120) * rehearsalBoost(chunk.useCount);
+  //   用户确认过的再加一档——"被注入"只是她提过，"被确认"才是真的被记住。
+  const confirmBoost = 1 + Math.min(1, (Number(chunk.confirmedCount) || 0) * 0.1);
+  const halfLife =
+    (DECAY_HALF_LIFE_DAYS[chunk.source] ?? 120) * rehearsalBoost(chunk.useCount) * confirmBoost;
   const factor = Math.pow(0.5, ageDays / halfLife);
   return Math.max(DECAY_FLOOR, factor);
 }
@@ -572,9 +586,13 @@ export function rankMemoryChunks(
     .map((chunk) => ({
       chunk,
       // ★ 遗忘曲线：同样的关键词命中，老条目排在后面（核心/雷区永不衰减）
-      // ★ 遗忘曲线（时间 + 复习）× 重要性：越重要、越常被想起，越容易再次浮上来
+      // ★ 遗忘曲线的反函数——铭记：
+      //   上锁的条目不但永不衰减，还要在同等命中下压过普通条目（那是"她绝不想忘的事"）。
       score:
-        keywordScore(q, chunk, focus) * recallDecay(chunk) * importanceFactor(chunk.importance),
+        keywordScore(q, chunk, focus) *
+        recallDecay(chunk) *
+        importanceFactor(chunk.importance) *
+        (chunk.pinned ? PINNED_RECALL_BOOST : 1),
     }))
     .filter((x) => x.score > 0)
     .sort(

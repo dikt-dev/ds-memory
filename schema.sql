@@ -212,8 +212,14 @@ CREATE TABLE IF NOT EXISTS memory_chunks (
   -- 复习计数：这条记忆被召回了几次、最后一次是什么时候。
   -- 遗忘曲线用它抵抗衰减（用得越多越难忘），也是「突然想起来」的选材依据。
   use_count    INTEGER NOT NULL DEFAULT 0,
-  last_used_at INTEGER
+  last_used_at INTEGER,
+  -- 用户明确确认过的次数（"对，就是那次"）：确认比"被注入"更接近真实记住
+  confirmed_count INTEGER NOT NULL DEFAULT 0,
+  -- 铭记锁：1 = 永不衰减、必受召回优待、不参与"翻旧账"
+  pinned       INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE INDEX IF NOT EXISTS idx_memory_chunks_pinned ON memory_chunks(pinned);
 
 -- 记忆之间的显式关联：同事件/同实体/同项目/来源派生。
 CREATE TABLE IF NOT EXISTS memory_links (

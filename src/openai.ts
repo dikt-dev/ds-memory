@@ -11,7 +11,7 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { Env } from './types';
 import { buildPromptMemoryFor } from './memory-index';
 import { buildMemoryPack, budgetFromPack } from './context-pack';
-import { recordRecallUsage } from './memory-rehearsal';
+import { consumePendingRecall, recordRecallUsage, rememberPendingRecall } from './memory-rehearsal';
 import { buildBaseSystemPrompt, normalizeChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, stripSilentEndToken, STYLE_REMINDER } from './prompt';
 import { stripLeadingTimeLabels } from './anti-ai-flavor';
 import { budgetContext, formatBudgetManifest } from './context-budget';
@@ -428,6 +428,8 @@ openaiApp.post('/chat/completions', async (c) => {
   const channel = normalizeChannel(c.req.header('x-client-channel'), 'astrobot');
   // 客户端声明了支持语音，才告诉模型可以发 [语音]（没装 TTS 的客户端不会收到这句提示）
   const voiceReply = c.req.header('x-client-voice') === '1';
+  // 上一轮提过的往事被确认了吗
+  void consumePendingRecall(c.env, lastUserCleaned, now.getTime());
 
   // ★ 情感系统：事件 → 情绪向量 → 5 轴微增量 → 情绪快照（先算，心情由它派生）
   const emotion = await processEmotionTurn({
@@ -560,6 +562,7 @@ openaiApp.post('/chat/completions', async (c) => {
   const recalledRaw = recall.text;
 
   void recordRecallUsage(c.env, recall.ids, now.getTime());
+  void rememberPendingRecall(c.env, recall.ids, now.getTime());
   const { recalled, budget: contextBudget } = budgetFromPack(
     pack,
     recalledRaw,

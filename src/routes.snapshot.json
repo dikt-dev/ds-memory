@@ -121,6 +121,14 @@
   ],
   [
     "GET",
+    "/api/admin/memory/pinned"
+  ],
+  [
+    "GET",
+    "/api/admin/memory/pinned"
+  ],
+  [
+    "GET",
     "/api/admin/memory/projection"
   ],
   [
@@ -538,6 +546,14 @@
   [
     "POST",
     "/api/admin/memory/link-all"
+  ],
+  [
+    "POST",
+    "/api/admin/memory/pin"
+  ],
+  [
+    "POST",
+    "/api/admin/memory/pin"
   ],
   [
     "POST",

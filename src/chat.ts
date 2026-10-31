@@ -7,7 +7,7 @@ import { resolveRecall } from './memory-engine';
 import type { Env } from './types';
 import { buildPromptMemoryFor } from './memory-index';
 import { buildMemoryPack } from './context-pack';
-import { recordRecallUsage } from './memory-rehearsal';
+import { consumePendingRecall, recordRecallUsage, rememberPendingRecall } from './memory-rehearsal';
 import { buildSystemPromptSplit, type MessageChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, STYLE_REMINDER } from './prompt';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
@@ -68,6 +68,9 @@ export async function streamChat(
   const apiKey = env.DEEPSEEK_API_KEY;
   if (!apiKey) return Response.json({ error: 'DEEPSEEK_API_KEY 未配置' }, { status: 500 });
 
+  // 0) 上一轮她提过的往事，如果这句是"对/记得"，就算一次确认复习
+  void consumePendingRecall(env, content, now.getTime());
+
   // 1) 组装上下文（先取历史，再落 user 消息，避免历史里重复出现本条）
   const dateKey = dateKeyInBeijing(now);
   // 这些读取互不依赖：并行发起，减少手机 QQ 场景的首字延迟。
@@ -111,6 +114,7 @@ export async function streamChat(
   const recalledRaw = recall.text;
   // 复习计数：这一轮真正注入的条目被想起了一次（遗忘曲线靠它抵抗衰减）。
   void recordRecallUsage(env, recall.ids, now.getTime());
+  void rememberPendingRecall(env, recall.ids, now.getTime());
 
   const recalled = stripDuplicateRecall(
     recalledRaw,

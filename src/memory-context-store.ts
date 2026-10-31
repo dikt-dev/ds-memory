@@ -286,7 +286,8 @@ export async function replaceMemoryContext(
 export async function loadMemoryChunks(env: Env, limit = 1000): Promise<MemoryChunk[]> {
   const rows = await env.DB.prepare(
     `SELECT id, source, source_id, section, content, date, keywords, tags,
-            importance, vec, content_hash, updated_at, use_count, last_used_at
+            importance, vec, content_hash, updated_at, use_count, last_used_at,
+            confirmed_count, pinned
      FROM memory_chunks
      ORDER BY importance DESC, date DESC, updated_at DESC
      LIMIT ?`,
@@ -307,6 +308,8 @@ export async function loadMemoryChunks(env: Env, limit = 1000): Promise<MemoryCh
       updated_at: number;
       use_count: number | null;
       last_used_at: number | null;
+      confirmed_count: number | null;
+      pinned: number | null;
     }>();
   return (rows.results ?? []).map((r) => ({
     id: r.id,
@@ -323,6 +326,8 @@ export async function loadMemoryChunks(env: Env, limit = 1000): Promise<MemoryCh
     updatedAt: r.updated_at,
     useCount: Number(r.use_count) || 0,
     lastUsedAt: r.last_used_at ?? null,
+    confirmedCount: Number(r.confirmed_count) || 0,
+    pinned: Number(r.pinned) === 1,
   }));
 }
 

@@ -28,6 +28,7 @@ import { runSelfReview } from './self-review';
 import { loadVariants, proposeVariant, decideById, rollbackVariant } from './variants';
 import { loadPersonaDrift } from './persona-fingerprint';
 import { buildFactsDocMarkdown, rebuildFactsDoc } from './memory-doc';
+import { listPinnedChunks, setChunkPinned } from './memory-rehearsal';
 import { parseMemoryContext } from './memory-domain';
 import { applySubjectFixes } from './subject-fix';
 import { recordAction } from './memory-actions';
@@ -595,6 +596,33 @@ app.post('/api/admin/memory/reconcile-facts', requireAuth, async (c) => {
     expiredFacts: stale.length,
     sample: stale.slice(0, 5).map((r) => r.content.slice(0, 60)),
   });
+});
+
+/** 铭记锁：当前永不淡忘的条目。 */
+app.get('/api/admin/memory/pinned', requireAuth, async (c) => {
+  const rows = await listPinnedChunks(c.env);
+  return c.json({ ok: true, total: rows.length, pinned: rows });
+});
+
+/** 上锁 / 解锁一条记忆（铭记 = 永不淡忘，不是删除的反面）。 */
+app.post('/api/admin/memory/pin', requireAuth, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { id?: unknown; pinned?: unknown } | null;
+  const id = typeof body?.id === 'string' ? body.id.trim() : '';
+  if (!id) return c.json({ ok: false, error: 'id required' }, 400);
+  const pinned = body?.pinned !== false;
+  const changed = await setChunkPinned(c.env, id, pinned);
+  if (!changed) return c.json({ ok: false, error: 'chunk not found' }, 404);
+  await recordAction(c.env, {
+    actor: 'human',
+    kind: 'memory.write',
+    intent: pinned ? '给一条记忆上铭记锁（永不淡忘）' : '解除铭记锁',
+    evidence: [id],
+    diff: pinned ? 'pinned=1' : 'pinned=0',
+    before: pinned ? '可淡忘' : '铭记中',
+    after: pinned ? '铭记中' : '可淡忘',
+    revertible: true,
+  }, Date.now()).catch(() => {});
+  return c.json({ ok: true, id, pinned });
 });
 
 /** 记忆主体审计：把「用户做的事被记成她做的」条目挑出来，只报告不改。 */

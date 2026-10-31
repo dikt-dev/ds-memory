@@ -81,6 +81,26 @@ describe('rankMemoryChunks 把重要性与复习算进去', () => {
   });
 });
 
+describe('铭记锁', () => {
+  const now = Date.parse('2026-10-31T12:00:00+08:00');
+
+  it('上锁的条目永不衰减', () => {
+    expect(recallDecay(chunk({ date: '2015-01-01', pinned: true }), now)).toBe(1);
+  });
+
+  it('同等命中下上锁条目排前面（即使更老）', () => {
+    const normal = chunk({ id: 'n', content: '奶茶', keywords: ['奶茶'], date: '2026-09-01' });
+    const pinned = chunk({ id: 'p', content: '奶茶', keywords: ['奶茶'], date: '2025-01-01', pinned: true });
+    expect(rankMemoryChunks('奶茶', [normal, pinned], 2)[0].id).toBe('p');
+  });
+
+  it('确认过的事衰减更慢', () => {
+    const plain = recallDecay(chunk({ date: '2026-02-01', confirmedCount: 0 }), now);
+    const confirmed = recallDecay(chunk({ date: '2026-02-01', confirmedCount: 5 }), now);
+    expect(confirmed).toBeGreaterThan(plain);
+  });
+});
+
 describe('pickDormant', () => {
   const now = Date.parse('2026-10-31T12:00:00+08:00');
   it('挑很久没提过、有点分量的旧事', () => {
@@ -92,6 +112,11 @@ describe('pickDormant', () => {
   it('总被复习的不算沉睡', () => {
     const used = chunk({ id: 'used', date: '2026-03-01', useCount: 9 });
     expect(pickDormant([used], now)).toBeNull();
+  });
+
+  it('上锁的铭记条目不参与翻旧账', () => {
+    const pinned = chunk({ id: 'pinned', date: '2026-03-01', importance: 5, pinned: true });
+    expect(pickDormant([pinned], now)).toBeNull();
   });
 
   it('太琐碎的不翻出来', () => {

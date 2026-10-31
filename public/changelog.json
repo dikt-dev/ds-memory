@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-10-31T12:17:38.105Z",
-  "count": 308,
+  "generated_at": "2026-10-31T12:24:13.941Z",
+  "count": 309,
   "days": [
     {
       "date": "2026-10-31",
       "items": [
+        {
+          "hash": "b645387",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "",
+          "title": "记忆复习机制 + 突然想起来（遗忘的正反面）",
+          "why": "原来只有单向衰减：同样 180 天的旧事，被想起过十次的和从没被想起的权重一样。 补上四件事： 1. memory_chunks 加 use_count / last_used_at（迁移 012） 2. recordRecallUsage：chat / openai / proactive 三条链路召回命中后 +1， 失败静默（记忆降级不能影响回复） 3. recallDecay 乘 rehearsalBoost（1 + log1p(n)*0.5，上限 3 倍 × 半衰期）， rankMemoryChunks 再乘 importanceFactor（0.8~1.2） 4. 主动消息\"突然想起来\"：每 ≥7 天从 ≥45 天没提、use_count ≤2、importance ≥2 的 沉睡条目里挑一条当引子（runtime_state 节流） 测试 1139 全绿，迁移已应用，部署 0b"
+        },
         {
           "hash": "d6e2250",
           "date": "2026-10-31",
