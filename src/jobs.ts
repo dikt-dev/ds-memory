@@ -37,6 +37,8 @@ import {
   archiveCompletedItems,
   byteLength,
   compactMemoryEntries,
+  demoteSectionToBudget,
+  reportSectionBudgets,
   demoteSectionEntries,
   memoryDensity,
   mergeMemoryEntry,
@@ -534,6 +536,28 @@ export async function archiveOneDay(
 
     // 6.5) 保守去重：只合并重复条目，不改事实；受保护分区不动。
     //      放在所有 memory 维护之后、写回之前，保证写进 R2 的是紧凑版本。
+    // 6.6) 分区预算：共同经历/进行中的事项等超预算时，最旧条目搬进档案（仍可召回）
+    //      不加这一步，memory.md 会线性涨到 16KB 然后静默掉成 compact 模式。
+    try {
+      let demoted = 0;
+      for (const b of reportSectionBudgets(memory)) {
+        if (!b.over) continue;
+        const r = demoteSectionToBudget(memory, b.header, b.budget);
+        if (r.removed.length === 0) continue;
+        await appendArchiveLines(env, r.removed);
+        const archive = await getArchiveLines(env);
+        if (r.removed.every((line) => archiveHasLine(archive, line))) {
+          memory = r.text;
+          demoted += r.removed.length;
+        } else {
+          logError(`[daily] 分区降级中止：${b.header} 档案未确认写入`);
+        }
+      }
+      if (demoted > 0) logInfo(`[daily] 分区预算：把 ${demoted} 条最旧条目搬进档案`);
+    } catch (e) {
+      logError('[daily] demote sections failed:', e);
+    }
+
     let compactedRemoved = 0;
     try {
       const beforeDensity = memoryDensity(memory);

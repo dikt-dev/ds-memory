@@ -1,10 +1,26 @@
 {
-  "generated_at": "2026-10-31T23:13:57.271Z",
-  "count": 328,
+  "generated_at": "2026-10-31T23:19:23.506Z",
+  "count": 330,
   "days": [
     {
       "date": "2026-11-01",
       "items": [
+        {
+          "hash": "7ab0b49",
+          "date": "2026-11-01",
+          "type": "docs",
+          "area": "status",
+          "title": "修正排查记录格式",
+          "why": ""
+        },
+        {
+          "hash": "46d271e",
+          "date": "2026-11-01",
+          "type": "fix",
+          "area": "memory",
+          "title": "复习计数不再静默失败（0 行/异常都留痕）",
+          "why": ""
+        },
         {
           "hash": "fcb5255",
           "date": "2026-11-01",

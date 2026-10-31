@@ -338,3 +338,27 @@ pinned 0、keepsakes 4 条（全 approved、全 pinned）、health 94.29 good。
 **已加可观测性（5ae5978e）：** 更新 0 行 / 异常都 `logWarn` + `recordDegradation(env,'recall')`。
 
 **下一步：** 发一条消息后查 `degradation_log`——有记录=写入失败（看错误），无记录但计数仍 0=调用没执行。
+
+
+### 八点十三、记忆体积预算（已上线 c89a6c7c）
+
+**根因**：`SECTION_BUDGETS` 和 `demoteSectionEntries` 定义了，但**从来没被调用**——分区预算形同虚设，只有 32KB 的整体裁剪会生效。
+
+**修复**：新增 `demoteSectionToBudget`（按分区自身字节判断，不是整篇），在每日归档里执行：
+
+| 分区 | 预算 |
+| --- | --- |
+| 共同经历 | 3000 B（原 1800，避免一次搬太狠） |
+| 进行中的事项 | 1500 B |
+| 偏好与习惯 | 1800 B |
+| 近期动态 | 800 B |
+
+超出的最旧条目 → 写 archive.md（仍可召回）→ **回读确认写入才生效**，否则中止保留原样。
+
+预期：13.4KB → 约 10.5KB，且 共同经历 不再无限增长。
+
+### 八点十四、chunk use_count 已恢复正常
+
+11-01 07:16 起，8 条新消息后计数开始递增（1/2/3），`last_used_at` 有值，`degradation_log` 无 recall 失败记录。
+
+结论：之前恒 0 是部署前的旧版本问题，现版本正常。静默 catch 已改成留痕，若再发生会进 `degradation_log`。

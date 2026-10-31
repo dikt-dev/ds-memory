@@ -399,7 +399,7 @@ export const SECTION_BUDGETS: Record<string, number> = {
   '## 关于用户': 2000,
   '## 偏好与习惯': 1800,
   '## 进行中的事项': 1500,
-  '## 共同经历': 1800,
+  '## 共同经历': 3000,
   '## 雷区与禁忌': 1200,
   '## 近期动态': 800,
 };
@@ -454,6 +454,42 @@ export function demoteSectionEntries(
     size = byteLength(reassemble(pre, sections));
   }
 
+  if (removed.length === 0) return { text, removed: [] };
+  const next = sections.map((s) => ({
+    header: s.header,
+    lines: s.lines.filter((l) => l !== ''),
+  }));
+  return { text: reassemble(pre, next), removed };
+}
+
+
+/**
+ * 按分区预算降级：只量该分区自身字节，超了就把最旧的条目搬出去（调用方写入档案）。
+ *
+ * 与 demoteSectionEntries 的区别：那个比的是全文体积，语义是"整篇太大"；
+ * 这里是"这一节太胖"，用来提前拦住 16KB 的分界线——超过它记忆会从全量注入
+ * 掉成 compact，共同经历/进行中的事项会整段退出提示词。
+ */
+export function demoteSectionToBudget(
+  text: string,
+  header: string,
+  budgetBytes: number,
+  keepAtLeast = 6,
+): { text: string; removed: string[] } {
+  const target = header.trim();
+  if (PROTECTED_HEADERS.some((h) => h.trim() === target)) return { text, removed: [] };
+  const { pre, sections } = parseSections(text);
+  const sec = sections.find((s) => s.header.trim() === target);
+  if (!sec) return { text, removed: [] };
+
+  const sizeOf = (): number => byteLength([sec.header, ...sec.lines].join('\n'));
+  const entryIdx = sec.lines.map((l, i) => (ENTRY_RE.test(l) ? i : -1)).filter((i) => i >= 0);
+  const removed: string[] = [];
+  while (sizeOf() > budgetBytes && entryIdx.length > keepAtLeast) {
+    const idx = entryIdx.shift() as number;
+    removed.push(sec.lines[idx]);
+    sec.lines[idx] = '';
+  }
   if (removed.length === 0) return { text, removed: [] };
   const next = sections.map((s) => ({
     header: s.header,

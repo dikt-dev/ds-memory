@@ -4,6 +4,7 @@ import {
   compactMemoryEntries,
   memoryDensity,
   demoteSectionEntries,
+  demoteSectionToBudget,
   ensureModuleComments,
   mergeMemoryEntry,
   parseRelationValues,
@@ -522,5 +523,36 @@ describe('splitMemoryForPrompt（缓存分段）', () => {
     const { stable, volatile } = splitMemoryForPrompt('');
     expect(stable).toBe('');
     expect(volatile).toBe('');
+  });
+});
+
+describe('demoteSectionToBudget', () => {
+  const doc = [
+    '# 长期记忆',
+    '## 共同经历',
+    '- [26-10-01] 第一件事 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    '- [26-10-02] 第二件事 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    '- [26-10-03] 第三件事 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    '- [26-10-04] 第四件事 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    '## 雷区与禁忌',
+    '- [26-10-01] 别提体重',
+  ].join('\n');
+
+  it('超预算时只搬最旧的几条，且不动受保护分区', () => {
+    const r = demoteSectionToBudget(doc, '## 共同经历', 200, 2);
+    expect(r.removed.length).toBeGreaterThan(0);
+    expect(r.text).toContain('第四件事');
+    expect(r.text).toContain('别提体重');
+  });
+
+  it('未超预算时原样返回', () => {
+    const r = demoteSectionToBudget(doc, '## 共同经历', 100000);
+    expect(r.removed).toEqual([]);
+    expect(r.text).toBe(doc);
+  });
+
+  it('受保护分区不参与', () => {
+    const r = demoteSectionToBudget(doc, '## 雷区与禁忌', 1);
+    expect(r.removed).toEqual([]);
   });
 });
