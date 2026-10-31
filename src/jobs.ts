@@ -60,7 +60,8 @@ import { getDaySummaryRaw, summaryKey } from './summary';
 import { checkStorageCapacity, cleanupStaleObjects, deleteObject, getObject, listKeys, putObject } from './storage';
 import { pruneSnapshots, writeDailySnapshot } from './memory-snapshot';
 import { pruneRecallSamples } from './recall-samples';
-import { messagesByDate, assistantReplyTo, sanitizeMessagePlaceholders, type MessageRow } from './db';
+import { messagesByDate, assistantReplyTo, type MessageRow } from './db';
+import { buildDistillConversation, sanitizeDistilledSummary } from './distill-view';
 import { backfillFeedback } from './feedback';
 import { cleanupQueue } from './queue';
 import { addLlmCost } from './llm-cost';
@@ -275,6 +276,7 @@ export async function archiveOneDay(
 
     // 4) AI 提炼当天对话 → 合并进 memory.md（失败不阻断归档）
     let memory = await getMemory(env);
+    const memoryBefore = memory;
     const before = byteLength(memory);
     let distilled = false;
     let distillCost = 0;
@@ -287,17 +289,9 @@ export async function archiveOneDay(
       try {
         const daySummary = await getDaySummaryRaw(env, target).catch(() => null);
         // 主动消息（turn_type='proactive'）标注出来，避免提炼时误当成用户说过的话
+        // 提炼视图：文件块折叠、占位符压缩、她的长回复截断（详见 distill-view.ts）。
         const conversation =
-          distilledRows
-            .map((m) => {
-              // R2 路径占位符先压成标记，避免 UUID 被提炼进 memory.md。
-              const content = sanitizeMessagePlaceholders(m.content);
-              if (m.role === 'user') return `用户：${content}`;
-              return m.turn_type === 'proactive'
-                ? `助手（主动发起，用户未回复）：${content}`
-                : `助手：${content}`;
-            })
-            .join('\n\n') +
+          buildDistillConversation(distilledRows) +
           (daySummary?.text ? `\n\n今日摘要（滚动提炼）：${daySummary.text}` : '');
         const summary = await distillDay(env, target, conversation, memory);
         if (!summary.text.trim() && summary.backend === 'workers-ai') {
@@ -362,7 +356,8 @@ export async function archiveOneDay(
         // 把当天提炼结果写进 context/{date}.json（方便回溯当天要点；失败不影响归档）
         if (summary.text.trim()) {
           try {
-            await attachDistillation(env, target, summary.text.trim(), now);
+            const digest = sanitizeDistilledSummary(summary.text.trim());
+            if (digest) await attachDistillation(env, target, digest, now);
           } catch (e) {
             console.error('[daily] attach distillation to context failed:', e);
           }
@@ -548,20 +543,25 @@ export async function archiveOneDay(
     }
 
     // 7) 写回 R2 + 强制刷新 KV 缓存（24h TTL）
+    const memoryChanged = memory !== memoryBefore;
     const saved = await putMemory(env, memory);
     if (!saved) {
       console.error('[daily] 记忆写回失败（R2 读回校验未通过），跳过索引与 context 重建，避免两者不一致');
     }
     // 重建 D1 记忆检索索引（幂等；失败不影响归档，下次可手动 /api/admin/memory/reindex）
-    if (saved) try {
+    // memory 没变就不重建：全量 reindex + context 重写是这条链路里最贵的一步，
+    // 而"当天没有新记忆"（比如整天都在闲聊）并不罕见。
+    if (saved && memoryChanged) try {
       const idx = await reindexMemory(env);
       if (idx.errors) console.error('[daily] memory reindex failed:', idx.errors);
       else console.log(`[daily] 记忆索引重建：${idx.entries} 条，含向量 ${idx.withVec} 条`);
     } catch (e) {
       console.error('[daily] memory reindex error:', e);
+    } else if (saved) {
+      console.log('[daily] memory 未变化，跳过索引重建');
     }
     // Phase 2：同步 Memory Context（facts/events/chunks）；表未迁移时只记录，不影响归档。
-    if (saved) try {
+    if (saved && memoryChanged) try {
       const ctx = await replaceMemoryContext(env, memory, 'memory');
       console.log(
         `[daily] memory context：facts=${ctx.facts} events=${ctx.events} chunks=${ctx.chunks}`,
@@ -584,9 +584,18 @@ export async function archiveOneDay(
       await enqueueMemoryJob(env, 'embed_chunks', 'chunks', now.getTime());
       await enqueueMemoryJob(env, 'backfill_provenance', 'memory', now.getTime());
       await enqueueMemoryJob(env, 'extract_conversation', 'recent', now.getTime());
-      const jobs = await runMemoryJobs(env, now, 5);
-      if (jobs.failed) console.error('[daily] memory jobs failed:', JSON.stringify(jobs.details));
-      else console.log(`[daily] memory jobs：${jobs.processed} 个完成`);
+      // 一天只跑 5 个会积压（提炼失败补跑日尤其明显）：跑到队列空或时间用完为止。
+      let processed = 0;
+      let failedJobs = 0;
+      const jobDeadline = Date.now() + 60_000;
+      for (let round = 0; round < 6; round++) {
+        const jobs = await runMemoryJobs(env, now, 5);
+        processed += jobs.processed;
+        failedJobs += jobs.failed;
+        if (jobs.failed) console.error('[daily] memory jobs failed:', JSON.stringify(jobs.details));
+        if (jobs.processed === 0 || Date.now() > jobDeadline) break;
+      }
+      console.log(`[daily] memory jobs：${processed} 个完成，失败 ${failedJobs}`);
       // 兜底：任务队列失败时也保证重建后的 chunks 有向量，避免静默退化到纯关键词。
       const embedded = await embedMemoryChunks(env, 200).catch((e) => {
         console.error('[daily] embedding fallback failed:', e);
