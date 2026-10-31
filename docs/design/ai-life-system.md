@@ -311,6 +311,7 @@ CREATE TABLE ai_people (
   name TEXT NOT NULL,          -- 小鹿 / 阿May / 老周
   relation TEXT NOT NULL,      -- 大学室友 / 前同事 / 表姐
   city TEXT,                   -- 同城 / 上海
+  looks TEXT,                  -- 样貌一句：能一句话认出来的特征
   note TEXT,                   -- 话很多，爱劝我出门
   created_at TEXT NOT NULL
 );
@@ -321,6 +322,8 @@ CREATE TABLE ai_people (
 | 小鹿 | 大学室友，同城 | 会拉她出门，是「社交单元」的主要触发者 |
 | 阿May | 前同事，异地 | 主要靠发消息/打电话；能提供「别人怎么看这件事」的视角 |
 | 表姐 | 亲戚，年长 | 偶尔出现，说些让她烦又没法反驳的话 |
+
+每个朋友多一个 `looks` 字段（**一句话认出来**的特征，不是设定集）——她第一次提到某人时能带一句外貌，之后不重复。写法见 [friends-template.md](./friends-template.md) 四半。
 
 **出现频率**：整周 1–2 次。理由——她生活里有朋友，但朋友不是主线；每周见两次比每天提一嘴更真。
 
