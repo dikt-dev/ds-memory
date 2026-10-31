@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-10-31T23:04:32.789Z",
-  "count": 327,
+  "generated_at": "2026-10-31T23:13:57.271Z",
+  "count": 328,
   "days": [
     {
       "date": "2026-11-01",
       "items": [
+        {
+          "hash": "fcb5255",
+          "date": "2026-11-01",
+          "type": "fix",
+          "area": "memory",
+          "title": "引文校验回 R2 取原文，缺失不判造假；补跑跳过空日期；清理僵尸 cron",
+          "why": ""
+        },
         {
           "hash": "7a29f5e",
           "date": "2026-11-01",

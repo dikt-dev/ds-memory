@@ -12,6 +12,8 @@
  * 都只加计数、不删内容。
  */
 import type { Env } from './types';
+import { logWarn } from './error-log';
+import { recordDegradation } from './degradations';
 import type { MemoryChunk } from './memory-domain';
 
 /** 一次最多记录多少条（防止异常输入把 batch 撑爆）。 */
@@ -29,15 +31,24 @@ export async function recordRecallUsage(
   if (unique.length === 0) return 0;
   const placeholders = unique.map(() => '?').join(',');
   try {
-    await env.DB.prepare(
+    const res = await env.DB.prepare(
       `UPDATE memory_chunks SET use_count = COALESCE(use_count, 0) + 1, last_used_at = ?
        WHERE id IN (${placeholders})`,
     )
       .bind(nowMs, ...unique)
       .run();
-    return unique.length;
-  } catch {
-    // 复习计数是锦上添花：写不进去不能影响这一轮回复
+    const raw = (res as { meta?: { changes?: number } } | undefined)?.meta?.changes;
+    const changed = typeof raw === 'number' ? raw : unique.length;
+    // 计数写不进去曾经静默失败过：命中 0 行要留痕，否则"背了不少但一次都没被复习"
+    if (changed === 0) {
+      logWarn('[recall-usage] 0 rows updated', { ids: unique.slice(0, 3) });
+      void recordDegradation(env, 'recall');
+    }
+    return changed;
+  } catch (e) {
+    // 复习计数是锦上添花：写不进去不能影响这一轮回复，但必须留痕
+    logWarn('[recall-usage] update failed:', e);
+    void recordDegradation(env, 'recall');
     return 0;
   }
 }

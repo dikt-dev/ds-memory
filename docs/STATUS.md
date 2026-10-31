@@ -323,3 +323,22 @@ pinned 0、keepsakes 4 条（全 approved、全 pinned）、health 94.29 good。
 `ok: true`，事件 14 / 引文不一致 0 / 孤儿 0 / 断链 0。
 
 数据修复：事件 1–11 的 importance 从 1 恢复到默认 3（被两轮误判各降 2），已写审计记录（memory_actions #19）。
+
+
+### 八点十二、chunk use_count 恒为 0（排查中）" + "" +
+"",
+"**已确认：**",
+"",
+"- recall 返回的 ids 就是 chunk id（`chunk_summary_month:2026-10` 之类），与 memory_chunks.id 一致",
+"- 手动执行同一条 UPDATE 成功（use_count 0→1），SQL 与表结构都没问题",
+"- 召回本身正常：近 304 次采样只有 2 次为空，平均命中 2–3 条",
+"",
+"**结论：** 问题出在调用侧，不是 SQL——最大嫌疑是 `void recordRecallUsage(...)` 在 `/v1/chat/completions` 流式响应开始前被丢弃，或异常被 catch 静默吞掉。",
+"",
+"**已加的可观测性（5ae5978e）：**",
+"",
+"- 更新 0 行时 `logWarn` + `recordDegradation(env,'recall')`",
+"- 异常同样留痕（以前是静默 catch）",
+"",
+"**下一步：** 发一条消息后查 `degradation_log`：有记录=写入失败（看错误），无记录但计数仍 0=调用根本没执行。",
+"
