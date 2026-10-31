@@ -123,7 +123,14 @@ L3 每轮工作记忆                                     → 宪法 + 召回证
   接入自检报告（`subjectIssues`）与 `GET /api/admin/memory/subject-audit`。
 - `memory-domain.ts`：非键值条目按文本推断 `subject`（用户/她/双方），facts 投影能看到归属。
 
-线上实测当前 43 条记忆里 5 条主体不明（进行中的事项 ×3、共同经历 ×2）。
+**存量已全部修完（2026-10-31）**：`POST /api/admin/memory/subject-fix?confirm=1` 一次改 14 条
+（含 15 条人工审过的整行规则 + 通用"补用户"规则），改前备份到
+`memory/subject-fix/<时间戳>.md`，改动记进 `memory_actions`（actor=human）。
+改完 `subject-audit` 归零；旧版本投影事实用 `POST /api/admin/memory/reconcile-facts` 标失效（不删），
+facts.md 里保留"已失效"历史。
+
+审计结论：42 条记忆里 14 条主体不明或归属错（比初版的 5 条多——通用规则只抓"没主体"，
+逐行读过才看得出"主体写错"的，比如"陪写插座C代码"其实是他写的）。
 
 ## 九、风险提示
 

@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-10-31T11:52:23.643Z",
-  "count": 305,
+  "generated_at": "2026-10-31T12:01:01.996Z",
+  "count": 306,
   "days": [
     {
       "date": "2026-10-31",
       "items": [
+        {
+          "hash": "c89d16d",
+          "date": "2026-10-31",
+          "type": "fix",
+          "area": "",
+          "title": "记忆主体错位——归档必须写清\"谁做的\"",
+          "why": "现象：用户做的事被她记成自己做的。 根因（写入端压缩，不是读取端）： 1. 归档提示词要求\"电报体、去主语\"，\"用户熬夜调通 AstrBot\"被压成\"熬夜调通 AstrBot\"； 2. \"共同经历\"允许第一人称，两边动作混成\"一起\"； 3. 事件抽取的 summary/facts 没要求写主体。 改法（只改写入端，不碰历史记忆内容）： - distill.ts 新增【主语规则】：动作条目必须以「用户/她/一起」开头， 拿不准归「用户」；\"去主语\"只保留给键=值这类静态事实。附正反例。 - memory-events.ts：summary 必须写清谁做的，facts 每条以「用户」或「她」开头。 - subject-guard.ts：classifyActor/auditSubjects 审计\"有动作但没主体\"的条目， 接进每夜自检报告（subjectIssues）与 GET /api/ad"
+        },
         {
           "hash": "8fb0a16",
           "date": "2026-10-31",

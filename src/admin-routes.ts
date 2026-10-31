@@ -28,6 +28,9 @@ import { runSelfReview } from './self-review';
 import { loadVariants, proposeVariant, decideById, rollbackVariant } from './variants';
 import { loadPersonaDrift } from './persona-fingerprint';
 import { buildFactsDocMarkdown, rebuildFactsDoc } from './memory-doc';
+import { parseMemoryContext } from './memory-domain';
+import { applySubjectFixes } from './subject-fix';
+import { recordAction } from './memory-actions';
 import { dateKeyInBeijing } from './date';
 import { backfillEvents, readEventStats } from './memory-events';
 import { insertKeepsake, loadKeepsakes, refreshKeepsakesBlock, setKeepsakePinned, setKeepsakeStatus } from './keepsakes';
@@ -495,6 +498,105 @@ app.post('/api/admin/memory/self-check', requireAuth, async (c) => {
 });
 
 /** 记忆健康分：判据全是外部事实（召回命中、失忆抱怨、延迟），不由模型自评。 */
+/** 读取 memory.md 原文（排查用，只读）。 */
+app.get('/api/admin/memory/raw', requireAuth, async (c) => {
+  const text = await getMemory(c.env);
+  return c.json({ ok: true, bytes: byteLength(text), text });
+});
+
+/**
+ * 一次性修补记忆主体（2026-10-31）。
+ *
+ * 不是通用记忆编辑器：只做两件事——给"有动作没主体"的条目补「用户」，
+ * 以及替换人工审过的整行。改前先备份原文到 R2，改动记进 memory_actions。
+ */
+app.post('/api/admin/memory/subject-fix', requireAuth, async (c) => {
+  const preview = c.req.query('dry') === '1';
+  if (!preview && c.req.query('confirm') !== '1') {
+    return c.json({ ok: false, error: '需要 confirm=1 才会写记忆（只看方案加 dry=1）' }, 400);
+  }
+  const before = await getMemory(c.env);
+  if (!before.trim()) return c.json({ ok: false, error: '当前没有记忆文件' }, 400);
+  const { text: after, changes } = applySubjectFixes(before);
+  if (changes.length === 0) return c.json({ ok: true, applied: 0, changes: [] });
+  if (preview) return c.json({ ok: true, applied: 0, preview: true, changes });
+
+  // 1) 原文备份：改坏了能整份回滚
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupKey = `memory/subject-fix/${stamp}.md`;
+  await putObject(c.env, backupKey, before, { contentType: 'text/markdown' }).catch(() => {});
+
+  // 2) 写回（写闸口 + 读回校验都在 putMemory 里）
+  const written = await putMemory(c.env, after, 'human');
+  if (!written) return c.json({ ok: false, error: '写入校验失败，已放弃本次修补', backupKey }, 500);
+
+  // 3) 审计：谁改的、改了什么、怎么回滚
+  await recordAction(c.env, {
+    actor: 'human',
+    kind: 'memory.write',
+    intent: '修正记忆主体：把「用户做的事被记成她做的」条目补上主体',
+    evidence: [backupKey],
+    diff: changes.map((x) => `- ${x.from}\n+ ${x.to}`).join('\n').slice(0, 4000),
+    before: `${changes.length} 条主体不明`,
+    after: `${changes.length} 条已补主体`,
+    revertible: true,
+  }, Date.now()).catch(() => {});
+
+  // 4) 派生数据重建：facts/chunks 由 memory.md 解析而来，不重建就对不上
+  const rebuild = await replaceMemoryContext(c.env, after, 'legacy').catch(() => null);
+  await rebuildFactsDoc(c.env).catch(() => {});
+
+  return c.json({ ok: true, applied: changes.length, backupKey, changes, rebuild });
+});
+
+/**
+ * 事实对账：把「memory.md 里已经没有、但库里还活着」的投影事实标成失效。
+ *
+ * 场景：条目被改写（如补主体）后，旧版本的行还在 active，facts.md 里就出现新旧两份。
+ * 只处理 origin=memory/legacy（这两个来源是 memory.md 的投影）；
+ * conversation 是用户原话抽出来的，没出现在 memory.md 也照样有效，不动。
+ */
+app.post('/api/admin/memory/reconcile-facts', requireAuth, async (c) => {
+  if (c.req.query('confirm') !== '1') {
+    return c.json({ ok: false, error: '需要 confirm=1' }, 400);
+  }
+  const text = await getMemory(c.env);
+  const live = new Set(parseMemoryContext(text).facts.map((f) => f.content));
+  const rows = await c.env.DB.prepare(
+    `SELECT id, content FROM memory_facts
+     WHERE origin IN ('memory', 'legacy') AND (valid_to IS NULL OR valid_to = '') LIMIT 2000`,
+  ).all<{ id: string; content: string }>();
+  const stale = (rows.results ?? []).filter((r) => !live.has(r.content));
+  if (stale.length === 0) return c.json({ ok: true, expired: 0 });
+
+  const today = dateKeyInBeijing(new Date());
+  const nowMs = Date.now();
+  await c.env.DB.batch(
+    stale.map((r) =>
+      c.env.DB.prepare(
+        'UPDATE memory_facts SET valid_to = ?, updated_at = ? WHERE id = ? AND (valid_to IS NULL OR valid_to = \'\')',
+      ).bind(today, nowMs, r.id),
+    ),
+  );
+  await rebuildFactsDoc(c.env).catch(() => {});
+  await recordAction(c.env, {
+    actor: 'human',
+    kind: 'fact.expire',
+    intent: '改写主体后清理旧版本的投影事实（memory.md 里已不存在）',
+    evidence: stale.slice(0, 10).map((r) => 'fact:' + r.id),
+    diff: `失效事实 ${stale.length} 条（memory.md 里已不存在）`,
+    before: `活跃投影事实 ${rows.results?.length ?? 0} 条`,
+    after: `有效 ${live.size} 条`,
+    revertible: true,
+  }, nowMs).catch(() => {});
+
+  return c.json({
+    ok: true,
+    expiredFacts: stale.length,
+    sample: stale.slice(0, 5).map((r) => r.content.slice(0, 60)),
+  });
+});
+
 /** 记忆主体审计：把「用户做的事被记成她做的」条目挑出来，只报告不改。 */
 app.get('/api/admin/memory/subject-audit', requireAuth, async (c) => {
   const text = await getMemory(c.env).catch(() => '');

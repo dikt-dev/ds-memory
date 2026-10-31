@@ -137,6 +137,14 @@
   ],
   [
     "GET",
+    "/api/admin/memory/raw"
+  ],
+  [
+    "GET",
+    "/api/admin/memory/raw"
+  ],
+  [
+    "GET",
     "/api/admin/memory/recall"
   ],
   [
@@ -549,6 +557,14 @@
   ],
   [
     "POST",
+    "/api/admin/memory/reconcile-facts"
+  ],
+  [
+    "POST",
+    "/api/admin/memory/reconcile-facts"
+  ],
+  [
+    "POST",
     "/api/admin/memory/refresh"
   ],
   [
@@ -610,6 +626,14 @@
   [
     "POST",
     "/api/admin/memory/self-review"
+  ],
+  [
+    "POST",
+    "/api/admin/memory/subject-fix"
+  ],
+  [
+    "POST",
+    "/api/admin/memory/subject-fix"
   ],
   [
     "POST",
