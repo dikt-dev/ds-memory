@@ -412,7 +412,9 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
       result.timedOut = true;
     }),
   ]);
-  const legacyMs = performance.now() - legacyStart;
+  // next 模式不跑 legacy：这里必须记 0，否则会因为 Promise.all 等到 next 结束
+  // 而把「并行的等待时间」记成 legacy 的耗时，指标会一直骗人。
+  const legacyMs = needLegacy ? performance.now() - legacyStart : 0;
   result.legacyText = capRecallText(legacyRaw);
 
   let nextRaw = '';
