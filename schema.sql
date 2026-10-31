@@ -208,7 +208,11 @@ CREATE TABLE IF NOT EXISTS memory_chunks (
   vec          TEXT,
   content_hash TEXT NOT NULL,
   origin       TEXT NOT NULL DEFAULT 'legacy',
-  updated_at   INTEGER NOT NULL
+  updated_at   INTEGER NOT NULL,
+  -- 复习计数：这条记忆被召回了几次、最后一次是什么时候。
+  -- 遗忘曲线用它抵抗衰减（用得越多越难忘），也是「突然想起来」的选材依据。
+  use_count    INTEGER NOT NULL DEFAULT 0,
+  last_used_at INTEGER
 );
 
 -- 记忆之间的显式关联：同事件/同实体/同项目/来源派生。

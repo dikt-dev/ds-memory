@@ -65,6 +65,10 @@ export interface MemoryChunk {
   importance: number;
   contentHash: string;
   updatedAt: number;
+  /** 被召回并注入过几次（复习次数）。 */
+  useCount?: number;
+  /** 最后一次被召回的时间（毫秒）。 */
+  lastUsedAt?: number | null;
   vec?: string | null;
 }
 
@@ -512,8 +516,36 @@ export const DECAY_HALF_LIFE_DAYS: Record<string, number> = {
 /** 衰减下限：再老也保留 15% 的分量，避免陈年条目彻底沉底。 */
 export const DECAY_FLOOR = 0.15;
 
+/**
+ * 复习加成：被想起得越多，忘得越慢。
+ *
+ * 对数增长（第一次复习收益最大，之后递减），上限 3 倍：
+ * 用 1 次 ×1.35、3 次 ×1.69、10 次 ×2.20、30 次 ×2.76、封顶 ×3。
+ * 为什么用对数而不是线性：如果每用一次都线性延长，那"每轮都被召回"的
+ * 核心事实会迅速变成永不淡忘，衰减就形同虚设。
+ */
+export function rehearsalBoost(useCount: number | undefined): number {
+  const n = Math.max(0, Number(useCount) || 0);
+  if (n === 0) return 1;
+  return Math.min(3, 1 + Math.log1p(n) * 0.5);
+}
+
+/**
+ * 重要性系数：里程碑比日常寒暄难淡出。
+ *
+ * importance 1~5 → 系数 0.8 / 1.0 / 1.2（3 为中性）：只是微调，占主导的仍是时间与复习，
+ * 避免"标成重要就永远排第一"。
+ */
+export function importanceFactor(importance: number | undefined): number {
+  const v = Math.min(5, Math.max(1, Number(importance) || 3));
+  return Math.min(1.2, Math.max(0.8, 0.7 + 0.1 * v));
+}
+
 export function recallDecay(
-  chunk: Pick<MemoryChunk, 'source' | 'section' | 'date'>,
+  chunk: Pick<MemoryChunk, 'source' | 'section' | 'date'> & {
+    useCount?: number;
+    importance?: number;
+  },
   nowMs = Date.now(),
 ): number {
   if (NEVER_DECAY_SECTIONS.has(chunk.section)) return 1;
@@ -521,7 +553,8 @@ export function recallDecay(
   const ts = Date.parse(`${chunk.date}T00:00:00+08:00`);
   if (!Number.isFinite(ts)) return 1;
   const ageDays = Math.max(0, (nowMs - ts) / 86_400_000);
-  const halfLife = DECAY_HALF_LIFE_DAYS[chunk.source] ?? 120;
+  // ★ 复习过的条目半衰期更长：同样是 180 天的旧事，被想起过 10 次的更难淡出。
+  const halfLife = (DECAY_HALF_LIFE_DAYS[chunk.source] ?? 120) * rehearsalBoost(chunk.useCount);
   const factor = Math.pow(0.5, ageDays / halfLife);
   return Math.max(DECAY_FLOOR, factor);
 }
@@ -539,7 +572,9 @@ export function rankMemoryChunks(
     .map((chunk) => ({
       chunk,
       // ★ 遗忘曲线：同样的关键词命中，老条目排在后面（核心/雷区永不衰减）
-      score: keywordScore(q, chunk, focus) * recallDecay(chunk),
+      // ★ 遗忘曲线（时间 + 复习）× 重要性：越重要、越常被想起，越容易再次浮上来
+      score:
+        keywordScore(q, chunk, focus) * recallDecay(chunk) * importanceFactor(chunk.importance),
     }))
     .filter((x) => x.score > 0)
     .sort(

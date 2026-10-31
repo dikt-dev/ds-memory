@@ -11,6 +11,7 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { Env } from './types';
 import { buildPromptMemoryFor } from './memory-index';
 import { buildMemoryPack, budgetFromPack } from './context-pack';
+import { recordRecallUsage } from './memory-rehearsal';
 import { buildBaseSystemPrompt, normalizeChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, stripSilentEndToken, STYLE_REMINDER } from './prompt';
 import { stripLeadingTimeLabels } from './anti-ai-flavor';
 import { budgetContext, formatBudgetManifest } from './context-budget';
@@ -558,6 +559,7 @@ openaiApp.post('/chat/completions', async (c) => {
   });
   const recalledRaw = recall.text;
 
+  void recordRecallUsage(c.env, recall.ids, now.getTime());
   const { recalled, budget: contextBudget } = budgetFromPack(
     pack,
     recalledRaw,

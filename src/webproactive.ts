@@ -60,7 +60,9 @@ import { buildVoiceDirective } from './voice';
 import { formatRecentMemoBlock, getRecentMemo } from './recent-memory';
 import { extractPromptMemory, buildPromptMemoryFor, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 import { buildMemoryPack, budgetFromPack } from './context-pack';
-import { getRuntimeState } from './runtime-store';
+import { formatDormantHint, loadDormantCandidates, pickDormant, recordRecallUsage } from './memory-rehearsal';
+import { getRuntimeState, putRuntimeState } from './runtime-store';
+import { logTrace } from './trace';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { readSessionFacts } from './session-facts';
 import { facetsOf, processEmotionTurn } from './emotion-context';
@@ -171,6 +173,39 @@ async function collectEnvironment(env: Env, now: Date, dayCtx: DayContextFile): 
   return { hour, isRestDay: dayCtx.is_holiday, weatherChanged, isSpecialDay };
 }
 
+/** 「突然想起来」的节流：两次之间至少隔这么多天。 */
+export const DORMANT_HINT_MIN_GAP_DAYS = 7;
+const DORMANT_HINT_KEY = 'proactive:dormant_hint_at';
+
+/**
+ * 偶尔从沉睡记忆里挑一条，作为主动消息的引子。
+ *
+ * 三条约束：
+ *   - 最多 7 天一次（翻旧账太频繁就不像"突然想起来"了）；
+ *   - 只在确定性窗口内触发（避免每条消息都带旧事）；
+ *   - 取不到就静默返回空——它是锦上添花，不能影响主动消息本身的可用性。
+ */
+async function maybeDormantHint(env: Env, now: Date): Promise<string> {
+  try {
+    const last = await getRuntimeState(env, DORMANT_HINT_KEY).catch(() => null);
+    if (last) {
+      const lastMs = Number(last);
+      if (Number.isFinite(lastMs) && now.getTime() - lastMs < DORMANT_HINT_MIN_GAP_DAYS * 86_400_000) {
+        return '';
+      }
+    }
+    const candidates = await loadDormantCandidates(env, now.getTime());
+    if (candidates.length === 0) return '';
+    const pick = pickDormant(candidates, now.getTime());
+    if (!pick) return '';
+    await putRuntimeState(env, DORMANT_HINT_KEY, String(now.getTime()), 60 * 86_400).catch(() => {});
+    logTrace('proactive.dormant', { section: pick.section, date: pick.date });
+    return formatDormantHint(pick);
+  } catch {
+    return '';
+  }
+}
+
 /** 生成带事由的主动消息。 */
 async function generateProactive(
   env: Env,
@@ -240,6 +275,8 @@ async function generateProactive(
     skipMemorySource: promptMemory.mode === 'full' && !promptMemory.evidence,
     nowMs: now.getTime(),
   });
+  // 复习计数：主动消息注入的往事也算"被想起"，否则它们永远等不到加固。
+  void recordRecallUsage(env, recall.ids, now.getTime());
   const recalled = stripDuplicateRecall(
     recall.text,
     [...history.map((m) => m.content), recentMemo ?? '', promptMemory.text].filter(Boolean),
@@ -296,6 +333,10 @@ async function generateProactive(
     decision.topics.length > 0
       ? `\n## 本次主动消息的事由（优先围绕这些）\n${decision.topics.map((t) => `- ${t}`).join('\n')}`
       : '\n## 本次主动消息的事由\n（无具体事由，可以随口聊聊，但要自然、简短）';
+
+  // ★ 突然想起来：从很久没被提起、但分量不轻的旧事里挑一条（最多一周一次）。
+  //   不是每条主动消息都翻旧账——偶尔一次像人，每次都提像复读机。
+  const dormantHint = await maybeDormantHint(env, now);
 
   const system = `${systemPrompt}
 

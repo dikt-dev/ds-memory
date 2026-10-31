@@ -1,10 +1,26 @@
 {
-  "generated_at": "2026-10-31T12:01:01.996Z",
-  "count": 306,
+  "generated_at": "2026-10-31T12:17:38.105Z",
+  "count": 308,
   "days": [
     {
       "date": "2026-10-31",
       "items": [
+        {
+          "hash": "d6e2250",
+          "date": "2026-10-31",
+          "type": "fix",
+          "area": "",
+          "title": "归档链路取消不必要的尺寸限制（分段提炼 + 自适应预算）",
+          "why": "原来的上限都是为省字节设的，代价是记忆在写入端就少了： - distill-view：她的话 400→6000 字，用户 3000→12000 字（文件块已折叠，再砍是真实叙述） - distillDay：超 60K 对话不再\"只留尾部\"，改成按消息边界分段提炼（≤12 段）， 并把单次输入预算做成自适应：对话额度 = 110K - 记忆长度，避免记忆涨到 96KB 后超上下文 - memory.md 常驻上限 24KB→96KB（archive.md 不进提示词，24KB 等于把记忆降级成不可见） - 近期动态保留 7→30 天；快照保留 45→365 天；archive→facts 解析 500→5000 行 - facts.md 投影上限 16KB→256KB（超限时整份停更，比写大更糟） 测试 1124 全绿，部署 7a3a700b。"
+        },
+        {
+          "hash": "99e114a",
+          "date": "2026-10-31",
+          "type": "fix",
+          "area": "",
+          "title": "全量排查并修正记忆主体（14 条 + 旧版本失效）",
+          "why": "存量修补（一次性，可回滚）： - subject-fix.ts：15 条人工审过的整行替换 + 通用\"动作句补用户\"规则； 「陪写插座C代码」这类\"主体写错\"的只能逐行改，通用规则抓不到。 - POST /api/admin/memory/subject-fix?dry=1 先看方案、confirm=1 才写； 写前备份 memory/subject-fix/<ts>.md，改动记进 memory_actions(actor=human)， 写完重建 facts/chunks 并刷新 facts.md。 - POST /api/admin/memory/reconcile-facts：把 memory.md 里已不存在的投影事实标失效 （origin=memory/legacy；conversation 是用户原话，不动）。旧行保留 valid_to，不物理删除。 - GET /api/a"
+        },
         {
           "hash": "c89d16d",
           "date": "2026-10-31",

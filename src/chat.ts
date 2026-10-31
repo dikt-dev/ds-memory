@@ -7,6 +7,7 @@ import { resolveRecall } from './memory-engine';
 import type { Env } from './types';
 import { buildPromptMemoryFor } from './memory-index';
 import { buildMemoryPack } from './context-pack';
+import { recordRecallUsage } from './memory-rehearsal';
 import { buildSystemPromptSplit, type MessageChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, STYLE_REMINDER } from './prompt';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
@@ -108,6 +109,8 @@ export async function streamChat(
     nowMs: now.getTime(),
   });
   const recalledRaw = recall.text;
+  // 复习计数：这一轮真正注入的条目被想起了一次（遗忘曲线靠它抵抗衰减）。
+  void recordRecallUsage(env, recall.ids, now.getTime());
 
   const recalled = stripDuplicateRecall(
     recalledRaw,

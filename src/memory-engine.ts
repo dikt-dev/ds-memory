@@ -93,6 +93,8 @@ export interface RecallResult {
   skipped: boolean;
   timedOut: boolean;
   ms: number;
+  /** 本轮真正注入的 chunks id（复习计数用；legacy 链路拿不到，返回空）。 */
+  ids: string[];
 }
 
 /**
@@ -170,6 +172,7 @@ async function runNextEngine(
   picked: number;
   stages: NextStageMs;
   tier: 'full' | 'recent' | 'summary';
+  ids: string[];
 }> {
   const stages: NextStageMs = { load: 0, rank: 0, embed: 0, expand: 0 };
   const started = performance.now();
@@ -189,6 +192,7 @@ async function runNextEngine(
       picked: 0,
       stages,
       tier: 'full' as const,
+      ids: [],
     };
   }
 
@@ -209,6 +213,7 @@ async function runNextEngine(
       picked: floor.chunks.length,
       stages,
       tier,
+      ids: floor.chunks.map((c) => c.id),
     };
   }
 
@@ -296,6 +301,7 @@ async function runNextEngine(
     picked: picked.length,
     stages,
     tier,
+    ids: packed.chunks.map((c) => c.id),
   };
 }
 
@@ -329,6 +335,7 @@ function emptyNext(): Awaited<ReturnType<typeof runNextEngine>> {
     picked: 0,
     stages: { load: 0, rank: 0, embed: 0, expand: 0 },
     tier: 'full' as const,
+    ids: [],
   };
 }
 
@@ -372,6 +379,7 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
     skipped: false,
     timedOut: false,
     ms: 0,
+    ids: [],
   };
 
   // P2-5：门控现在对**所有**引擎生效。一句"你好"不该触发全量召回。
@@ -496,6 +504,8 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
   }
 
   result.nextText = nextRaw;
+  // 注入的就是 packed 里那几条：复习计数按它们记。
+  result.ids = next.ids;
   result.text = opts.mode === 'next' && nextRaw ? nextRaw : result.legacyText;
   result.ms = Math.round(performance.now() - started);
   return result;
