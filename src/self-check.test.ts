@@ -47,6 +47,26 @@ describe('findQuoteMismatches', () => {
     expect(findQuoteMismatches([ev], messages)).toEqual([]);
   });
 
+  it('D1 里没有原文、但归档里有：不算不一致（真实场景：隔天清理）', () => {
+    const ev = event();
+    const archived = new Map<number, string>([
+      [101, '算了今天不走回滚，明天再说'],
+      [102, '嗯'],
+    ]);
+    expect(findQuoteMismatches([ev], new Map(), archived)).toEqual([]);
+  });
+
+  it('D1 和归档都没有原文：视为无法校验，不判造假', () => {
+    const ev = event();
+    expect(findQuoteMismatches([ev], new Map(), new Map())).toEqual([]);
+  });
+
+  it('一部分消息还在 D1，引文能对上就不报', () => {
+    const ev = event({ msg_ids: '[101,999]' });
+    const archived = new Map<number, string>([[999, '今天的另一句']]);
+    expect(findQuoteMismatches([ev], messages, archived)).toEqual([]);
+  });
+
   it('引文太短（<4 字）不判', () => {
     const ev = event({ quotes: '["嗯"]' });
     expect(findQuoteMismatches([ev], messages)).toEqual([]);

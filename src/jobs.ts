@@ -6,6 +6,7 @@
  */
 import type { Env } from './types';
 import {
+  addDays,
   dateKeyInBeijing,
   daysInMonth,
   isoInBeijing,
@@ -789,9 +790,38 @@ const CATCHUP_SCAN_LIMIT = 20;
  * 2) 超过 2 小时仍卡在 running 的任务；
  * 3) D1 里还有消息、但 R2 没有归档的日期（Worker 当天完全没跑过时不会有 cron_runs 行）。
  */
+/** 某天在 D1 里还有没有消息。 */
+async function hasMessages(env: Env, dateKey: string): Promise<boolean> {
+  const row = await env.DB.prepare('SELECT 1 AS n FROM messages WHERE date_key = ? LIMIT 1')
+    .bind(dateKey)
+    .first<{ n: number }>();
+  return Boolean(row);
+}
+
+/**
+ * 历史日期的失败/卡死任务，如果「当天没消息 + R2 已有归档」，
+ * 说明无事可做：直接标 done，否则会每天占用补跑名额空转（甚至卡死）。
+ */
+async function settleEmptyArchive(env: Env, dateKey: string): Promise<boolean> {
+  if (await hasMessages(env, dateKey)) return false;
+  if (!(await hasArchivedDate(env, dateKey))) return false;
+  await finishJob(env, 'daily_archive', dateKey, '无消息且已归档，跳过补跑', true);
+  logInfo(`[daily] ${dateKey} 无消息且已归档，标记完成不再补跑`);
+  return true;
+}
+
 export async function findArchiveCatchupTargets(env: Env, now: Date): Promise<string[]> {
   const prev = previousDateKey(dateKeyInBeijing(now));
   const targets = new Set<string>();
+
+  // 太老的历史失败行是考古，不是补账：清掉，避免永远排在最前面
+  const staleTarget = previousDateKey(addDays(prev, -45));
+  await env.DB.prepare(
+    "DELETE FROM cron_runs WHERE job_type = 'daily_archive' AND status = 'failed' AND target < ?",
+  )
+    .bind(staleTarget)
+    .run()
+    .catch(() => undefined);
 
   const failed = await env.DB.prepare(
     "SELECT target FROM cron_runs WHERE job_type = 'daily_archive' AND status = 'failed' AND target < ? ORDER BY target ASC LIMIT ?",
@@ -799,7 +829,9 @@ export async function findArchiveCatchupTargets(env: Env, now: Date): Promise<st
     .bind(prev, CATCHUP_LIMIT)
     .all<{ target: string }>();
   for (const row of failed.results ?? []) {
-    if (/^\d{4}-\d{2}-\d{2}$/.test(row.target)) targets.add(row.target);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(row.target)) continue;
+    if (await settleEmptyArchive(env, row.target)) continue;
+    targets.add(row.target);
   }
 
   const staleCutoff = isoInBeijing(new Date(now.getTime() - STALE_RUNNING_MS));
@@ -809,7 +841,9 @@ export async function findArchiveCatchupTargets(env: Env, now: Date): Promise<st
     .bind(prev, staleCutoff, CATCHUP_LIMIT)
     .all<{ target: string }>();
   for (const row of stale.results ?? []) {
-    if (/^\d{4}-\d{2}-\d{2}$/.test(row.target)) targets.add(row.target);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(row.target)) continue;
+    if (await settleEmptyArchive(env, row.target)) continue;
+    targets.add(row.target);
   }
 
   // 从 D1 反查“有消息但没归档”的日期；只扫最近 20 个，避免 R2 读放大。

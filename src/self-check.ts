@@ -14,9 +14,14 @@ import { putObject } from './storage';
 import { dateKeyInBeijing } from './date';
 import { auditSubjects } from './subject-guard';
 import { getMemory } from './memory';
+import { getObject } from './storage';
+import type { MessageRow } from './db';
+import { addDays } from './date';
 
 export interface SelfCheckEvent {
   id: number;
+  /** 事件所属自然日；D1 消息被清理后靠它回 R2 找原文 */
+  date_key?: string;
   msg_ids: string;
   quotes: string;
   importance: number;
@@ -33,10 +38,17 @@ function normalize(text: string): string {
   return (text ?? '').replace(/\s+/g, '').replace(/[“”"']/g, '');
 }
 
-/** 引文回查：对不上原文的事件单独列出来。 */
+/**
+ * 引文回查：对不上原文的事件单独列出来。
+ *
+ * D1 只保留今天和昨天，老事件的原文在 R2 归档里，所以除 D1 的 messagesById 外，
+ * 还要接受 archived（归档回查结果）。两者都查不到的引文视为「无法校验」，
+ * 不下结论——否则每天都会把整库老事件误判成造假。
+ */
 export function findQuoteMismatches(
   events: SelfCheckEvent[],
   messagesById: Map<number, string>,
+  archived: Map<number, string> = new Map(),
 ): QuoteMismatch[] {
   const out: QuoteMismatch[] = [];
   for (const ev of events) {
@@ -58,7 +70,10 @@ export function findQuoteMismatches(
       for (const q of quotes) out.push({ eventId: ev.id, quote: q, reason: 'no_messages' });
       continue;
     }
-    const pool = ids.map((id) => normalize(messagesById.get(id) ?? '')).join('|');
+    // 原文可得性：D1 → 归档 → 都没有则无法校验
+    const texts = ids.map((id) => messagesById.get(id) ?? archived.get(id));
+    if (texts.every((text) => text === undefined)) continue;
+    const pool = texts.map((text) => normalize(text ?? '')).join('|');
     for (const q of quotes) {
       const needle = normalize(q);
       if (needle.length < 4) continue;
@@ -110,12 +125,30 @@ export interface SelfCheckReport {
 const MAX_EVENTS = 200;
 const MAX_ROWS = 2000;
 
+/** 读某天的归档消息（日文件优先，月末回退月文件）。只读，不写回 D1。 */
+async function loadArchivedMessages(env: Env, dateKey: string): Promise<MessageRow[]> {
+  const parse = async (key: string): Promise<MessageRow[] | null> => {
+    const obj = await getObject(env, key).catch(() => null);
+    if (!obj) return null;
+    try {
+      const parsed = JSON.parse(await obj.text()) as { messages?: MessageRow[] };
+      return Array.isArray(parsed.messages) ? parsed.messages : null;
+    } catch {
+      return null;
+    }
+  };
+  const daily = await parse(`chat_logs/${dateKey}.log`);
+  if (daily && daily.length > 0) return daily;
+  const monthly = await parse(`chat_logs/${dateKey.slice(0, 7)}.json`);
+  return (monthly ?? []).filter((m) => m.date_key === dateKey);
+}
+
 export async function runSelfCheck(env: Env, now = Date.now()): Promise<SelfCheckReport> {
   const date = dateKeyInBeijing(new Date(now));
 
   // 1) 最近事件 + 它们引用的消息正文
   const evRes = await env.DB.prepare(
-    `SELECT id, msg_ids, quotes, importance, status FROM memory_event_log
+    `SELECT id, date_key, msg_ids, quotes, importance, status FROM memory_event_log
      WHERE status = 'active' ORDER BY id DESC LIMIT ?`,
   )
     .bind(MAX_EVENTS)
@@ -146,7 +179,29 @@ export async function runSelfCheck(env: Env, now = Date.now()): Promise<SelfChec
     }
   }
 
-  const quoteMismatches = findQuoteMismatches(events, messagesById);
+  // D1 只留两天：老事件引用的消息去 R2 归档里找原文，找不到才算"无法校验"
+  const missing = [...referenced].filter(
+    (id) => Number.isFinite(id) && !messagesById.has(Number(id)),
+  );
+  const archived = new Map<number, string>();
+  if (missing.length > 0) {
+    const wanted = new Set(missing.map(Number));
+    const days = new Set(events.map((ev) => ev.date_key).filter(Boolean) as string[]);
+    for (const day of days) {
+      // 跨天回复可能落在前一天，两个都试
+      for (const d of [day, addDays(day, -1)]) {
+        if (wanted.size === 0) break;
+        for (const row of await loadArchivedMessages(env, d)) {
+          if (wanted.has(row.id)) {
+            archived.set(row.id, row.content);
+            wanted.delete(row.id);
+          }
+        }
+      }
+    }
+  }
+
+  const quoteMismatches = findQuoteMismatches(events, messagesById, archived);
 
   // 2b) 主体审计：她有没有把用户做的事记成自己做的
   // 只报告不修：主体判断牵扯事实归属，误改比漏改更糟。
