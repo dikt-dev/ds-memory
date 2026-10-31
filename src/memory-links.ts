@@ -205,6 +205,16 @@ function chunkFromRow(r: ChunkRow): MemoryChunk {
  * 从已召回的 chunk 出发，取最多 limit 个直接关联 chunk。
  * 只做 1 跳；不改变根集，不递归扩散。
  */
+/**
+ * 关联扩展的预算：只有她挑得不够多时才补。
+ *
+ * 实测（10-30）：选择器挑中 1 条最准的，扩展又给回 2 条相关但不那么准的，
+ * 最终 1 → 3 条。P1-1b 的目标是「少而准」，挑够了还扩等于把它稀释回去。
+ */
+export function expansionBudget(pickedCount: number, cap = 2, minPicked = 2): number {
+  return pickedCount > 0 && pickedCount < minPicked ? cap : 0;
+}
+
 export async function expandLinkedChunks(
   env: Env,
   roots: MemoryChunk[],

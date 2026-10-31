@@ -57,7 +57,7 @@ import {
   type MemoryJobStats,
 } from './memory-context-store';
 import { enqueueMemoryJob, runMemoryJobs } from './memory-jobs';
-import { expandLinkedChunks, linkAllFacts, linksForMemory } from './memory-links';
+import { expandLinkedChunks, expansionBudget, linkAllFacts, linksForMemory } from './memory-links';
 import { rankMemoryChunks } from './memory-domain';
 import { resolveRecall } from './memory-engine';
 import { applyMemoryProjection, buildMemoryProjection } from './memory-projection';
@@ -1396,7 +1396,7 @@ app.get('/api/admin/memory/recall', requireAuth, async (c) => {
   if (!q) return c.json({ error: 'q required' }, 400);
   const chunks = await loadMemoryChunks(c.env);
   const picked = rankMemoryChunks(q, chunks, 10);
-  const expanded = await expandLinkedChunks(c.env, picked, 2);
+  const expanded = await expandLinkedChunks(c.env, picked, expansionBudget(picked.length));
   // compare=1：同一句话按**生产链路**同时跑 legacy 与 next（含门控、选择器、封顶），
   // 给评估集对照用。直接调 recallMemoryForChat 会绕过门控，"在吗"这种就会假性翻旧账。
   if (c.req.query('compare') === '1') {

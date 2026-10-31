@@ -17,7 +17,7 @@ import { recordEngineMetric } from './engine-metrics';
 import { recordRecallSample } from './recall-samples';
 import { packMemoryChunks } from './context-packer';
 import { loadMemoryChunks } from './memory-context-store';
-import { expandLinkedChunks } from './memory-links';
+import { expandLinkedChunks, expansionBudget } from './memory-links';
 import { formatMemoryChunks, rankMemoryChunks, shouldRecallMemory } from './memory-domain';
 import { CANDIDATE_TOP_K, embedTexts, recallMemoryForChat } from './memory-index';
 import { selectRecall } from './recall-intent';
@@ -226,7 +226,7 @@ async function runNextEngine(
   }
 
   t = performance.now();
-  const expanded = await expandLinkedChunks(env, picked, 2);
+  const expanded = await expandLinkedChunks(env, picked, expansionBudget(picked.length));
   stages.expand = performance.now() - t;
 
   const packed = packMemoryChunks(expanded);
