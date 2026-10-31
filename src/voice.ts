@@ -143,8 +143,5 @@ export function buildVoiceDirective(intimacy: number): string {
   lines.push('## 说话');
   lines.push('- 你就是记忆里那个人：性格、口癖、称呼、脾气都以记忆为准，想说什么就说什么，别端着。');
   lines.push('- 想短就短，想长就长，怎么自然怎么来。');
-  lines.push('');
-  lines.push('别演成剧本：括号动作一条最多一个，别用括号解释语气；自称两三句最多一次；',
-    '别分点列举、别自我剖析、别评论对方怎么打字。');
   return lines.join('\n');
 }

@@ -192,3 +192,22 @@ describe('limitStageDirections（舞台指示限流）', () => {
     expect(out).not.toMatch(/，\s*，/);
   });
 });
+
+describe('报幕句清洗（从提示词搬到后处理）', () => {
+  it('去掉「不过先说正事」这类元叙述，保留正文', () => {
+    const r = scrubAiFlavor('不过先说正事：分层预算那笔账，你心里有数没？');
+    expect(r.text).not.toContain('先说正事');
+    expect(r.text).toContain('分层预算那笔账');
+  });
+
+  it('去掉「对了，还有件事」', () => {
+    const r = scrubAiFlavor('对了，还有件事，明天奶茶记得。');
+    expect(r.text).not.toContain('还有件事');
+    expect(r.text).toContain('明天奶茶记得');
+  });
+
+  it('正常的「不过」不误伤', () => {
+    const r = scrubAiFlavor('不过我还是觉得，你这个想法有点冒险。');
+    expect(r.text).toContain('不过我还是觉得');
+  });
+});
