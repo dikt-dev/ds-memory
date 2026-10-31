@@ -1,10 +1,343 @@
 {
-  "generated_at": "2026-10-30T13:30:02.183Z",
-  "count": 232,
+  "generated_at": "2026-10-31T04:00:47.576Z",
+  "count": 273,
   "days": [
+    {
+      "date": "2026-10-31",
+      "items": [
+        {
+          "hash": "ed0ac99",
+          "date": "2026-10-31",
+          "type": "docs",
+          "area": "",
+          "title": "发送时序方案 C 落地记录（真机逐帧验证）",
+          "why": ""
+        },
+        {
+          "hash": "3134842",
+          "date": "2026-10-31",
+          "type": "docs",
+          "area": "",
+          "title": "发送时序方案（A/B/C）+ 任务表记录评估集进度",
+          "why": ""
+        },
+        {
+          "hash": "e45ca22",
+          "date": "2026-10-31",
+          "type": "docs",
+          "area": "eval",
+          "title": "基线换成 30 条完整跑的 28/30 vs 30/30",
+          "why": ""
+        },
+        {
+          "hash": "46bdb1d",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "eval",
+          "title": "真实记忆上的 legacy/next 对照跑 + 语气词门控",
+          "why": "- 新 scripts/eval-recall.mjs：按生产链路（resolveRecall shadow）对照两套引擎 - 新 /api/admin/memory/recall?compare=1：一次调用同时返回 legacy/next 文本 - 30 条真实用例放 golden-memory.local.json（gitignore，不入库） - 修门控：'哈哈哈''嘿嘿嘿'不再触发全量召回（原来连发三个哈会翻五条旧账） - 基线：legacy 26/27 命中 5.0 条；next 27/27 命中 4.2 条；误召均 0"
+        },
+        {
+          "hash": "132cb40",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "obs",
+          "title": "单独记录选择器选中条数（扩张前），看清扩展放大了多少",
+          "why": ""
+        },
+        {
+          "hash": "9e3eee9",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "recall",
+          "title": "P1-1b 选择器调优 + P1.5 遗忘曲线与进行中保底",
+          "why": "- 选择器：默认只挑 1~3 条（原来每次顶满 5），超时 1.5s → 2.5s，总预算 3.5s - 遗忘曲线：事件半衰期 90 天 / 事实 180 / 摘要 120，下限 15%； 核心分区（人物底色/称呼关系/雷区禁忌/用户更正）永不衰减 - 进行中的事项保底：选中非空时保证它进上下文 - 921 测试全绿"
+        },
+        {
+          "hash": "3d6ce49",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "obs",
+          "title": "recall_samples 记录本轮检索意图（P1-1 可观测）",
+          "why": ""
+        },
+        {
+          "hash": "4a5cdb6",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "recall",
+          "title": "P1-1 一次调用完成意图改写 + 挑选",
+          "why": "- 新增 recall-intent.ts：模型先写 2~3 个检索意图，再从 20 条候选里挑（允许为空） - chunk 引擎的粗召回从 6 条放宽到 20 条，让选择器有得挑 - 失败/超时回退到确定性排序，不影响主路径 - 914 测试全绿"
+        },
+        {
+          "hash": "d4c153e",
+          "date": "2026-10-31",
+          "type": "fix",
+          "area": "recall",
+          "title": "指标记封顶后的条数（否则看起来永远顶满 8）",
+          "why": ""
+        },
+        {
+          "hash": "66a1992",
+          "date": "2026-10-31",
+          "type": "perf",
+          "area": "recall",
+          "title": "legacy 与 next 并行 + 预算 3s + 封顶 8→5",
+          "why": "- 串行时延迟 = legacy + next（实测 708+482=1190ms）；并行后 = max - deadline 1500 → 3000：实测只剩 300ms 余量，一次抖动整条作废 - RECALL_MAX_ITEMS 8 → 5：一周数据里 new_items 几乎次次顶满，是上限在替代排序 - runNextEngineSafe：超时/抛错只影响 next 一侧，不拖累 legacy"
+        },
+        {
+          "hash": "cc40573",
+          "date": "2026-10-31",
+          "type": "docs",
+          "area": "memory",
+          "title": "澄清 legacySkipped 的语义（过滤来源≠跳过执行）",
+          "why": ""
+        },
+        {
+          "hash": "39a5534",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "engines",
+          "title": "全渠道开 shadow + 采样区分「旧侧跳过」与「旧侧为空」",
+          "why": "- MEMORY_ENGINE / AFFECT_ENGINE 及三个渠道覆盖全部 shadow（回复仍走 legacy） - recall_samples 加 legacy_skipped：手机上全量记忆注入时 legacy 召回被跳过， old_items=0 不等于旧召回差，不区分就会被误读 - 老表用 ALTER ... ADD COLUMN 补列（CREATE IF NOT EXISTS 不会补） - 905 测试全绿"
+        },
+        {
+          "hash": "b4b788a",
+          "date": "2026-10-31",
+          "type": "docs",
+          "area": "",
+          "title": "主动消息到点提醒的设计与观测方式",
+          "why": ""
+        },
+        {
+          "hash": "2d5832f",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "proactive",
+          "title": "新增 GET /api/proactive/plan（今日计划，供 App 设闹钟）",
+          "why": ""
+        },
+        {
+          "hash": "286d57a",
+          "date": "2026-10-31",
+          "type": "docs",
+          "area": "tasks",
+          "title": "R8 已开（56.3MB，已验证）；记录后台常驻默认关闭的影响",
+          "why": ""
+        },
+        {
+          "hash": "fa60aac",
+          "date": "2026-10-31",
+          "type": "fix",
+          "area": "proactive",
+          "title": "用户主动关掉后台常驻后，不再误报「通道掉线」",
+          "why": "App 的心跳默认关闭（见 ds-mobile 提交），但旧逻辑只看「心跳多久没更新」， 于是主动关掉 3 小时后会入队一条「⚠️ 聊天通道已经 X 小时没有心跳了」的运维提醒， 那条提醒还会被当成一条消息显示出来。 - 新增 CLIENT_BACKGROUND_OFF = 'ds-mobile/background-off'；客户端停止服务前上报一次 - checkChannelOffline 见到这个标记就返回 no-heartbeat（静默），真实掉线仍照旧提醒 - 补一条用例覆盖；892 用例全绿，tsc 干净"
+        },
+        {
+          "hash": "1e04922",
+          "date": "2026-10-31",
+          "type": "docs",
+          "area": "tasks",
+          "title": "记录三个待拍板项（部署 / shadow 开关 / R8）",
+          "why": ""
+        },
+        {
+          "hash": "759c7a5",
+          "date": "2026-10-31",
+          "type": "refactor",
+          "area": "relation",
+          "title": "关系/情绪数值常量收敛到 relation-model.ts",
+          "why": "审查报告 P0-2：RELATION_MAX 曾在 memory-maintenance / relation-drivers / relation-growth 各写一份， MOOD_MAX_DAILY_DELTA 在 attitude 与 memory-maintenance 各一份，亲密度上限基数散在 relation-drivers。 同一个上限改一处漏两处，就会出现「结算用 1000、增量判断用 800」这种极难查的偏差。 - 新增 src/relation-model.ts：RELATION_MAX / RELATION_MIN / MOOD_MAX_DAILY_DELTA / INTIMACY_BASE / INTIMACY_PER_DAY - 四个模块改为从它 import 并保留原有 export 名（tests 与外部引用零改动） - attitude 的 RELATI"
+        },
+        {
+          "hash": "7776d71",
+          "date": "2026-10-31",
+          "type": "docs",
+          "area": "",
+          "title": "更正部署版本与线上开关现状，TASKS 加偏差记录",
+          "why": "- HANDOFF/current-state：线上 Version 是 91a0ed0b（10-31 03:26，代码等同 eaf3c5b）； 「00db532 未部署」是错的——逐字节比对过，线上页面 == 本地文件（只差角色名替换） - 记录线上开关全部 legacy（memory/affect），shadow 对比没在积累；recall_samples 因 legacy 提前 return 永不建表 - 新增第十一节：复查发现的 5 条偏差（部署版本、开关、memory_events 冲突、惰性表、request_log） - TASKS.md 顶部加偏差表：T-01b/T-02/T-03 已完成，T-04 待部署后重跑，T-06 前提不成立"
+        },
+        {
+          "hash": "581bc79",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "dev",
+          "title": "本地可复现环境（scripts/local-env.ps1 + runbook）",
+          "why": "把线上 D1 导出成快照、清空本地、导入、起 wrangler dev，一条命令拿到「真实数据 + 真实 SQL」的本地环境。 解决的是「改了看不见」：wrangler tail 在这条网络上连不上，过去三次翻车都源于分不清 是代码问题、缓存问题还是部署没生效。 - scripts/local-env.ps1：-SkipExport 复用快照，-Port 自定义端口 - docs/runbooks/local-env.md：覆盖范围（D1 全量；R2/KV 为空是预期）、怎么补 memory.md、怎么登录、数据安全 - .gitignore 加 tmp/ 与 .wrangler/（快照里有真实对话，绝不入仓） 实测：导入 276 条消息 + 21 张表，/api/health 全 ok，/api/admin/requests 200 且 request_log 建表写入成功。"
+        },
+        {
+          "hash": "0d31bf2",
+          "date": "2026-10-31",
+          "type": "refactor",
+          "area": "",
+          "title": "删除 16 个死导出（源码与测试都没人引用）",
+          "why": "按「在 src 里只出现声明、测试里 0 次」筛出，逐个确认后删除： attitude/MOOD_STAGES、context/RelationSnapshotV2、date/nextMonthKey、db/recentMessages、 emotion-vector/emotionSignature、engine-metrics/EngineMetricMode、 memory-archive 的 5 个旧召回打分常量（RECALL_LIMIT/RECALL_MIN_SCORE/TAG_BOOST/WORD_BOOST/ALIAS_BOOST）、 memory-links/linkedCount、memory-maintenance/DEMOTE_HEADERS+RELATION_MAX_DAILY_DELTA、 recent-context/loadRecentHistory（注释写着"
+        },
+        {
+          "hash": "f735437",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "obs",
+          "title": "请求级 trace 落 D1（request_log）+ /api/admin/requests",
+          "why": "这条网络连不上 wrangler tail，线上日志等于没有——「改了看不见」是这个项目所有翻车 的共同原因。现在把 trace 写进能用 SQL 查的地方： - 新表 request_log（惰性建表，30 天保留，REQUEST_LOG=off 可关） - 中间件按 shouldLogHttp 的策略记录 http 行（错误请求全记） - /api/chat 额外记一条 #recall 行，带记忆引擎、预算字符数、召回耗时/条数、是否超时 - cron 三条分支各记一条（耗时 + 是否成功），每日归档后顺手清理过期行 - GET /api/admin/requests?hours=24&limit=30 返回按路径的 p50/p95/最大耗时/错误数 + 明细 只记元信息，不写真消息正文；写失败静默，不影响聊天。测试 +10（891 全绿）。"
+        },
+        {
+          "hash": "85b3184",
+          "date": "2026-10-31",
+          "type": "fix",
+          "area": "memory",
+          "title": "事件账本表改名 memory_event_log，修线上回填 500",
+          "why": "`memory_events` 早被 schema.sql 占用（记忆上下文投影：id TEXT/section/summary/participants…）， 与事件账本 v2（started_ms/ended_ms/title/quotes…）结构完全不同。同名导致线上 CREATE TABLE IF NOT EXISTS 被跳过、CREATE UNIQUE INDEX (started_ms, ended_ms) 报 no such column: started_ms，`POST /api/admin/memory/events/backfill` 直接 500，阶段 A 从未写入成功。 本提交只改 v2 一侧的表名/索引名（v1 与三个使用方不动），无数据迁移（v2 侧零数据）。"
+        },
+        {
+          "hash": "559f713",
+          "date": "2026-10-31",
+          "type": "docs",
+          "area": "",
+          "title": "校正现状（会话级短期记忆 / 97 条路由 / 881 用例），新增结构审查报告",
+          "why": "- architecture.md v3.1：短期记忆改成会话级（6h 边界、120 轮压提要）、API 表补齐 8 组、目录补 16 个模块、测试文件数 39→77 - current-state.md §0：换成本次核对数字（部署 eaf3c5b / Version 92297db2、HEAD 00db532、881 用例、召回 503ms、惰性表未建） - docs/HANDOFF.md：HEAD 改 00db532 且线上仍是 eaf3c5b；补「历史渲染中断」真实根因线索；记录惰性表不存在；第九节改成工作区干净 - 新增 docs/review-2026-10-31.md：index.ts 拆分方案、关系数值单一真相、死导出清单、三批执行顺序"
+        },
+        {
+          "hash": "00db532",
+          "date": "2026-10-31",
+          "type": "fix",
+          "area": "web",
+          "title": "顶栏窄屏折行 + 历史/实时消息逐条渲染兜底，纸墨 UI 定稿",
+          "why": "- header 在 ≤1100px 折成两行，宽屏铺到 1040px，日期/费用/余额不再被挤成省略号 - loadMoreHistory / pollNewMessages 逐条 try/catch：单条渲染失败不再让整段历史空白（10-31 踩过） - docs/WEB_UI.md 同步版面规则与检查项；更新三张验收截图"
+        },
+        {
+          "hash": "d55a98f",
+          "date": "2026-10-31",
+          "type": "docs",
+          "area": "handoff",
+          "title": "详细交接文档（不含 UI 改版部分）",
+          "why": "系统地图、当前部署版本与数据规模、24 小时内的改动清单、被我改坏又撤回的提交、排期表、构建/部署/线上验证命令、12 条踩坑、红线与产品哲学、数据现状、未提交物清单。"
+        },
+        {
+          "hash": "eaf3c5b",
+          "date": "2026-10-31",
+          "type": "fix",
+          "area": "web",
+          "title": "页面不再被浏览器缓存，顶栏信息也不挤成省略号",
+          "why": "根因是 HTML 没有 ETag/Last-Modified，max-age=0 又缺校验器，浏览器按启发式缓存一直跑旧 JS——所以前面几次改动要么看不到、要么看到半新半旧。现在 HTML 统一 no-store，改了立刻生效。顶栏三处文案同时缩短：日期只留月日（完整带节日的放 title），今日费用只显示今日、7 天放 title，其余两处同理。"
+        },
+        {
+          "hash": "43d8de4",
+          "date": "2026-10-31",
+          "type": "other",
+          "area": "web",
+          "title": "撤回首屏合并请求的改动，只保留顶栏修复",
+          "why": "那次把「探活 + 今日 + 历史」压成一次请求的改动，在上线后表现为历史只刷出几条就停（applyHistoryPage 那条路径没有被真正验证过）。先整体撤回到 c682348 的页面逻辑，保证记录能正常加载；顶栏被挤扁的 CSS 修复单独保留（品牌块不收缩、状态不换行、信息条可横向滑动）。性能优化要重做，但必须先在本地验证渲染再上线。"
+        },
+        {
+          "hash": "c05a442",
+          "date": "2026-10-31",
+          "type": "fix",
+          "area": "web",
+          "title": "顶栏被挤扁导致名字截断、在线竖排重叠",
+          "why": "品牌块原来允许收缩，中间那排信息（今日/7天/余额）先把宽度吃光，于是名字只剩一个字、「在线」竖着折成两行盖在一起。改成：品牌块 flex:0 0 auto 不参与收缩，状态文字 nowrap，中间信息 flex:1 且横向滚动，压缩时先让位的是它。"
+        },
+        {
+          "hash": "57254f0",
+          "date": "2026-10-31",
+          "type": "perf",
+          "area": "web",
+          "title": "首屏历史从三次串行往返压成一次",
+          "why": "原来登录/恢复会话是：探活 /api/history?limit=5 → /api/day → 再拉一次 /api/history，三次排队走网络。D1 主库在 LAX，单次往返 0.6~0.9s，光等待就两三秒。现在探活直接复用它拿到的那一页历史，今日/用量/余额并行，谁慢都不挡消息出现。/api/day 的天气与 /api/balance 的余额都改成 KV 缓存（10 分钟 / 5 分钟），并给浏览器 60 秒 private 缓存。测试 881 全绿。"
+        },
+        {
+          "hash": "c682348",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "web",
+          "title": "网页上可以设置/生成配对码",
+          "why": "配对码改由 KV 承载（pair:code）：网页设置 > 环境变量 APP_PAIR_CODE > 回退 ASTROBOT_API_KEY，改码不用重新部署，也不用把长期 Key 当配对码。头部长了「配对」入口：随机生成（去掉 0/O/1/I）、保存、清除回退。"
+        }
+      ]
+    },
     {
       "date": "2026-10-30",
       "items": [
+        {
+          "hash": "b752be5",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "tasks",
+          "title": "收口 App 侧 A-1~A-9，其余按日期归档",
+          "why": "App 侧不依赖部署的工作全部做完：设置页试听、1.5 秒安静期、气泡分层、内嵌相机、状态页重做、高清头像、缓存扩到 4GB。剩下 12 项不是没做，是卡在 11-01 部署、外部确认或前序验收上，逐条标了日期和卡点。"
+        },
+        {
+          "hash": "a1c701f",
+          "date": "2026-10-30",
+          "type": "fix",
+          "area": "proactive",
+          "title": "白天随机主动消息不再被阈值和冷却锁死",
+          "why": "线上表现是只剩早晚两条固定问候。根因两条：随机时段没有基础分，靠待办/天气/里程碑凑 50 分几乎不可能（固定问候有 +55 所以一直发得出来）；未回复时冷却 ×3 变 540 分钟，早安没人回就把白天全锁死。改法：随机档给基础分（quiet 20 / normal 32 / active 40，条数仍由 0-2 条/天 + 静默期 + 冷却限制）、冷却封顶 360 分钟、深夜降到 23 点后改为硬否决保证不打扰。新增回归测试，全套 881 通过。"
+        },
+        {
+          "hash": "92c9166",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "tasks",
+          "title": "补 App 待办清单与未验证项",
+          "why": "把 App 侧七项待办（试听、媒体安静期、气泡层次、相机、状态页、推仓库、代码整理）和两个待编译验证的提交登记进总表，避免做了但没记。"
+        },
+        {
+          "hash": "9f00499",
+          "date": "2026-10-30",
+          "type": "feat",
+          "area": "status",
+          "title": "App 状态快照接口，只回模糊的一句话",
+          "why": "GET /api/app/status 返回心情/关系/记忆/今天/余额，全部映射成人话（『还在生气』『挺熟的』），不吐 0-100 数值——精确数字会被当成优化目标。余额给档位 + 真实金额，查不到降级为 null 不影响其它字段。新增 9 个测试，全套 880 通过。"
+        },
+        {
+          "hash": "74baf5c",
+          "date": "2026-10-30",
+          "type": "docs",
+          "area": "tasks",
+          "title": "登记 D-25 App 设置页与头像",
+          "why": "同步 ds-mobile 的 UI 改动到任务表：设置页整屏化、消息两侧头像。"
+        },
+        {
+          "hash": "3c715f7",
+          "date": "2026-10-30",
+          "type": "test",
+          "area": "tts",
+          "title": "服务端合成与 R2 缓存的行为测试",
+          "why": "覆盖三点：第二次同文本同参数命中缓存不再调 Azure；Azure 返回 5xx 时抛错且不写缓存；未配置密钥时明确报错。"
+        },
+        {
+          "hash": "d7639bf",
+          "date": "2026-10-30",
+          "type": "feat",
+          "area": "tts",
+          "title": "语音参数上云，网页和 App 用同一份 Azure 配置",
+          "why": "网页原来靠手机合成、超时掉 MeloTTS，声音和 App 不是一个人。现在 App 把 voice/rate/pitch/style_degree 推到 KV tts:config，网页 POST /api/tts/speak 由 Worker 直连 Azure 合成，结果按 sha256(文本+参数) 缓存在 R2。style 关键词表也从 Kotlin 平移到服务端共用。提示词同步改成语音标记放末尾、引号里是整段话。新增 13 个测试，全套 868 通过。 docs/voice-tts.md 记录链路与成本。"
+        },
+        {
+          "hash": "12dca91",
+          "date": "2026-10-30",
+          "type": "fix",
+          "area": "web",
+          "title": "B站/网页资料块渲染成卡片，不再整段铺开",
+          "why": "用户消息里的 [BILI_META]…[/BILI_META] 是喂给模型的元数据（标题/UP主/时长/字幕），App 一直渲染成卡片，网页却把整段 Markdown 原样展开。现在在 renderUserContent 里抽出标题/UP主/时长/链接，渲染成一张可点击的小卡片，[WEB_META] 同理。卡片复用文件卡的样式，加了 meta-sub 副标题。"
+        },
+        {
+          "hash": "b7366a7",
+          "date": "2026-10-30",
+          "type": "fix",
+          "area": "chat",
+          "title": "流式首帧为空时时间标签会漏给用户看",
+          "why": "线上现象：网页回复开头出现 [10-30 21:36]，App 正常、D1 里也是干净的。原因：模型常先发一个空 content delta，createStreamScrubber 的 started 被提前置 true，之后到达的时间标签不再被 stripLeadingTimeLabels 处理，于是原样透传给 SSE。改成「吐出第一段正文之前一直剥」，并支持全角［］；网页 repaint 也加一层 stripLeadTime 兜底。855 测试通过。"
+        },
+        {
+          "hash": "0b30fb4",
+          "date": "2026-10-30",
+          "type": "chore",
+          "area": "",
+          "title": "刷新 changelog 数据",
+          "why": ""
+        },
         {
           "hash": "cfbc958",
           "date": "2026-10-30",

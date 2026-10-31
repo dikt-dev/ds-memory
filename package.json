@@ -8,7 +8,7 @@
     "dev": "wrangler dev",
     "build": "tsc --noEmit",
     "test": "vitest run",
-    "deploy": "wrangler deploy",
+    "deploy": "node scripts/gen-changelog.mjs && wrangler deploy",
     "db:init": "wrangler d1 execute ds-memory-db --remote --file=./schema.sql",
     "password:hash": "node scripts/hash-password.mjs",
     "observe:p5": "node scripts/p5-observe.mjs",
