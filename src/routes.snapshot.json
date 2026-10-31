@@ -145,6 +145,14 @@
   ],
   [
     "GET",
+    "/api/admin/memory/variants"
+  ],
+  [
+    "GET",
+    "/api/admin/memory/variants"
+  ],
+  [
+    "GET",
     "/api/admin/pair-code"
   ],
   [
@@ -578,6 +586,30 @@
   [
     "POST",
     "/api/admin/memory/sync-summaries"
+  ],
+  [
+    "POST",
+    "/api/admin/memory/variants"
+  ],
+  [
+    "POST",
+    "/api/admin/memory/variants"
+  ],
+  [
+    "POST",
+    "/api/admin/memory/variants/:id/decide"
+  ],
+  [
+    "POST",
+    "/api/admin/memory/variants/:id/decide"
+  ],
+  [
+    "POST",
+    "/api/admin/memory/variants/:id/rollback"
+  ],
+  [
+    "POST",
+    "/api/admin/memory/variants/:id/rollback"
   ],
   [
     "POST",

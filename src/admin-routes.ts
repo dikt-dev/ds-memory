@@ -23,6 +23,7 @@ import { policyTable, type ActionKind } from './policy';
 import { loadHealth } from './health';
 import { runSelfCheck } from './self-check';
 import { runSelfReview } from './self-review';
+import { loadVariants, proposeVariant, decideById, rollbackVariant } from './variants';
 import { dateKeyInBeijing } from './date';
 import { backfillEvents, readEventStats } from './memory-events';
 import { insertKeepsake, loadKeepsakes, refreshKeepsakesBlock, setKeepsakePinned, setKeepsakeStatus } from './keepsakes';
@@ -391,6 +392,58 @@ app.get('/api/admin/readiness', requireAuth, async (c) => {
     ready ? 200 : 503,
   );
 });
+/** B 档变体：列表。 */
+app.get('/api/admin/memory/variants', requireAuth, async (c) => {
+  const items = await loadVariants(c.env);
+  return c.json({ ok: true, items });
+});
+
+/** B 档变体：提交候选（只登记，不上线；必须带 intent + evidence）。 */
+app.post('/api/admin/memory/variants', requireAuth, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!body || typeof body.kind !== 'string' || typeof body.target !== 'string') {
+    return c.json({ ok: false, error: 'need kind + target' }, 400);
+  }
+  if (body.kind !== 'prompt' && body.kind !== 'extractor' && body.kind !== 'retrieval') {
+    return c.json({ ok: false, error: 'bad kind' }, 400);
+  }
+  try {
+    const variant = await proposeVariant(c.env, {
+      kind: body.kind,
+      target: body.target,
+      change: typeof body.change === 'string' ? body.change : '',
+      intent: typeof body.intent === 'string' ? body.intent : '',
+      evidence: Array.isArray(body.evidence) ? body.evidence.map((e) => String(e)) : [],
+    });
+    return c.json({ ok: true, variant });
+  } catch (e) {
+    return c.json({ ok: false, error: (e as Error).message }, 400);
+  }
+});
+
+/** B 档变体：用评估数据裁决。 */
+app.post('/api/admin/memory/variants/:id/decide', requireAuth, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+  const baseline = body?.baseline as Record<string, number> | undefined;
+  const candidate = body?.candidate as Record<string, number> | undefined;
+  const toMetrics = (m: Record<string, number> | undefined) => ({
+    samples: Number(m?.samples ?? 0),
+    hitRate: Number(m?.hitRate ?? 0),
+    avgItems: Number(m?.avgItems ?? 0),
+    falsePositiveRate: Number(m?.falsePositiveRate ?? 0),
+  });
+  if (!baseline || !candidate) return c.json({ ok: false, error: 'need baseline + candidate' }, 400);
+  const result = await decideById(c.env, c.req.param('id') ?? '', toMetrics(baseline), toMetrics(candidate));
+  return c.json({ ok: result.ok, reason: result.reason, variant: result.variant });
+});
+
+/** B 档变体：回滚。 */
+app.post('/api/admin/memory/variants/:id/rollback', requireAuth, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { reason?: string } | null;
+  const ok = await rollbackVariant(c.env, c.req.param('id') ?? '', body?.reason ?? 'manual');
+  return c.json({ ok });
+});
+
 /** 自审：GET 取当天报告；POST?confirm=1 立即跑一次（只在 A 档内动作）。 */
 app.get('/api/admin/memory/self-review', requireAuth, async (c) => {
   const date = c.req.query('date') ?? dateKeyInBeijing(new Date());
