@@ -69,7 +69,6 @@ import { pruneRecallSamples } from './recall-samples';
 import { messagesByDate, assistantReplyTo, type MessageRow } from './db';
 import { buildDistillConversation, sanitizeDistilledSummary } from './distill-view';
 import { backfillFeedback } from './feedback';
-import { cleanupQueue } from './queue';
 import { addLlmCost } from './llm-cost';
 import { cleanupRuntimeState, deleteRuntimeState } from './runtime-store';
 import { appendArchiveLines, archiveHasLine, CORE_TARGET_BYTES, getArchiveLines } from './memory-archive';
@@ -838,7 +837,6 @@ export async function runDailyArchive(env: Env, now: Date): Promise<DailyArchive
   await backfillFeedback(env, now).catch((e) => logError('[feedback] backfill failed:', e));
 
   // 清理：30 天前的已发送队列记录、过期的 context/images 文件
-  await cleanupQueue(env).catch((e) => logError('[queue] cleanup failed:', e));
   await cleanupStaleObjects(env, now).catch((e) => logError('[r2] cleanup failed:', e));
   await cleanupRuntimeState(env, now.getTime()).catch((e) => logError('[runtime] cleanup failed:', e));
   // 召回分段采样只留 14 天（一天约 100 行）

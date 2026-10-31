@@ -31,7 +31,6 @@ import { getTodaySummary } from './summary';
 import { historyTimeLabel, recentProactiveMessages, insertProactiveMessage, updateMessageUsage } from './db';
 import { loadRecentRounds, PROACTIVE_RECENT_ROUNDS } from './recent-context';
 import { byteLength, parseRelationValues } from './memory-maintenance';
-import { enqueueProactive } from './queue';
 import { completeDeepSeek } from './deepseek';
 import {
   decideProactive,
@@ -629,50 +628,6 @@ export async function diagnoseProactive(env: Env, now: Date): Promise<ProactiveD
     decision,
     claimedToday: (claimed.results ?? []).map((r) => r.slot_key),
   };
-}
-
-/** 超过这么久没心跳才提醒（客户端 5 分钟一次）。 */
-export const OFFLINE_ALERT_HOURS = 3;
-
-/** 客户端主动关掉「后台常驻」时上报的版本标记：说明「我知道它不在跑」，不是掉线。 */
-export const CLIENT_BACKGROUND_OFF = 'ds-mobile/background-off';
-
-export type OfflineCheckResult =
-  | 'no-heartbeat'
-  | 'online'
-  | 'already-alerted'
-  | 'alerted'
-  | 'enqueue-failed';
-
-/**
- * QQ 通道掉线检查（由 cron 每 5 分钟调用一次）。
- *
- * 手机被 Android 杀掉后客户端会静默消失，只能从事后心跳看出来；
- * 这里把它变成一条能送到你眼前的消息：入队一条运维提醒。
- * 如果客户端确实已经死了，没人会拉这条队列——它会自然过期，不会污染记忆。
- */
-export async function checkChannelOffline(env: Env, now: Date): Promise<OfflineCheckResult> {
-  const hb = await getHeartbeat(env);
-  if (!hb) return 'no-heartbeat';
-  // 用户主动关掉后台常驻（App 默认如此）：这不是掉线，别每 3 小时发一条运维提醒
-  if ((hb.version ?? '') === CLIENT_BACKGROUND_OFF) return 'no-heartbeat';
-
-  const at = Date.parse(hb.at);
-  if (!Number.isFinite(at)) return 'no-heartbeat';
-  const hours = (now.getTime() - at) / 3600000;
-  if (hours < OFFLINE_ALERT_HOURS) return 'online';
-
-  const alertedAt = await getOfflineAlertedAt(env);
-  if (alertedAt === hb.at) return 'already-alerted';
-
-  const text =
-    `⚠️ 聊天通道已经 ${Math.round(hours)} 小时没有心跳了，手机上的客户端可能被系统停掉。` +
-    '重新打开 DS-Mobile，或检查后台运行权限即可恢复。';
-  const id = await enqueueProactive(env, text, now).catch(() => 0);
-  if (!id) return 'enqueue-failed';
-
-  await setOfflineAlertedAt(env, hb.at);
-  return 'alerted';
 }
 
 export async function runWebProactiveSlot(env: Env, now: Date): Promise<ProactiveResult> {

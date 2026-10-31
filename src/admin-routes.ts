@@ -391,7 +391,7 @@ app.get('/api/admin/readiness', requireAuth, async (c) => {
       affect_engine_mobile: c.env.AFFECT_ENGINE_MOBILE ?? c.env.AFFECT_ENGINE ?? 'legacy',
       affect_engine_web: c.env.AFFECT_ENGINE_WEB ?? c.env.AFFECT_ENGINE ?? 'legacy',
       proactive_engine: c.env.PROACTIVE_ENGINE ?? 'legacy',
-      proactive_delivery: c.env.PROACTIVE_DELIVERY ?? 'queue',
+      proactive_delivery: c.env.PROACTIVE_DELIVERY ?? 'events',
       auth_secret_configured: Boolean(c.env.AUTH_SECRET),
       memory_bytes: memoryBytes,
       context,

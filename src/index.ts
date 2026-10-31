@@ -77,13 +77,11 @@ import { parseRelationValues, reportSectionBudgets, setRelationValues } from './
 import { analyzeMood } from './mood';
 import { mergeMood, needsAiVerification, verifyMoodWithAI } from './mood-ai';
 import {
-  checkChannelOffline,
   diagnoseProactive,
   runProactiveNow,
   runWebProactiveRandom,
   runWebProactiveSlot,
 } from './webproactive';
-import { ackSent, dropMessages, markAttempt, queueStats, takePending } from './queue';
 import { fallbackPlanTimes, readPlan } from './proactive-plan';
 import { openaiApp, stripAttachmentWrapper, checkBearer } from './openai';
 import { getLlmCost } from './llm-cost';
@@ -575,11 +573,6 @@ async function maybeRefreshContext(env: Env, now: Date): Promise<void> {
   await runContextRefresh(env, now);
 }
 
-async function runChannelCheck(env: Env, now: Date): Promise<void> {
-  const result = await checkChannelOffline(env, now).catch(() => 'skip' as const);
-  if (result === 'alerted') logWarn('[cron] 聊天通道掉线，已生成提醒');
-}
-
 /** 把一次 cron 的执行记进 request_log（线上没有 wrangler tail）。 */
 function logCron(env: Env, ctx: ExecutionContext, cron: string, startedAt: number, ok = true): void {
   ctx.waitUntil(
@@ -625,7 +618,6 @@ export default {
 
     if (cron === '* 1-14 * * *') {
       // QQ 通道掉线检查：与主动消息是否暂停无关，每次 tick 都查
-      ctx.waitUntil(runChannelCheck(env, now));
       // 白天随机主动消息：打分决策 + 落库 + 推送 QQ（直连或队列）
       ctx.waitUntil(runWebProactiveRandom(env, now));
       // 这条 cron 实际覆盖 UTC 8 点 → 北京 16:00 的 context 刷新
@@ -636,7 +628,6 @@ export default {
 
     if (cron === '* 23,0,14,15,16 * * *') {
       // QQ 通道掉线检查（同上）
-      ctx.waitUntil(runChannelCheck(env, now));
       // 早晚固定主动消息：打分决策 + 落库 + 推送 QQ（直连或队列）
       ctx.waitUntil(runWebProactiveSlot(env, now));
       // 这条 cron 覆盖 UTC 0 / 16 点 → 北京 08:00 / 24:00 的 context 刷新

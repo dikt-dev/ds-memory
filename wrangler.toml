@@ -59,7 +59,7 @@ AFFECT_ENGINE_MOBILE = "shadow"
 AFFECT_ENGINE_WEB = "shadow"
 AFFECT_ENGINE_QQ = "shadow"
 # App 轮询并 ACK；events 仅调试
-PROACTIVE_DELIVERY = "queue"
+PROACTIVE_DELIVERY = "events"
 
 # ── 角色身份（可选）──────────────────────────────────────────
 # 不填则用开源默认值：角色名「小忆」、按记忆自然称呼对方。
@@ -70,8 +70,6 @@ PROACTIVE_DELIVERY = "queue"
 
 # 主动消息（AstrBot HTTP API）：AstrBot 的公网地址与会话 UMO；留空则走队列模式
 # UMO 形如 default_1234567890:FriendMessage:ABCDEF...
-ASTRBOT_BASE_URL = ""
-ASTRBOT_UMO = ""
 
 [[d1_databases]]
 binding = "DB"

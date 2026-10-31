@@ -369,10 +369,6 @@
   ],
   [
     "GET",
-    "/api/proactive/pending"
-  ],
-  [
-    "GET",
     "/api/proactive/plan"
   ],
   [
@@ -841,19 +837,7 @@
   ],
   [
     "POST",
-    "/api/proactive/ack"
-  ],
-  [
-    "POST",
-    "/api/proactive/drop"
-  ],
-  [
-    "POST",
     "/api/proactive/heartbeat"
-  ],
-  [
-    "POST",
-    "/api/proactive/nack"
   ],
   [
     "POST",

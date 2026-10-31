@@ -89,7 +89,7 @@ node scripts/try-chat.mjs "在干嘛"   # 命令行试聊，输出字数/行数/
 | `MEMORY_ENGINE_MOBILE` / `MEMORY_ENGINE_WEB` | 按渠道覆盖记忆引擎（Phase 5 切流用；QQ 旧键仍兼容） |
 | `AFFECT_ENGINE_MOBILE` / `AFFECT_ENGINE_WEB` | 按渠道覆盖关系引擎（Phase 5 切流用；QQ 旧键仍兼容） |
 | `PROACTIVE_ENGINE` | 主动消息引擎：`legacy` / `shadow` / `next`（最后切） |
-| `PROACTIVE_DELIVERY` | `queue`（默认；App 轮询并 ACK）/ `events`（仅调试） |
+| `PROACTIVE_DELIVERY` | 固定 `events`（消息落库，App 按事件拉取）；队列/QQ 直连已废弃 |
 | `ASTRBOT_BASE_URL` / `ASTRBOT_UMO` | AstrBot 直连推送地址与会话 UMO；留空则走队列模式 |
 | `CHARACTER_NAME` | 角色自称，缺省「小忆」；同时作用于系统提示词、状态卡和网页标题 |
 | `USER_ADDRESS` | 角色怎么称呼你，缺省按记忆自然称呼；填了就会固定用它 |

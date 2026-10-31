@@ -44,8 +44,20 @@ App 用**不需要权限**的 `setAndAllowWhileIdle` 在目标前 12 分钟醒�
 - 服务端 `/api/proactive/stats` 的 `heartbeat.version` 应为 `ds-mobile/alarm`。
 - `dumpsys alarm | grep PROACTIVE_CHECK` 可看到挂着的闹钟（`origWhen` 应等于目标时刻 - 12 分钟）。
 
-## 与后台保活的关系
+## 与后台保活的关系（2026-10-31 已完结）
 
-保活（`KeepAliveService`）从主路径退场：默认关；等这套在真实时段验证过之后再整块删除。
-删的时候注意三件事：`BootReceiver` 改用途、`PROACTIVE_DELIVERY` 从 `queue` 改 `events`、
-心跳改由"拉取即心跳"承担。
+保活（KeepAliveService）从主路径退场：默认关，仍保留给"想要实时"的人开。
+
+同一批做掉的退役：
+
+| 退役项 | 原因 |
+| --- | --- |
+| PROACTIVE_DELIVERY 队列模式 | 队列要一个常驻消费者，没人取就积压；proactive_log 永远 queued，看着像发送失败 |
+| deliverProactive 的 AstrBot 直连分支 | QQ 方案整体废弃 |
+| /api/proactive/pending、/nack、/ack、/drop | 队列接口，没有消费者了 |
+| src/queue.ts + 队列清理任务 | 同上 |
+| checkChannelOffline（QQ 通道掉线提醒） | 只为 QQ 通道可见性存在 |
+
+现在的投递只有一个动作：deliverProactive 直接返回 { mode: 'events', status: 'sent' }——
+消息已经落在 messages 里，App 醒来按 after_id 拉增量。
+/api/proactive/stats 仍留心跳与暂停状态，供诊断页看。

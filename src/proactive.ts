@@ -8,7 +8,6 @@
  */
 
 import type { Env } from './types';
-import { enqueueProactive } from './queue';
 import { logError, logWarn } from './error-log';
 
 export type ProactiveSlot = 'morning' | 'evening';
@@ -118,6 +117,7 @@ export function randomTargetMinutes(dateKey: string, index: number): number {
 
 export interface DeliveryResult {
   ok: boolean;
+  /** 现在只有 events 一种；保留旧值是为了读历史日志。 */
   mode: 'direct' | 'queue' | 'events';
   /**
    * 实际状态：
@@ -129,15 +129,12 @@ export interface DeliveryResult {
 }
 
 /**
- * 投递主动消息：两种模式
- * - 直连模式（已配置 ASTRBOT_BASE_URL）：Worker 直接调 AstrBot HTTP API
- * - 队列模式（未配置）：消息入队，由客户端（如 ds-qq-client）轮询拉取后本地发送（无需公网入口）
+ * 投递主动消息：单通道 —— events。
  *
- * ★ 语义提醒：队列模式下「入队成功」≠「用户收到」。
- *   真正的送达要等插件 ack。因此返回值区分 `queued` 与 `sent`，
- *   避免把「已入队」记成「已发送」而掩盖投递失败。
- *
- * @param messageId 关联的 messages.id（已落库的网页端主动消息），用于队列追踪
+ * 消息先落 messages，App 通过 /api/app/events 增量拉取（闹钟唤醒或前台轮询）。
+ * 2026-10-31 起废弃 QQ / AstrBot 直连与队列轮询两条老路：
+ * 队列要一个常驻消费者，实际没人取，消息在库里躺到过期，
+ * proactive_log 永远停在 queued，看起来像发送失败——比不投递更糟。
  */
 export async function deliverProactive(
   env: Env,
@@ -145,56 +142,9 @@ export async function deliverProactive(
   now: Date,
   messageId?: number,
 ): Promise<DeliveryResult> {
-  // App 直接轮询 /api/app/events；消息已先落 messages，不需要再入队
-  if ((env.PROACTIVE_DELIVERY ?? '').toLowerCase() === 'events') {
-    return { ok: true, mode: 'events', status: 'sent' };
-  }
-  if (env.ASTRBOT_BASE_URL && env.ASTROBOT_OPENAPI_KEY && env.ASTRBOT_UMO) {
-    const ok = await sendToAstrBot(env, text);
-    return { ok, mode: 'direct', status: ok ? 'sent' : 'failed' };
-  }
-  try {
-    const id = await enqueueProactive(env, text, now, messageId);
-    // 入队拿不到 id 说明语句异常，按失败处理
-    if (!id) return { ok: false, mode: 'queue', status: 'failed' };
-    return { ok: true, mode: 'queue', status: 'queued' };
-  } catch (e) {
-    logError('[proactive] 入队失败:', e);
-    return { ok: false, mode: 'queue', status: 'failed' };
-  }
-}
-
-/** 直连模式：Worker 调 AstrBot HTTP API 发送。 */
-async function sendToAstrBot(env: Env, text: string): Promise<boolean> {
-  try {
-    const base = (env.ASTRBOT_BASE_URL ?? '').replace(/\/+$/, '');
-    const res = await fetch(`${base}/api/v1/im/message`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${env.ASTROBOT_OPENAPI_KEY}`,
-      },
-      body: JSON.stringify({ umo: env.ASTRBOT_UMO, message: text }),
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => '');
-      logError('[proactive] AstrBot send failed:', res.status, detail.slice(0, 200));
-      return false;
-    }
-    return true;
-  } catch (e) {
-    logError('[proactive] AstrBot fetch failed:', e);
-    return false;
-  }
-}
-
-export interface ProactiveResult {
-  skipped?: string;
-  sent?: boolean;
-  message?: string;
-  error?: string;
-  kind?: string;
-  score?: number;
-  reasons?: string[];
+  void env;
+  void text;
+  void now;
+  void messageId;
+  return { ok: true, mode: 'events', status: 'sent' };
 }

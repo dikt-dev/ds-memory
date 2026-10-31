@@ -9,7 +9,6 @@ import type { Context } from 'hono';
 import type { Env } from './types';
 import { dateKeyInBeijing } from './date';
 import { requireApp, requireAuth } from './middleware';
-import { ackSent, dropMessages, markAttempt, queueStats, takePending } from './queue';
 import { fallbackPlanTimes, readPlan } from './proactive-plan';
 import { getHeartbeat } from './profile-cache';
 import { getRuntimeState, putRuntimeState } from './runtime-store';
@@ -52,59 +51,17 @@ export function registerProactiveRoutes(app: Hono<AppEnv>): void {
     return c.json({ ...plan, fallback: fallbackPlanTimes() });
   });
 
-  /** 拉取待发送的主动消息。 */
-  app.get('/api/proactive/pending', async (c) => {
-    if (!(await checkAppOrQueueAuth(c))) return c.json({ error: 'unauthorized' }, 401);
-    const limitRaw = Number(c.req.query('limit') ?? '5');
-    const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 5, 1), 20);
-    const messages = await takePending(c.env, limit);
-    // ★ 不再在拉取时计尝试次数：拉取不代表发送。失败由插件调 /nack 上报，
-    //   否则「插件发送失败 / UMO 失效」会静默地把消息在 5 分钟后丢掉。
-    return c.json({ messages });
-  });
-
-  /** 上报发送失败（插件调用）：attempts+1，5 次后不再下发。 */
-  app.post('/api/proactive/nack', async (c) => {
-    if (!(await checkAppOrQueueAuth(c))) return c.json({ error: 'unauthorized' }, 401);
-    const body = await c.req.json().catch(() => null);
-    const ids = body && Array.isArray(body.ids) ? body.ids.filter((x: unknown) => typeof x === 'number') : [];
-    await markAttempt(c.env, ids);
-    return c.json({ ok: true, failed: ids.length });
-  });
-
-  /** 确认已发送。 */
-  app.post('/api/proactive/ack', async (c) => {
-    if (!(await checkAppOrQueueAuth(c))) return c.json({ error: 'unauthorized' }, 401);
-    const body = await c.req.json().catch(() => null);
-    const ids = body && Array.isArray(body.ids) ? body.ids.filter((x: unknown) => typeof x === 'number') : [];
-    const acked = await ackSent(c.env, ids);
-    return c.json({ ok: true, acked });
-  });
-
-  /** 队列状态（供调试）。 */
+  /** 通道状态（供调试）：只报心跳与暂停状态，队列已废弃。 */
   app.get('/api/proactive/stats', requireAuth, async (c) => {
-    const stats = await queueStats(c.env);
     const hb = await getHeartbeat(c.env);
     const ageSeconds = hb?.at ? (Date.now() - Date.parse(hb.at)) / 1000 : null;
     return c.json({
-      ...stats,
-      // ★ QQ 通道可见性：手机杀后台后客户端会静默消失，只能靠心跳判断
       heartbeat: hb,
       heartbeat_age_seconds: ageSeconds,
       paused_until: await getRuntimeState(c.env, 'proactive:paused_until').catch(() => null),
       channel_online: ageSeconds !== null && ageSeconds < HEARTBEAT_ONLINE_SECONDS,
     });
   });
-
-  /** 积压保护：主动丢弃过期消息（不算送达）。 */
-  app.post('/api/proactive/drop', async (c) => {
-    if (!(await checkQueueAuth(c))) return c.json({ error: 'unauthorized' }, 401);
-    const body = await c.req.json().catch(() => null);
-    const ids = body && Array.isArray(body.ids) ? body.ids.filter((x: unknown) => typeof x === 'number') : [];
-    const dropped = await dropMessages(c.env, ids);
-    return c.json({ ok: true, dropped });
-  });
-
   /** 手动补发一条固定时段主动消息（Bearer 鉴权，调试/补偿用）。 */
   app.post('/api/admin/proactive-send-now', async (c) => {
     if (!(await checkQueueAuth(c))) return c.json({ error: 'unauthorized' }, 401);

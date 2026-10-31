@@ -247,6 +247,19 @@ pinned 0、keepsakes 4 条（全 approved、全 pinned）、health 94.29 good。
 **回滚顺序**（真出问题时按这个试，一次只动一个）：`MEMORY_ENGINE=legacy` →
 `MEMORY_PROMPT_MODE=full` → 移除 SELF_REVIEW → 最后才是改代码。
 
+## 八点九、QQ 通道与队列模式退役（2026-10-31）
+
+主动消息只剩一条投递路径：落库 → App 按事件拉取（闹钟或前台轮询）。
+
+- deliverProactive：去掉 AstrBot 直连与队列入队，固定返回 events/sent
+- 删除 /api/proactive/pending|nack|ack|drop、src/queue.ts、队列清理任务
+- 删除 checkChannelOffline（QQ 通道掉线提醒）
+- 手机端删除队列消费者 proactiveLoop 与 proactivePending/proactiveAck
+- wrangler.toml 的 PROACTIVE_DELIVERY 改 events，ASTRBOT_* 配置移除
+
+原因：队列要一个常驻消费者，实际没人取，消息躺到过期，proactive_log 永远 queued，
+看起来像"发送失败"。现在日志里的 sent 含义是"已落库、App 会拉到"。
+
 ## 九、风险提示
 
 - **evidence 模式把召回变成单点依赖**：提示词只带宪法，召回没命中就是真空白。健康分里的"失忆抱怨"就是哨兵——每百条出现 3 次"你忘了"就该切回 `full` 排查。
