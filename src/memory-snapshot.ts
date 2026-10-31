@@ -16,7 +16,8 @@ import { logError, logWarn } from './error-log';
 
 export const SNAPSHOT_PREFIX = 'memory/snapshots/';
 /** 保留天数：每天约 12KB，45 天约 540KB */
-export const SNAPSHOT_KEEP = 45;
+/** 保留天数：一天约 12~20KB，一年不到 8MB。R2 有空间就别只留 45 天。 */
+export const SNAPSHOT_KEEP = 365;
 
 /** 只认 `memory/snapshots/YYYY-MM-DD.md`。清理是删除操作，必须严格匹配。 */
 const SNAPSHOT_KEY_RE = /^memory\/snapshots\/(\d{4}-\d{2}-\d{2})\.md$/;

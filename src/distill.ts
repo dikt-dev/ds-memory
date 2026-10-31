@@ -180,25 +180,103 @@ export function tailByMessage(conversation: string, maxChars: number): string {
   return kept.join('\n\n');
 }
 
+/**
+ * 单次提炼能吃的对话字符数。
+ *
+ * 之前是「超过 60k 就只留尾部」——一天聊得多，早上发生的事直接不参与提炼，
+ * 而记忆恰恰最容易漏掉"早上说的那件事"。现在超长就分段：每段独立提炼，
+ * 最后统一合并（mergeMemoryEntry 会去重），不再丢开头。
+ */
+export const DISTILL_SEGMENT_CHARS = 60000;
+export const DISTILL_MAX_SEGMENTS = 12;
+/**
+ * 单次提炼的输入预算（字符）。
+ *
+ * memory.md 全文 + 当天某一段对话要塞进同一个请求；OpenAI 兼容接口的上下文
+ * 是 128K token，中文近似 1 字 ≈ 0.9 token，所以必须给两者留出总预算，
+ * 不能各自定死上限——记忆涨到 96KB 时再塞 60K 对话，请求直接被判超长。
+ */
+export const DISTILL_PROMPT_BUDGET_CHARS = 110000;
+/** 对话段至少给这么多，避免记忆很大时把对话压成一小片。 */
+export const DISTILL_MIN_CONVERSATION_CHARS = 20000;
+
+/** 按记忆大小算出这一段对话能占多少字符。 */
+export function distillSegmentChars(memoryChars: number): number {
+  const room = DISTILL_PROMPT_BUDGET_CHARS - Math.max(0, memoryChars);
+  return Math.max(DISTILL_MIN_CONVERSATION_CHARS, Math.min(DISTILL_SEGMENT_CHARS, room));
+}
+
+/** 按消息边界（空行）切段，尽量装满但不切断单条消息。 */
+export function splitDistillSegments(conversation: string, maxChars = DISTILL_SEGMENT_CHARS): string[] {
+  if (conversation.length <= maxChars) return [conversation];
+  const parts = conversation.split('\n\n');
+  const segments: string[] = [];
+  let cur: string[] = [];
+  let used = 0;
+  for (const part of parts) {
+    const size = part.length + 2;
+    // 单条消息即使超长也自成一段，否则会把它切碎
+    if (used > 0 && used + size > maxChars) {
+      segments.push(cur.join('\n\n'));
+      cur = [];
+      used = 0;
+    }
+    cur.push(part);
+    used += size;
+  }
+  if (cur.length > 0) segments.push(cur.join('\n\n'));
+  return segments.slice(0, DISTILL_MAX_SEGMENTS);
+}
+
 export async function distillDay(
   env: Env,
   dateKey: string,
   conversation: string,
   memory: string,
 ): Promise<DistillResult> {
-  const user = `日期：${dateKey}
+  const segments = splitDistillSegments(conversation, distillSegmentChars(memory.length));
+  const buildUser = (body: string, index: number): string => `日期：${dateKey}
 
 ## 当前记忆（memory.md 全文）
 ${memory || '（暂无）'}
 
-## 当天对话
-${tailByMessage(conversation, 60000)}
+## 当天对话${segments.length > 1 ? `（第 ${index + 1}/${segments.length} 段，其余段稍后单独提炼）` : ''}
+${body}
 
 请对照当前记忆，只输出需要新增或修正的条目（不要重复已有内容），格式 "- [YY-MM-DD] 内容"。`;
-  // 每日归档是一天只跑一次的重活：开思考模式，并给思维链留出额度（4096 会被推理吃掉）
-  return distillText(env, DAY_DISTILL_SYSTEM, user, 8192, env.DISTILL_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL, {
-    thinking: true,
-  });
+
+  if (segments.length === 1) {
+    // 每日归档是一天只跑一次的重活：开思考模式，并给思维链留出额度（4096 会被推理吃掉）
+    return distillText(env, DAY_DISTILL_SYSTEM, buildUser(segments[0], 0), 8192, env.DISTILL_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL, {
+      thinking: true,
+    });
+  }
+
+  // 分段提炼：任何一段失败都继续，最后按顺序拼接（换行分隔，条目格式不变）
+  const texts: string[] = [];
+  let cost = 0;
+  let backend: DistillBackend = 'deepseek';
+  let usage: TokenUsage | undefined;
+  for (let i = 0; i < segments.length; i++) {
+    try {
+      const r = await distillText(env, DAY_DISTILL_SYSTEM, buildUser(segments[i], i), 8192, env.DISTILL_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL, {
+        thinking: true,
+      });
+      texts.push(r.text.trim());
+      cost += r.cost;
+      if (r.backend === 'workers-ai') backend = 'workers-ai';
+      if (r.usage) {
+        usage = {
+          prompt_cache_hit_tokens: (usage?.prompt_cache_hit_tokens ?? 0) + r.usage.prompt_cache_hit_tokens,
+          prompt_cache_miss_tokens: (usage?.prompt_cache_miss_tokens ?? 0) + r.usage.prompt_cache_miss_tokens,
+          completion_tokens: (usage?.completion_tokens ?? 0) + r.usage.completion_tokens,
+        };
+      }
+    } catch (e) {
+      logWarn(`[distill] 第 ${i + 1}/${segments.length} 段提炼失败，跳过：`, e);
+    }
+  }
+  return { text: texts.filter(Boolean).join('\n'), cost, backend, usage };
 }
 
 /** 全量压缩 memory.md 的旧实现已停用；质量优先，超限只走无损分层。 */

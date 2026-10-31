@@ -26,7 +26,14 @@ const ARCHIVE_MEM_TTL_MS = ARCHIVE_CACHE_TTL * 1000;
 let archiveMemoryCache: { at: number; text: string } | null = null;
 
 /** 核心层目标体积：超过 24KB 时把最旧往事无损搬进档案（仍可被索引召回）。 */
-export const CORE_TARGET_BYTES = 24000;
+/**
+ * memory.md 常驻提示词的目标上限。
+ *
+ * 之前 24KB：超出就把最旧的「共同经历/近期动态/进行中的事项」搬进 archive.md。
+ * 但 archive.md **不进提示词**（只能靠召回 5 条兜），等于把记忆从"常驻"降级成"想不起来就没了"。
+ * 现在 96KB：正常一年也用不到，只在病态膨胀时兜底。
+ */
+export const CORE_TARGET_BYTES = 96000;
 
 /* ---------- 同义词 / 别名扩展 ---------- */
 

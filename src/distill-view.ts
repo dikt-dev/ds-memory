@@ -12,10 +12,21 @@ const FILE_MARK_RE = /【文件：([^】]+)】/g;
 const ENTRY_RE = /^-\s*\[\d{2,4}-\d{2}-\d{2}\]/;
 const HEADER_RE = /^#{2,3}\s/;
 
-/** 最长保留的用户正文：再长基本就是粘贴的文件/日志，提炼用不上全文。 */
-const USER_MAX_CHARS = 3000;
-/** 她的回复最长保留：语气在，长段落砍掉。 */
-const ASSISTANT_MAX_CHARS = 400;
+/**
+ * 最长保留的用户正文。
+ *
+ * 之前 3000：理由是"再长基本是粘贴的文件/日志"。但文件块在上一步
+ * collapseFileBlocks 已经折成一行了，这里再砍，砍掉的是用户真正的长叙述
+ * （项目背景、回忆、需求细节——正是记忆该记的东西）。空间不要钱，放开。
+ */
+const USER_MAX_CHARS = 12000;
+/**
+ * 她的回复保留长度。
+ *
+ * 之前 400 是同一条思路的副作用：以为"记忆只记用户的事"，但「共同经历」
+ * 记的是双方的反应，她的承诺/情绪/玩笑也是要留的。400 字连一段完整回复都放不下。
+ */
+const ASSISTANT_MAX_CHARS = 6000;
 
 export interface DistillRow {
   role: string;

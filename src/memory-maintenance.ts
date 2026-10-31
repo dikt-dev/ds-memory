@@ -29,7 +29,8 @@ export function byteLength(s: string): number {
  *
  * 事实、日期、分区标题全部保留，因此不会改变文件本身。
  */
-export const MEMORY_PROMPT_MAX_BYTES = 24576;
+/** 提示词里 memory 段的硬上限（full 模式）。evidence 模式只带宪法，用不到这个上限。 */
+export const MEMORY_PROMPT_MAX_BYTES = 32768;
 
 function stripMemoryForPrompt(text: string): string {
   const lines = text
@@ -156,7 +157,14 @@ export const PROTECTED_HEADERS: string[] = ['## 人物底色', '## 称呼与关�
 /** 短期区块：条目按日期自动过期（只保留最近 N 天）。 */
 export const TRANSIENT_HEADERS: string[] = ['## 近期动态'];
 /** 短期区块保留天数。 */
-export const TRANSIENT_KEEP_DAYS = 7;
+/**
+ * 「近期动态」在常驻层保留多少天。
+ *
+ * 之前 7 天：一周后整段搬进 archive.md，而 archive 不进提示词——
+ * 「上周三他说想辞职」这种正需要被想起来的事，一周后就想不起来了。
+ * 30 天覆盖"最近一个月"的对话语境；再久的事件本来就该进「共同经历」。
+ */
+export const TRANSIENT_KEEP_DAYS = 30;
 
 /** 标准分区顺序（新分类按此顺序插入；未知分类追加在最后）。 */
 export const SECTION_ORDER: string[] = [

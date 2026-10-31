@@ -15,7 +15,13 @@ import {
 import { loadMemoryContext } from './memory-context-store';
 import { putObject } from './storage';
 
-export const PROJECTION_MAX_BYTES = 16 * 1024;
+/**
+ * facts.md 投影的大小上限。
+ *
+ * 之前 16KB：事实一多就超限报错、整份投影不更新（facts.md 停更比写大更糟）。
+ * 它只是只读白皮书，不进提示词，给足空间。
+ */
+export const PROJECTION_MAX_BYTES = 256 * 1024;
 const CORE_HEADERS = ['## 人物底色', '## 称呼与关系', '## 雷区与禁忌'];
 
 export interface ProjectionResult {

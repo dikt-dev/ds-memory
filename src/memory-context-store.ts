@@ -536,7 +536,7 @@ export async function syncArchiveContext(
   lines: string[],
   now = Date.now(),
 ): Promise<number> {
-  const events = parseArchiveContext(lines.slice(-500), now);
+  const events = parseArchiveContext(lines.slice(-5000), now);
   const chunks = buildMemoryChunks({ facts: [], events }, now);
   const ids = new Set(events.map((e) => e.id));
   const chunkIds = new Set(chunks.map((c) => c.id));

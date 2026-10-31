@@ -20,20 +20,22 @@ describe('collapseFileBlocks', () => {
 });
 
 describe('buildDistillConversation', () => {
-  it('用户全文保留，她的回复截断', () => {
-    const long = '啊'.repeat(900);
+  it('她的长回复不再被砍到 400 字', () => {
+    const long = '啊'.repeat(3000);
     const out = buildDistillConversation([
       { role: 'user', content: '今天有点累' },
       { role: 'assistant', content: long },
     ]);
     expect(out).toContain('用户：今天有点累');
-    expect(out).toContain('后略 500 字');
-    expect(out.length).toBeLessThan(600);
+    expect(out).toContain('啊'.repeat(3000));
   });
 
-  it('超长用户消息也会截断', () => {
-    const out = buildDistillConversation([{ role: 'user', content: '字'.repeat(5000) }]);
-    expect(out).toContain('后略 2000 字');
+  it('超过 12000 字的用户消息才截断', () => {
+    expect(
+      buildDistillConversation([{ role: 'user', content: '字'.repeat(9000) }]),
+    ).not.toContain('后略');
+    const out = buildDistillConversation([{ role: 'user', content: '字'.repeat(13000) }]);
+    expect(out).toContain('后略 1000 字');
   });
 
   it('主动消息单独标注', () => {
