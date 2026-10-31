@@ -65,6 +65,14 @@
   ],
   [
     "GET",
+    "/api/admin/memory/facts-doc"
+  ],
+  [
+    "GET",
+    "/api/admin/memory/facts-doc"
+  ],
+  [
+    "GET",
     "/api/admin/memory/health"
   ],
   [
@@ -94,6 +102,14 @@
   [
     "GET",
     "/api/admin/memory/links"
+  ],
+  [
+    "GET",
+    "/api/admin/memory/persona-drift"
+  ],
+  [
+    "GET",
+    "/api/admin/memory/persona-drift"
   ],
   [
     "GET",
@@ -450,6 +466,14 @@
   [
     "POST",
     "/api/admin/memory/extract"
+  ],
+  [
+    "POST",
+    "/api/admin/memory/facts-doc"
+  ],
+  [
+    "POST",
+    "/api/admin/memory/facts-doc"
   ],
   [
     "POST",

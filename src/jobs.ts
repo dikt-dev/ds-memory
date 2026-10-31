@@ -28,6 +28,7 @@ import { backfillMemoryProvenance, embedMemoryChunks, replaceMemoryContext, sync
 import { cleanupMemoryTables, enqueueMemoryJob, runMemoryJobs } from './memory-jobs';
 import { runSelfCheck } from './self-check';
 import { runSelfReview } from './self-review';
+import { rebuildFactsDoc } from './memory-doc';
 import { maybeGenerateRollups } from './memory-rollups';
 import { buildRelationStatus } from './attitude';
 import { distillDay } from './distill';
@@ -642,6 +643,13 @@ export async function archiveOneDay(
         return 0;
       });
       if (embedded > 0) logInfo(`[daily] embedding fallback：${embedded} 条`);
+      // ADR-001 S12：每晚重建给人看的 facts.md（只读投影，不进提示词）。
+      try {
+        const doc = await rebuildFactsDoc(env, dateKeyInBeijing(now));
+        logInfo(`[daily] facts.md：${doc.facts} 条 / ${doc.bytes} 字节`);
+      } catch (e) {
+        console.error('[daily] facts.md rebuild failed:', e);
+      }
       // ADR-001 S9：自审（默认关，SELF_REVIEW=on 才跑；只执行 A 档动作）。
       if (env.SELF_REVIEW === 'on') {
         try {

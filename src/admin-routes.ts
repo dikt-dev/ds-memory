@@ -24,6 +24,8 @@ import { loadHealth } from './health';
 import { runSelfCheck } from './self-check';
 import { runSelfReview } from './self-review';
 import { loadVariants, proposeVariant, decideById, rollbackVariant } from './variants';
+import { loadPersonaDrift } from './persona-fingerprint';
+import { buildFactsDocMarkdown, rebuildFactsDoc } from './memory-doc';
 import { dateKeyInBeijing } from './date';
 import { backfillEvents, readEventStats } from './memory-events';
 import { insertKeepsake, loadKeepsakes, refreshKeepsakesBlock, setKeepsakePinned, setKeepsakeStatus } from './keepsakes';
@@ -392,6 +394,23 @@ app.get('/api/admin/readiness', requireAuth, async (c) => {
     ready ? 200 : 503,
   );
 });
+/** facts.md：只读投影（不进提示词）。GET 预览，POST 重建。 */
+app.get('/api/admin/memory/facts-doc', requireAuth, async (c) => {
+  const { markdown, facts } = await buildFactsDocMarkdown(c.env, dateKeyInBeijing(new Date()));
+  return c.json({ ok: true, facts, markdown });
+});
+
+app.post('/api/admin/memory/facts-doc', requireAuth, async (c) => {
+  const result = await rebuildFactsDoc(c.env, dateKeyInBeijing(new Date()));
+  return c.json({ ok: true, ...result });
+});
+
+/** 人格指纹：近 7 天 vs 前 7 天，她是不是还是她。 */
+app.get('/api/admin/memory/persona-drift', requireAuth, async (c) => {
+  const result = await loadPersonaDrift(c.env);
+  return c.json({ ok: true, ...result });
+});
+
 /** B 档变体：列表。 */
 app.get('/api/admin/memory/variants', requireAuth, async (c) => {
   const items = await loadVariants(c.env);
