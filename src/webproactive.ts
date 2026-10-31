@@ -18,6 +18,7 @@ import { dateKeyInBeijing, isoInBeijing } from './date';
 import { buildBaseSystemPrompt } from './prompt';
 import { budgetContext } from './context-budget';
 import { getMemory } from './memory';
+import { detectFarewell } from './proactive-context';
 import { fetchWeather } from './weather';
 import { loadMemoryChunks } from './memory-context-store';
 import { formatMemoryChunks, rankMemoryChunks, shouldRecallMemory } from './memory-domain';
@@ -39,7 +40,7 @@ import {
   type EnvironmentSignal,
   type UserProfile,
 } from './proactive-engine';
-import { getCachedProfile, setCachedProfile, getHeartbeat, getOfflineAlertedAt, setOfflineAlertedAt } from './profile-cache';
+import { getCachedProfile, setCachedProfile, getHeartbeat } from './profile-cache';
 import { analyzeMood, moodToneHint } from './mood';
 import { analyzeMoodSmart } from './mood-ai';
 import { computeStreak, countMemoryEntries, detectMilestones, getFirstChatDate } from './milestone';
@@ -435,6 +436,28 @@ async function emit(
   }
 
   // 决策：收集信号 → 打分
+  // ★ 语境判断（确定性）：刚道过晚安就别再补一句睡前问候，那不叫惦记，叫追着说话。
+  //   放在打分之前：这种情况分数一定够（固定时段自带 55 分），光靠分数拦不住。
+  const tailRows = await env.DB.prepare(
+    `SELECT role, content, created_at FROM messages ORDER BY id DESC LIMIT 3`,
+  )
+    .all<{ role: string; content: string; created_at: string }>()
+    .catch(() => ({ results: [] as Array<{ role: string; content: string; created_at: string }> }));
+  const tail = (tailRows.results ?? []).slice().reverse();
+  const lastAtMs = tail.length > 0 ? Date.parse(tail[tail.length - 1].created_at) : null;
+  const farewell = detectFarewell(
+    tail.map((r) => ({ role: r.role, content: String(r.content ?? '') })),
+    now.getTime(),
+    Number.isFinite(lastAtMs as number) ? (lastAtMs as number) : null,
+  );
+  if (!force && farewell.closed) {
+    await releaseSlot(env, dateKey, slotKey);
+    return {
+      skipped: farewell.mutual ? '刚互道过晚安，今晚不再打扰' : '刚说过晚安/收尾，不再补一句',
+      kind,
+      reasons: [farewell.evidence ?? ''],
+    };
+  }
   const [profile, dayCtx, memory] = await Promise.all([
     collectUserProfile(env, now),
     getOrCreateDayContext(env, dateKey),
