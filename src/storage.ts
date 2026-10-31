@@ -5,6 +5,9 @@
  * - 删除/列出两个桶都会处理（合并去重）。
  */
 import type { Env } from './types';
+import { logTrace } from './trace';
+
+const logInfo = (msg: string): void => logTrace('storage', { msg });
 import { AwsClient } from 'aws4fetch';
 
 export type StorageMode = 'main' | 'secondary';
@@ -245,7 +248,7 @@ export async function cleanupStaleObjects(
     await deleteObject(env, key);
     deleted += 1;
   }
-  if (deleted > 0) console.log(`[r2] 清理过期 context ${deleted} 个（早于 ${cutoffKey}）`);
+  if (deleted > 0) logInfo(`[r2] 清理过期 context ${deleted} 个（早于 ${cutoffKey}）`);
   return { deleted };
 }
 
@@ -295,7 +298,7 @@ export async function checkStorageCapacity(env: Env): Promise<CapacityCheck> {
     await setStorageMode(env, 'secondary');
     mode = 'secondary';
     switched = true;
-    console.log('[storage] main R2 usage', usage, '>= threshold', threshold, '→ switched to secondary');
+    logTrace('storage.switch', { usage, threshold, to: 'secondary' });
   }
   return { usage, threshold, mode, switched };
 }

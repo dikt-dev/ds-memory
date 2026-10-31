@@ -67,6 +67,10 @@ import { cleanupQueue } from './queue';
 import { addLlmCost } from './llm-cost';
 import { cleanupRuntimeState, deleteRuntimeState } from './runtime-store';
 import { appendArchiveLines, archiveHasLine, CORE_TARGET_BYTES, getArchiveLines } from './memory-archive';
+import { logJob } from './trace';
+
+/** 后台任务的日志出口：统一走 [job] 结构化格式，便于按 event 过滤。 */
+const logInfo = (msg: string): void => logJob('job.daily', { msg });
 
 export interface DailyArchiveResult {
   target: string;
@@ -212,7 +216,7 @@ export async function archiveOneDay(
         const completed = completeConversationRows(dayRows, reply);
         if (completed !== dayRows) {
           rows = completed;
-          console.log(`[daily] ${target} 补上跨天 AI 回复 #${reply?.id}，保证以 AI 收尾`);
+          logInfo(`[daily] ${target} 补上跨天 AI 回复 #${reply?.id}，保证以 AI 收尾`);
         }
       }
     }
@@ -340,7 +344,7 @@ export async function archiveOneDay(
           distilled = true;
         }
         if (stats) {
-          console.log(
+          logInfo(
             `[daily] relation drivers — 消息 ${stats.intimacy.userMessages} 轮 / 天数 ${stats.intimacy.activeDays} / ` +
               `温暖 ${stats.affinity.warmTurns} / 感谢 ${stats.affinity.gratefulCount} / ` +
               `冒犯 ${stats.affinity.offensiveCount} / 冲突 ${stats.affinity.hadConflict}`,
@@ -415,11 +419,11 @@ export async function archiveOneDay(
           attraction: settled.facets.attraction,
         });
         distilled = true;
-        console.log(`[daily] emotion settle — ${JSON.stringify(settled.applied)}`);
+        logInfo(`[daily] emotion settle — ${JSON.stringify(settled.applied)}`);
       }
       await commitEmotionSettle(env, working);
       if (settled.changed || nextMood !== baseVals.mood) {
-        console.log(`[daily] emotion settle — ${JSON.stringify(settled.applied)} mood=${nextMood}`);
+        logInfo(`[daily] emotion settle — ${JSON.stringify(settled.applied)} mood=${nextMood}`);
       }
     } catch (e) {
       console.error('[daily] emotion settle failed:', e);
@@ -434,7 +438,7 @@ export async function archiveOneDay(
         const preserved = pruned.removedLines.every((line) => archiveHasLine(archive, line));
         if (preserved) {
           memory = pruned.text;
-          console.log(`[daily] 近期动态 ${pruned.removed} 条过期条目搬进档案`);
+          logInfo(`[daily] 近期动态 ${pruned.removed} 条过期条目搬进档案`);
         } else {
           console.error('[daily] 近期动态清理中止：档案未确认写入，保留核心层');
         }
@@ -448,7 +452,7 @@ export async function archiveOneDay(
       const archived = archiveCompletedItems(memory, target);
       if (archived.moved > 0) {
         memory = archived.text;
-        console.log(`[daily] 已完成事项归档 ${archived.moved} 条：${archived.titles.join('、')}`);
+        logInfo(`[daily] 已完成事项归档 ${archived.moved} 条：${archived.titles.join('、')}`);
       }
     } catch (e) {
       console.error('[daily] archive completed failed:', e);
@@ -467,7 +471,7 @@ export async function archiveOneDay(
         if (acc.promoted.length > 0) {
           const entries = acc.promoted.map(formatAversionEntry);
           memory = mergeAversionEntries(memory, entries);
-          console.log(`[daily] 雷区学习 新增 ${entries.length} 条：${acc.promoted.map((p) => p.topic).join('、')}`);
+          logInfo(`[daily] 雷区学习 新增 ${entries.length} 条：${acc.promoted.map((p) => p.topic).join('、')}`);
         }
       }
     } catch (e) {
@@ -484,7 +488,7 @@ export async function archiveOneDay(
       const decay = applyRelationDecay(memory, inactiveDays);
       if (decay.changed) {
         memory = decay.text;
-        console.log(`[daily] relation decay: ${decay.note}`);
+        logInfo(`[daily] relation decay: ${decay.note}`);
       }
     } catch (e) {
       console.error('[daily] relation decay failed:', e);
@@ -500,7 +504,7 @@ export async function archiveOneDay(
       if (compacted.removed > 0) {
         memory = compacted.text;
         const afterDensity = memoryDensity(memory);
-        console.log(
+        logInfo(
           `[daily] 记忆去重 ${compacted.removed} 条：${beforeDensity.entries} 条/${beforeDensity.bytes}B → ${afterDensity.entries} 条/${afterDensity.bytes}B`,
         );
       }
@@ -527,7 +531,7 @@ export async function archiveOneDay(
         archivedCount += demoted.removed.length;
       }
       if (archivedCount > 0) {
-        console.log(`[daily] 记忆分层：${archivedCount} 条旧往事搬进档案，memory=${byteLength(memory)}B`);
+        logInfo(`[daily] 记忆分层：${archivedCount} 条旧往事搬进档案，memory=${byteLength(memory)}B`);
       }
     } catch (e) {
       console.error('[daily] memory demote failed:', e);
@@ -537,7 +541,7 @@ export async function archiveOneDay(
     const snap = await writeDailySnapshot(env, target, memory);
     try {
       const pruned = await pruneSnapshots(env);
-      if (pruned.length > 0) console.log(`[daily] 快照清理：删除 ${pruned.length} 份超期快照`);
+      if (pruned.length > 0) logInfo(`[daily] 快照清理：删除 ${pruned.length} 份超期快照`);
     } catch (e) {
       console.error('[daily] 快照清理失败（不影响归档）:', e);
     }
@@ -554,16 +558,16 @@ export async function archiveOneDay(
     if (saved && memoryChanged) try {
       const idx = await reindexMemory(env);
       if (idx.errors) console.error('[daily] memory reindex failed:', idx.errors);
-      else console.log(`[daily] 记忆索引重建：${idx.entries} 条，含向量 ${idx.withVec} 条`);
+      else logInfo(`[daily] 记忆索引重建：${idx.entries} 条，含向量 ${idx.withVec} 条`);
     } catch (e) {
       console.error('[daily] memory reindex error:', e);
     } else if (saved) {
-      console.log('[daily] memory 未变化，跳过索引重建');
+      logInfo('[daily] memory 未变化，跳过索引重建');
     }
     // Phase 2：同步 Memory Context（facts/events/chunks）；表未迁移时只记录，不影响归档。
     if (saved && memoryChanged) try {
       const ctx = await replaceMemoryContext(env, memory, 'memory');
-      console.log(
+      logInfo(
         `[daily] memory context：facts=${ctx.facts} events=${ctx.events} chunks=${ctx.chunks}`,
       );
     } catch (e) {
@@ -572,7 +576,7 @@ export async function archiveOneDay(
     // 时间金字塔：周一滚上周摘要、每月 1 日滚上月摘要（幂等，失败不影响归档）
     try {
       const rl = await maybeGenerateRollups(env, now);
-      if (rl.generated.length) console.log(`[daily] 记忆摘要滚动：${rl.generated.join('、')}`);
+      if (rl.generated.length) logInfo(`[daily] 记忆摘要滚动：${rl.generated.join('、')}`);
       if (rl.errors.length) console.error('[daily] rollup errors:', rl.errors.join(';'));
     } catch (e) {
       console.error('[daily] rollup error:', e);
@@ -595,20 +599,20 @@ export async function archiveOneDay(
         if (jobs.failed) console.error('[daily] memory jobs failed:', JSON.stringify(jobs.details));
         if (jobs.processed === 0 || Date.now() > jobDeadline) break;
       }
-      console.log(`[daily] memory jobs：${processed} 个完成，失败 ${failedJobs}`);
+      logInfo(`[daily] memory jobs：${processed} 个完成，失败 ${failedJobs}`);
       // 兜底：任务队列失败时也保证重建后的 chunks 有向量，避免静默退化到纯关键词。
       const embedded = await embedMemoryChunks(env, 200).catch((e) => {
         console.error('[daily] embedding fallback failed:', e);
         return 0;
       });
-      if (embedded > 0) console.log(`[daily] embedding fallback：${embedded} 条`);
+      if (embedded > 0) logInfo(`[daily] embedding fallback：${embedded} 条`);
     } catch (e) {
       console.error('[daily] memory jobs unavailable, fallback direct:', e);
       try {
         const summaries = await syncRollupSummaries(env);
         const linked = await backfillMemoryProvenance(env);
         const embedded = await embedMemoryChunks(env, 200).catch(() => 0);
-        console.log(
+        logInfo(
           `[daily] memory context fallback：summaries=${summaries} provenance=${linked} embedded=${embedded}`,
         );
       } catch (fallbackError) {
@@ -985,7 +989,7 @@ export async function runContextRefresh(env: Env, now: Date): Promise<void> {
         attraction: relation.attraction,
       });
       await putMemory(env, updatedMemory);
-      console.log(`[context] 心情同步 ${relation.mood} → ${mood}（由情绪向量派生）`);
+      logInfo(`[context] 心情同步 ${relation.mood} → ${mood}（由情绪向量派生）`);
     }
 
     const finalRelation = parseRelationValues(updatedMemory);

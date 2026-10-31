@@ -34,6 +34,18 @@ export function elapsedMs(trace: TraceMeta): number {
   return Math.max(0, Date.now() - trace.startedAt);
 }
 
+/**
+ * 后台任务（cron）专用：没有 requestId，但同样要结构化。
+ * 前缀 `[job]` 便于和 `[trace]` 分开过滤。
+ */
+export function logJob(event: string, data: Record<string, unknown> = {}): void {
+  try {
+    console.log(`[job] ${JSON.stringify({ event, ts: new Date().toISOString(), ...data })}`);
+  } catch {
+    console.log(`[job] ${event}`);
+  }
+}
+
 /** 结构化日志：统一前缀 + JSON，方便按 requestId 过滤。 */
 export function logTrace(event: string, data: Record<string, unknown> = {}): void {
   try {

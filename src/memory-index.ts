@@ -26,6 +26,9 @@ import {
 import { DATE_PREFIX_RE, ENTRY_RE, byteLength, normalizeDateKey } from './memory-maintenance';
 import { loadRollups } from './memory-rollups';
 import { distillText } from './distill';
+import { logTrace } from './trace';
+
+const logInfo = (msg: string): void => logTrace('memory.index', { msg });
 
 /** 永远常驻注入、不参与检索的分区（核心层）。 */
 export const CORE_SECTIONS = [
@@ -837,7 +840,7 @@ export async function recallMemoryForChat(
       const t0 = Date.now();
       const llm = await llmRerank(env, q, pool, k);
       if (llm && llm.length > 0) picked = llm;
-      console.log(
+      logInfo(
         `[recall] llm rerank q="${q.slice(0, 30)}" pool=${pool.length} top=${pool[0]?.score ?? 0} ms=${Date.now() - t0} picked=${picked.length}`,
       );
     }

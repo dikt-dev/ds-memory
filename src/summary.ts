@@ -11,6 +11,9 @@ import { latestMessage } from './db';
 import { distillText } from './distill';
 import { addLlmCost } from './llm-cost';
 import { acquireRuntimeLock, getRuntimeState, putRuntimeState, releaseRuntimeLock } from './runtime-store';
+import { logTrace } from './trace';
+
+const logInfo = (msg: string): void => logTrace('summary', { msg });
 
 /** 首次生成摘要的消息条数阈值（约 10 轮）。 */
 export const SUMMARY_TRIGGER_COUNT = 20;
@@ -155,7 +158,7 @@ async function summarizeToday(env: Env, input: string, dateKey: string): Promise
     512,
     env.SUMMARY_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL,
   );
-  console.log(`[summary] backend=${result.backend} cost=${result.cost.toFixed(5)}`);
+  logInfo(`[summary] backend=${result.backend} cost=${result.cost.toFixed(5)}`);
   // 摘要费用也计入当天（此前只打日志，页面统计看不到）
   await addLlmCost(env, dateKey, result.cost);
   return result.text.slice(0, 180); // 防模型超长，保持约 100 字目标
