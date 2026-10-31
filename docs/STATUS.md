@@ -9,7 +9,7 @@
 | 技术栈 | Cloudflare Workers + Hono + TS ESM；D1 / KV / R2 / Workers AI / DeepSeek | Kotlin + Compose、Room、OkHttp、AlarmManager |
 | 线上 | `https://fae.us.ci` | release APK 56.36 MB（R8） |
 | 当前版本 | `3c37d2e8` | commit `d8171b3` |
-| 代码规模 | 104 个源文件 / 25 132 行 | ChatActivity 1245 行、ApiClient 1049 行 |
+| 代码规模 | 108 个源文件 / 25 100 行（index.ts 1629 → 649） | ChatActivity 1245 行、ApiClient 1049 行 |
 | 质量 | **1076 个测试 / 99 个文件全绿**，`tsc --noEmit` 干净 | 无单测基建，靠编译 + 真机验证 |
 | 协议 | 私有部署 | Apache-2.0（LICENSE + README 已就位） |
 
@@ -89,7 +89,9 @@ L3 每轮工作记忆                                     → 宪法 + 召回证
 
 ### 建议后续处理（未改）
 
-5. **`index.ts` 仍有 1629 行**：路由已抽出，但触发器/定时任务/回调仍在里面，可再按"cron / 回调 / 静态资源"拆。
+5. **`index.ts` 1629 → 649 行**：已拆出 `routes-app.ts`（设备 Token 那一组）、`routes-proactive.ts`（队列 + 鉴权）、
+   `routes-media.ts`（上传/回放/TTS/外链预览）、`queue-auth.ts`（队列与设备鉴权）。
+   仍留在 index.ts 的是登录/聊天/历史/统计、静态资源兜底与 cron 入口——这些共同依赖 `app` 之外的执行上下文，暂不拆。
 6. **125 处 SELECT 没有 LIMIT**：多数是聚合查询没问题，但增长型表（`messages`、`memory_event_log`）的长查询要逐个确认，避免以后数据涨了才炸。
 7. **87 处 `console.error`**：日志非结构化，查问题时只能靠 grep。建议统一走 `logJob` / `logTrace` 这类带字段的出口（`log-hygiene` 守卫已经在管一部分）。
 8. **10 处静默 `catch {}`**：降级是有意的（记忆挂了不能影响聊天），但至少应该计数，否则"静默退化"没人发现。可接进健康分。
