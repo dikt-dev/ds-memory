@@ -303,3 +303,27 @@
 | 11-15 起 | Phase 6（关系系统收口） | 前五阶段验收全绿才开 |
 
 > 随时可插队：你只要说一句「今天先做哪个」，上面任何一条都能提前。
+
+## 二十一、2026-11-01 新增：召回评估 + 发送时序
+
+### 召回评估（已完成基础版）
+
+| 项 | 状态 | 说明 |
+|---|---|---|
+| 30 条真实用例 | ✅ | `docs/eval/golden-memory.local.json`（gitignore，不入库） |
+| 对照脚本 | ✅ | `scripts/eval-recall.mjs`，走 `resolveRecall(shadow)` 生产链路 |
+| 对照接口 | ✅ | `GET /api/admin/memory/recall?compare=1` |
+| 基线 | ✅ | legacy 28/30 命中、5.1 条；next 30/30 命中、4.2 条；误召均 0 |
+| 语气词门控 | ✅ | "哈哈哈"不再翻旧账（`GREETING_RE` 改 `哈{2,}` 等） |
+| 切 next 决策 | 🔵 | 达标但只领先 2 条，**补 20 条难例再判** |
+
+### App 消息发送时序
+
+| 项 | 状态 | 说明 |
+|---|---|---|
+| 方案设计 | ✅ | `docs/design/send-flow.md`（A/B/C 三案 + 推荐 C） |
+| 已读 gating | ✅ | 回复真正到手机后才亮（`newer?.role == "assistant"`） |
+| 已读到开口 1.5s | ✅ | `ChatUi.READ_HOLD_MS`，新消息先显示"正在输入" |
+| 卡片跳动 | ⬜ | pending 气泡不含卡片 + 解析结果没写 `MediaCaches` → 待改 |
+| 媒体停顿时长 | ⬜ | `MEDIA_SETTLE_MS` 1.5s 与开口停顿叠加，待定 |
+| debug 包 | ✅ | 已换回 release（56.36 MB，R8） |
