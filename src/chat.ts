@@ -6,6 +6,7 @@
 import { resolveRecall } from './memory-engine';
 import type { Env } from './types';
 import { buildPromptMemoryFor } from './memory-index';
+import { buildMemoryPack } from './context-pack';
 import { buildSystemPromptSplit, type MessageChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, STYLE_REMINDER } from './prompt';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
@@ -69,38 +70,22 @@ export async function streamChat(
   // 1) 组装上下文（先取历史，再落 user 消息，避免历史里重复出现本条）
   const dateKey = dateKeyInBeijing(now);
   // 这些读取互不依赖：并行发起，减少手机 QQ 场景的首字延迟。
-  const [memory, dayCtxFile, fetchedWeather, session, recentMemoRaw, summaryRaw, personaState] =
-    await Promise.all([
-      getMemory(env),
-      getOrCreateDayContext(env, dateKey),
-      fetchWeather(env),
-      loadSessionHistory(env, now),
-      getRecentMemo(env),
-      getTodaySummary(env, dateKey),
-      loadPersonaState(env),
-    ]);
+  // 会话历史与记忆包互不依赖：并行取。
+  const [session, pack] = await Promise.all([
+    loadSessionHistory(env, now),
+    buildMemoryPack(env, now, { channel }),
+  ]);
   // 短期记忆 = 本次会话全部（只追加不滑窗，缓存才命得中）；超出上限才有提要
   const history = session.rows;
-  // 小记忆全量带上，大记忆只带核心+稳定画像，其余靠召回
-  // ADR-001 S6：evidence 模式下只带宪法，事实靠召回证据集。
-  const promptMemory = buildPromptMemoryFor(memory, env);
-  // 拉取失败时回退到当天缓存，避免提示词里直接没有天气、让模型去翻旧记忆
-  const weather = fetchedWeather ?? dayCtxFile.weather ?? null;
-  if (fetchedWeather) await attachWeather(env, dateKey, fetchedWeather, dayCtxFile);
-  const ctx = {
-    date: dayCtxFile.date,
-    weekday: dayCtxFile.weekday,
-    is_holiday: dayCtxFile.is_holiday,
-    holiday_note: dayCtxFile.holiday_note,
-  };
+  const { memory, dayCtxFile, weather, ctx, promptMemory, personaState, personaDrift } = pack;
+  if (pack.weather) await attachWeather(env, dateKey, pack.weather, dayCtxFile);
   // 最近几条回复的开头：避免连续几轮用同一句开场白
   const avoidOpeners = recentOpeners(history.filter((m) => m.role === 'assistant').map((m) => m.content));
   // ★ 中期记忆（最近 24 小时）优先：它存在时就不再注入今日摘要，避免同一段内容发两遍。
   // 落在本会话时间范围内的条目不再注入——历史原文里已经有了（O4 去重）。
   const sessionStartMs = history[0]?.created_ms;
-  const recentMemo = formatRecentMemoBlock(recentMemoRaw, MEMO_MAX_ITEMS, sessionStartMs);
-  const todaySummary = recentMemo ? null : summaryRaw;
-  const personaDrift = buildPersonaDriftLine(personaState);
+  const recentMemo = formatRecentMemoBlock(pack.recentMemoRaw, MEMO_MAX_ITEMS, sessionStartMs);
+  const todaySummary = recentMemo ? null : pack.todaySummary;
 
   // ★ 按需检索：用当前消息 + 最近几条用户消息去档案里找相关往事（不命中就不占字节）
   const recallQuery = [

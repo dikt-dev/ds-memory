@@ -1,10 +1,226 @@
 {
-  "generated_at": "2026-10-31T04:18:47.067Z",
-  "count": 274,
+  "generated_at": "2026-10-31T07:18:37.752Z",
+  "count": 301,
   "days": [
     {
       "date": "2026-10-31",
       "items": [
+        {
+          "hash": "a03308b",
+          "date": "2026-10-31",
+          "type": "other",
+          "area": "",
+          "title": "docs+perf: 项目现状快照 + 代码审查优化",
+          "why": "- docs/STATUS.md: 两仓库现状、开关、数据、质量指标、分层、待办、审查结论 - perf: fact-expiry/self-check 的逐条 await 改成 DB.batch（D1 往返从 N 次降到 1 次） - perf: memory_actions(created_at)、recall_samples(day_key, mode) 补索引 - fix: 同一天重复自检不再重复给孤儿降权（updated_at < now-12h 门槛） 测试 1076，部署 3c37d2e8"
+        },
+        {
+          "hash": "1268e36",
+          "date": "2026-10-31",
+          "type": "chore",
+          "area": "",
+          "title": "移除误提交的调试产物（mem-snapshot.txt / payload.txt）",
+          "why": ""
+        },
+        {
+          "hash": "3bd9be0",
+          "date": "2026-10-31",
+          "type": "docs",
+          "area": "",
+          "title": "自主改造 12 步状态总览（10-31 收尾）",
+          "why": ""
+        },
+        {
+          "hash": "e2fb469",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "memory",
+          "title": "S11 人格指纹 + S12 facts.md 只读投影",
+          "why": "- persona-fingerprint.ts: 句长/语气词/称呼/表情四维同比，偏差 >25% 报警并指出维度；GET /api/admin/memory/persona-drift - memory-doc.ts: facts.md 只读投影（按分区、带可信度与生效日期、失效单列），GET/POST /api/admin/memory/facts-doc，每夜重建到 R2；不进提示词 - 线上：人格指纹 69 条/句长 167.8（前 7 天无数据）；facts.md 43 条 2844 字 测试 1076，部署 ae0cf7a5"
+        },
+        {
+          "hash": "3f0b5cf",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "variants",
+          "title": "S10 B 档变体与自动裁决",
+          "why": "- variants.ts: prompt/extractor/retrieval 三类候选，一律 pending 不上线，存 KV memory:variants - decideVariant 纯函数: 命中率需 +2pp、误召率 +1pp 一票否决、多塞条目不算改进、样本<20 不许裁决 - 接口: GET/POST variants、POST :id/decide、POST :id/rollback；动作全进审计表 - 线上实测: 提交 retrieval 候选 -> pending；用没涨的数据裁决 -> 自动 rejected 测试 1061，部署 4f25a165"
+        },
+        {
+          "hash": "034fa39",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "self-review",
+          "title": "S9 自审 agent（只开 A 档）",
+          "why": "- self-review.ts: 收集外部证据（健康分/自检/召回 miss）→ 模型提动作 → 白名单+政策闸口+数量上限 → 执行并记审计 - 白名单只有 chunk.tune / param.tune / fact.expire，全是 A 档；B/C 档提案直接退回并写原因 - 新增 chunk.tune 动作类型（改派生层权重，不要求消息出处） - GET/POST /api/admin/memory/self-review（POST 需 confirm=1）；每夜任务里默认关，SELF_REVIEW=on 才跑 - 线上试跑：提 2 条、1 条被政策拦下、参数建议只记录；第二次提案 0 条 测试 1050，部署 02cf77b3"
+        },
+        {
+          "hash": "c61c27c",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "self-check",
+          "title": "S8 每夜自检重放",
+          "why": "- self-check.ts: 引文回查 / 孤儿检测 / 断链清理，报告写 memory/self-check/YYYY-MM-DD.json - 接进 runDailyArchive 每晚自动跑；GET 取报告，POST 立即跑一次 - 线上首跑：14 条事件引文 0 处不一致，1 条孤儿事实按次降权 0.85->0.7（不删），清理 36 条断链 - 修两处过严：孤儿只查 conversation 来源；降权改为每次 -0.15，不一次打到地板 测试 1038，部署 e728c132"
+        },
+        {
+          "hash": "9f3d7cd",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "health",
+          "title": "S7 每日健康分",
+          "why": "- health.ts: 命中率 40 / 失忆抱怨 30 / 延迟 15 / 超时率 15，合计 100 - 失忆抱怨 = 用户消息里「忘了/不记得/记不住」出现率，是模型无法自评操纵的外部信号 - GET /api/admin/memory/health?days=7；线上首跑 94.16 good - 修正分母：只统计用户消息，不算她自己的话 测试 1027，部署 d9dbf6c8"
+        },
+        {
+          "hash": "a83ace8",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "prompt",
+          "title": "S6 注入改证据集",
+          "why": "- buildPromptMemoryFor + MEMORY_PROMPT_MODE 开关（默认 full，一行回滚） - evidence 模式只带宪法四节：线上实测 12744 B -> 2327 B（降 82%） - 该模式自动放行 memory 召回来源；核心区块缺失时退回全量 - 新增 GET /api/admin/memory/prompt-preview 做前后对比 - 6 个测试；部署 3bab399d"
+        },
+        {
+          "hash": "f09b8dc",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "memory",
+          "title": "S5 置信度与证据门",
+          "why": "- fact-confidence.ts: 按来源给初始置信度，只有用户确认能加分、纠正一次降 0.35 且不可逆，她自己的重复只 +0.02 - 证据门硬化: 模型声称的引文一句都对不上 = 整条事件是编的，直接丢弃；部分对上只留对上的 - fact-correction.ts: 用户纠正联动降权受影响事实并记审计 - 线上召回读路径验证正常 测试 1012，部署 eddc2bf1"
+        },
+        {
+          "hash": "b3ba3d6",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "memory",
+          "title": "S4 事实失效链",
+          "why": "- fact-expiry.ts: 同 (subject, predicate) 新值顶掉旧值时写 valid_to，不删行；planExpiry 纯函数可测 - insertFacts 只在 origin=conversation 上跑失效链（memory.md 重建顺序不代表时间顺序） - replaceMemoryContext 清理旧事实从 DELETE 改为 expireFactRows（不变量 2） - 修 S1 回归：memory.md/correction 来源的事实没有消息 id，被出处校验拦成 500； 现在只有 conversation 强制要求出处 - 线上验证：塞测试事实 → rebuild-context → valid_to 落上且行保留 测试 997，部署 7e4928ed"
+        },
+        {
+          "hash": "d477255",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "policy",
+          "title": "S1 写闸口 + S2 自主动作审计",
+          "why": "S1 policy.ts: 六条不变量与三档权限落成代码，putMemory/writeEvent/insertFacts 强制过闸口，write-gate.test.ts 守卫锁死写入来源 S2 memory-actions.ts: 每笔自主动作记 actor/tier/intent/evidence/diff/before/after/revertible，GET /api/admin/memory/actions + POST /:id/revert 测试 954 -> 986，线上部署 ba69d81b"
+        },
+        {
+          "hash": "1249f0c",
+          "date": "2026-10-31",
+          "type": "docs",
+          "area": "",
+          "title": "自主记忆改造执行清单（ADR-001 边界 + 12 步顺序）",
+          "why": ""
+        },
+        {
+          "hash": "4038941",
+          "date": "2026-10-31",
+          "type": "docs",
+          "area": "",
+          "title": "10-31 收尾（B1/B3/B4 结果 + memory.md 四种定位 + 协议确认）",
+          "why": ""
+        },
+        {
+          "hash": "3437681",
+          "date": "2026-10-31",
+          "type": "perf",
+          "area": "recall",
+          "title": "切 next 模式（100 条评估判据已满足）+ 修正 legacy_ms 指标",
+          "why": "- MEMORY_ENGINE 全渠道 shadow → next：线上 p50 1409ms → 1076ms（n=3 新样本） - next 模式下不再跑 legacy 链路，但 legacy_ms 因为等 Promise.all 被记成 ~1000ms， 会误导「切换没生效」的判断；现在跳过时记 0"
+        },
+        {
+          "hash": "cc96f8d",
+          "date": "2026-10-31",
+          "type": "docs",
+          "area": "",
+          "title": "勾掉本轮已完成项（T-07a/07b、T-08、T-06b、E-10/11/15/16），切 next 待拍板",
+          "why": ""
+        },
+        {
+          "hash": "7dfa0f5",
+          "date": "2026-10-31",
+          "type": "docs",
+          "area": "",
+          "title": "D1 拆分完成（ChatActivity 1778 → 1245 行）",
+          "why": ""
+        },
+        {
+          "hash": "8cee907",
+          "date": "2026-10-31",
+          "type": "docs",
+          "area": "",
+          "title": "本轮 A+D 批量任务收尾（评估结论、路由拆分、D1 拆分进度）",
+          "why": ""
+        },
+        {
+          "hash": "aa9690d",
+          "date": "2026-10-31",
+          "type": "refactor",
+          "area": "router",
+          "title": "index.ts 拆出管理端路由与鉴权中间件（2304 → 1630 行）",
+          "why": "- src/admin-routes.ts：46 条 /api/admin/* 整块搬出，行为零改动 - src/middleware.ts：requireAuth / requireApp 抽成共享中间件 - src/auth.ts：authSecret / authMode 并入（原来散在入口文件） - 新增 routes.snapshot.json + routes.test.ts：182 条路由清单快照， 拆分时少挂一条就直接测试失败（这是拆文件唯一看不出来的风险）"
+        },
+        {
+          "hash": "90d0020",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "emotion,recall",
+          "title": "芥蒂扣信任 + 情绪日线 + 结算兜底 + 账本对账；next 模式不再跑 legacy",
+          "why": "D6（E-10/11/15/16）： - E-10 grievanceTrustPenalty：委屈≥20 时每天扣 trust，封顶 -2 - E-11 saveEmotionHistory：每日写 memory/emotion-history/YYYY-MM-DD.json - E-15 sumPendingFacetDelta：结算前用 D1 账本对账，KV 落后就以账本为准 - E-16 missedSettleRounds：归档补跑漏掉的天（上限 7 天），补结算只在日结算链路打开 A6：mode=next 时不再并行跑 legacy（那条链路要扫全表做 BM25+向量，白烧 CPU）。 实测 legacy 侧没有 LLM 调用，所以原本「两次 LLM 调用合并」的说法不成立，改为去掉冗余链路。 新增 11 个单测，953 全绿。"
+        },
+        {
+          "hash": "4de5e8f",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "memory",
+          "title": "快照列表 + 从快照恢复（恢复前先备份、60 秒写锁、读回校验）",
+          "why": "A2：GET /api/admin/memory/snapshots 列出每天快照与字节数（能一眼看出哪天的记忆被写残）； POST /api/admin/memory/restore 需 confirm:true，恢复后重建索引与 Memory Context。 恢复前把现役记忆备份到 memory/restore-backups/，恢复错了能再回来。 新增 6 个单测（成功/坏日期/缺失/并发锁/锁释放/空快照）。"
+        },
+        {
+          "hash": "1bc21a2",
+          "date": "2026-10-31",
+          "type": "chore",
+          "area": "log",
+          "title": "24 处裸 console.log 统一成结构化日志",
+          "why": "- trace.ts 新增 logJob()：cron 没有 requestId，用 [job] 前缀与 [trace] 分开 - jobs/memory-index/storage/summary 的日志统一带 event 字段 - 新增 log-hygiene.test.ts：业务代码出现裸 console.log 直接测试失败"
+        },
+        {
+          "hash": "379a6de",
+          "date": "2026-10-31",
+          "type": "feat",
+          "area": "recall",
+          "title": "扩展封顶——挑够了就不再扩（1→3 的膨胀止住）",
+          "why": "A1：expansionBudget()，只有选择器只挑中 1 条时才补关联，挑中 ≥2 条不扩。 新增 3 个单测；另写入本轮 A+D 批量任务清单。"
+        },
+        {
+          "hash": "402ac6d",
+          "date": "2026-10-31",
+          "type": "perf",
+          "area": "archive",
+          "title": "提炼输入压缩 + 索引重建条件化 + 任务队列跑到底",
+          "why": "- 新增 distill-view.ts：文件块折叠（2 万字粘贴 → 一行）、她的回复超 400 字截断、 用户正文超 3000 字截断。10-30 实测 32470 → 20741 字 - 审计快照 sanitizeDistilledSummary：只留分区标题与 [- [日期]] 条目，剔掉派生行 - memory 未变化时跳过 reindex + replaceMemoryContext - runMemoryJobs 从每天 5 个改为跑到队列空/60 秒预算 - 更正认知：提炼 hit=0 是因为日更 cron 命中不了缓存（TTL 分钟级），不是 bug"
+        },
+        {
+          "hash": "80be840",
+          "date": "2026-10-31",
+          "type": "docs",
+          "area": "",
+          "title": "归档审查补一条实测——提炼输入大头是粘贴的文件全文",
+          "why": ""
+        },
+        {
+          "hash": "06ef290",
+          "date": "2026-10-31",
+          "type": "docs",
+          "area": "",
+          "title": "归档代码审查记录（昨晚归档正常 + 两个已修问题）",
+          "why": ""
+        },
+        {
+          "hash": "488221c",
+          "date": "2026-10-31",
+          "type": "fix",
+          "area": "cost",
+          "title": "chat_usage 建表 + 记账不再静默吞错；提炼改按整条消息截断",
+          "why": "- chat_usage 此前在生产库里根本不存在，recordChatUsage 的 catch{} 把错误吞了， 成本看板一直返回空，缓存命中率无法观测（已用读路径先把表建出来，schema 也补上） - 记账失败改为 console.error，别再静默 - distill 输入从 conversation.slice(-60000) 改成按消息边界从尾部取， 避免把某句话从中间切开喂给模型"
+        },
         {
           "hash": "b727154",
           "date": "2026-10-31",

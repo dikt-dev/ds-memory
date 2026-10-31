@@ -59,6 +59,7 @@ import { buildCharacterCard } from './character-card';
 import { buildVoiceDirective } from './voice';
 import { formatRecentMemoBlock, getRecentMemo } from './recent-memory';
 import { extractPromptMemory, buildPromptMemoryFor, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
+import { buildMemoryPack, budgetFromPack } from './context-pack';
 import { getRuntimeState } from './runtime-store';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { readSessionFacts } from './session-facts';
@@ -178,27 +179,16 @@ async function generateProactive(
   toneHint: string,
 ): Promise<{ text: string; cost: number; promptTokens: number; completionTokens: number } | { error: string }> {
   const dateKey = dateKeyInBeijing(now);
-  const [memory, weather, dayCtx, recentMemoRaw, todaySummaryRaw, history, recentProactive] = await Promise.all([
-    getMemory(env),
-    fetchWeather(env),
-    getOrCreateDayContext(env, dateKey),
-    getRecentMemo(env),
-    getTodaySummary(env, dateKey),
+  const [pack, history, recentProactive] = await Promise.all([
+    buildMemoryPack(env, now, { channel: 'web' }),
     loadRecentRounds(env, PROACTIVE_RECENT_ROUNDS, now),
     recentProactiveMessages(env, 6),
   ]);
+  const { memory, dayCtxFile: dayCtx, weather, ctx, promptMemory } = pack;
   const relation = parseRelationValues(memory);
-  // ADR-001 S6：evidence 模式下只带宪法，事实靠召回证据集。
-  const promptMemory = buildPromptMemoryFor(memory, env);
   // 中期记忆优先：它存在时跳过今日摘要，避免重复
-  const recentMemo = formatRecentMemoBlock(recentMemoRaw);
-  const todaySummary = recentMemo ? null : todaySummaryRaw;
-  const ctx = {
-    date: dayCtx.date,
-    weekday: dayCtx.weekday,
-    is_holiday: dayCtx.is_holiday,
-    holiday_note: dayCtx.holiday_note,
-  };
+  const recentMemo = pack.recentMemo;
+  const todaySummary = pack.todaySummary;
 
   // ★ 活人感：状态卡 + 口语化 + 情绪残留，让"主动开口"也符合"当下的它"
   const hourNow = Number(
@@ -251,7 +241,7 @@ async function generateProactive(
   });
   const recalled = stripDuplicateRecall(
     recall.text,
-    [...history.map((m) => m.content), recentMemo, promptMemory.text].filter(Boolean),
+    [...history.map((m) => m.content), recentMemo ?? '', promptMemory.text].filter(Boolean),
   );
 
   // Phase 5：主动消息最后切。shadow 只计算新上下文，next 才真正替换 prompt。
@@ -271,12 +261,7 @@ async function generateProactive(
   }
   const useNextProactive = proactiveEngine === 'next';
   const proactiveRecall = useNextProactive && recall.nextText ? recall.nextText : recall.text;
-  const contextBudget = budgetContext({
-    core: promptMemory.text,
-    recent: todaySummary ?? '',
-    rollup: recentMemo ?? '',
-    recall: proactiveRecall,
-  });
+  const { budget: contextBudget } = budgetFromPack(pack, proactiveRecall, history.map((m) => m.content));
 
   const systemPrompt = buildBaseSystemPrompt({
     now,

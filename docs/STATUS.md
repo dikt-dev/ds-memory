@@ -83,10 +83,12 @@ L3 每轮工作记忆                                     → 宪法 + 召回证
 2. **热表缺索引**：`memory_actions(created_at)`、`recall_samples(day_key, mode)` 都是按时间/天查询的热路径，之前全表扫。已加 `CREATE INDEX IF NOT EXISTS`。
 3. **同一天重复自检会重复降权**：孤儿事实每次跑都 −0.15，手动跑三次就掉到地板。现在加了 `updated_at < now - 12h` 的门槛，一天最多降一次。
 
+4. **三处提示词组装重复**（`chat.ts` / `openai.ts` / `webproactive.ts`）
+   → **已修**：抽出 `src/context-pack.ts`（`buildMemoryPack` + `budgetFromPack` + `shouldSkipMemoryRecall`），
+   三个渠道共用同一份"取记忆 → 中期/摘要二选一 → evidence 判定 → 去重 → 预算"，共删约 110 行重复代码。
+
 ### 建议后续处理（未改）
 
-4. **三处提示词组装重复**（`chat.ts` / `openai.ts` / `webproactive.ts` 各一份约 60–80 行）
-   三处都做"取记忆 → 预算 → 组 system prompt"，任何一处改口径另两处就得跟着改。建议抽成 `buildChatContext(ctx)`，三个渠道只传差异参数。
 5. **`index.ts` 仍有 1629 行**：路由已抽出，但触发器/定时任务/回调仍在里面，可再按"cron / 回调 / 静态资源"拆。
 6. **125 处 SELECT 没有 LIMIT**：多数是聚合查询没问题，但增长型表（`messages`、`memory_event_log`）的长查询要逐个确认，避免以后数据涨了才炸。
 7. **87 处 `console.error`**：日志非结构化，查问题时只能靠 grep。建议统一走 `logJob` / `logTrace` 这类带字段的出口（`log-hygiene` 守卫已经在管一部分）。

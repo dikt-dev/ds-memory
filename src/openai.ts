@@ -10,6 +10,7 @@ import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { Env } from './types';
 import { buildPromptMemoryFor } from './memory-index';
+import { buildMemoryPack, budgetFromPack } from './context-pack';
 import { buildBaseSystemPrompt, normalizeChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, stripSilentEndToken, STYLE_REMINDER } from './prompt';
 import { stripLeadingTimeLabels } from './anti-ai-flavor';
 import { budgetContext, formatBudgetManifest } from './context-budget';
@@ -406,33 +407,19 @@ openaiApp.post('/chat/completions', async (c) => {
   c.executionCtx.waitUntil(maybeSummarizeToday(c.env, dateKey)); // 异步滚动摘要，不阻塞
   c.executionCtx.waitUntil(maybeRefreshRecentMemo(c.env, now)); // 异步刷新中期记忆（最近 24h）
   // 这些读取互不依赖：并行发起，减少 QQ 场景的首字延迟。
-  const [memory, dayCtx, fetchedWeather, recentMemoRaw, summaryRaw, personaState, facts] =
-    await Promise.all([
-      getMemory(c.env),
-      getOrCreateDayContext(c.env, dateKey),
-      fetchWeather(c.env),
-      getRecentMemo(c.env),
-      getTodaySummary(c.env, dateKey),
-      loadPersonaState(c.env),
-      readSessionFacts(c.env, now, dateKey),
-    ]);
-  // ADR-001 S6：evidence 模式下只带宪法，事实靠召回证据集。
-  const promptMemory = buildPromptMemoryFor(memory, c.env);
+  const [pack, facts] = await Promise.all([
+    buildMemoryPack(c.env, now, { channel: 'astrobot' }),
+    readSessionFacts(c.env, now, dateKey),
+  ]);
+  const { memory, dayCtxFile: dayCtx, weather, ctx, promptMemory, personaState } = pack;
   // 拉取失败时回退当天缓存，避免“没有天气”时模型去翻旧记忆
-  const weather = fetchedWeather ?? dayCtx.weather ?? null;
-  if (fetchedWeather) await attachWeather(c.env, dateKey, fetchedWeather, dayCtx);
-  const ctx = {
-    date: dayCtx.date,
-    weekday: dayCtx.weekday,
-    is_holiday: dayCtx.is_holiday,
-    holiday_note: dayCtx.holiday_note,
-  };
-  const recentMemo = formatRecentMemoBlock(recentMemoRaw);
+  if (pack.weather) await attachWeather(c.env, dateKey, pack.weather, dayCtx);
+  const recentMemo = pack.recentMemo;
   // 文件沉淀：先记账再读，本轮发的文件立刻能出现在提示词里
   await recordFiles(c.env, body?.files);
   const recentFiles = await recentFilesBlock(c.env, now);
   // 中期记忆存在时跳过今日摘要，避免重复注入同一段时间的事
-  const todaySummary = recentMemo ? null : summaryRaw;
+  const todaySummary = pack.todaySummary;
   const relation = parseRelationValues(memory);
   const envHour = beijingHour(now);
   const envMonth = beijingMonth(now);
@@ -571,16 +558,11 @@ openaiApp.post('/chat/completions', async (c) => {
   });
   const recalledRaw = recall.text;
 
-  const recalled = stripDuplicateRecall(
+  const { recalled, budget: contextBudget } = budgetFromPack(
+    pack,
     recalledRaw,
-    [...historyRaw.map((m) => m.content), recentMemo, promptMemory.text].filter(Boolean),
+    historyRaw.map((m) => m.content),
   );
-  const contextBudget = budgetContext({
-    core: promptMemory.text,
-    recent: todaySummary ?? '',
-    rollup: recentMemo ?? '',
-    recall: recalled,
-  });
   logTrace('openai.context', {
     requestId,
     channel,
