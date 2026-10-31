@@ -73,3 +73,6 @@ export interface Env {
   // AstrBot OpenAPI Key（secret）
   ASTROBOT_OPENAPI_KEY?: string;
 }
+
+/** Hono 的绑定与请求变量类型（原来定义在 index.ts 里，路由拆分后共享）。 */
+export type AppEnv = { Bindings: Env; Variables: { requestId: string } };

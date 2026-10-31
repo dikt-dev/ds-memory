@@ -189,3 +189,13 @@ export async function verifyPassword(password: string, stored: string): Promise<
   }
   return diff === 0;
 }
+
+/** 签名密钥：AUTH_SECRET 优先，回滚路径用 ACCESS_PASSWORD_HASH 当密钥。 */
+export function authSecret(env: { AUTH_SECRET?: string; ACCESS_PASSWORD_HASH?: string }): string | null {
+  return env.AUTH_SECRET?.trim() || env.ACCESS_PASSWORD_HASH?.trim() || null;
+}
+
+/** 登录态模式：signed（默认，无 KV 读）/ kv（回滚路径）。 */
+export function authMode(env: { AUTH_MODE?: string }): 'signed' | 'kv' {
+  return (env.AUTH_MODE ?? 'signed').toLowerCase() === 'kv' ? 'kv' : 'signed';
+}

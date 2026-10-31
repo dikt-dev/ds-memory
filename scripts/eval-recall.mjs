@@ -11,6 +11,9 @@ const EVAL_DIR = path.join(process.cwd(), 'docs/eval');
 const args = process.argv.slice(2);
 const only = args.includes('--only') ? args[args.indexOf('--only') + 1] : null;
 const verbose = args.includes('--verbose');
+// 用例多了以后必须限速：连续打会把 Worker 打到 503，样本缺口直接污染结论。
+const delayMs = args.includes('--delay') ? Number(args[args.indexOf('--delay') + 1]) : 800;
+const skip = args.includes('--skip') ? Number(args[args.indexOf('--skip') + 1]) : 0;
 
 function loadSecret() {
   const text = fs.readFileSync(path.join(process.cwd(), '.dev.vars'), 'utf8');
@@ -56,6 +59,8 @@ function score(item, text, count) {
   return { hit, hits, bad, overLimit, count };
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 async function getJson(url, cookie, tries = 5) {
   let last;
   for (let i = 0; i < tries; i++) {
@@ -65,14 +70,16 @@ async function getJson(url, cookie, tries = 5) {
       return await res.json();
     } catch (err) {
       last = err;
-      await new Promise((r) => setTimeout(r, 700 * (i + 1)));
+      await sleep(1200 * (i + 1));
     }
   }
   throw last;
 }
 
 const { file, cases } = loadCases();
-const items = cases.filter((c) => !only || c.section.includes(only) || c.id.startsWith(only));
+const items = cases
+  .filter((c) => !only || c.section.includes(only) || c.id.startsWith(only))
+  .slice(skip);
 const cookie = authCookie(loadSecret());
 
 console.log('数据集 ' + file + '  用例 ' + items.length + '\n');
@@ -96,6 +103,7 @@ for (const item of items) {
     '  ' + item.query,
   );
   if (verbose && !n.hit) console.log('    next: ' + (j.next?.text ?? '').replace(/\n/g, ' | ').slice(0, 260));
+  await sleep(delayMs);
 }
 
 const hit = (k) => rows.filter((r) => r[k].hit).length;
