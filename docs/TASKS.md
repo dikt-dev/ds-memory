@@ -350,7 +350,7 @@
 | 7 | **A6 去掉冗余引擎链路** | ✅ `90d0020` | 实测 legacy 侧**没有 LLM 调用**（纯 BM25+向量），原「合并两次 LLM」前提不成立；改为 `mode=next` 时不再并行跑 legacy | tsc + 953 测试绿 |
 | 8 | **D4 去重核查 + 文本层抽取** | ✅ `0c0f89a` | 全仓扫描：无重复函数体、无重名顶层函数（B站网络层早就在 ApiClient）；改为把 `ChatText.kt`（纯文本解析 347 行）从 ChatActivity 抽出 | release 构建通过 + 真机无崩溃 |
 | 9 | **D6 情绪收尾 E-10/11/15/16** | ✅ `90d0020` | 芥蒂扣信任（≤-2/天）/ 情绪日线 JSON / 账本对账（KV 落后以 D1 为准）/ 漏跑补结算（上限 7 天，仅日结算链路） | 11 个单测 |
-| 10 | **D1 ChatActivity 拆分** | 🔵 部分 | 已抽 `ChatText.kt`（1778 → 1377 行）；剩余 `ChatScreen` 的状态闭包（发送/同步/附件）要先把 20+ 个 `mutableStateOf` 收进状态容器才能继续拆，硬拆会动到界面行为 | 下一轮单独做，需你目测界面 |
+| 10 | **D1 ChatActivity 拆分** | ✅ `0c0f89a` + `dc0917d` | 拆成 4 个文件：`ChatText.kt`(347 行纯解析) / `ChatSync.kt`(同步与对账) / `ChatBiliSend.kt`(取帧流水线) / `ChatMedia.kt`(图片压缩)；ChatActivity **1778 → 1245 行** | 真机全流程验证：发 B站链接→3 宫格+6 细节帧→她引用歌词→已读回执正常 |
 | 11 | **D2 index.ts 拆 router** | ✅ `aa9690d` | 抽出 `admin-routes.ts`（46 条）/`middleware.ts`/`auth.ts`；新增 182 条路由清单快照测试 | 2304 → 1630 行，路由一条不差 |
 
 ### 归档代码审查（2026-11-01）
