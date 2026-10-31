@@ -5,6 +5,7 @@
  * 旧表 memory_entries / 旧召回路径完全不动，便于影子对比与回滚。
  */
 import type { Env } from './types';
+import { assertAllowed } from './policy';
 import { autoTags, bigrams } from './memory-archive';
 import { embedTexts, quantizeVec } from './memory-index';
 import { rollupSourceHash } from './memory-rollups';
@@ -54,6 +55,12 @@ function parseArray<T>(raw: string): T[] {
 }
 
 async function insertFacts(env: Env, facts: MemoryFact[], origin: string): Promise<void> {
+  // 不变量 4：事实必须带出处；legacy 迁移是老数据，允许一次性导入。
+  const provenance = facts.flatMap((f) => f.sourceMessageIds ?? []);
+  assertAllowed(
+    { kind: 'fact.upsert', sourceMessageIds: provenance, legacyOrigin: origin === 'legacy' },
+    { actor: 'job' },
+  );
   for (const batch of chunksOf(facts)) {
     await env.DB.batch(
       batch.map((f) =>

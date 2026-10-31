@@ -18,6 +18,8 @@ import { rankMemoryChunks } from './memory-domain';
 import { resolveRecall } from './memory-engine';
 import { readEngineMetrics } from './engine-metrics';
 import { readRecallSamples, summarizeSamples } from './recall-samples';
+import { listActions, markReverted } from './memory-actions';
+import { policyTable, type ActionKind } from './policy';
 import { backfillEvents, readEventStats } from './memory-events';
 import { insertKeepsake, loadKeepsakes, refreshKeepsakesBlock, setKeepsakePinned, setKeepsakeStatus } from './keepsakes';
 import { readUsageStats, summarizeUsage } from './usage-stats';
@@ -225,6 +227,22 @@ app.post('/api/admin/memory/events/backfill', requireAuth, async (c) => {
   const maxEvents = Math.min(200, Math.max(1, Number(c.req.query('max') ?? 30) || 30));
   const result = await backfillEvents(c.env, { days, maxEvents });
   return c.json({ ok: true, ...result });
+});
+
+/** 自主动作审计：她做过什么、为什么、能不能撤（ADR-001 S2）。 */
+app.get('/api/admin/memory/actions', requireAuth, async (c) => {
+  const limit = Number(c.req.query('limit') ?? 50) || 50;
+  const kind = c.req.query('kind') as ActionKind | undefined;
+  const items = await listActions(c.env, { limit, kind: kind || undefined });
+  return c.json({ ok: true, items, policy: policyTable() });
+});
+
+/** 撤销一笔自主动作（只标记，回滚由具体动作实现）。 */
+app.post('/api/admin/memory/actions/:id/revert', requireAuth, async (c) => {
+  const id = Number(c.req.param('id')) || 0;
+  if (id <= 0) return c.json({ ok: false, error: 'bad id' }, 400);
+  const ok = await markReverted(c.env, id, id);
+  return c.json({ ok, reverted: ok });
 });
 
 /** 铭记：列表（默认只看已通过；pending=1 看候选）。 */

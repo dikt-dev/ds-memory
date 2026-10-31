@@ -41,6 +41,14 @@
   ],
   [
     "GET",
+    "/api/admin/memory/actions"
+  ],
+  [
+    "GET",
+    "/api/admin/memory/actions"
+  ],
+  [
+    "GET",
     "/api/admin/memory/context-stats"
   ],
   [
@@ -354,6 +362,14 @@
   [
     "POST",
     "/api/admin/emotion/simulate"
+  ],
+  [
+    "POST",
+    "/api/admin/memory/actions/:id/revert"
+  ],
+  [
+    "POST",
+    "/api/admin/memory/actions/:id/revert"
   ],
   [
     "POST",

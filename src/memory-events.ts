@@ -6,6 +6,7 @@
  * **读路径完全没动**，所以出问题只要删表或停 cron，线上行为不变。
  */
 import type { Env } from './types';
+import { assertAllowed } from './policy';
 import { distillText } from './distill';
 import { addLlmCost } from './llm-cost';
 import { dateKeyInBeijing } from './date';
@@ -187,6 +188,11 @@ export async function extractEvent(env: Env, rows: EventSourceRow[]): Promise<Me
 
 /** 幂等写入：同一个 (started_ms, ended_ms) 覆盖更新。 */
 export async function writeEvent(env: Env, ev: MemoryEvent): Promise<void> {
+  // 不变量 4：事件必须能指回它断言的那几条消息，否则不许入库。
+  assertAllowed(
+    { kind: 'event.write', sourceMessageIds: ev.msg_ids },
+    { actor: 'job' },
+  );
   await ensureEventsTable(env);
   await env.DB.prepare(
     `INSERT INTO memory_event_log

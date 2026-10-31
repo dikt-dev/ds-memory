@@ -6,6 +6,7 @@
  */
 import type { Env } from './types';
 import { getObject, putObject } from './storage';
+import { assertAllowed, type Actor } from './policy';
 
 export const MEMORY_R2_KEY = 'memory.md';
 export const MEMORY_KV_KEY = 'memory:cache';
@@ -40,7 +41,13 @@ export async function getMemory(env: Env): Promise<string> {
  * 于是索引里有一份 R2 里不存在的记忆 —— 比直接报错更难查。
  * 现在：写后读回比对，不一致就不刷新缓存并返回 false，让调用方跳过派生重建。
  */
-export async function putMemory(env: Env, text: string): Promise<boolean> {
+export async function putMemory(
+  env: Env,
+  text: string,
+  actor: Actor = 'job',
+): Promise<boolean> {
+  // 重写长期记忆属于 A 档动作，但必须过闸口：宪法四节的写入在 policy 里是被挡的。
+  assertAllowed({ kind: 'memory.write' }, { actor });
   // 1) 先写 R2（唯一真相）。失败时缓存保持旧值：KV 与 R2 仍是**一致**的旧版本。
   try {
     await putObject(env, MEMORY_R2_KEY, text);

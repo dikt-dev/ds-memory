@@ -32,13 +32,19 @@
 
 ## 阶段一：闸口与记录（先做，不放开任何自由）
 
-### S1 policy.ts：写闸口
+### S1 policy.ts：写闸口 ✅ 已完成（19 个测试，3 条写入路径已接闸口）
+
+> 已落地：6 条不变量 + 3 档权限全部代码化；`putMemory` / `writeEvent` / `insertFacts` 强制过 `assertAllowed`；守卫测试锁死「事实/事件/记忆文件只能从白名单模块写」。
+
 - **做什么**：新建 `src/policy.ts`，导出 `assertAllowed(action, ctx)`；六条不变量与三档权限全部落成代码。
 - **产出**：`policy.ts` + `policy.test.ts`（每条不变量至少一个拒绝用例）。
 - **验收**：所有写路径（D1 写、memory.md 写、主动消息、参数变更）都过闸口；加守卫测试，发现直接调用裸写函数即失败。
 - **依赖**：无。**这是地基。**
 
-### S2 memory_actions 审计表
+### S2 memory_actions 审计表 ✅ 已完成（8 个测试，线上接口已验证）
+
+> 已落地：动作入库前由 policy 决定档位（调用方不能自称 A 档）；C 档动作直接拒绝入库；超长文本截断到 4k。
+
 - **做什么**：新表记录每一次自主动作：`actor / tier / intent / evidence / diff / before / after / result / revertible / created_at`。
 - **产出**：建表 + 写入封装 + 管理端列表接口 `GET /api/admin/memory/actions`。
 - **验收**：A/B 档任一动作都能在表里查到完整证据链，并能按 id 撤销。
