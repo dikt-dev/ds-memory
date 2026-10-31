@@ -23,6 +23,7 @@ export type ActionKind =
   | 'chunk.tune'
   | 'event.write'
   | 'memory.write'
+  | 'memory.pin'
   | 'param.tune'
   | 'proactive.send'
   // ——— 必须隔离验证（B）
@@ -77,6 +78,8 @@ const TIERS: Record<ActionKind, PolicyTier> = {
   'chunk.tune': 'A',
   'event.write': 'A',
   'memory.write': 'A',
+  // 给一条记忆上铭记锁：不删、不改内容，只决定这条不许淡忘
+  'memory.pin': 'A',
   'param.tune': 'A',
   'proactive.send': 'A',
   'prompt.change': 'B',

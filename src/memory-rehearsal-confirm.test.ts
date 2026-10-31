@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   consumePendingRecall,
+  looksLikePinRequest,
   looksLikeConfirmation,
   recordRecallConfirmation,
   setChunkPinned,
@@ -116,5 +117,19 @@ describe('setChunkPinned', () => {
   it('数据库异常时返回 false 而不是抛', async () => {
     const env = { DB: { prepare: () => { throw new Error('down'); } } } as unknown as Env;
     expect(await setChunkPinned(env, 'c1', true)).toBe(false);
+  });
+});
+
+describe('looksLikePinRequest', () => {
+  it('明确的"记住这件事"', () => {
+    for (const s of ['记住这件事', '别忘了这个', '这个很重要', '你要记得']) {
+      expect(looksLikePinRequest(s)).toBe(true);
+    }
+  });
+
+  it('长句和随口一说都不算', () => {
+    expect(looksLikePinRequest('我记住了，今天开会讲了好多东西要整理一下，明天再和你说')).toBe(false);
+    expect(looksLikePinRequest('今天天气不错')).toBe(false);
+    expect(looksLikePinRequest('')).toBe(false);
   });
 });

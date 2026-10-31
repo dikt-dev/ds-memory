@@ -60,12 +60,12 @@ export interface NewKeepsake {
   status?: KeepsakeStatus;
 }
 
-export const KEEPSAKE_MAX = 30;
-export const KEEPSAKE_MAX_BITTER = 8;
-export const KEEPSAKE_MAX_DAILY_AI = 2;
-export const KEEPSAKE_MAX_WEEKLY_AI = 5;
-export const KEEPSAKE_MAX_DAILY_BITTER = 1;
-export const KEEPSAKE_MAX_WEEKLY_BITTER = 2;
+export const KEEPSAKE_MAX = 120;
+export const KEEPSAKE_MAX_BITTER = 32;
+export const KEEPSAKE_MAX_DAILY_AI = 4;
+export const KEEPSAKE_MAX_WEEKLY_AI = 10;
+export const KEEPSAKE_MAX_DAILY_BITTER = 2;
+export const KEEPSAKE_MAX_WEEKLY_BITTER = 4;
 export const KEEPSAKE_BLOCK_KEY = 'keepsakes:block';
 export const KEEPSAKE_ENABLED_KEY = 'keepsakes:enabled';
 

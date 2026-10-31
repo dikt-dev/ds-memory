@@ -133,21 +133,21 @@ describe('renderKeepsakesBlock', () => {
     expect(block).toContain('别主动翻旧账');
   });
 
-  it('bitter 最多 8 条', () => {
-    const many = Array.from({ length: 12 }, (_, i) =>
+  it('bitter 最多 32 条', () => {
+    const many = Array.from({ length: 40 }, (_, i) =>
       item({ kind: 'hurt', tone: 'bitter', title: `伤心事${i}`, happened_at: T0 + i * 86400_000 }),
     );
     const block = renderKeepsakesBlock(many);
-    expect(block.split('\n').filter((l) => l.includes('伤心事')).length).toBe(8);
+    expect(block.split('\n').filter((l) => l.includes('伤心事')).length).toBe(32);
   });
 
-  it('超过 30 条保留最早的', () => {
-    const many = Array.from({ length: 35 }, (_, i) =>
+  it('超过 120 条保留最早的', () => {
+    const many = Array.from({ length: 130 }, (_, i) =>
       item({ title: `事件${i}`, happened_at: T0 + i * 86400_000 }),
     );
     const block = renderKeepsakesBlock(many);
     expect(block).toContain('事件0');
-    expect(block).not.toContain('事件34');
+    expect(block).not.toContain('事件129');
   });
 });
 describe('validateKeepsake', () => {
@@ -225,12 +225,12 @@ describe('insertKeepsake', () => {
     expect(db.rows.length).toBe(2);
   });
 
-  it('单日 AI 入册上限 2 条', async () => {
+  it('单日 AI 入册上限 4 条', async () => {
     const { env } = fakeEnv();
-    for (const t of ['事件一', '事件二', '事件三']) {
+    for (const t of ['事件一', '事件二', '事件三', '事件四', '事件五']) {
       await insertKeepsake(env, { kind: 'milestone', title: t, happened_at: T0, source: 'ai' }, '', T0);
     }
-    expect((await loadKeepsakes(env)).length).toBe(2);
+    expect((await loadKeepsakes(env)).length).toBe(4);
   });
 });
 

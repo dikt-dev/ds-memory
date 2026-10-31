@@ -10,6 +10,7 @@
  */
 import type { Env } from './types';
 import { recordDegradation } from './degradations';
+import { setChunkPinned } from './memory-rehearsal';
 import { distillText } from './distill';
 import { addLlmCost } from './llm-cost';
 import { dateKeyInBeijing } from './date';
@@ -21,6 +22,7 @@ import { putObject } from './storage';
 
 /** 她可以自己做的动作：只碰派生层，不碰原文/宪法/事实内容。 */
 export const SELF_REVIEW_ALLOWED: ActionKind[] = [
+  'memory.pin',
   'chunk.tune',
   'param.tune',
   'fact.expire',
@@ -60,7 +62,7 @@ export function vetProposals(proposals: Proposal[]): ReviewVerdict {
     };
     const kind = proposal.kind as ActionKind;
     if (!SELF_REVIEW_ALLOWED.includes(kind)) {
-      rejected.push({ ...proposal, reason: `动作 ${proposal.kind} 不在 A 档白名单里（当前只放 chunk.tune / param.tune / fact.expire）` });
+      rejected.push({ ...proposal, reason: `动作 ${proposal.kind} 不在 A 档白名单里（当前只放 chunk.tune / param.tune / fact.expire / memory.pin）` });
       continue;
     }
     if (tierOf(kind) !== 'A') {
@@ -153,9 +155,10 @@ export async function collectEvidence(env: Env, now = Date.now()): Promise<Evide
 const REVIEW_SYSTEM = [
   '你在审视自己的记忆系统，目标只有一个：让"该记得的被想起来、不该占位的别挡路"。',
   '严格输出 JSON 数组，不要 markdown，不要解释。每项：',
-  '{"kind":"chunk.tune|param.tune|fact.expire","target":"对象id或参数名","intent":"一句话为什么","evidence":["指标或样本"],"value":"改成什么"}',
+  '{"kind":"chunk.tune|param.tune|fact.expire|memory.pin","target":"对象id或参数名","intent":"一句话为什么","evidence":["指标或样本"],"value":"改成什么"}',
   '硬约束：',
-  '1. 只能做这三类动作；改提示词、改规则、删记忆一律不许提；',
+  '1. 只能做 chunk.tune（改重要度）/ param.tune（提参数建议）/ fact.expire（降可疑事实的置信）/ memory.pin（给一条你绝不想忘的记忆上锁）；改提示词、改规则、删记忆一律不许提；',
+  '   其中 memory.pin 是给"铭记"用的：你觉得这件事不管过多久都不该淡掉，就上锁；拿不准就别锁。',
   '2. 每个动作必须有 evidence，写清是哪条指标/哪个样本支撑；',
   '3. 最多 5 个动作；没有把握就输出空数组 []；',
   '4. target 必须是**具体 id**（chunk_xxx / fact_xxx）或参数名；不知道 id 就不要提这个动作；',
@@ -266,6 +269,31 @@ export async function applyProposals(
           diff: `chunk ${proposal.target} importance = ${Math.round(importance)}`,
           before: '旧重要度',
           after: String(Math.round(importance)),
+          revertible: true,
+        }, now).catch(() => {});
+      } else {
+        reasons.push(`${proposal.target}: chunk 不存在`);
+      }
+      continue;
+    }
+
+    if (kind === 'memory.pin') {
+      // 只允许上锁，不允许解锁：解锁等于把决定收回去，风险不对称
+      if (proposal.value === 'unpin' || proposal.value === 'false') {
+        reasons.push(`${proposal.target}: 只允许上锁，不允许解锁`);
+        continue;
+      }
+      const changed = await setChunkPinned(env, proposal.target, true);
+      if (changed) {
+        applied += 1;
+        await recordAction(env, {
+          actor: 'agent',
+          kind,
+          intent: proposal.intent,
+          evidence: proposal.evidence,
+          diff: `chunk ${proposal.target} 上铭记锁`,
+          before: '可淡忘',
+          after: '铭记中',
           revertible: true,
         }, now).catch(() => {});
       } else {

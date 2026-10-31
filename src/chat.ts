@@ -3,11 +3,12 @@
  * 落库顺序：先读历史（不含本条）→ 落 user 消息 → 流结束后落 assistant 回复并计费。
  * 图片：已压缩存入 R2（images/日期/时间戳.jpg），发给 DeepSeek 时从 R2 读回；D1 只记录 R2 路径。
  */
+import { recordAction } from './memory-actions';
 import { resolveRecall } from './memory-engine';
 import type { Env } from './types';
 import { buildPromptMemoryFor } from './memory-index';
 import { buildMemoryPack } from './context-pack';
-import { consumePendingRecall, recordRecallUsage, rememberPendingRecall } from './memory-rehearsal';
+import { consumePendingRecall, looksLikePinRequest, recordRecallUsage, rememberPendingRecall, setChunkPinned } from './memory-rehearsal';
 import { buildSystemPromptSplit, type MessageChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, STYLE_REMINDER } from './prompt';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
@@ -115,6 +116,24 @@ export async function streamChat(
   // 复习计数：这一轮真正注入的条目被想起了一次（遗忘曲线靠它抵抗衰减）。
   void recordRecallUsage(env, recall.ids, now.getTime());
   void rememberPendingRecall(env, recall.ids, now.getTime());
+  // 她来决定铭记什么：用户明确说"记住这件事"时，给命中的那条上锁
+  if (recall.ids.length > 0 && looksLikePinRequest(content)) {
+    const target = recall.ids[0];
+    void (async () => {
+      if (await setChunkPinned(env, target, true)) {
+        await recordAction(env, {
+          actor: 'agent',
+          kind: 'memory.pin',
+          intent: '用户明确要求记住这件事，这条记忆上了铭记锁',
+          evidence: [target],
+          diff: 'chunk ' + target + ' 上铭记锁',
+          before: '可淡忘',
+          after: '铭记中',
+          revertible: true,
+        }, now.getTime()).catch(() => {});
+      }
+    })();
+  }
 
   const recalled = stripDuplicateRecall(
     recalledRaw,

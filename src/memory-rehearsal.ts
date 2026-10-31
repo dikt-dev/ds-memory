@@ -130,6 +130,20 @@ export async function recordRecallConfirmation(
   }
 }
 
+/**
+ * 用户是不是在明确说"这件事你要记住"？
+ *
+ * 只在召回命中时才会用这个判断（没命中就没有可上锁的对象），且要求是短句，
+ * 避免"我记住了"这种随口一说把不相干的事锁死。
+ */
+export function looksLikePinRequest(text: string): boolean {
+  const t = (text || '').trim();
+  if (!t || t.length > 20) return false;
+  // 带逗号/句号的说明性长句不算（"我记住了，今天开会…"）
+  if (/[，,。；;]/.test(t)) return false;
+  return /(记住|记得|别忘|很重要)/.test(t);
+}
+
 /** 候选门槛：至少这么多天没被想起，才算"沉睡"。 */
 export const DORMANT_MIN_AGE_DAYS = 45;
 /** 太近的事不算"旧事"。 */
