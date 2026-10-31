@@ -85,11 +85,8 @@ export function computeIntimacyGain(sig: IntimacySignals): number {
 }
 
 /** 长期失联衰减。 */
-export function intimacyDecay(daysSinceInteraction: number): number {
-  if (daysSinceInteraction <= INTIMACY_DECAY_AFTER_DAYS) return 0;
-  const inactive = daysSinceInteraction - INTIMACY_DECAY_AFTER_DAYS;
-  return Math.min(inactive * INTIMACY_DECAY_PER_DAY, 15); // 单次最多 -15
-}
+
+
 
 /**
  * 应用亲密度变化：先加增量，再按硬上限截断。

@@ -7,7 +7,6 @@ import {
   applyIntimacyChange,
   computeAffinityDelta,
   computeIntimacyGain,
-  intimacyDecay,
   maxIntimacyForDays,
   scanQuality,
   type AffinitySignals,
@@ -90,21 +89,7 @@ describe('computeIntimacyGain —— 只看互动量', () => {
   });
 });
 
-describe('intimacyDecay —— 长期失联', () => {
-  it('7 天内不衰减', () => {
-    expect(intimacyDecay(0)).toBe(0);
-    expect(intimacyDecay(7)).toBe(0);
-  });
-
-  it('超过 7 天开始缓慢下降', () => {
-    expect(intimacyDecay(10)).toBeGreaterThan(0);
-    expect(intimacyDecay(17)).toBe(5);
-  });
-
-  it('单次最多 -15', () => {
-    expect(intimacyDecay(1000)).toBe(15);
-  });
-});
+;
 
 describe('applyIntimacyChange —— 综合应用', () => {
   it('正常增长', () => {

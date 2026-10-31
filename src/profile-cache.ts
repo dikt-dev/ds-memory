@@ -82,11 +82,9 @@ export async function getHeartbeat(env: Env): Promise<HeartbeatRecord | null> {
 }
 
 /** 读「上次已经提醒过的掉线心跳时间」。 */
-export async function getOfflineAlertedAt(env: Env): Promise<string | null> {
-  return getRuntimeState(env, 'proactive:offline_alert').catch(() => null);
-}
+
+
 
 /** 记下已提醒（同一个掉线事件只提醒一次）。 */
-export async function setOfflineAlertedAt(env: Env, at: string): Promise<void> {
-  await putRuntimeState(env, 'proactive:offline_alert', at, 7 * 86400).catch(() => {});
-}
+
+

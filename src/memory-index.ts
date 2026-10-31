@@ -28,6 +28,7 @@ import { loadRollups } from './memory-rollups';
 import { distillText } from './distill';
 import { logTrace } from './trace';
 import { logError, logWarn } from './error-log';
+import { promptModeFor } from './prompt-mode';
 
 const logInfo = (msg: string): void => logTrace('memory.index', { msg });
 
@@ -140,7 +141,7 @@ export function buildPromptMemoryFor(
   env: { MEMORY_PROMPT_MODE?: string },
   inlineMaxBytes = MEMORY_INLINE_MAX_BYTES,
 ): { text: string; mode: 'full' | 'compact'; evidence?: boolean } {
-  if (env.MEMORY_PROMPT_MODE === 'evidence') {
+  if (promptModeFor(env) === 'evidence') {
     const core = extractCoreMemory(text);
     // 核心区块缺失时退回全量：宁可多带，不许把人物底色弄丢。
     if (core.trim() === '') return { text, mode: 'full' };

@@ -166,19 +166,8 @@ export async function distillText(
  * 按整条消息从尾部取：`slice(-N)` 会把某句话从中间切开，
  * 模型看到半截「助手：……」容易把残缺内容当成当天发生的事。
  */
-export function tailByMessage(conversation: string, maxChars: number): string {
-  if (conversation.length <= maxChars) return conversation;
-  const parts = conversation.split('\n\n');
-  const kept: string[] = [];
-  let used = 0;
-  for (let i = parts.length - 1; i >= 0; i--) {
-    const piece = parts[i];
-    if (used + piece.length + 2 > maxChars && kept.length > 0) break;
-    kept.unshift(piece);
-    used += piece.length + 2;
-  }
-  return kept.join('\n\n');
-}
+
+
 
 /**
  * 单次提炼能吃的对话字符数。

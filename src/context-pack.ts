@@ -127,6 +127,5 @@ export function shouldSkipMemoryRecall(pack: MemoryPack): boolean {
 }
 
 /** 召回引擎选择（渠道相关，集中一处便于以后按渠道收紧）。 */
-export function memoryEngineForChannel(env: Env, channel: string) {
-  return memoryEngineFor(env, channel);
-}
+
+

@@ -9,6 +9,8 @@
  */
 
 /** 需要整体抹掉的短语（命中即删除，不替换成别的）。 */
+import { sanitizeProactiveText } from './proactive';
+
 const STRIP_PHRASES: Array<{ re: RegExp; why: string }> = [
   { re: /很高兴(能够)?帮助[您你]?/g, why: '客服套话' },
   { re: /(?:很|非常)?高兴(?:能|可以)?(?:为|帮)[您你](?:服务|解答问题|回答|提供帮助)/g, why: '客服套话' },
@@ -171,7 +173,9 @@ function tidySpaces(text: string): string {
 }
 
 export function scrubAiFlavor(raw: string): { text: string; cleaned: boolean } {
-  const withoutTime = limitStageDirections(stripLeadingTimeLabels(raw));
+  // 主动消息的收尾清理收进这里：以前是两份实现，一份线上、一份只有测试
+  const source = sanitizeProactiveText(raw);
+  const withoutTime = limitStageDirections(stripLeadingTimeLabels(source));
   const applied = applyRules(withoutTime);
   const finalText = applied.text.trim();
 

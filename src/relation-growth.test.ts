@@ -3,7 +3,6 @@ import {
   MAX_DAILY_LOSS,
   applyGradualChange,
   applyInactivityDecay,
-  estimateDaysToReach,
   maxGainAt,
 } from './relation-growth';
 
@@ -104,29 +103,4 @@ describe('applyInactivityDecay —— 长期不联系衰减', () => {
   });
 });
 
-describe('estimateDaysToReach —— 日积月累的量化', () => {
-  it('从 0 到 500 需要很长时间', () => {
-    const days = estimateDaysToReach(0, 500);
-    // 0-200 段每天 5 分（40天），200-400 每天 3 分（67天），400-500 每天 2 分（50天）
-    expect(days).toBeGreaterThan(140);
-    expect(days).toBeLessThan(200);
-  });
-
-  it('从 900 到 1000 需要 100 天', () => {
-    const days = estimateDaysToReach(900, 1000);
-    expect(days).toBe(100); // 每天 1 分
-  });
-
-  it('已经达到时返回 0', () => {
-    expect(estimateDaysToReach(500, 400)).toBe(0);
-    expect(estimateDaysToReach(500, 500)).toBe(0);
-  });
-
-  it('一年能从 0 涨到多少', () => {
-    // 模拟 365 天
-    let cur = 0;
-    for (let i = 0; i < 365; i++) cur = Math.min(1000, cur + maxGainAt(cur));
-    expect(cur).toBeGreaterThan(600); // 一年能到"亲近"档
-    expect(cur).toBeLessThan(1000);   // 但涨不满
-  });
-});
+;

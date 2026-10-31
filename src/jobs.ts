@@ -469,6 +469,9 @@ export async function archiveOneDay(
       logError('[daily] emotion settle failed:', e);
     }
 
+    // 维护链计数：四项全 0 且记忆不小 = 维护可能又断了（写了没接线）
+    const maintenance = { pruned: 0, archived: 0, compacted: 0, demoted: 0 };
+
     // 5) 短期区块到期：先把「近期动态」超过 7 天的条目无损搬进档案，再清理
     try {
       const pruned = pruneTransientSections(memory, target);
@@ -478,6 +481,7 @@ export async function archiveOneDay(
         const preserved = pruned.removedLines.every((line) => archiveHasLine(archive, line));
         if (preserved) {
           memory = pruned.text;
+          maintenance.pruned = pruned.removed;
           logInfo(`[daily] 近期动态 ${pruned.removed} 条过期条目搬进档案`);
         } else {
           logError('[daily] 近期动态清理中止：档案未确认写入，保留核心层');
@@ -492,6 +496,7 @@ export async function archiveOneDay(
       const archived = archiveCompletedItems(memory, target);
       if (archived.moved > 0) {
         memory = archived.text;
+        maintenance.archived = archived.moved;
         logInfo(`[daily] 已完成事项归档 ${archived.moved} 条：${archived.titles.join('、')}`);
       }
     } catch (e) {
@@ -521,6 +526,14 @@ export async function archiveOneDay(
     // 5.7/5.8) 记忆质量优先：memory.md 不限大小、不压缩、不删除、不搬档。
     //      「近期动态」仍按 7 天过期规则归档进 R2 档案（前面 5 已做写后验证，本体不丢）。
     const trimmed = false;
+
+    // 维护链健康：一天什么都没收拾、记忆又不小 → 大概率是「写了没接线」
+    if (maintenance.pruned + maintenance.archived + maintenance.compacted + maintenance.demoted === 0) {
+      const sizeNow = byteLength(memory);
+      if (sizeNow > 9000) {
+        logWarn('[daily] 维护链四项全 0（' + sizeNow + 'B）：检查 prune/archive/compact/demote 是否还接线');
+      }
+    }
 
     // 7) 长期不联系时关系缓慢衰减
     try {
@@ -553,6 +566,7 @@ export async function archiveOneDay(
           logError(`[daily] 分区降级中止：${b.header} 档案未确认写入`);
         }
       }
+      maintenance.demoted = demoted;
       if (demoted > 0) logInfo(`[daily] 分区预算：把 ${demoted} 条最旧条目搬进档案`);
     } catch (e) {
       logError('[daily] demote sections failed:', e);
@@ -563,6 +577,7 @@ export async function archiveOneDay(
       const beforeDensity = memoryDensity(memory);
       const compacted = compactMemoryEntries(memory);
       compactedRemoved = compacted.removed;
+      maintenance.compacted = compacted.removed;
       if (compacted.removed > 0) {
         memory = compacted.text;
         const afterDensity = memoryDensity(memory);

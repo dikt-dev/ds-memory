@@ -388,3 +388,16 @@ pinned 0、keepsakes 4 条（全 approved、全 pinned）、health 94.29 good。
 **兼容壳（正常，不用管）**：`buildSystemPrompt`（内部调 `buildSystemPromptSplit`，测试用它断言整篇）。
 
 **下一步**：A 类删除；B 类逐个确认是「兼容壳」还是「重复实现」，重复的收成一份。
+
+
+### 八点十六、接线清理（已完成，dbb2465f）
+
+| 动作 | 结果 |
+| --- | --- |
+| 删除完全无引用的函数 | 7 个（原 5 + intimacyDecay + estimateDaysToReach） |
+| `shouldSkipMemoryRecall` | 接入 chat.ts / openai.ts，内联判断删除 |
+| `promptModeFor` | 接入 memory-index.ts，不再直接读 env |
+| `sanitizeProactiveText` | 并入 `scrubAiFlavor` 第一步，成为线上唯一净化入口 |
+| 运行时断言 | 每日归档：prune/archive/compact/demote 四项全 0 且记忆 >9KB → `logWarn` |
+
+测试 1148 passed（删掉 7 条已废弃函数的用例）。`npm run dead-code` 复扫：A 档 0 个。

@@ -10,7 +10,7 @@ import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { Env } from './types';
 import { buildPromptMemoryFor } from './memory-index';
-import { buildMemoryPack, budgetFromPack } from './context-pack';
+import { shouldSkipMemoryRecall, buildMemoryPack, budgetFromPack  } from './context-pack';
 import { consumePendingRecall, recordRecallUsage, rememberPendingRecall } from './memory-rehearsal';
 import { buildBaseSystemPrompt, normalizeChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, stripSilentEndToken, STYLE_REMINDER } from './prompt';
 import { stripLeadingTimeLabels } from './anti-ai-flavor';
@@ -556,7 +556,7 @@ openaiApp.post('/chat/completions', async (c) => {
     mode: memoryEngine,
     channel,
     requestId,
-    skipMemorySource: promptMemory.mode === 'full' && !promptMemory.evidence,
+    skipMemorySource: shouldSkipMemoryRecall(pack),
     nowMs: now.getTime(),
   });
   const recalledRaw = recall.text;

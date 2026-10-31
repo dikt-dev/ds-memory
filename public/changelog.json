@@ -1,10 +1,26 @@
 {
-  "generated_at": "2026-10-31T23:19:23.506Z",
-  "count": 330,
+  "generated_at": "2026-10-31T23:25:39.238Z",
+  "count": 332,
   "days": [
     {
       "date": "2026-11-01",
       "items": [
+        {
+          "hash": "79ccf8d",
+          "date": "2026-11-01",
+          "type": "chore",
+          "area": "",
+          "title": "接线自检脚本（npm run dead-code）与扫描结果",
+          "why": ""
+        },
+        {
+          "hash": "89bd9fc",
+          "date": "2026-11-01",
+          "type": "fix",
+          "area": "memory",
+          "title": "分区预算真正生效（超预算最旧条目搬档案）",
+          "why": ""
+        },
         {
           "hash": "7ab0b49",
           "date": "2026-11-01",

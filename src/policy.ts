@@ -176,6 +176,5 @@ export function policyTable(): Array<{ kind: ActionKind; tier: PolicyTier }> {
 }
 
 /** 预留：将来按 env/渠道收紧时从这里读。 */
-export function policyEnforced(_env: Env): boolean {
-  return true;
-}
+
+

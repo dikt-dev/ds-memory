@@ -135,17 +135,8 @@ export function applyInactivityDecay(current: number, daysSinceInteraction: numb
 /**
  * 估算从当前值涨到目标值需要多少天（用于展示"还需要多久"）。
  */
-export function estimateDaysToReach(from: number, to: number): number {
-  if (to <= from) return 0;
-  let cur = from;
-  let days = 0;
-  while (cur < to && days < 5000) {
-    const gain = maxGainAt(cur);
-    cur = Math.min(cur + gain, to);
-    days += 1;
-  }
-  return days;
-}
+
+
 
 function clampInt(n: number, min: number, max: number): number {
   return Math.min(Math.max(Math.round(n), min), max);

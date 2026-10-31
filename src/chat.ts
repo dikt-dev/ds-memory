@@ -7,7 +7,7 @@ import { recordAction } from './memory-actions';
 import { resolveRecall } from './memory-engine';
 import type { Env } from './types';
 import { buildPromptMemoryFor } from './memory-index';
-import { buildMemoryPack } from './context-pack';
+import { shouldSkipMemoryRecall, buildMemoryPack  } from './context-pack';
 import { consumePendingRecall, looksLikePinRequest, recordRecallUsage, rememberPendingRecall, setChunkPinned } from './memory-rehearsal';
 import { buildSystemPromptSplit, type MessageChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, STYLE_REMINDER } from './prompt';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
@@ -109,7 +109,7 @@ export async function streamChat(
     channel,
     requestId,
     // 全量记忆已经带上所有 memory 条目，召回只补档案层的旧事
-    skipMemorySource: promptMemory.mode === 'full' && !promptMemory.evidence,
+    skipMemorySource: shouldSkipMemoryRecall(pack),
     nowMs: now.getTime(),
   });
   const recalledRaw = recall.text;

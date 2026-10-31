@@ -11,6 +11,6 @@ import type { Env } from './types';
 
 export type PromptMemoryMode = 'full' | 'evidence';
 
-export function promptModeFor(env: Env): PromptMemoryMode {
+export function promptModeFor(env: { MEMORY_PROMPT_MODE?: string }): PromptMemoryMode {
   return env.MEMORY_PROMPT_MODE === 'evidence' ? 'evidence' : 'full';
 }
