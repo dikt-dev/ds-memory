@@ -369,3 +369,21 @@
 | 审计快照派生行 | ✅ | `sanitizeDistilledSummary`：只留分区标题与 `- [日期]` 条目，「心情值 455/1000」这类抄进来的行剔掉 |
 | 归档日志以用户消息结尾 | ✅ 正常 | 10-30 23:54 她选择沉默（silent end），本来就没有回复，不补是对的 |
 | debug 包 | ✅ | 已换回 release（56.36 MB，R8） |
+
+### 22.9 10-31 收尾：B1 / B3 / B4 + memory.md 定位
+
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| B3 事件引文逐字核验 | ✅ 32/32 = 100% | 取 `memory_event_log` 最近 12 条事件的全部引文，按空白/引号归一化后逐条回查 `messages.content`，全部命中原文；`msg_ids` 也都落在真实消息区间（1274–1392） |
+| B3 旧表溯源断链 | ⚠️ 已知 | `memory_events`（老表，从 memory.md 迁移而来）的 `source_message_ids` 全是 `[]`——历史事件查不到出处。新表 `memory_event_log` 有 `msg_ids`，以后只认新表；老表不再写入 |
+| B4 next 模式延迟 | ✅ p50 1076ms（n=3） | 切换后线上样本：1044/1078/1106ms，legacy_ms 修正前被误记 ~1000ms（等 Promise.all），修正后记 0；对比 shadow 期 p50 1409ms，下降 ~24%。注入条数 2–3 条（旧链路 3.9–5.1） |
+| B1 ApiClient 拆分 | ✅ 1116 → 1049 行 | `ApiModels.kt`（72 行模型：EventPage/Proactive*/BiliPreview/WebPreview/StatusSnapshot）+ `BiliSign.kt`（wbi 签名纯算法：mixinKey 重排、参数排序、MD5）。剩余方法都绑定同一个 OkHttpClient 与 token 状态，再拆要引入 `internal Http` 持有者，留给后续 |
+| 长视频取帧上限 | ⏭ 不做 | 按你的意思先不做 |
+| memory.md 未来角色 | 📄 待定 | 四种定位（契约 / 分层 / 白皮书分离 / 完全体外化）的利弊与建议见 [MEMORY-MD-ROLE.md](MEMORY-MD-ROLE.md) |
+
+### 22.10 ds-mobile 开源协议
+
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| LICENSE | ✅ Apache-2.0 | 完整 Apache License 2.0 全文已在仓库根目录 |
+| README | ✅ | 已有 `## License` 段指向 LICENSE |
