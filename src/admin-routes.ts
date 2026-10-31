@@ -21,6 +21,7 @@ import { readRecallSamples, summarizeSamples } from './recall-samples';
 import { listActions, markReverted } from './memory-actions';
 import { policyTable, type ActionKind } from './policy';
 import { loadHealth } from './health';
+import { runSelfCheck } from './self-check';
 import { backfillEvents, readEventStats } from './memory-events';
 import { insertKeepsake, loadKeepsakes, refreshKeepsakesBlock, setKeepsakePinned, setKeepsakeStatus } from './keepsakes';
 import { readUsageStats, summarizeUsage } from './usage-stats';
@@ -389,6 +390,18 @@ app.get('/api/admin/readiness', requireAuth, async (c) => {
     ready ? 200 : 503,
   );
 });
+/** 每夜自检：引文回查 / 孤儿 / 断链，报告写 R2；POST 可立即跑一次。 */
+app.get('/api/admin/memory/self-check', requireAuth, async (c) => {
+  const res = await getObject(c.env, `memory/self-check/${c.req.query('date') ?? ''}.json`).catch(() => null);
+  if (!res) return c.json({ ok: false, error: 'no report for that date' }, 404);
+  return c.json({ ok: true, report: JSON.parse(await res.text()) });
+});
+
+app.post('/api/admin/memory/self-check', requireAuth, async (c) => {
+  const report = await runSelfCheck(c.env);
+  return c.json({ ok: true, report });
+});
+
 /** 记忆健康分：判据全是外部事实（召回命中、失忆抱怨、延迟），不由模型自评。 */
 app.get('/api/admin/memory/health', requireAuth, async (c) => {
   const days = Number(c.req.query('days') ?? 7) || 7;

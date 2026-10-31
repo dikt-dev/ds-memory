@@ -121,6 +121,14 @@
   ],
   [
     "GET",
+    "/api/admin/memory/self-check"
+  ],
+  [
+    "GET",
+    "/api/admin/memory/self-check"
+  ],
+  [
+    "GET",
     "/api/admin/memory/snapshots"
   ],
   [
@@ -530,6 +538,14 @@
   [
     "POST",
     "/api/admin/memory/rollup"
+  ],
+  [
+    "POST",
+    "/api/admin/memory/self-check"
+  ],
+  [
+    "POST",
+    "/api/admin/memory/self-check"
   ],
   [
     "POST",
