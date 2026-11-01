@@ -12,6 +12,7 @@ import { ensureLifeDay, lifeNow } from './life/jobs';
 import { generateDiary } from './life/diary-job';
 import { refreshLifeEnv } from './life/weather';
 import { gateDecision, lifeEnabled } from './life/gate';
+import { writeTrip } from './life/travel';
 import { beijingDateKey, getDayPlan } from './life/state';
 import { byteLength, mergeMemoryEntry, parseRelationValues, setRelationValues } from './memory-maintenance';
 import { reindexMemory, buildPromptMemoryFor } from './memory-index';
@@ -553,6 +554,20 @@ app.post('/api/admin/memory/subject-fix', requireAuth, async (c) => {
   await rebuildFactsDoc(c.env).catch(() => {});
 
   return c.json({ ok: true, applied: changes.length, backupKey, changes, rebuild });
+});
+
+/** 生活系统：手动安排/取消一次旅行（排查用）。 */
+app.post('/api/admin/life/trip', requireAuth, async (c) => {
+  const city = c.req.query('city');
+  if (!city) {
+    await writeTrip(c.env, null);
+    return c.json({ ok: true, trip: null });
+  }
+  const start = c.req.query('date') || beijingDateKey();
+  const days = Number(c.req.query('days') || 2);
+  const trip = { city, start, days: Math.min(4, Math.max(2, days)) };
+  await writeTrip(c.env, trip);
+  return c.json({ ok: true, trip });
 });
 
 /** 生活系统：闸门开关（P2）。默认关，出事改一个 KV 键就能退。 */

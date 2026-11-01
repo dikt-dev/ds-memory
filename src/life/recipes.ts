@@ -9,7 +9,7 @@
  */
 import { makeRng } from './seed';
 
-export type RecipeId = 'lazy' | 'sick' | 'deepclean' | 'marathon' | 'trip' | 'festival';
+export type RecipeId = 'lazy' | 'sick' | 'deepclean' | 'marathon' | 'trip' | 'homecoming' | 'festival';
 
 export interface Recipe {
   id: RecipeId;
@@ -56,6 +56,20 @@ export const RECIPES: Record<string, Recipe> = {
     wakeAt: 10 * 60,
     kinds: ['anime', 'idle', 'meal'],
     eveningOnly: true,
+  },
+  trip: {
+    id: 'trip',
+    label: '旅行',
+    budget: 3,
+    wakeAt: 8 * 60,
+    kinds: ['outing', 'short_trip', 'meal', 'idle'],
+  },
+  homecoming: {
+    id: 'homecoming',
+    label: '回家日',
+    budget: 2,
+    wakeAt: 10 * 60,
+    kinds: ['idle', 'meal'],
   },
 };
 

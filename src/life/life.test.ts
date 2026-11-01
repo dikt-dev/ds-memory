@@ -12,6 +12,8 @@ import {
   parseDiaryOutput,
 } from './diary';
 import { hashSeed, makeRng } from './seed';
+import { RECIPES } from './recipes';
+import { dayIndexOnTrip, maybeStartTrip } from './travel';
 
 const env = { weather: 'sunny', tempC: 22, atHome: true };
 
@@ -136,6 +138,42 @@ describe('随机', () => {
     const values = new Set<number>();
     for (let i = 0; i < 50; i += 1) values.add(hashSeed('2026-11-' + i));
     expect(values.size).toBe(50);
+  });
+});
+
+describe('旅行', () => {
+  it('行程内算出第几天，行程外是 null', () => {
+    const trip = { city: '杭州', start: '2026-11-03', days: 2 };
+    expect(dayIndexOnTrip(trip, '2026-11-02')).toBeNull();
+    expect(dayIndexOnTrip(trip, '2026-11-03')).toBe(0);
+    expect(dayIndexOnTrip(trip, '2026-11-04')).toBe(1);
+    expect(dayIndexOnTrip(trip, '2026-11-05')).toBeNull();
+  });
+
+  it('旅行日只排出门的单元，回家日只排躺着', () => {
+    const plan = buildDay({
+      date: '2026-11-03',
+      env: { weather: 'sunny', tempC: 20, atHome: false },
+      recipe: RECIPES.trip,
+    });
+    for (const a of plan.activities) {
+      const kind = BY_ID.get(a.unitId)!.kind;
+      expect(['outing', 'short_trip', 'meal', 'idle'], a.unitId).toContain(kind);
+    }
+    const home = buildDay({
+      date: '2026-11-05',
+      env: { weather: 'sunny', tempC: 20, atHome: true },
+      recipe: RECIPES.homecoming,
+    });
+    for (const a of home.activities) {
+      expect(['idle', 'meal']).toContain(BY_ID.get(a.unitId)!.kind);
+    }
+  });
+
+  it('生病或不在家时不出发', () => {
+    expect(maybeStartTrip({ dateKey: '2026-11-03', daysSinceLastTrip: null, atHome: false, health: 100 })).toBeNull();
+    expect(maybeStartTrip({ dateKey: '2026-11-03', daysSinceLastTrip: null, atHome: true, health: 50 })).toBeNull();
+    expect(maybeStartTrip({ dateKey: '2026-11-03', daysSinceLastTrip: 5, atHome: true, health: 100 })).toBeNull();
   });
 });
 

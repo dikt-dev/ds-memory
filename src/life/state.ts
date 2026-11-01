@@ -11,7 +11,8 @@ import type { Env } from '../types';
 import { buildDay, type DayPlan, type PlannedActivity } from './planner';
 import { ACTIVITIES } from './pool';
 import type { DayEnv } from './types';
-import { healthForDay, pickRecipe, type Recipe } from './recipes';
+import { RECIPES, healthForDay, pickRecipe, type Recipe } from './recipes';
+import { dayIndexOnTrip, maybeStartTrip, readTrip, writeTrip, type Trip } from './travel';
 
 const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000;
 
@@ -192,19 +193,28 @@ export async function ensureDayPlan(
   const uses = await recentUses(env, input.dateKey);
   // 特殊日 + 健康度：都要看前几天的记录，所以先查历史再生成
   const history = await recipeHistory(env, input.dateKey);
-  const choice = pickRecipe(input.dateKey, history);
   const prev = await previousHealth(env, input.dateKey);
   const health = healthForDay({
     yesterdayHealth: prev ?? 100,
-    sickToday: choice.recipe?.id === 'sick',
+    sickToday: false,
     daysSinceSick: history.daysSinceSick,
   });
+
+  // 旅行优先于其他配方：在路上的日子不生病、不摆烂、不打扫。
+  const { recipe, trip, dayEnv, location } = await resolveTravel(env, {
+    dateKey: input.dateKey,
+    env: input.env,
+    location: input.location,
+    health,
+    history,
+  });
+
   const plan = buildDay({
     date: input.dateKey,
-    env: input.env,
+    env: dayEnv,
     recentUses: uses,
     salt: input.salt,
-    recipe: choice.recipe,
+    recipe,
   });
   // 当天基调 = 各段活动 mood 的均值。先只存着：P0 不喂给情绪向量，
   // 等 P2 打开闸门再进 processEmotionTurn 的 environment 通道。
@@ -218,10 +228,11 @@ export async function ensureDayPlan(
       : 0);
   await saveDayPlan(env, {
     plan,
-    env: input.env,
-    location: input.location,
+    env: dayEnv,
+    location,
     moodSeed,
-    health: choice.recipe?.health ?? health,
+    health: recipe?.health ?? health,
+    recipe: recipe?.id ?? null,
   });
   const saved = await getDayPlan(env, input.dateKey);
   if (saved) return saved;
@@ -229,8 +240,8 @@ export async function ensureDayPlan(
   return {
     day: {
       date_key: input.dateKey,
-      location: input.location,
-      at_home: input.env.atHome ? 1 : 0,
+      location,
+      at_home: dayEnv.atHome ? 1 : 0,
       mood_seed: input.moodSeed ?? 0,
       health: input.health ?? 100,
       weather: input.env.weather,
@@ -311,4 +322,79 @@ export async function previousHealth(env: Env, dateKey: string): Promise<number 
     .first<{ health: number }>()
     .catch(() => null);
   return row ? row.health : null;
+}
+
+/**
+ * 决定今天在不在旅行、要不要出发、还是刚回来。
+ *
+ * 旅行期间：地点是外地、at_home=0；回来那天是回家日（不进池子，只收拾、躺）。
+ */
+async function resolveTravel(
+  env: Env,
+  input: {
+    dateKey: string;
+    env: DayEnv;
+    location: string;
+    health: number;
+    history: { daysSinceSick: number | null; daysSinceDeepclean: number | null; daysSinceMarathon: number | null };
+  },
+): Promise<{ recipe: Recipe | null; trip: Trip | null; dayEnv: DayEnv; location: string }> {
+  const trip = await readTrip(env);
+  if (trip) {
+    const index = dayIndexOnTrip(trip, input.dateKey);
+    if (index !== null) {
+      return {
+        recipe: RECIPES.trip,
+        trip,
+        dayEnv: { ...input.env, atHome: false },
+        location: trip.city,
+      };
+    }
+    // 行程结束：今天是回家日，顺手把行程清掉
+    const endDate = shiftDate(trip.start, trip.days - 1);
+    if (input.dateKey === shiftDate(endDate, 1)) {
+      await writeTrip(env, null);
+      return { recipe: RECIPES.homecoming, trip: null, dayEnv: input.env, location: input.location };
+    }
+    // 已经过去很久的残留行程，清掉
+    if (Date.parse(input.dateKey) > Date.parse(endDate)) await writeTrip(env, null);
+  }
+
+  // 没在旅行：看看今天要不要出发。生病/健康度低的日子不出发。
+  const historyTrip = await lastTripEnd(env);
+  const started =
+    input.history.daysSinceSick !== 0
+      ? maybeStartTrip({
+          dateKey: input.dateKey,
+          daysSinceLastTrip: historyTrip,
+          atHome: input.env.atHome,
+          health: input.health,
+        })
+      : null;
+  if (started) {
+    await writeTrip(env, started);
+    return {
+      recipe: RECIPES.trip,
+      trip: started,
+      dayEnv: { ...input.env, atHome: false },
+      location: started.city,
+    };
+  }
+
+  const choice = pickRecipe(input.dateKey, input.history);
+  return { recipe: choice.recipe, trip: null, dayEnv: input.env, location: input.location };
+}
+
+/** 上次旅行回来距今多少天（行程存在 KV，历史在 ai_day 的 recipe='trip'）。 */
+async function lastTripEnd(env: Env, dateKey?: string): Promise<number | null> {
+  const row = await env.DB.prepare(
+    "SELECT MAX(date_key) AS last FROM ai_day WHERE recipe = 'trip' AND date_key < ?",
+  )
+    .bind(dateKey ?? beijingDateKey())
+    .first<{ last: string | null }>()
+    .catch(() => null);
+  if (!row?.last) return null;
+  const diff =
+    (Date.parse(beijingDateKey() + 'T00:00:00+08:00') - Date.parse(row.last + 'T00:00:00+08:00')) / 86400000;
+  return Number.isFinite(diff) ? Math.round(diff) : null;
 }
