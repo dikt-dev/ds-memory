@@ -8,12 +8,13 @@ import { healthForDay, pickRecipe } from './recipes';
 import type { DayEnv } from './types';
 
 /**
- * 30 天日程评审：用真实历史天气（Open-Meteo archive）生成，打印成表。
+ * 60 天日程评审：用真实历史天气（Open-Meteo archive，北京 2025-09-01 至 10-30）生成，打印成表。
+ * 30 天样本太小——作息一改、种子一换，用到的单元数就在 47–53 之间跳，噪声盖过信号。
  * PREVIEW=1 npx vitest run src/life/preview.test.ts 才会打印大表；
  * 平时这条只校验「每天 2–4 段、全部过校验」。
  */
 const raw = JSON.parse(
-  readFileSync('src/life/fixtures/weather30.json', 'utf8'),
+  readFileSync('src/life/fixtures/weather60.json', 'utf8'),
 ) as { daily: { time: string[]; temperature_2m_max: number[]; weather_code: number[] } };
 
 describe('特殊日频率（365 天统计）', () => {
@@ -45,7 +46,7 @@ describe('特殊日频率（365 天统计）', () => {
   });
 });
 
-describe('30 天日程评审', () => {
+describe('60 天日程评审', () => {
   it('每天 2–5 段、全部过校验、天气与池子不冲突', () => {
     const recent = new Map<string, string[]>();
     let prevHealth = 100;
@@ -116,10 +117,10 @@ describe('30 天日程评审', () => {
       console.log('没出现的：' + (never.length ? never.join('、') : '无'));
       console.log('特殊日：' + (recipes.length ? recipes.join(' ｜ ') : '无'));
     }
-    // 阈值：单个单元 30 天最多 6 次，且至少用到 45 个单元。
-    // 45 不是 50：作息一改，所有日子的种子都变了，30 天的样本会整体重排——
-    // 47~53 都在噪声范围内，卡 50 会让「改一下起床时间」变成一次必红的提交。
-    expect(sorted[0]?.[1] ?? 0).toBeLessThanOrEqual(6);
-    expect(sorted.length).toBeGreaterThanOrEqual(45);
+    // 阈值按 60 天定：单个单元最多 12 次（约每 5 天一次），至少用到 50 个单元。
+    // 实测 55/64、最高频 11 次（拼图/乐高）。30 天样本只有 47–53，噪声盖过信号，
+    // 才换成的 60 天。
+    expect(sorted[0]?.[1] ?? 0).toBeLessThanOrEqual(12);
+    expect(sorted.length).toBeGreaterThanOrEqual(50);
   });
 });
