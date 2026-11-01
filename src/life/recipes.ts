@@ -7,6 +7,7 @@
  * 冲突顺序照 activity-pool.md 的最后那张表：旅行 > 生病 > 通宵 > 大扫除 > 摆烂。
  * 旅行还没做（要跨天状态），其余四条在这里。
  */
+import { festivalOn } from './festivals';
 import { makeRng } from './seed';
 
 export type RecipeId = 'lazy' | 'sick' | 'deepclean' | 'marathon' | 'trip' | 'homecoming' | 'festival';
@@ -64,6 +65,13 @@ export const RECIPES: Record<string, Recipe> = {
     wakeAt: 8 * 60,
     kinds: ['outing', 'short_trip', 'meal', 'idle'],
   },
+  festival: {
+    id: 'festival',
+    label: '节日',
+    budget: 2,
+    wakeAt: 8 * 60 + 30,
+    kinds: ['outing', 'meal', 'idle', 'chores'],
+  },
   homecoming: {
     id: 'homecoming',
     label: '回家日',
@@ -93,6 +101,14 @@ export interface RecipeChoice {
 export function pickRecipe(dateKey: string, history: RecipeHistory): RecipeChoice {
   const rng = makeRng(`recipe|${dateKey}`);
 
+  // 节日优先于一切配方：这天不该掷骰子决定她过不过节。
+  const fest = festivalOn(dateKey);
+  if (fest) {
+    return {
+      recipe: RECIPES.festival,
+      reason: fest.size === 'big' ? `${fest.name}（大节，可以往外走）` : `${fest.name}（小节日，吃一口就行）`,
+    };
+  }
   // 生病：2%/天，30 天冷却。生病日只能在家，所以在外面的日子不抽（P3 先不管旅行）
   if ((history.daysSinceSick === null || history.daysSinceSick >= 30) && rng.chance(0.02)) {
     return { recipe: RECIPES.sick, reason: '2% 掷中，且 30 天内没生过病' };
