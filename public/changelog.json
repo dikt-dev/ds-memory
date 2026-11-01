@@ -1,10 +1,26 @@
 {
-  "generated_at": "2026-11-01T11:01:32.400Z",
-  "count": 369,
+  "generated_at": "2026-11-01T11:33:29.599Z",
+  "count": 371,
   "days": [
     {
       "date": "2026-11-01",
       "items": [
+        {
+          "hash": "6aee08a",
+          "date": "2026-11-01",
+          "type": "other",
+          "area": "",
+          "title": "路由快照：日记列表/详情/问她 三个入口",
+          "why": ""
+        },
+        {
+          "hash": "8fdffdb",
+          "date": "2026-11-01",
+          "type": "other",
+          "area": "",
+          "title": "日记：网页 + App 两处入口，都做成一本纸本子",
+          "why": "规则（用户定的） 没同意只给日期、星期、天气、在哪、身体——正文一个字都不出服务端。 同意只算「当天」，过了那个自然日要重新问她一次。 这条不是前端藏的：diary-api.ts 里 consentFresh() 判定，过期连 text 都不返回。 服务端 src/life/diary-api.ts（新）：consentFresh / diaryList / diaryOne / askDiary - 列表 LEFT JOIN ai_day，顺手带上那天的天气、城市、健康 - 三种锁态：asked（问过了等答）、expired（那天看过、已收回）、lock（没问过） /api/app/ai-diary、/index、/ask 改用它； /api/admin/life/diary/list、/item、/ask 也给网页用。 网页（public/diary.html） 米色纸 + 横格 + "
+        },
         {
           "hash": "2a4d155",
           "date": "2026-11-01",

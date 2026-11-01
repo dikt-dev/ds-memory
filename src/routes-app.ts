@@ -88,24 +88,48 @@ app.post('/api/app/ai-diary/ask', requireApp, async (c) => {
   return c.json({ ...result, hint: result.already ? undefined : '去聊天里问她吧，她答了才算' });
 });
 
+/**
+ * 她现在的状态。
+ *
+ * 注意 start/end 给的是「19:03」这种字符串（跨午夜带 +1），以前直接回分钟数，
+ * App 那边原样显示成「1148 打算做饭」——数字看着像乱码。
+ * 分钟数另给一份 start_min/end_min，需要算时间的客户端用那个。
+ */
+function clockText(minute: number): string {
+  const over = minute >= 1440;
+  const m = minute % 1440;
+  const hh = String(Math.floor(m / 60)).padStart(2, '0');
+  const mm = String(m % 60).padStart(2, '0');
+  return over ? `${hh}:${mm}+1` : `${hh}:${mm}`;
+}
+
 app.get('/api/app/ai-status', requireApp, async (c) => {
   const status = await lifeNow(c.env);
   return c.json({
     ok: true,
     date: status.dateKey,
+    // 状态名两个都带：老客户端读 state，新客户端读 status
     state: status.status,
+    status: status.status,
     health: status.health,
     current: status.current
       ? {
           title: status.current.title,
           kind: status.current.kind,
-          start: status.current.start_min,
-          end: status.current.end_min,
+          start: clockText(status.current.start_min),
+          end: clockText(status.current.end_min),
+          start_min: status.current.start_min,
+          end_min: status.current.end_min,
           interruptible: status.current.interruptible === 1,
         }
       : null,
     next: status.next
-      ? { title: status.next.title, kind: status.next.kind, start: status.next.start_min }
+      ? {
+          title: status.next.title,
+          kind: status.next.kind,
+          start: clockText(status.next.start_min),
+          start_min: status.next.start_min,
+        }
       : null,
   });
 });
