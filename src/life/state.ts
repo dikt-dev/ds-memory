@@ -12,7 +12,9 @@ import { buildDay, type DayPlan, type PlannedActivity } from './planner';
 import { ACTIVITIES } from './pool';
 import type { DayEnv } from './types';
 import { RECIPES, healthForDay, pickRecipe, type Recipe } from './recipes';
-import { dayIndexOnTrip, maybeStartTrip, readTrip, writeTrip, type Trip } from './travel';
+import { festivalOn } from './festivals';
+import { makeRng } from './seed';
+import { dayIndexOnTrip, maybeStartTrip, readTrip, writeTrip, TRIP_CITIES, type Trip } from './travel';
 
 const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000;
 
@@ -360,6 +362,16 @@ async function resolveTravel(
     }
     // 已经过去很久的残留行程，清掉
     if (Date.parse(input.dateKey) > Date.parse(endDate)) await writeTrip(env, null);
+  }
+
+  // 大节日（除夕/春节/国庆）当天直接出发：这些日子是她会专门空出来的，
+  // 不该由 1.2% 的骰子决定。天数仍按 2–3 天走现成的行程口径。
+  const bigFest = festivalOn(input.dateKey);
+  if (bigFest?.size === 'big') {
+    const rng = makeRng(`festival-trip|${input.dateKey}`);
+    const trip: Trip = { city: rng.pick(TRIP_CITIES), start: input.dateKey, days: rng.int(2, 3) };
+    await writeTrip(env, trip);
+    return { recipe: RECIPES.trip, trip, dayEnv: { ...input.env, atHome: false }, location: trip.city };
   }
 
   // 没在旅行：看看今天要不要出发。生病/健康度低的日子不出发。
