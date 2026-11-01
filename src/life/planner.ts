@@ -408,9 +408,23 @@ export function buildDay(input: BuildDayInput): DayPlan {
 
   // 名额只算「活动」：三餐和加餐都在 activities 里，不能拿 length 当已用名额
   let actCount = 0;
-  for (const w of dayWindows(wakeAt)) {
-    if (actCount >= budget) break;
-    const filled = fillWindow(rng, w.start, w.end, input, used, budget - actCount, lazy, socialUsed, recipe?.kinds);
+  // 最后一个窗口 19:50–01:00 太长：名额从 19:50 就开吃，到 22:00 已经没了，
+  // 深夜那几小时永远空着。在 22:00 切开，后半段单独给一个名额。
+  const windows = dayWindows(wakeAt).flatMap((w) =>
+    w.start < 22 * 60 && w.end > 22 * 60
+      ? [
+          { start: w.start, end: 22 * 60, late: false },
+          { start: 22 * 60, end: w.end, late: true },
+        ]
+      : [{ ...w, late: false }],
+  );
+  // 夜里那格不从总额外要名额，而是把白天让出一格：
+  // cap 加 1 会让一天多出一段，校验（非餐 ≤ MAX_ACTIVITIES）当场失败。
+  const hasLate = windows.some((w) => w.late);
+  for (const w of windows) {
+    const cap = w.late ? budget : hasLate ? Math.max(1, budget - 1) : budget;
+    if (actCount >= cap) continue;
+    const filled = fillWindow(rng, w.start, w.end, input, used, cap - actCount, lazy, socialUsed, recipe?.kinds);
     actCount += filled.length;
     socialUsed += filled.filter((a) => ACTIVITIES.find((u) => u.id === a.unitId)?.kind === 'social').length;
     activities.push(...filled);
