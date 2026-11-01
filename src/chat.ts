@@ -74,8 +74,9 @@ export async function streamChat(
 
   // 0) 上一轮她提过的往事，如果这句是"对/记得"，就算一次确认复习
   void consumePendingRecall(env, content, now.getTime());
-  // 日记「问问她」之后，这一句就决定给不给看（只认明确同意，反问算拒绝）
-  void settleDiaryConsent(env, content);
+  // 日记给不给看由**她的回答**决定，不是由用户的措辞决定。
+  // 之前拿用户输入判：用户问「可以给我看一下吗？」带问号 → 反问=拒绝，
+  // 而她明明答了「好吧」，界面照样锁着。结算改到 onFinish 里。
 
   // 1) 组装上下文（先取历史，再落 user 消息，避免历史里重复出现本条）
   const dateKey = dateKeyInBeijing(now);
@@ -387,6 +388,8 @@ export async function streamChat(
       let assistantId: number | undefined;
       const silent = isSilentEnd(text) && (channel === 'mobile' || channel === 'web');
       const stored = silent ? '' : normalizeAssistantText(text);
+      // 她的这句才决定日记给不给看（「好吧/拿去」= 同意，「不给/想得美」= 拒绝）
+      if (stored) void settleDiaryConsent(env, stored).catch(() => {});
       if (!silent && stored) {
         // 费用与 token 随 INSERT 一次写入（少一条 UPDATE）
         const saved = await insertAssistantReply(env, stored, userId, now, {
