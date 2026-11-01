@@ -12,8 +12,19 @@ import { logError } from '../error-log';
 
 const IMAGE_MODEL = '@cf/black-forest-labs/flux-1-schnell';
 
-export function diaryImageKey(dateKey: string, ext = 'jpg'): string {
-  return `diary-images/${dateKey}/cover.${ext}`;
+/** 可选模型：flux 风格好但不认否定词；两个 SD 系认否定词，画风偏实。 */
+export const IMAGE_MODELS: Record<string, string> = {
+  flux: '@cf/black-forest-labs/flux-1-schnell',
+  lightning: '@cf/bytedance/stable-diffusion-xl-lightning',
+  dreamshaper: '@cf/lykon/dreamshaper-8-lcm',
+  sdxl: '@cf/stabilityai/stable-diffusion-xl-base-1.0',
+};
+
+/** SD 系支持的否定词——flux 没有这个参数，所以只在 SD 上带。 */
+const NEGATIVE = 'text, letters, chinese characters, calligraphy, watermark, signature, caption, logo';
+
+export function diaryImageKey(dateKey: string, name = 'cover', ext = 'jpg'): string {
+  return `diary-images/${dateKey}/${name}.${ext}`;
 }
 
 /** 从日记正文里取一个可以画的场景。取开头两三句——那是当天的骨架。 */
@@ -38,23 +49,37 @@ export function imageScene(text: string): string {
 /** 最近一次失败原因（排查用，进程内即可）。 */
 export let lastImageError: string | null = null;
 
-export async function generateDiaryImage(env: Env, dateKey: string, text: string): Promise<string | null> {
+export async function generateDiaryImage(
+  env: Env,
+  dateKey: string,
+  text: string,
+  opts?: { model?: string; keyName?: string },
+): Promise<string | null> {
   try {
-    const out = (await env.AI.run(IMAGE_MODEL as never, {
-      prompt: imageScene(text),
-      steps: 4,
-    } as never)) as { image?: string };
-    const b64 = out?.image;
-    if (!b64 || b64.length < 512) {
-      lastImageError = 'no image in response: ' + JSON.stringify(out).slice(0, 120);
+    const model = IMAGE_MODELS[opts?.model ?? 'flux'] ?? IMAGE_MODEL;
+    const isFlux = model === IMAGE_MODEL;
+    const input = isFlux
+      ? { prompt: imageScene(text), steps: 4 }
+      : { prompt: imageScene(text), negative_prompt: NEGATIVE, num_steps: 4 };
+    const out = (await env.AI.run(model as never, input as never)) as { image?: string };
+    const anyOut = out as unknown as { image?: string; result?: { image?: string } };
+    // 有的模型直接吐二进制流，不吐 base64
+    let bin: Uint8Array | null = null;
+    if (out instanceof ReadableStream) {
+      bin = new Uint8Array(await new Response(out).arrayBuffer());
+    } else {
+      const b64 = anyOut?.image ?? anyOut?.result?.image;
+      if (b64) bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    }
+    if (!bin) {
+      lastImageError = 'no image, keys=' + Object.keys(anyOut ?? {}).join(',') + ' bytes=' + (out ? JSON.stringify(out).length : 0) + ' sample=' + JSON.stringify(anyOut ?? null).slice(0, 200);
       return null;
     }
-    const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
     if (bin.byteLength < 2048) {
       lastImageError = 'tiny image: ' + bin.byteLength;
       return null;
     }
-    const key = diaryImageKey(dateKey);
+    const key = diaryImageKey(dateKey, opts?.keyName);
     // putObject 成功时返回 void —— 不能拿返回值当成功标志
     await putObject(env, key, bin, { contentType: 'image/jpeg' });
     const back = await getObject(env, key).catch(() => null);

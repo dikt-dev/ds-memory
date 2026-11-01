@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-01T14:17:41.146Z",
+  "generated_at": "2026-11-01T14:24:52.341Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-01",
       "items": [
+        {
+          "hash": "cc86bcc",
+          "date": "2026-11-01",
+          "type": "other",
+          "area": "",
+          "title": "日记：问过 15 分钟没回话就锁回去",
+          "why": ""
+        },
         {
           "hash": "af74ef1",
           "date": "2026-11-01",
@@ -3240,14 +3248,6 @@
           "type": "chore",
           "area": "",
           "title": "仓库地址更新为 dikt-dev/ds-memory",
-          "why": ""
-        },
-        {
-          "hash": "3227d5e",
-          "date": "2026-10-23",
-          "type": "chore",
-          "area": "",
-          "title": "插件元数据指向开源仓库",
           "why": ""
         }
       ]

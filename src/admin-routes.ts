@@ -9,7 +9,7 @@ import type { AppEnv } from './types';
 import { requireAuth } from './middleware';
 import { MEMORY_KV_KEY, getMemory, putMemory } from './memory';
 import { appendMemoryLine, removeMemoryLine } from './memory-append';
-import { generateDiaryImage, lastImageError } from './life/diary-image';
+import { generateDiaryImage, lastImageError, IMAGE_MODELS } from './life/diary-image';
 import { askDiary, diaryList, diaryOne } from './life/diary-api';
 import { collapseOngoingItems } from './memory-ongoing-job';
 import { ensureLifeDay, lifeNow } from './life/jobs';
@@ -657,11 +657,21 @@ app.post('/api/admin/life/diary/cover', requireAuth, async (c) => {
     .first<{ text: string }>()
     .catch(() => null);
   if (!row) return c.json({ ok: false, error: '这天没写' }, 404);
-  const key = await generateDiaryImage(c.env, date, row.text);
+  const model = c.req.query('model') ?? undefined;
+  if (model && !(model in IMAGE_MODELS)) {
+    return c.json({ ok: false, error: '不认识的模型', models: Object.keys(IMAGE_MODELS) }, 400);
+  }
+  const key = await generateDiaryImage(c.env, date, row.text, {
+    model,
+    keyName: model ? `try-${model}` : undefined,
+  });
   if (!key) return c.json({ ok: false, error: '生成失败', detail: lastImageError }, 502);
-  await c.env.DB.prepare('UPDATE ai_diary SET images = ? WHERE date_key = ?')
-    .bind(JSON.stringify([key]), date)
-    .run();
+  // 试模型不写回数据库，正式配图才写
+  if (!model) {
+    await c.env.DB.prepare('UPDATE ai_diary SET images = ? WHERE date_key = ?')
+      .bind(JSON.stringify([key]), date)
+      .run();
+  }
   return c.json({ ok: true, key, url: `/api/image/${key}` });
 });
 
