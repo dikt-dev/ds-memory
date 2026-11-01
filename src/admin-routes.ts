@@ -10,6 +10,7 @@ import { requireAuth } from './middleware';
 import { MEMORY_KV_KEY, getMemory, putMemory } from './memory';
 import { appendMemoryLine, removeMemoryLine } from './memory-append';
 import { generateDiaryImage, lastImageError, IMAGE_MODELS } from './life/diary-image';
+import { completeDeepSeek } from './deepseek';
 import { askDiary, diaryList, diaryOne } from './life/diary-api';
 import { collapseOngoingItems } from './memory-ongoing-job';
 import { ensureLifeDay, lifeNow } from './life/jobs';
@@ -673,6 +674,35 @@ app.post('/api/admin/life/diary/cover', requireAuth, async (c) => {
       .run();
   }
   return c.json({ ok: true, key, url: `/api/image/${key}` });
+});
+
+/** 补写摘要（历史日记没有 summary 时用）。只给服务端判断用，不对外展示。 */
+app.post('/api/admin/life/diary/summary', requireAuth, async (c) => {
+  const date = c.req.query('date');
+  if (!date) return c.json({ ok: false, error: '需要 date' }, 400);
+  const row = await c.env.DB.prepare('SELECT text FROM ai_diary WHERE date_key = ?')
+    .bind(date)
+    .first<{ text: string }>()
+    .catch(() => null);
+  if (!row) return c.json({ ok: false, error: '这天没写' }, 404);
+  const res = await completeDeepSeek(
+    c.env,
+    [
+      {
+        role: 'system',
+        content:
+          '你在帮一个角色给她自己的日记写备忘。只输出一句话，30 字以内，回答三件事：这篇里有没有他（提到了什么）、有没有暴露软肋（吃醋/委屈/自我怀疑/想他）、她当时大概什么心情。不是剧情简介，不要写推送文案或标题。',
+      },
+      { role: 'user', content: '她的日记正文：\n' + row.text },
+    ],
+    new Date(),
+    120,
+  );
+  if ('error' in res) return c.json({ ok: false, error: res.error }, 502);
+  const summary = res.text.trim().replace(/\s+/g, ' ').slice(0, 80);
+  if (!summary) return c.json({ ok: false, error: '模型没给摘要' }, 502);
+  await c.env.DB.prepare('UPDATE ai_diary SET summary = ? WHERE date_key = ?').bind(summary, date).run();
+  return c.json({ ok: true, date, summary });
 });
 
 /** 「问问她」：标成 pending，等聊天里她回话。 */

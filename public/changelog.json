@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-01T16:19:41.300Z",
+  "generated_at": "2026-11-01T16:27:35.666Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-02",
       "items": [
+        {
+          "hash": "78a0f73",
+          "date": "2026-11-02",
+          "type": "other",
+          "area": "",
+          "title": "日记写的时候留摘要，授权判断时带上摘要作为依据",
+          "why": ""
+        },
         {
           "hash": "88dce0d",
           "date": "2026-11-02",
@@ -3241,14 +3249,6 @@
           "area": "",
           "title": "docs+chore: 补写「态度怎么算」章节，并清掉心情漂移额度的死代码",
           "why": "文档（architecture.md）： - 新增第七节「情感系统：AI 对用户的态度是怎么算出来的」： 5 轴关系 → 8 维情绪 → 环境驱动 → 心情投影 → 情绪快照 → 时间尺度 - 明确写清**当天天气与节假日/周末**如何影响情绪（雷暴 −20、晴 +10、休息日白天 +12…）， 以及折算比例与按间隔缩放 - KV 表删掉废弃的 session:mood / mood:drift，补 emotion:state； 概览、上下文组装清单、定时任务流程、记忆保护机制同步为 5 轴说法 代码： - mood-env.ts 删掉已无人调用的漂移额度四件套（applyMoodDrift / 额度读写 / 累计应用） 与 scaleDriftByInterval，只留纯环境计算；jobs.ts 去掉对应无用 import - 新增 2 个测试：节假日白天比工作日更轻快、雷雨天比晴天更沉"
-        },
-        {
-          "hash": "79bda2f",
-          "date": "2026-10-24",
-          "type": "chore",
-          "area": "",
-          "title": "删除已被情绪向量取代的 session-state 模块",
-          "why": "- 删掉 src/session-state.ts 与其 21 个测试（系统提示词里的情绪残留早已由 emotion-vector + emotion-context 承担，这个模块没有任何调用方） - 文档同步：README/architecture 目录树补上 emotion-*/relation-facets/sse-scrub， 去掉 session-state；活人感计划里的阶段 2 产出与三通道表格改成现状 - 测试数从 622 → 601（净减 21，数量对得上）"
         }
       ]
     }
