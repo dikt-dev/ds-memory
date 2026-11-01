@@ -76,7 +76,7 @@ export async function ensureLifeDay(
         ? `- ${tripBefore.start} 到 ${end} 去了${tripBefore.city}，待了 ${tripBefore.days} 天`
         : `- ${tripBefore.start} 去了${tripBefore.city}`;
     await appendMemoryLine(env, {
-      section: '## 共同经历',
+      section: '## 她的生活',
       line,
       keyword: tripBefore.city,
       actor: 'job',

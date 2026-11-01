@@ -41,6 +41,22 @@
   ],
   [
     "GET",
+    "/api/admin/life/gate"
+  ],
+  [
+    "GET",
+    "/api/admin/life/gate"
+  ],
+  [
+    "GET",
+    "/api/admin/life/now"
+  ],
+  [
+    "GET",
+    "/api/admin/life/now"
+  ],
+  [
+    "GET",
     "/api/admin/memory/actions"
   ],
   [
@@ -254,6 +270,30 @@
   [
     "GET",
     "/api/admin/storage-check"
+  ],
+  [
+    "GET",
+    "/api/app/ai-diary"
+  ],
+  [
+    "GET",
+    "/api/app/ai-diary"
+  ],
+  [
+    "GET",
+    "/api/app/ai-diary/index"
+  ],
+  [
+    "GET",
+    "/api/app/ai-diary/index"
+  ],
+  [
+    "GET",
+    "/api/app/ai-status"
+  ],
+  [
+    "GET",
+    "/api/app/ai-status"
   ],
   [
     "GET",
@@ -449,6 +489,62 @@
   ],
   [
     "POST",
+    "/api/admin/life/day"
+  ],
+  [
+    "POST",
+    "/api/admin/life/day"
+  ],
+  [
+    "POST",
+    "/api/admin/life/diary"
+  ],
+  [
+    "POST",
+    "/api/admin/life/diary"
+  ],
+  [
+    "POST",
+    "/api/admin/life/flag"
+  ],
+  [
+    "POST",
+    "/api/admin/life/flag"
+  ],
+  [
+    "POST",
+    "/api/admin/life/photo"
+  ],
+  [
+    "POST",
+    "/api/admin/life/photo"
+  ],
+  [
+    "POST",
+    "/api/admin/life/postcard"
+  ],
+  [
+    "POST",
+    "/api/admin/life/postcard"
+  ],
+  [
+    "POST",
+    "/api/admin/life/trip"
+  ],
+  [
+    "POST",
+    "/api/admin/life/trip"
+  ],
+  [
+    "POST",
+    "/api/admin/life/weather"
+  ],
+  [
+    "POST",
+    "/api/admin/life/weather"
+  ],
+  [
+    "POST",
     "/api/admin/memory/actions/:id/revert"
   ],
   [
@@ -601,6 +697,14 @@
   ],
   [
     "POST",
+    "/api/admin/memory/remove-line"
+  ],
+  [
+    "POST",
+    "/api/admin/memory/remove-line"
+  ],
+  [
+    "POST",
     "/api/admin/memory/replay-distill"
   ],
   [
@@ -622,6 +726,14 @@
   [
     "POST",
     "/api/admin/memory/rollup"
+  ],
+  [
+    "POST",
+    "/api/admin/memory/section-line"
+  ],
+  [
+    "POST",
+    "/api/admin/memory/section-line"
   ],
   [
     "POST",
@@ -766,6 +878,14 @@
   [
     "POST",
     "/api/admin/wipe-data"
+  ],
+  [
+    "POST",
+    "/api/app/ai-diary/ask"
+  ],
+  [
+    "POST",
+    "/api/app/ai-diary/ask"
   ],
   [
     "POST",

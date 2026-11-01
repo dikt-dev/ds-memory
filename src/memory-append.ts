@@ -9,7 +9,7 @@ import type { Env } from './types';
 import { getMemory, putMemory } from './memory';
 import { putObject } from './storage';
 import { recordAction } from './memory-actions';
-import { byteLength } from './memory-maintenance';
+import { SECTION_COMMENTS, SECTION_ORDER, byteLength } from './memory-maintenance';
 import { replaceMemoryContext } from './memory-context-store';
 
 
@@ -19,7 +19,53 @@ export interface AppendResult {
   backupKey?: string;
 }
 
-/** 往「## 分区」的第一行位置插一条。已存在（关键词 + 行首）就跳过。 */
+/** 纯文本变换：把一行插进分区。分区不存在就按标准顺序新建。 */
+export function insertLineIntoText(
+  before: string,
+  section: string,
+  line: string,
+): { text: string; reason?: string } {
+  const target = section.trim();
+  const row = line.trim();
+  let lines = before.split('\n');
+  let head = lines.findIndex((x) => x.trim() === target);
+  let created = false;
+
+  if (head < 0) {
+    if (!SECTION_ORDER.includes(target)) return { text: before, reason: 'no-section' };
+    const nextSections = SECTION_ORDER.slice(SECTION_ORDER.indexOf(target) + 1);
+    const insertAt = lines.findIndex((x) => nextSections.some((s) => x.trim() === s));
+    const comment = SECTION_COMMENTS[target];
+    // 别在文末留空段：有下一节就插在它前面
+    const block = [target, ...(comment ? ['', comment] : []), '', row, ''];
+    lines =
+      insertAt < 0
+        ? [...lines, '', ...block]
+        : [...lines.slice(0, insertAt), ...block, ...lines.slice(insertAt)];
+    head = lines.findIndex((x) => x.trim() === target);
+    created = true;
+  }
+
+  let tail = lines.findIndex((x, i) => i > head && x.startsWith('## '));
+  if (tail < 0) tail = lines.length;
+  const inSection = lines.slice(head + 1, tail);
+
+  // 幂等：整行已存在就不重复写（cron 一天可能跑多次）。
+  // 不能拿「关键词 + 行首是短横线」当判据——含同名词的旧行会被误判成已存在。
+  if (!created && inSection.some((x) => x.trim() === row || x.includes(row))) {
+    return { text: before, reason: 'exists' };
+  }
+
+  // 新建分区时 block 里已经带着这一行，不能再插一次（会变成两条一模一样）
+  if (created) return { text: lines.join('\n') };
+
+  // 追到分区最后一条之后（按时间顺序往下排），而不是紧贴标题
+  let last = head;
+  for (let i = head + 1; i < tail; i++) if (lines[i].trim()) last = i;
+  return { text: [...lines.slice(0, last + 1), row, ...lines.slice(last + 1)].join('\n') };
+}
+
+/** 往「## 分区」插一条：备份原文 → 写闸门 → 记 memory_actions → 重建派生数据。 */
 export async function appendMemoryLine(
   env: Env,
   input: { section: string; line: string; keyword?: string; actor?: 'human' | 'job' },
@@ -30,20 +76,9 @@ export async function appendMemoryLine(
 
   const before = await getMemory(env);
   if (!before.trim()) return { applied: false, reason: 'no-memory' };
-  const lines = before.split('\n');
-  const head = lines.findIndex((x) => x.trim() === section);
-  if (head < 0) return { applied: false, reason: 'no-section' };
+  const { text: after, reason } = insertLineIntoText(before, section, line);
+  if (reason) return { applied: false, reason };
 
-  const keyword = input.keyword ?? section.replace('## ', '');
-  let tail = lines.findIndex((x, i) => i > head && x.startsWith('## '));
-  if (tail < 0) tail = lines.length;
-  const inSection = lines.slice(head + 1, tail);
-  // 同一天同一个关键词已经有了就不重复写（cron 一天可能跑多次）
-  if (inSection.some((x) => x.includes(keyword) && x.trim().startsWith(line.slice(0, 2)))) {
-    return { applied: false, reason: 'exists' };
-  }
-
-  const after = [...lines.slice(0, head + 1), line, ...lines.slice(head + 1)].join('\n');
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const backupKey = `memory/append/${stamp}.md`;
   await putObject(env, backupKey, before, { contentType: 'text/markdown' }).catch(() => {});
