@@ -8,6 +8,7 @@ import type { Hono } from 'hono';
 import type { AppEnv } from './types';
 import { requireAuth } from './middleware';
 import { MEMORY_KV_KEY, getMemory, putMemory } from './memory';
+import { appendMemoryLine, removeMemoryLine } from './memory-append';
 import { ensureLifeDay, lifeNow } from './life/jobs';
 import { generateDiary } from './life/diary-job';
 import { refreshLifeEnv } from './life/weather';
@@ -677,42 +678,24 @@ app.post('/api/admin/memory/section-line', requireAuth, async (c) => {
   } | null;
   const section = String(body?.section ?? '').trim();
   const line = String(body?.line ?? '').trim();
-  const keyword = String(body?.keyword ?? section).trim();
-  if (!section || !line) return c.json({ ok: false, error: '需要 section 和 line' }, 400);
-  if (!section.startsWith('## ')) return c.json({ ok: false, error: 'section 要写成 「## 分区名」' }, 400);
-
-  const before = await getMemory(c.env);
-  if (!before.trim()) return c.json({ ok: false, error: '当前没有记忆文件' }, 400);
-  const lines = before.split('\n');
-  const head = lines.findIndex((x) => x.trim() === section);
-  if (head < 0) return c.json({ ok: false, error: `记忆里没有分区 ${section}` }, 404);
-  let tail = lines.findIndex((x, i) => i > head && x.startsWith('## '));
-  if (tail < 0) tail = lines.length;
-  const inSection = lines.slice(head + 1, tail);
-  if (inSection.some((x) => x.includes(keyword) && x.includes(line.slice(0, 8)))) {
-    return c.json({ ok: true, applied: 0, reason: '已经有这一行了' });
-  }
   if (!body?.confirm) return c.json({ ok: true, preview: true, section, line });
-
-  const after = [...lines.slice(0, head + 1), line, ...lines.slice(head + 1)].join('\n');
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const backupKey = `memory/section-line/${stamp}.md`;
-  await putObject(c.env, backupKey, before, { contentType: 'text/markdown' }).catch(() => {});
-  const written = await putMemory(c.env, after, 'human');
-  if (!written) return c.json({ ok: false, error: '写入校验失败，已放弃', backupKey }, 500);
-  await recordAction(c.env, {
+  const result = await appendMemoryLine(c.env, {
+    section,
+    line,
+    keyword: body?.keyword,
     actor: 'human',
-    kind: 'memory.write',
-    intent: `在「${section.replace('## ', '')}」补一行：${line.slice(0, 40)}`,
-    evidence: [backupKey],
-    diff: `+ ${line}`,
-    before: `${byteLength(before)} 字节`,
-    after: `${byteLength(after)} 字节`,
-    revertible: true,
-  }, Date.now()).catch(() => {});
-  const rebuild = await replaceMemoryContext(c.env, after, 'legacy').catch(() => null);
-  await rebuildFactsDoc(c.env).catch(() => {});
-  return c.json({ ok: true, applied: 1, backupKey, rebuild });
+  });
+  return c.json({ ok: result.applied, ...result });
+});
+
+
+/** 删掉 memory.md 里完全匹配的一行（测试数据/纠错用）。 */
+app.post('/api/admin/memory/remove-line', requireAuth, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { line?: string; confirm?: boolean } | null;
+  const line = String(body?.line ?? '');
+  if (!body?.confirm) return c.json({ ok: true, preview: true, line });
+  const result = await removeMemoryLine(c.env, line);
+  return c.json({ ok: result.removed, ...result });
 });
 
 /**

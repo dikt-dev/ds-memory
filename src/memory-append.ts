@@ -1,0 +1,106 @@
+/**
+ * 往 memory.md 的某个分区补一行（幂等、可审计）。
+ *
+ * 从 admin 路由里抽出来的：旅行回来要自动写一条「去了杭州」，
+ * 手动补字段（样貌）也要走同一条路——备份、写闸口、审计、重建派生数据，
+ * 少一样都会让记忆和派生数据对不上。
+ */
+import type { Env } from './types';
+import { getMemory, putMemory } from './memory';
+import { putObject } from './storage';
+import { recordAction } from './memory-actions';
+import { byteLength } from './memory-maintenance';
+import { replaceMemoryContext } from './memory-context-store';
+
+
+export interface AppendResult {
+  applied: boolean;
+  reason?: string;
+  backupKey?: string;
+}
+
+/** 往「## 分区」的第一行位置插一条。已存在（关键词 + 行首）就跳过。 */
+export async function appendMemoryLine(
+  env: Env,
+  input: { section: string; line: string; keyword?: string; actor?: 'human' | 'job' },
+): Promise<AppendResult> {
+  const section = input.section.trim();
+  const line = input.line.trim();
+  if (!section.startsWith('## ') || !line) return { applied: false, reason: 'bad-input' };
+
+  const before = await getMemory(env);
+  if (!before.trim()) return { applied: false, reason: 'no-memory' };
+  const lines = before.split('\n');
+  const head = lines.findIndex((x) => x.trim() === section);
+  if (head < 0) return { applied: false, reason: 'no-section' };
+
+  const keyword = input.keyword ?? section.replace('## ', '');
+  let tail = lines.findIndex((x, i) => i > head && x.startsWith('## '));
+  if (tail < 0) tail = lines.length;
+  const inSection = lines.slice(head + 1, tail);
+  // 同一天同一个关键词已经有了就不重复写（cron 一天可能跑多次）
+  if (inSection.some((x) => x.includes(keyword) && x.trim().startsWith(line.slice(0, 2)))) {
+    return { applied: false, reason: 'exists' };
+  }
+
+  const after = [...lines.slice(0, head + 1), line, ...lines.slice(head + 1)].join('\n');
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupKey = `memory/append/${stamp}.md`;
+  await putObject(env, backupKey, before, { contentType: 'text/markdown' }).catch(() => {});
+  const written = await putMemory(env, after, input.actor ?? 'job');
+  if (!written) return { applied: false, reason: 'write-failed', backupKey };
+
+  await recordAction(
+    env,
+    {
+      actor: input.actor ?? 'job',
+      kind: 'memory.write',
+      intent: `在「${section.replace('## ', '')}」补一行：${line.slice(0, 40)}`,
+      evidence: [backupKey],
+      diff: `+ ${line}`,
+      before: `${byteLength(before)} 字节`,
+      after: `${byteLength(after)} 字节`,
+      revertible: true,
+    },
+    Date.now(),
+  ).catch(() => {});
+
+  await replaceMemoryContext(env, after, 'legacy').catch(() => null);
+  return { applied: true, backupKey };
+}
+
+/** 删掉完全匹配的一行（测试/纠错用：只认整行相等，不做模糊删除）。 */
+export async function removeMemoryLine(
+  env: Env,
+  line: string,
+): Promise<{ removed: boolean; reason?: string }> {
+  const target = line.trim();
+  if (!target) return { removed: false, reason: 'empty' };
+  const before = await getMemory(env);
+  const lines = before.split('\n');
+  const idx = lines.findIndex((x) => x.trim() === target);
+  if (idx < 0) return { removed: false, reason: 'not-found' };
+
+  const after = [...lines.slice(0, idx), ...lines.slice(idx + 1)].join('\n');
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupKey = `memory/remove/${stamp}.md`;
+  await putObject(env, backupKey, before, { contentType: 'text/markdown' }).catch(() => {});
+  const written = await putMemory(env, after, 'human');
+  if (!written) return { removed: false, reason: 'write-failed' };
+  await recordAction(
+    env,
+    {
+      actor: 'human',
+      kind: 'memory.write',
+      intent: `删掉一行：${target.slice(0, 40)}`,
+      evidence: [backupKey],
+      diff: `- ${target}`,
+      before: `${byteLength(before)} 字节`,
+      after: `${byteLength(after)} 字节`,
+      revertible: true,
+    },
+    Date.now(),
+  ).catch(() => {});
+  await replaceMemoryContext(env, after, 'legacy').catch(() => null);
+  return { removed: true };
+}

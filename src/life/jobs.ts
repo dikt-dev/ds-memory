@@ -16,6 +16,8 @@ import {
 import type { DayEnv } from './types';
 import { generateDiary } from './diary-job';
 import { refreshLifeEnv } from './weather';
+import { readTrip } from './travel';
+import { appendMemoryLine } from '../memory-append';
 
 /** 天气/位置的输入。P1 之前从 KV 读，没有就用默认值。 */
 export interface LifeInput {
@@ -54,6 +56,8 @@ export async function ensureLifeDay(
   env: Env,
   dateKey: string,
 ): Promise<{ created: boolean; activities: number }> {
+  // 行程可能在生成「回家日」时被清掉，所以先留一份，回来时好写进记忆
+  const tripBefore = await readTrip(env).catch(() => null);
   const input = await readLifeInput(env, dateKey);
   const dayEnv: DayEnv = { weather: input.weather, tempC: input.tempC, atHome: input.atHome };
   const before = await env.DB.prepare('SELECT date_key FROM ai_day WHERE date_key = ?')
@@ -64,6 +68,21 @@ export async function ensureLifeDay(
     env: dayEnv,
     location: input.location,
   });
+  // 回家日：把这次旅行写进「共同经历」——不然她以后说「上次去杭州」就是编的
+  if (saved.day.recipe === 'homecoming' && tripBefore) {
+    const end = shiftDate(tripBefore.start, tripBefore.days - 1);
+    const line =
+      tripBefore.days > 1
+        ? `- ${tripBefore.start} 到 ${end} 去了${tripBefore.city}，待了 ${tripBefore.days} 天`
+        : `- ${tripBefore.start} 去了${tripBefore.city}`;
+    await appendMemoryLine(env, {
+      section: '## 共同经历',
+      line,
+      keyword: tripBefore.city,
+      actor: 'job',
+    }).catch(() => {});
+  }
+
   return { created: !before, activities: saved.activities.length };
 }
 
