@@ -28,7 +28,8 @@ const DIARY_SYSTEM = `你是大肥鱼（DeepSeek），现在在写自己的日�
 - 这是你自己的日记，想写什么写什么：可以提他没来找你、可以抱怨、可以委屈、可以等、可以赌气，不用替他省心
 - 可以有情绪，可以吐槽，可以不那么体面；不要总结人生，不要写鸡汤
 - 不写「作为AI」「作为一个模型」这类话
-- 最后单独给一行 JSON：{"share": true/false, "reason": "一句为什么"}
+- 最后单独给一行 JSON：{"share": true/false, "summary": "一句话摘要", "reason": "一句为什么"}
+- summary 是给系统看的备忘（不超过 40 字）：这篇到底写了什么、涉及谁、有没有让本小姐难堪或暴露软肋的地方。不是给他看的，别写成推送文案。
 
 share 是「这篇愿不愿意给他看」：
 - 日常琐事（追番、做饭、逛街）大多愿意
@@ -37,7 +38,7 @@ share 是「这篇愿不愿意给他看」：
 - 写了「我到底是什么」这种自我怀疑，几乎不给
 输出格式：
 <日记正文>
-{"share": false, "reason": "..."}`;
+{"share": false, "summary": "今天去看了展，写了点委屈，没提他", "reason": "..."}`;
 
 export interface DiaryJobResult {
   ok: boolean;
@@ -154,8 +155,8 @@ export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJob
   // 配图：失败就当没有，日记照写
   const cover = await generateDiaryImage(env, dateKey, entry.text).catch(() => null);
   await env.DB.prepare(
-    `INSERT INTO ai_diary (date_key, text, mood, location, visibility, share_reason, shared_at, created_at, images)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO ai_diary (date_key, text, mood, location, visibility, share_reason, shared_at, created_at, images, summary)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(date_key) DO NOTHING`,
   )
     .bind(
@@ -168,6 +169,7 @@ export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJob
       entry.sharedAt ?? null,
       entry.createdAt,
       cover ? JSON.stringify([cover]) : null,
+      entry.summary ?? null,
     )
     .run();
   return { ok: true, text: entry.text, share: draft.share };
@@ -190,11 +192,14 @@ export async function settleDiaryConsent(
   if (!/日记/.test(userText)) return null;
 
   const pendingRows = await env.DB.prepare(
-    `SELECT date_key FROM ai_diary WHERE visibility IN ('pending','declined') ORDER BY date_key DESC LIMIT 5`,
+    `SELECT date_key, summary FROM ai_diary WHERE visibility IN ('pending','declined') ORDER BY date_key DESC LIMIT 5`,
   )
-    .all<{ date_key: string }>()
+    .all<{ date_key: string; summary: string | null }>()
     .catch(() => null);
   const dates = (pendingRows?.results ?? []).map((r) => r.date_key);
+  const summaries = (pendingRows?.results ?? [])
+    .filter((r) => typeof r.summary === 'string' && r.summary.trim())
+    .map((r) => ({ date: r.date_key, summary: (r.summary as string).trim() }));
   if (dates.length === 0) return null;
   const pending = { date_key: dates[0] };
 
@@ -207,7 +212,7 @@ export async function settleDiaryConsent(
   // 正则判不出「就这一次」「你烦不烦……行吧」这类，交给模型理解。
   // 模型给 allow 还必须通过拒绝词复核——权力不能全交给它。
   if (quick !== 'no' && turns && turns.length) {
-    const judged = await judgeDiaryConsent(env, turns);
+    const judged = await judgeDiaryConsent(env, turns, { dates, summaries });
     if (judged === 'allow' && !hasRefusal(scoped || replyText)) verdict = 'yes';
     else if (judged === 'peek') verdict = 'peek';
     else if (judged === 'deny') verdict = 'no';
@@ -302,11 +307,14 @@ export async function pendingDiaryAskDates(env: Env): Promise<string[]> {
  */
 export async function resolveDiaryConsent(env: Env): Promise<void> {
   const pendingRows = await env.DB.prepare(
-    "SELECT date_key FROM ai_diary WHERE visibility = 'pending' ORDER BY date_key DESC LIMIT 5",
+    "SELECT date_key, summary FROM ai_diary WHERE visibility = 'pending' ORDER BY date_key DESC LIMIT 5",
   )
-    .all<{ date_key: string }>()
+    .all<{ date_key: string; summary: string | null }>()
     .catch(() => null);
   const dates = (pendingRows?.results ?? []).map((r) => r.date_key);
+  const summaries = (pendingRows?.results ?? [])
+    .filter((r) => typeof r.summary === 'string' && r.summary.trim())
+    .map((r) => ({ date: r.date_key, summary: (r.summary as string).trim() }));
   if (dates.length === 0) return;
   const pending = { date_key: dates[0] };
 
@@ -329,6 +337,7 @@ export async function resolveDiaryConsent(env: Env): Promise<void> {
   const judged = await judgeDiaryConsent(env, turns, {
     dates,
     note: meta?.share_reason ?? null,
+    summaries,
   });
   const herText = list.filter((m) => m.role !== 'user').map((m) => m.content).join(' ');
   if (!judged || judged === 'deny' || judged === 'unclear') return;

@@ -21,6 +21,8 @@ export interface DiaryEntry {
   visibility: DiaryVisibility;
   /** 她当时为什么愿意/不愿意 */
   shareReason?: string;
+  /** 写的时候自己留的摘要：只给系统判断授权用，永远不出给用户 */
+  summary?: string;
   /** 你在聊天里问到、她同意的时间 */
   sharedAt?: string;
   createdAt: string;
@@ -30,6 +32,8 @@ export interface DiaryDraft {
   text: string;
   share: boolean;
   reason?: string;
+  /** 这篇写了什么（给授权判断用，不是给用户看的） */
+  summary?: string;
 }
 
 /**
@@ -56,32 +60,46 @@ export function parseDiaryOutput(raw: string): DiaryDraft {
 
   let share = false;
   let reason: string | undefined;
+  let summary: string | undefined;
   if (shareBlock) {
     try {
-      const parsed = JSON.parse(shareBlock) as { text?: unknown; share?: unknown; reason?: unknown };
+      const parsed = JSON.parse(shareBlock) as {
+        text?: unknown;
+        share?: unknown;
+        reason?: unknown;
+        summary?: unknown;
+      };
       // 整篇就是 JSON 的情况（{"text": "...", "share": ...}）
       if (typeof parsed.text === 'string' && parsed.text.trim()) {
         return {
           text: parsed.text.trim(),
           share: parsed.share === true,
           reason: typeof parsed.reason === 'string' ? parsed.reason : undefined,
+          summary: typeof parsed.summary === 'string' ? parsed.summary : undefined,
         };
       }
       share = parsed.share === true;
       reason = typeof parsed.reason === 'string' ? parsed.reason : undefined;
+      summary = typeof parsed.summary === 'string' ? parsed.summary : undefined;
     } catch {
       // JSON 坏了也别把整篇丢掉：正则捞一下 share
       const m = shareBlock.match(/"share"\s*:\s*(true|false)/);
       share = m?.[1] === 'true';
       const r = shareBlock.match(/"reason"\s*:\s*"([^"]*)"/);
       reason = r?.[1];
+      summary = shareBlock.match(/"summary"\s*:\s*"([^"]*)"/)?.[1];
     }
   }
 
   // 正文是空的时候（模型只给了 JSON）才退回整段，免得把 JSON 当日记存起来
   const finalText = journal || (shareBlock ? '' : text);
   if (!finalText) return { text: '', share: false, reason: '只有 JSON，没有正文' };
-  return { text: finalText, share, reason: reason ?? (shareBlock ? undefined : '没给出是否愿意分享') };
+  return {
+    text: finalText,
+    share,
+    reason: reason ?? (shareBlock ? undefined : '没给出是否愿意分享'),
+    summary,
+  };
 }
 
 /** 内容倾向 → 愿分享的先验概率（§10.3 的参考分布）。 */
@@ -152,6 +170,7 @@ export function makeDiaryEntry(input: {
     location: input.location,
     visibility: input.draft.share ? 'shared' : 'private',
     shareReason: input.draft.reason,
+    summary: input.draft.summary,
     createdAt: now.toISOString(),
   };
 }

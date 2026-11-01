@@ -40,13 +40,23 @@ export function buildTranscript(turns: Turn[]): string {
 export async function judgeDiaryConsent(
   env: Env,
   turns: Turn[],
-  meta?: { dates?: string[]; note?: string | null },
+  meta?: {
+    dates?: string[];
+    note?: string | null;
+    /** 每篇她写的时候自己留的摘要：让她判断「这篇能不能给他看」时有内容依据 */
+    summaries?: { date: string; summary: string }[];
+  },
 ): Promise<ConsentDecision | null> {
   if (turns.length === 0) return null;
   // 让她知道要判断的是哪一篇：日期 + 她写这篇时自己的理由
   const about = meta?.dates?.length
     ? `用户点了「问问她」的日记：${meta.dates.join('、')}（共 ${meta.dates.length} 篇）。` +
-      (meta.note ? `其中一篇她当时写下的态度：${meta.note.slice(0, 60)}。` : '')
+      (meta.note ? `其中一篇她当时写下的态度：${meta.note.slice(0, 60)}。` : '') +
+      (meta.summaries?.length
+        ? `这些日记里写了什么（她自己的备忘）：` +
+          meta.summaries.map((s) => `${s.date}：${s.summary.slice(0, 60)}`).join('；') +
+          '。'
+        : '')
     : '';
   try {
     const res = await Promise.race([

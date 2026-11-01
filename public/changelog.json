@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-01T16:16:14.654Z",
+  "generated_at": "2026-11-01T16:19:41.300Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-02",
       "items": [
+        {
+          "hash": "88dce0d",
+          "date": "2026-11-02",
+          "type": "other",
+          "area": "",
+          "title": "日记拆成独立 cron（04:05），token 不限，任务结果记账到 cron_runs",
+          "why": ""
+        },
         {
           "hash": "13221f8",
           "date": "2026-11-02",
@@ -3241,14 +3249,6 @@
           "area": "",
           "title": "删除已被情绪向量取代的 session-state 模块",
           "why": "- 删掉 src/session-state.ts 与其 21 个测试（系统提示词里的情绪残留早已由 emotion-vector + emotion-context 承担，这个模块没有任何调用方） - 文档同步：README/architecture 目录树补上 emotion-*/relation-facets/sse-scrub， 去掉 session-state；活人感计划里的阶段 2 产出与三通道表格改成现状 - 测试数从 622 → 601（净减 21，数量对得上）"
-        },
-        {
-          "hash": "72e4deb",
-          "date": "2026-10-24",
-          "type": "docs",
-          "area": "liveliness",
-          "title": "记忆保持电报体，明确不做口语化",
-          "why": "- 阶段 1 任务表：『记忆条目也口语化』改为『记忆保持电报体（密度优先）』 - 补一节取舍说明：记忆层只装事实，文风问题留给回复层； 与 memory.md 12KB 质量优先直接冲突，故不做"
         }
       ]
     }
