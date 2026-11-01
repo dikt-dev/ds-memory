@@ -179,7 +179,7 @@ h1{font-size:32px;margin:0;letter-spacing:.12em;font-weight:600}
     view.innerHTML='<div class="page locked"><p>翻开中…</p></div>';
     api("/api/admin/life/diary/item?date="+encodeURIComponent(date)).then(function(res){
       if(!res.ok){view.innerHTML='<button class="back" id="back">← 回去</button><div class="page locked"><p>'+esc(res.error||"打不开")+'</p></div>';bindBack();return}
-      if(res.visible && res.text){
+      if((res.visible || res.peek) && res.text){
         view.innerHTML='<button class="back" id="back">← 回去</button><article class="page">'
           +'<h2>'+esc(date)+'　'+esc(res.weekday)+'</h2>'
           +'<div class="pm">'+esc(weatherText(res))+'　·　'+esc(res.text.length)+' 字</div>'

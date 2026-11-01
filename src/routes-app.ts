@@ -70,7 +70,7 @@ app.get('/api/app/ai-diary', requireApp, async (c) => {
   await resolveDiaryConsent(c.env).catch(() => {});
   const { row, text, shareReason, peeked } = await diaryOne(c.env, date);
   if (!row) return c.json({ ok: true, date, visible: false, reason: '这天没写' });
-  if (!row.visible) {
+  if (!row.visible && !row.peek) {
     return c.json({
       ok: true,
       date: row.date,
