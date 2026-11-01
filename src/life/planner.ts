@@ -238,11 +238,12 @@ function ruleOk(unitId: string, start: number, env: DayEnv, date: string, recent
   if (rule.minTemp !== undefined && env.tempC < rule.minTemp) return false;
   if (rule.maxTemp !== undefined && env.tempC > rule.maxTemp) return false;
   const atMin = ((start % 1440) + 1440) % 1440;
-  if (rule.starts && !rule.starts.some(([a, b]) => atMin >= (a % 1440) && atMin <= (b % 1440))) {
-    // 跨午夜的时间段（如 20:00–02:00）单独判断
-    const spansMidnight = rule.starts.some(([a, b]) => b > 1440 && (atMin >= (a % 1440) || atMin <= (b % 1440)));
-    if (!spansMidnight) return false;
-  }
+  // 注意 b 不能再 %1440：写 [[20*60, 24*60]] 时 b%1440 = 0，条件会变成
+  // 「atMin <= 0」，整条规则恒假（收拾屋子就这样静默消失了很久）。
+  const inStart = rule.starts?.some(([a, b]) =>
+    b <= 1440 ? atMin >= a % 1440 && atMin <= b : atMin >= a % 1440 || atMin <= b - 1440,
+  );
+  if (rule.starts && !inStart) return false;
   if (rule.weekdays) {
     const utc = Date.parse(date + 'T00:00:00Z');
     const wd = Number.isFinite(utc) ? new Date(utc).getUTCDay() : -1;
