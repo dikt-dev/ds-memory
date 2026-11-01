@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ACTIVITIES, BY_ID } from './pool';
-import { SLEEP_START, WAKE_AT, antiRepeatWeight, buildDay, dayWindows, tagsOk } from './planner';
+import { SLEEP_START, WAKE_AT, antiRepeatWeight, buildDay, dayWindows, tagsOk , MEALS } from './planner';
 import { validateDay } from './validate';
 import {
   applyConsent,
@@ -66,10 +66,16 @@ describe('生成', () => {
     expect(a.activities).not.toEqual(b.activities);
   });
 
-  it('活动都在空档里、不重叠', () => {
+  it('活动都在空档里、三餐在自己那格里、不重叠', () => {
     const plan = buildDay(input('2026-11-02'));
     const windows = dayWindows();
     for (const act of plan.activities) {
+      if (BY_ID.get(act.unitId)?.kind === 'meal') {
+        // 三餐占用固定时段（早/午/晚），不在空档里
+        const slot = MEALS.find((m) => act.start >= m.start - 15 && act.start <= m.start + 15);
+        expect(slot, JSON.stringify(act)).toBeTruthy();
+        continue;
+      }
       expect(windows.some((w) => act.start >= w.start && act.end <= w.end), JSON.stringify(act)).toBe(true);
     }
     for (let i = 1; i < plan.activities.length; i += 1) {

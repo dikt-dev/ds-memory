@@ -18,11 +18,16 @@ export const WAKE_AT = 8 * 60;
 /** 一天最多几段活动。多了就显得「一天到晚都在做事」，不像人。 */
 export const MAX_ACTIVITIES = 4;
 
-const MEALS = [
+/** 三餐：不是背景板，是日程里真会出现的一段（「08:20 早餐」）。 */
+export const MEALS = [
   { name: '早餐', start: 8 * 60 + 10, minutes: 40 },
   { name: '午饭', start: 12 * 60 + 30, minutes: 50 },
   { name: '晚饭', start: 19 * 60, minutes: 50 },
 ];
+/** 三餐最多 3 段，不占 MAX_ACTIVITIES 的名额（吃饭不是「活动」）。 */
+export const MAX_MEALS = MEALS.length;
+/** 加餐最多 2 段（下午茶、夜宵），同样不占名额。 */
+export const MAX_EXTRAS = 2;
 
 export interface PlannedActivity {
   unitId: string;
@@ -81,12 +86,10 @@ export function dayWindows(wakeAt = WAKE_AT): Array<{ start: number; end: number
 export function tagsOk(unit: ActUnit, env: DayEnv): boolean {
   const rainy = env.weather === 'rain' || env.weather === 'snow';
   const sunny = env.weather === 'sunny';
-  const hot = env.tempC >= 30;
   const has = (tag: string) => unit.tags.includes(tag as ActUnit['tags'][number]);
 
   if (has('outdoor') && !has('rainy_ok') && rainy) return false;
   if (has('sunny_only') && !sunny) return false;
-  if (has('hot_ok') && !hot && has('outdoor') && sunny) return false;
   if (has('cold_ok') && env.tempC > 26) return false;
   if (!env.atHome && !has('outdoor')) return false;
   return true;
@@ -147,11 +150,14 @@ const UNIT_RULES: Record<string, UnitRule> = {
   short_trip_museum: { cooldownDays: 14 },
   short_trip_movie: { cooldownDays: 14 },
   outing_haircut: { cooldownDays: 30 },
-  outing_swim: { minTemp: 24, cooldownDays: 30 },
-  meal_night: { starts: [[19 * 60 + 50, 25 * 60]] },
-  meal_snack: { starts: [[13 * 60, 18 * 60 + 30]] },
-  meal_normal: { starts: [[10 * 60, 13 * 60 + 30], [16 * 60 + 30, 20 * 60]] },
-  meal_takeout: { starts: [[10 * 60, 13 * 60 + 30], [16 * 60 + 30, 20 * 60]] },
+  outing_swim: { minTemp: 24, maxTemp: 40, cooldownDays: 30 },
+  meal_night: { starts: [[20 * 60 + 30, 25 * 60]] },
+  // 「能忍受热」不等于「必须热」：hot_ok 以前被当成硬门槛，
+  // 结果公园（60–150 分钟）只在 ≥30℃ 的晴天出现，九月十月一次都没有。
+  // 游泳是真的怕冷，单独给个温度下限。
+  meal_snack: { starts: [[14 * 60, 18 * 60 + 30]] },
+  meal_normal: { starts: [[7 * 60 + 30, 13 * 60 + 30], [17 * 60, 20 * 60]] },
+  meal_takeout: { starts: [[7 * 60 + 30, 13 * 60 + 30], [17 * 60, 20 * 60]] },
   idle_nap: { starts: [[11 * 60, 16 * 60]] },
 };
 
@@ -197,6 +203,41 @@ function ruleOk(unitId: string, startMin: number, env: DayEnv, date: string, rec
   return true;
 }
 
+/**
+ * 给三餐各挑一个「吃饭类」单元。
+ *
+ * 之前三餐只是背景块：不许放活动，而吃饭类单元又不在任何空档里能落地，
+ * 结果她 60 天只吃过一顿饭。现在三餐是真正的窗口，只放 kind==='meal' 的单元。
+ * 挑不到就留空——宁可这一天没记录，也不硬塞一段「夜宵」当早饭。
+ */
+function pickMeal(
+  rng: Rng,
+  slot: { name: string; start: number; minutes: number },
+  input: BuildDayInput,
+  used: Set<string>,
+): PlannedActivity | null {
+  const start = slot.start + rng.int(0, 11);
+  const room = slot.start + slot.minutes - start;
+  const candidates = ACTIVITIES.filter(
+    (u) =>
+      u.kind === 'meal' &&
+      u.min <= room &&
+      Math.min(u.max, room) >= 20 &&
+      ruleOk(u.id, start, input.env, input.date, input.recentUses),
+  );
+  // 兜底：规则挑不出（起床太晚、时段卡住）时，放宽到「能塞进这段时间的吃饭单元」。
+  // 不为了一顿饭把整天的种子重抽——少一顿早饭比少一整天空档更难看。
+  const fallback = candidates.length > 0 ? candidates : ACTIVITIES.filter((u) => u.kind === 'meal' && u.min <= room);
+  if (fallback.length === 0) return null;
+  // 今天还没吃过的优先，但允许重复：池子里能当正餐的只有两个单元，
+  // 硬要求一天三顿各不相同，结果是晚饭永远轮空。
+  const fresh = fallback.filter((u) => !used.has(u.id));
+  const picked = rng.pick(fresh.length > 0 ? fresh : fallback) as ActUnit;
+  const minutes = Math.min(room, Math.max(picked.min, Math.min(picked.max, room)));
+  used.add(picked.id);
+  return { unitId: picked.id, start, end: start + minutes };
+}
+
 /** 往一个空档里装活动，装不下就留白。 */
 function fillWindow(
   rng: Rng,
@@ -221,8 +262,12 @@ function fillWindow(
     // 只按空档长度配单元，会永远只抽长单元（爬山、游乐园），
     // 60–120 分钟的日常（逛书店、洗衣服、看小说）就永远轮不到。
     // 候选为空时必须**降低目标时长重试**，否则一个抽不到的长目标会让整个下午空着。
+    // 上限从 180 提到 240，并加了 180 这一档：
+    // 爬山（180–360）和游乐园（240–420）之前永远抽不到，因为目标时长封顶 180。
+    // 「填满整个空档」的概率从 22% 提到 30%：60 天里一次公园都没去，不像人。
     const targets = [
-      rng.chance(0.22) ? free : rng.int(20, Math.min(free, 180)),
+      rng.chance(0.3) ? free : rng.int(20, Math.min(free, 240)),
+      180,
       90,
       60,
       40,
@@ -276,12 +321,40 @@ export function buildDay(input: BuildDayInput): DayPlan {
   const lazy = recipe?.id === 'lazy';
   let socialUsed = 0;
 
+  // 三餐先落：它们占固定时段，后面的活动只能填空档
+  const breakfastStart = Math.max(MEALS[0].start, wakeAt + 10);
+  const slots = [{ ...MEALS[0], start: breakfastStart }, ...MEALS.slice(1)];
+  for (const slot of slots) {
+    const meal = pickMeal(rng, slot, input, used);
+    if (meal) activities.push(meal);
+  }
+
+  // 名额只算「活动」：三餐和加餐都在 activities 里，不能拿 length 当已用名额
+  let actCount = 0;
   for (const w of dayWindows(wakeAt)) {
-    if (activities.length >= budget) break;
-    const filled = fillWindow(rng, w.start, w.end, input, used, budget - activities.length, lazy, socialUsed, recipe?.kinds);
+    if (actCount >= budget) break;
+    const filled = fillWindow(rng, w.start, w.end, input, used, budget - actCount, lazy, socialUsed, recipe?.kinds);
+    actCount += filled.length;
     socialUsed += filled.filter((a) => ACTIVITIES.find((u) => u.id === a.unitId)?.kind === 'social').length;
     activities.push(...filled);
   }
+  // 加餐：下午茶和夜宵不是每天都有，但一个月总有几次。
+  // 它们是 meal 类，不占活动名额，只要那个点空着就放。
+  const extras: Array<{ id: string; at: number; width: number; chance: number }> = [
+    { id: 'meal_snack', at: 15 * 60 + 40, width: 45, chance: 0.35 },
+    { id: 'meal_night', at: 22 * 60 + 30, width: 70, chance: 0.22 },
+  ];
+  for (const extra of extras) {
+    if (!rng.chance(extra.chance)) continue;
+    const at = extra.at + rng.int(0, 20);
+    const unit = ACTIVITIES.find((u) => u.id === extra.id);
+    if (!unit || !ruleOk(unit.id, at, input.env, input.date, input.recentUses)) continue;
+    const busy = activities.some((a) => at < a.end && at + unit.min > a.start);
+    if (busy) continue;
+    const minutes = Math.min(extra.width, unit.max);
+    activities.push({ unitId: unit.id, start: at, end: at + minutes });
+  }
+
   activities.sort((a, b) => a.start - b.start);
   return { date: input.date, seed, activities };
 }

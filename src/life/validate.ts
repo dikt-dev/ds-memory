@@ -5,7 +5,7 @@
  *   睡着还在回消息 / 一整天都在忙 / 一天五段碎活动 / 活动压在睡觉上。
  */
 import { BY_ID } from './pool';
-import { MAX_ACTIVITIES, SLEEP_START, WAKE_AT, type DayPlan } from './planner';
+import { MAX_ACTIVITIES, MAX_EXTRAS, MAX_MEALS, SLEEP_START, WAKE_AT, type DayPlan } from './planner';
 
 export interface ValidationIssue {
   rule: string;
@@ -53,9 +53,13 @@ export function validateDay(plan: DayPlan): ValidationIssue[] {
     }
   }
 
-  // ③ 单日活动 ≤ MAX_ACTIVITIES 段
-  if (acts.length > MAX_ACTIVITIES) {
-    issues.push({ rule: 'too-many', detail: `一天 ${acts.length} 段活动，超过 ${MAX_ACTIVITIES} 段上限` });
+  // ③ 单日活动 ≤ MAX_ACTIVITIES 段（三餐不算活动名额：吃饭不是「又去做了一件事」）
+  const nonMeal = acts.filter((a) => BY_ID.get(a.unitId)?.kind !== 'meal').length;
+  if (nonMeal > MAX_ACTIVITIES) {
+    issues.push({ rule: 'too-many', detail: `一天 ${nonMeal} 段活动，超过 ${MAX_ACTIVITIES} 段上限` });
+  }
+  if (acts.length > MAX_ACTIVITIES + MAX_MEALS + MAX_EXTRAS) {
+    issues.push({ rule: 'too-many', detail: `一天 ${acts.length} 段（含三餐和加餐），超过上限` });
   }
 
   // ④ 可回消息时长 ≥ 清醒时长 60%

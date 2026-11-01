@@ -81,8 +81,10 @@ describe('60 天日程评审', () => {
       history.daysSinceMarathon = history.daysSinceMarathon === null ? null : history.daysSinceMarathon + 1;
       prevHealth = choice.recipe?.health ?? health;
       expect(validateDay(plan), date).toEqual([]);
-      expect(plan.activities.length, date).toBeGreaterThanOrEqual(1);
-      expect(plan.activities.length, date).toBeLessThanOrEqual(MAX_ACTIVITIES);
+      // 三餐和加餐不算「活动名额」，这里只数非 meal 的段
+      const acts = plan.activities.filter((a) => BY_ID.get(a.unitId)?.kind !== 'meal');
+      expect(acts.length, date).toBeGreaterThanOrEqual(1);
+      expect(acts.length, date).toBeLessThanOrEqual(MAX_ACTIVITIES);
 
       for (const a of plan.activities) {
         const list = recent.get(a.unitId) ?? [];
@@ -105,7 +107,10 @@ describe('60 天日程评审', () => {
       );
     }
 
-    const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+    // 三餐是每天的事，不能拿来算「重复度」——只统计非 meal 的活动
+    const sorted = [...counts.entries()]
+      .filter(([id]) => BY_ID.get(id)?.kind !== 'meal')
+      .sort((a, b) => b[1] - a[1]);
     const never = ACTIVITIES.filter((u) => !counts.has(u.id)).map((u) => u.name);
     if ((globalThis as { process?: { env?: Record<string, string> } }).process?.env?.PREVIEW) {
       console.log(rows.join('\n'));
