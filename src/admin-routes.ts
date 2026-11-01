@@ -9,7 +9,7 @@ import type { AppEnv } from './types';
 import { requireAuth } from './middleware';
 import { MEMORY_KV_KEY, getMemory, putMemory } from './memory';
 import { appendMemoryLine, removeMemoryLine } from './memory-append';
-import { generateDiaryImage } from './life/diary-image';
+import { generateDiaryImage, lastImageError } from './life/diary-image';
 import { askDiary, diaryList, diaryOne } from './life/diary-api';
 import { collapseOngoingItems } from './memory-ongoing-job';
 import { ensureLifeDay, lifeNow } from './life/jobs';
@@ -658,7 +658,7 @@ app.post('/api/admin/life/diary/cover', requireAuth, async (c) => {
     .catch(() => null);
   if (!row) return c.json({ ok: false, error: '这天没写' }, 404);
   const key = await generateDiaryImage(c.env, date, row.text);
-  if (!key) return c.json({ ok: false, error: '生成失败' }, 502);
+  if (!key) return c.json({ ok: false, error: '生成失败', detail: lastImageError }, 502);
   await c.env.DB.prepare('UPDATE ai_diary SET images = ? WHERE date_key = ?')
     .bind(JSON.stringify([key]), date)
     .run();

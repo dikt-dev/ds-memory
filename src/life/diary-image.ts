@@ -7,7 +7,7 @@
  * 生成失败一律返回 null —— 配图是锦上添花，不能让它把日记本身拖挂。
  */
 import type { Env } from '../types';
-import { putObject } from '../storage';
+import { getObject, putObject } from '../storage';
 import { logError } from '../error-log';
 
 const IMAGE_MODEL = '@cf/black-forest-labs/flux-1-schnell';
@@ -31,21 +31,37 @@ export function imageScene(text: string): string {
   ].join('');
 }
 
+/** 最近一次失败原因（排查用，进程内即可）。 */
+export let lastImageError: string | null = null;
+
 export async function generateDiaryImage(env: Env, dateKey: string, text: string): Promise<string | null> {
   try {
     const out = (await env.AI.run(IMAGE_MODEL as never, {
       prompt: imageScene(text),
-      num_steps: 4,
+      steps: 4,
     } as never)) as { image?: string };
     const b64 = out?.image;
-    if (!b64 || b64.length < 512) return null;
+    if (!b64 || b64.length < 512) {
+      lastImageError = 'no image in response: ' + JSON.stringify(out).slice(0, 120);
+      return null;
+    }
     const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-    if (bin.byteLength < 2048) return null;
+    if (bin.byteLength < 2048) {
+      lastImageError = 'tiny image: ' + bin.byteLength;
+      return null;
+    }
     const key = diaryImageKey(dateKey);
-    const ok = await putObject(env, key, bin, { contentType: 'image/jpeg' }).catch(() => false);
-    return ok ? key : null;
+    // putObject 成功时返回 void —— 不能拿返回值当成功标志
+    await putObject(env, key, bin, { contentType: 'image/jpeg' });
+    const back = await getObject(env, key).catch(() => null);
+    if (!back) {
+      lastImageError = 'r2 put verify failed';
+      return null;
+    }
+    return key;
   } catch (e) {
-    logError('[diary-image] 生成失败:', (e as Error)?.message ?? e);
+    lastImageError = (e as Error)?.message ?? String(e);
+    logError('[diary-image] 生成失败:', lastImageError);
     return null;
   }
 }
