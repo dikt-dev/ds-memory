@@ -139,6 +139,40 @@ interface UnitRule {
   weekdays?: number[];
 }
 
+/** 出门类活动不该在夜里安排。默认全天可排，只显式限制需要限制的。 */
+const NIGHT_FREE = new Set(['morning', 'day', 'dusk']);
+const UNIT_BANDS: Record<string, string[]> = {
+  outing_mall: ['morning', 'day', 'dusk'],
+  outing_park: ['morning', 'day', 'dusk'],
+  outing_museum: ['day', 'dusk'],
+  outing_bookstore: ['day', 'dusk'],
+  outing_swim: ['morning', 'day'],
+  outing_haircut: ['morning', 'day'],
+  short_trip_hike: ['morning', 'day'],
+  short_trip_amusement: ['day'],
+  short_trip_museum: ['day'],
+  short_trip_hotspring: ['day', 'dusk'],
+  short_trip_movie: ['dusk'],
+  clean_deep: ['morning', 'day'],
+};
+
+function bandAt(minute: number): string {
+  const m = ((minute % 1440) + 1440) % 1440;
+  if (m >= 8 * 60 && m < 11 * 60) return 'morning';
+  if (m >= 11 * 60 && m < 17 * 60 + 30) return 'day';
+  if (m >= 17 * 60 + 30 && m < 21 * 60) return 'dusk';
+  return 'night';
+}
+
+function bandOk(unitId: string, minute: number): boolean {
+  const allowed = UNIT_BANDS[unitId];
+  if (!allowed) return true;
+  const band = bandAt(minute);
+  if (!allowed.includes(band)) return false;
+  // 傍晚开的头，别让它一路拖到深夜
+  return band !== 'night' || NIGHT_FREE.has(band);
+}
+
 const UNIT_RULES: Record<string, UnitRule> = {
   snow_watch: { weather: ['snow'] },
   rainy_window: { weather: ['rain', 'snow'] },
@@ -183,16 +217,17 @@ function weatherBias(unit: ActUnit, env: DayEnv): number {
 }
 
 /** 这条单元在「这个开始时间」合不合规矩。 */
-function ruleOk(unitId: string, startMin: number, env: DayEnv, date: string, recentUses?: Map<string, string[]>): boolean {
+function ruleOk(unitId: string, start: number, env: DayEnv, date: string, recentUses?: Map<string, string[]>): boolean {
+  if (!bandOk(unitId, start)) return false;
   const rule = UNIT_RULES[unitId];
   if (!rule) return true;
   if (rule.weather && !rule.weather.includes(env.weather)) return false;
   if (rule.minTemp !== undefined && env.tempC < rule.minTemp) return false;
   if (rule.maxTemp !== undefined && env.tempC > rule.maxTemp) return false;
-  const start = ((startMin % 1440) + 1440) % 1440;
-  if (rule.starts && !rule.starts.some(([a, b]) => start >= (a % 1440) && start <= (b % 1440))) {
+  const atMin = ((start % 1440) + 1440) % 1440;
+  if (rule.starts && !rule.starts.some(([a, b]) => atMin >= (a % 1440) && atMin <= (b % 1440))) {
     // 跨午夜的时间段（如 20:00–02:00）单独判断
-    const spansMidnight = rule.starts.some(([a, b]) => b > 1440 && (start >= (a % 1440) || start <= (b % 1440)));
+    const spansMidnight = rule.starts.some(([a, b]) => b > 1440 && (atMin >= (a % 1440) || atMin <= (b % 1440)));
     if (!spansMidnight) return false;
   }
   if (rule.weekdays) {
