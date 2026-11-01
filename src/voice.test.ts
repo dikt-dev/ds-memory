@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildVoiceDirective, casualness, recentOpeners, signatureFor } from './voice';
+import { buildVoiceDirective, casualness, recentOpeners, recentPhrases, signatureFor } from './voice';
 
 describe('casualness', () => {
   it('亲密度映射到 0~1，并做边界钳制', () => {
@@ -11,11 +11,19 @@ describe('casualness', () => {
   });
 });
 
-describe('buildVoiceDirective —— 只指向人设与记忆，不给风格清单', () => {
-  it('只讲「按记忆里那个人来说」与「长短随意」', () => {
+describe('buildVoiceDirective —— 指向人设，同时给四条机械约束', () => {
+  it('先指向「记忆里那个人」，再讲怎么打字', () => {
     const d = buildVoiceDirective(900);
     expect(d).toContain('记忆里那个人');
-    expect(d).toContain('想短就短，想长就长');
+    expect(d).toContain('像在手机上打字');
+  });
+
+  it('长度、括号动作、短回复、反问都有明确约束', () => {
+    const d = buildVoiceDirective(900);
+    expect(d).toContain('二三十个字');
+    expect(d).toContain('默认不写括号动作');
+    expect(d).toContain('允许只回');
+    expect(d).toContain('反问是偶尔的');
   });
 
   it('不再有禁用词/颜文字频率/口头禅/断句/情绪清单', () => {
@@ -25,9 +33,24 @@ describe('buildVoiceDirective —— 只指向人设与记忆，不给风格清�
     }
   });
 
-  it('体积很小（不再是一张清单）', () => {
+  it('体积控制在 900 字节内（不是一张清单）', () => {
     const bytes = new TextEncoder().encode(buildVoiceDirective(900)).length;
-    expect(bytes).toBeLessThan(400);
+    expect(bytes).toBeLessThan(900);
+  });
+});
+
+describe('recentPhrases', () => {
+  it('抓出反复出现的短词，按次数降序', () => {
+    const out = recentPhrases(['本小姐就不去了', '本小姐说了算', '行吧本小姐', '今天好累']);
+    expect(out[0]).toBe('本小姐');
+  });
+  it('只出现一次的词不进结果', () => {
+    const out = recentPhrases(['早上好', '晚上好']);
+    expect(out).toEqual([]);
+  });
+  it('括号里的动作描写不参与统计', () => {
+    const out = recentPhrases(['（顿了顿）行', '（顿了顿）好吧']).filter((w) => w === '顿了顿');
+    expect(out).toEqual([]);
   });
 });
 

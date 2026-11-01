@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-01T00:10:30.268Z",
-  "count": 334,
+  "generated_at": "2026-11-01T00:58:23.601Z",
+  "count": 335,
   "days": [
     {
       "date": "2026-11-01",
       "items": [
+        {
+          "hash": "72a49ce",
+          "date": "2026-11-01",
+          "type": "other",
+          "area": "",
+          "title": "生活系统：补「连续性事件」的四道闸（追番/游戏/连载）",
+          "why": "5.4 只说清了「进度挂在作品上」，但连续性事件真正会断的地方有四处， 这四处不设闸的话，模型照样会把第 3 集写回第 1 集： - 进度断：cursor 属于作品，活动只记「碰到哪」 - 节奏断：一次推进多少由单元决定（+1 / +2~4 / 0），代码先算 clamp 再交给生成 - 语义断：集数由模板拼、模型只写这一集内容，禁止自己数集、禁止剧透 - 记忆断：每集落 event（importance 2），并把「进行中的作品 ≤3」注入 prompt 新增内容： - ai_arc 增补 cursor_max / status(waiting) / mode(rewatch) / last_cursor_at / next_update_at；ai_activity 增补 arc_id / cursor_before / cursor_after - 「等更新」是独立状态：追平连载番 "
+        },
         {
           "hash": "66375a2",
           "date": "2026-11-01",

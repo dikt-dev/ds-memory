@@ -43,7 +43,7 @@ import { readSessionFacts } from './session-facts';
 import { buildCharacterCard } from './character-card';
 import { facetsOf, processEmotionTurn } from './emotion-context';
 import { moodFromVector } from './emotion-vector';
-import { buildVoiceDirective, recentOpeners } from './voice';
+import { buildVoiceDirective, recentOpeners, recentPhrases } from './voice';
 import { formatRecentMemoBlock, getRecentMemo, maybeRefreshRecentMemo } from './recent-memory';
 import { embedTexts, extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 import { loadMemoryChunks } from './memory-context-store';
@@ -589,6 +589,10 @@ openaiApp.post('/chat/completions', async (c) => {
     ...historyRaw.filter((m) => m.role === 'assistant').map((m) => m.content),
     ...textMessages.filter((m) => m.role === 'assistant').map((m) => contentToText(m.content)),
   ]);
+  const avoidPhrases = recentPhrases([
+    ...historyRaw.filter((m) => m.role === 'assistant').map((m) => m.content),
+    ...textMessages.filter((m) => m.role === 'assistant').map((m) => contentToText(m.content)),
+  ]);
   const personaDrift = buildPersonaDriftLine(personaState);
   const mergedSystem = [
     ...astrbotSystems,
@@ -608,6 +612,7 @@ openaiApp.post('/chat/completions', async (c) => {
       characterCard: cardTextWithMood,
       voice: buildVoiceDirective(relation.intimacy),
       avoidOpeners,
+      avoidPhrases,
       attitude,
       characterName: c.env.CHARACTER_NAME,
       userAddress: c.env.USER_ADDRESS,

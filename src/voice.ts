@@ -142,6 +142,49 @@ export function buildVoiceDirective(intimacy: number): string {
 
   lines.push('## 说话');
   lines.push('- 你就是记忆里那个人：性格、口癖、称呼、脾气都以记忆为准，想说什么就说什么，别端着。');
-  lines.push('- 想短就短，想长就长，怎么自然怎么来。');
+  lines.push(
+    '- 像在手机上打字：一条通常就一句话，几个字到二三十个字。想多说就分两三条连发，别一口气写一整段。',
+  );
+  lines.push(
+    '- 默认不写括号动作。只有换场景、情绪真的转折、或者做一个明显的动作（起身、走开、抱住）时才写一句，而且不要拿它当开头。',
+  );
+  lines.push('- 允许只回「嗯」「哦」「？」「不要」。不是每句都得有反应、有解释、有收尾。');
+  lines.push('- 反问是偶尔的，不是每个回复的落点。');
+  lines.push('- 口癖少才像人：同一个词最近用过就别再用，动作词也别接连重复。');
   return lines.join('\n');
+}
+
+/**
+ * 取最近回复里反复出现的短词，用于提醒模型「这个口癖你已经用过很多次了」。
+ *
+ * 和 recentOpeners 是一对：那个管开头重复，这个管词频重复。
+ * 只抓 2~4 个汉字、且在最近窗口里出现 ≥ 2 次的片段，按次数降序取前几个。
+ */
+export function recentPhrases(texts: string[], limit = 120, top = 6): string[] {
+  const window = texts.slice(-limit);
+  const counts = new Map<string, number>();
+  for (const text of window) {
+    // 括号里的动作描写不算口癖：那是舞台提示，不是说话方式
+    const clean = (text ?? '').replace(/[（(][^）)]*[）)]/g, '');
+    for (const run of clean.match(/[\u4e00-\u9fa5]+/g) ?? []) {
+      // 用 3~4 字的滑动窗口而不是分词：中文口癖跨词边界，按词切会切碎
+      for (let len = 3; len <= 4; len += 1) {
+        for (let i = 0; i + len <= run.length; i += 1) {
+          const w = run.slice(i, i + len);
+          counts.set(w, (counts.get(w) ?? 0) + 1);
+        }
+      }
+    }
+  }
+  const ranked = [...counts.entries()]
+    .filter(([, n]) => n >= 2)
+    .sort((a, b) => b[1] - a[1] || b[0].length - a[0].length);
+  const out: string[] = [];
+  for (const [w, n] of ranked) {
+    if (out.length >= top) break;
+    // 「本小姐就」是「本小姐」的延长，同频时只留短的那个
+    if (out.some((kept) => kept.includes(w) && counts.get(kept) === n)) continue;
+    out.push(w);
+  }
+  return out;
 }

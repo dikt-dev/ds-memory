@@ -72,6 +72,8 @@ export interface BasePromptArgs {
   userAddress?: string | null;
   /** 最近几条回复的开头（避免连续几轮用同一个开场） */
   avoidOpeners?: string[] | null;
+  /** 最近反复出现的口癖词：只提醒，不强制。 */
+  avoidPhrases?: string[] | null;
   /** 长期缓慢漂移出的近期性格倾向（见 persona-drift.ts） */
   personaDrift?: string | null;
   /** 只取某一段：stable = ①②（人设+长期记忆，可缓存前缀）；volatile = ③之后（每轮都变） */
@@ -104,6 +106,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     characterName,
     userAddress,
     avoidOpeners,
+    avoidPhrases,
     personaDrift,
   } = args;
   const lines: string[] = [];
@@ -221,6 +224,11 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     lines.push(characterCard);
     if (avoidOpeners && avoidOpeners.length > 0) {
       lines.push(`- 你最近用过这些开头，仅供参考，不必刻意避开：${avoidOpeners.map((s) => `“${s}”`).join('、')}`);
+    }
+    if (avoidPhrases && avoidPhrases.length > 0) {
+      lines.push(
+        `- 这些词你最近反复在用，这一轮尽量换种说法：${avoidPhrases.map((s) => `“${s}”`).join('、')}`,
+      );
     }
   }
 

@@ -17,7 +17,8 @@
     "memory:check": "node scripts/memory-check.mjs",
     "changelog": "node scripts/gen-changelog.mjs",
     "deploy:record": "node scripts/record-deploy.mjs",
-    "dead-code": "node scripts/dead-code.mjs"
+    "dead-code": "node scripts/dead-code.mjs",
+    "style-audit": "node scripts/style-audit.mjs"
   },
   "dependencies": {
     "@types/spark-md5": "^3.0.5",

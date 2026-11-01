@@ -39,7 +39,7 @@ import { computeTemper } from './temper';
 import { loadKeepsakesBlock } from './keepsakes';
 import { moodFromVector } from './emotion-vector';
 import { readSessionFacts } from './session-facts';
-import { buildVoiceDirective, recentOpeners } from './voice';
+import { buildVoiceDirective, recentOpeners, recentPhrases } from './voice';
 import { formatRecentMemoBlock, getRecentMemo, MEMO_MAX_ITEMS } from './recent-memory';
 import { embedTexts, extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 import { loadMemoryChunks } from './memory-context-store';
@@ -85,7 +85,10 @@ export async function streamChat(
   const { memory, dayCtxFile, weather, ctx, promptMemory, personaState, personaDrift } = pack;
   if (pack.weather) await attachWeather(env, dateKey, pack.weather, dayCtxFile);
   // 最近几条回复的开头：避免连续几轮用同一句开场白
-  const avoidOpeners = recentOpeners(history.filter((m) => m.role === 'assistant').map((m) => m.content));
+  const assistantTexts = history.filter((m) => m.role === 'assistant').map((m) => m.content);
+  const avoidOpeners = recentOpeners(assistantTexts);
+  // 最近反复出现的口癖：连着说同一个词，是比开头重复更明显的模板感
+  const avoidPhrases = recentPhrases(assistantTexts);
   // ★ 中期记忆（最近 24 小时）优先：它存在时就不再注入今日摘要，避免同一段内容发两遍。
   // 落在本会话时间范围内的条目不再注入——历史原文里已经有了（O4 去重）。
   const sessionStartMs = history[0]?.created_ms;
@@ -317,6 +320,7 @@ export async function streamChat(
         // 网页端已用浏览器 speechSynthesis 播放，允许模型输出 [语音] 段
         voiceReply: true,
         avoidOpeners,
+    avoidPhrases,
         attitude,
         temper: temper.line,
         keepsakes: keepsakesBlock,
