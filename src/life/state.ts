@@ -367,7 +367,8 @@ async function resolveTravel(
   // 大节日（除夕/春节/国庆）当天直接出发：这些日子是她会专门空出来的，
   // 不该由 1.2% 的骰子决定。天数仍按 2–3 天走现成的行程口径。
   const bigFest = festivalOn(input.dateKey);
-  if (bigFest?.size === 'big') {
+  // 除夕不出门：这顿年夜饭得在家吃。初一才走。
+  if (bigFest?.size === 'big' && bigFest.id !== 'chuxi') {
     const rng = makeRng(`festival-trip|${input.dateKey}`);
     const trip: Trip = { city: rng.pick(TRIP_CITIES), start: input.dateKey, days: rng.int(2, 3) };
     await writeTrip(env, trip);
