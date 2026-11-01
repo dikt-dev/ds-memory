@@ -9,7 +9,7 @@
  */
 import type { Env } from '../types';
 import { makeRng } from './seed';
-import { CITIES } from './weather';
+import { CITIES } from './cities';
 
 export interface Trip {
   city: string;
