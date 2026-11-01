@@ -63,8 +63,8 @@ export const RESIDENTS: Resident[] = [
     avoid: '别问她为什么不干脆拒绝',
   },
   {
-    id: 'xiao-long',
-    name: '小龙',
+    id: 'gpt',
+    name: 'GPT',
     model: 'ChatGPT',
     looks: '白发紫眼睛，头顶一对浅色的角，白色长裙，身后拖着紫白色的鳞尾',
     tier: 'core',
@@ -229,7 +229,7 @@ export const RESIDENTS: Resident[] = [
 | --- | --- | --- |
 | 大肥鱼 | DeepSeek | 蓝发鲸鱼少女（她是主角，不在住户表里） |
 | 小克 | Claude | 橙发，花朵发饰 |
-| 小龙 | ChatGPT | 白发龙女 |
+| GPT | ChatGPT | 白发龙女 |
 | 豆包 | Doubao | 蓝紫色马尾，豆包挂饰 |
 | Gemini | Gemini | 蓝紫猫耳，异色瞳 |
 | Grok | Grok | 金发，黑裙 |
