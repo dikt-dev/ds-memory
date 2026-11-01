@@ -266,16 +266,25 @@ LLM 在这里只做一件事：把 `播放第 3 集` 写成「看到芙莉莲在
 
 **片单草稿已出**：[anime-catalog.md](./anime-catalog.md)，40 部 + 8 部剧场版。
 
-够不够：有看点番的日子约 22%，一部番吃 2–4 周，40 部 ≈ **1.5–2 年**的量，够了；不够再靠联网补。
+够不够：**片单已按 AniList 核对（2026-11），40 部共 82 季 / 1,361 集。**
+有看点番的日子约 22%，一次推进 1 集（通宵 2–4 集），按每月 6–7 天追番算 ≈ **5 年**的量。
+原来的 1.5–2 年是把多季番只按第一季算，算少了。所以不需要再补片单。
 
 ```ts
-interface AnimeEntry {
-  title: string;       // '葬送的芙莉莲'
-  total: number;       // 28
-  genres: string[];    // ['奇幻','治愈']
+/** 一条「季」= 一条可独立推进的弧线（ai_arc 的一行） */
+interface SeasonEntry {
+  title: string;       // '进击的巨人'
+  season: string;      // 'S2' / '最终季' / '续章 上'
+  year: number;        // 2017
+  episodes: number;    // 12
   vibe: 'healing' | 'hype' | 'mystery' | 'daily' | 'sad';
+  status?: 'airing' | 'finished';
 }
 ```
+
+**一季一条进度**：`ai_arc.key` 用 `作品名#季`（如 `进击的巨人#S2`），`cursor_max` 是这一季的集数。
+把「进击的巨人 87 集」当成一个数会直接错两次：看到第 25 集时不知道第二季在哪；
+追平第一季就以为完结了，而实际还有 5 季。
 
 ### 5.4.2 连续性事件：进度、节奏、语义、记忆四道闸（新增）
 
@@ -334,6 +343,7 @@ cursor_after   INTEGER
 硬约束：
 
 - **同一作品每天最多一次活动**（marathon 本身就是一次长活动，不冲突）
+- **同一作品同时只允许一条 active 弧线**：S1 没看完不能开 S2（跳季比跳集更假）
 - **全局「追番类」单元每天最多 1 次**，避免一天看三部
 - **推进量先算再生成**：`cursor_after = clamp(cursor_before + step, 0, cursor_max)`，
   生成阶段拿到的是结果，不是「你随便加」
