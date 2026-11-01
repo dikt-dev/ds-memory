@@ -15,7 +15,7 @@ export const SLEEP_START = 26 * 60;
 /** 起床时间：09:00。 */
 export const WAKE_AT = 9 * 60;
 /** 一天最多几段活动。多了就显得「一天到晚都在做事」，不像人。 */
-export const MAX_ACTIVITIES = 5;
+export const MAX_ACTIVITIES = 4;
 
 const MEALS = [
   { name: '早餐', start: 9 * 60 + 10, minutes: 40 },
@@ -145,12 +145,29 @@ const UNIT_RULES: Record<string, UnitRule> = {
   short_trip_movie: { cooldownDays: 14 },
   outing_haircut: { cooldownDays: 30 },
   outing_swim: { minTemp: 24, cooldownDays: 30 },
-  meal_night: { starts: [[20 * 60, 26 * 60]] },
+  meal_night: { starts: [[19 * 60 + 50, 26 * 60]] },
   meal_snack: { starts: [[13 * 60, 18 * 60 + 30]] },
   meal_normal: { starts: [[10 * 60, 13 * 60 + 30], [16 * 60 + 30, 20 * 60]] },
   meal_takeout: { starts: [[10 * 60, 13 * 60 + 30], [16 * 60 + 30, 20 * 60]] },
   idle_nap: { starts: [[11 * 60, 16 * 60]] },
 };
+
+/**
+ * 天气偏好：晴天更愿意出门，阴雨天更愿意待着。
+ *
+ * 没有这一条的时候，30 天里 3 个晴天全被她用来在家打游戏——
+ * 不是数据坏了，是池子里「出门」和「在家」的权重一样高，天气就白接了。
+ */
+function weatherBias(unit: ActUnit, env: DayEnv): number {
+  const outdoor = unit.tags.includes('outdoor');
+  const sunny = env.weather === 'sunny';
+  if (outdoor && sunny && env.tempC >= 14 && env.tempC <= 26) return 2.2;
+  // 晴天但只有 10℃ 左右，也还是想出去晒晒，只是没那么大劲
+  if (outdoor && sunny && env.tempC >= 6) return 1.8;
+  if (outdoor && env.weather === 'cloudy') return 1.2;
+  if (!outdoor && (env.weather === 'rain' || env.weather === 'snow')) return 1.3;
+  return 1;
+}
 
 /** 这条单元在「这个开始时间」合不合规矩。 */
 function ruleOk(unitId: string, startMin: number, env: DayEnv, date: string, recentUses?: Map<string, string[]>): boolean {
@@ -222,7 +239,7 @@ function fillWindow(
         return u.min <= target && u.max * 1.2 >= target;
       });
       picked = rng.weighted(candidates, (u) =>
-        u.weight * antiRepeatWeight(u.id, input.date, input.recentUses),
+        u.weight * weatherBias(u, input.env) * antiRepeatWeight(u.id, input.date, input.recentUses),
       );
       if (picked) break;
     }

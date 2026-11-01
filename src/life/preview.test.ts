@@ -9,7 +9,7 @@ import type { DayEnv } from './types';
 /**
  * 30 天日程评审：用真实历史天气（Open-Meteo archive）生成，打印成表。
  * PREVIEW=1 npx vitest run src/life/preview.test.ts 才会打印大表；
- * 平时这条只校验「每天 2–5 段、全部过校验」。
+ * 平时这条只校验「每天 2–4 段、全部过校验」。
  */
 const raw = JSON.parse(
   readFileSync('src/life/fixtures/weather30.json', 'utf8'),

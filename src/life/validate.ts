@@ -5,7 +5,7 @@
  *   睡着还在回消息 / 一整天都在忙 / 一天五段碎活动 / 活动压在睡觉上。
  */
 import { BY_ID } from './pool';
-import { SLEEP_START, WAKE_AT, type DayPlan } from './planner';
+import { MAX_ACTIVITIES, SLEEP_START, WAKE_AT, type DayPlan } from './planner';
 
 export interface ValidationIssue {
   rule: string;
@@ -53,9 +53,9 @@ export function validateDay(plan: DayPlan): ValidationIssue[] {
     }
   }
 
-  // ③ 单日活动 ≤ 5 段
-  if (acts.length > 5) {
-    issues.push({ rule: 'too-many', detail: `一天 ${acts.length} 段活动，超过 5 段上限` });
+  // ③ 单日活动 ≤ MAX_ACTIVITIES 段
+  if (acts.length > MAX_ACTIVITIES) {
+    issues.push({ rule: 'too-many', detail: `一天 ${acts.length} 段活动，超过 ${MAX_ACTIVITIES} 段上限` });
   }
 
   // ④ 可回消息时长 ≥ 清醒时长 60%
