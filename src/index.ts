@@ -128,6 +128,7 @@ import { decayEmotion, emptyEmotionVector, type EmotionVector } from './emotion-
 import { elapsedMs, logTrace, REQUEST_ID_HEADER, shouldLogHttp, startTrace } from './trace';
 import { runLifeMorning } from './life/jobs';
 import { flushHeldMessages } from './life/flush';
+import { maybeNightWake } from './life/night';
 import { maybeSendPostcard } from './life/postcard';
 import { pruneRequestLog, readPathStats, readRecentRequests, recordRequest } from './request-log';
 import { deleteRuntimeState, getRuntimeState, putRuntimeState } from './runtime-store';
@@ -615,6 +616,8 @@ export default {
           await pruneRequestLog(env);
           // 生活系统：生成「今天」的日程。P0 阶段只写库，聊天行为不变。
           await runLifeMorning(env, now);
+          // 夜里醒来：凌晨四点偶尔醒一下，把压着的消息回掉（P3-2）
+          await maybeNightWake(env, now).catch(() => {});
         })(),
       );
       logCron(env, ctx, cron, startedAt);

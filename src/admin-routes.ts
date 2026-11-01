@@ -10,6 +10,7 @@ import { requireAuth } from './middleware';
 import { MEMORY_KV_KEY, getMemory, putMemory } from './memory';
 import { appendMemoryLine, removeMemoryLine } from './memory-append';
 import { ensureLifeDay, lifeNow } from './life/jobs';
+import { maybeNightWake } from './life/night';
 import { generateDiary } from './life/diary-job';
 import { refreshLifeEnv } from './life/weather';
 import { gateDecision, lifeEnabled } from './life/gate';
@@ -655,6 +656,12 @@ app.post('/api/admin/life/day', requireAuth, async (c) => {
     day: saved?.day ?? null,
     activities: saved?.activities ?? [],
   });
+});
+
+app.post('/api/admin/life/night', requireAuth, async (c) => {
+  const force = c.req.query('force') === '1';
+  const result = await maybeNightWake(c.env, new Date(), { force });
+  return c.json({ ok: true, ...result });
 });
 
 app.get('/api/admin/life/now', requireAuth, async (c) => {

@@ -54,6 +54,13 @@ export async function gateDecision(env: Env, now = new Date()): Promise<GateDeci
     const chance = status.current.reply_chance ?? 0.3;
     const roll = makeRng(`${status.dateKey}|${status.current.start_min}|${Math.floor(now.getTime() / 60000)}`);
     if (!roll.chance(chance)) {
+      // 忙里偷闲：真的在忙（不可打断）且这段活动本身让她心情好时，
+      // 仍然留着 12% 的机会回一句。全是「不理你」会显得像拉黑。
+      const sneaking = !status.current.interruptible && (status.current.mood_delta ?? 0) > 0;
+      const sneak = makeRng(`${status.dateKey}|${status.current.start_min}|sneak|${Math.floor(now.getTime() / 60000)}`);
+      if (sneaking && sneak.chance(0.12)) {
+        return { hold: false, reason: 'busy-but-sneaking', state: 'busy' };
+      }
       return {
         hold: true,
         until: hhmm(status.current.end_min),

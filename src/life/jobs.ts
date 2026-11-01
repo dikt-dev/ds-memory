@@ -68,7 +68,7 @@ export async function ensureLifeDay(
     env: dayEnv,
     location: input.location,
   });
-  // 回家日：把这次旅行写进「共同经历」——不然她以后说「上次去杭州」就是编的
+  // 回家日：把这次旅行写进「她的生活」——不然她以后说「上次去杭州」就是编的
   if (saved.day.recipe === 'homecoming' && tripBefore) {
     const end = shiftDate(tripBefore.start, tripBefore.days - 1);
     const line =

@@ -513,6 +513,14 @@
   ],
   [
     "POST",
+    "/api/admin/life/night"
+  ],
+  [
+    "POST",
+    "/api/admin/life/night"
+  ],
+  [
+    "POST",
     "/api/admin/life/photo"
   ],
   [
