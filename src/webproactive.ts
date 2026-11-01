@@ -1,4 +1,5 @@
 import { lifeNow } from './life/jobs';
+import { lifePromptLine } from './life/now-text';
 /**
  * AI 主动消息（v2：打分决策 + 事由驱动）。
  *
@@ -339,7 +340,11 @@ async function generateProactive(
   //   不是每条主动消息都翻旧账——偶尔一次像人，每次都提像复读机。
   const dormantHint = await maybeDormantHint(env, now);
 
-  const system = `${systemPrompt}
+  // ★ 主动消息也要知道「她此刻在干什么」：否则会出现
+  //   「在刷手机，你呢」而日程里她正在泡澡这种自相矛盾。
+  const lifeLine = await lifePromptLine(env, now).catch(() => null);
+
+  const system = `${systemPrompt}${lifeLine ? '\n\n' + lifeLine : ''}
 
 ## 最近对话
 ${historyText}
