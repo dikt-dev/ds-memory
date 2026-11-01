@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-01T13:13:45.783Z",
-  "count": 393,
+  "generated_at": "2026-11-01T13:18:33.568Z",
+  "count": 394,
   "days": [
     {
       "date": "2026-11-01",
       "items": [
+        {
+          "hash": "3fb758e",
+          "date": "2026-11-01",
+          "type": "other",
+          "area": "",
+          "title": "memory-dual 的表名收成联合类型",
+          "why": "count(env, table) 会把 table 拼进 SQL 模板。现在调用方都是常量，但接口本身接受任意字符串， 是个等着被误用的口子。 改成 type CountableTable = 'memory_entries' | 'memory_chunks' | 'memory_facts' | 'memory_events'， 越界在编译期就报错，不用等到运行时。"
+        },
         {
           "hash": "b0d8090",
           "date": "2026-11-01",

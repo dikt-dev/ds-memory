@@ -1,3 +1,4 @@
+import { lifeNow } from './life/jobs';
 /**
  * AI 主动消息（v2：打分决策 + 事由驱动）。
  *
@@ -653,8 +654,29 @@ export async function diagnoseProactive(env: Env, now: Date): Promise<ProactiveD
   };
 }
 
+/**
+ * 生活系统闸口：她睡着或病着的时候，主动消息不该照常发。
+ *
+ * 时间窗本身不冲突（08:10 在她醒来后、22:45 在睡前），但两套系统各排各的：
+ * 生病那天她还是会照常发两条闲聊，语气里却说着没精神——对不上。
+ */
+async function lifeGuard(
+  env: Env,
+  now: Date,
+  kind: 'morning' | 'evening' | 'random',
+): Promise<string | null> {
+  const life = await lifeNow(env, now).catch(() => null);
+  if (!life) return null;
+  if (life.status === 'sleeping') return '她在睡觉';
+  // 生病日只留早上一句，其余时段不发（§9.2：health < 60 减到每天 ≤1 条）
+  if (life.health < 60 && kind !== 'morning') return '她病着，今天只发一条';
+  return null;
+}
+
 export async function runWebProactiveSlot(env: Env, now: Date): Promise<ProactiveResult> {
   if (await isPaused(env, now)) return { skipped: '用户已暂停主动消息' };
+  const guarded = await lifeGuard(env, now, currentSlot(beijingMinutes(now)) ?? 'evening');
+  if (guarded) return { skipped: guarded };
   const dateKey = dateKeyInBeijing(now);
   const minutes = beijingMinutes(now);
   const slot = currentSlot(minutes);
@@ -680,6 +702,8 @@ export async function runProactiveNow(
 /** 白天随机主动消息（0~2 条，仍受打分约束）。 */
 export async function runWebProactiveRandom(env: Env, now: Date): Promise<ProactiveResult> {
   if (await isPaused(env, now)) return { skipped: '用户已暂停主动消息' };
+  const guarded = await lifeGuard(env, now, 'random');
+  if (guarded) return { skipped: guarded };
   const dateKey = dateKeyInBeijing(now);
   const minutes = beijingMinutes(now);
   if (minutes < RANDOM_WINDOW.start || minutes >= RANDOM_WINDOW.end) {
