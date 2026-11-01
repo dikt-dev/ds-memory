@@ -57,6 +57,7 @@ async function requestDeepSeek(
   messages: DeepSeekMessage[],
   stream: boolean,
   maxTokens?: number,
+  opts: { thinking?: boolean } = {},
 ): Promise<Response> {
   return fetch(DEEPSEEK_URL, {
     method: 'POST',
@@ -70,7 +71,8 @@ async function requestDeepSeek(
       temperature: 0.85,
       frequency_penalty: 0.15,
       presence_penalty: 0.1,
-      thinking: { type: 'disabled' },
+      // 聊天必须快：思考模式只在日记/记忆这类后台任务里开
+      thinking: { type: opts.thinking ? 'enabled' : 'disabled' },
     }),
   });
 }
@@ -218,12 +220,13 @@ export async function completeDeepSeek(
   messages: DeepSeekMessage[],
   now: Date,
   maxTokens = 4096,
+  opts: { thinking?: boolean } = {},
 ): Promise<DeepSeekCompletionResult> {
   const apiKey = env.DEEPSEEK_API_KEY;
   if (!apiKey) return { error: 'DEEPSEEK_API_KEY 未配置', status: 500 };
   let res: Response;
   try {
-    res = await requestDeepSeek(env, apiKey, messages, false, maxTokens);
+    res = await requestDeepSeek(env, apiKey, messages, false, maxTokens, opts);
     if (res.status === 400) {
       const detail = await res.clone().text().catch(() => '');
       logError('[deepseek] upstream 400, retry compact:', detail.slice(0, 300));
@@ -233,6 +236,7 @@ export async function completeDeepSeek(
         compactDeepSeekMessages(messages),
         false,
         maxTokens,
+        opts,
       );
     }
   } catch (e) {
