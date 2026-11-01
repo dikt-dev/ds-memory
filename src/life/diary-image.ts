@@ -50,12 +50,25 @@ export function imageScene(text: string): string {
 /** 最近一次失败原因（排查用，进程内即可）。 */
 export let lastImageError: string | null = null;
 
-/** 统一的画风前缀：不管场景是什么，长相要一致。 */
+/**
+ * 固定形象：长蓝发、蓝眼、鳍耳、女仆发带、黑白女仆裙、身后一条鲸鱼尾巴。
+ *
+ * 之前没写死，模型每张都画一个随机的黑发路人——日记里明明是她自己，
+ * 画面却像别人。形象必须当成常量，和画风分开写。
+ */
+export const CHARACTER =
+  'the same character: a young woman with long blue hair, blue eyes, fin-like ears, ' +
+  'a white maid headband, wearing a black-and-white maid dress, with a large whale tail behind her';
+
+/** 统一的画风 + 固定人物：不管场景是什么，长相要一致。 */
 export function withStyle(scene: string): string {
   return [
     'Japanese watercolor illustration, soft natural light, gentle brush texture, muted pastel palette.',
+    CHARACTER + '.',
     'Scene: ' + scene,
-    'No text, no letters, no characters, no watermark, no signature.',
+    // 加了形象描述之后模型爱画成两个人——明确只画一个
+    'Only one person in the frame.',
+    'No text, no letters, no characters on screen, no watermark, no signature.',
   ].join(' ');
 }
 

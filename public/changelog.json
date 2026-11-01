@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-01T14:42:40.115Z",
+  "generated_at": "2026-11-01T14:44:24.710Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-01",
       "items": [
+        {
+          "hash": "48a5440",
+          "date": "2026-11-01",
+          "type": "other",
+          "area": "",
+          "title": "修复日记页脚本括号错误（整页 JS 解析失败，所以什么都不显示）",
+          "why": ""
+        },
         {
           "hash": "220f1b2",
           "date": "2026-11-01",
@@ -3241,14 +3249,6 @@
           "area": "relation",
           "title": "修复关系值计算系统的 5 个缺陷",
           "why": "审查发现的问题与修复： 1. 【严重】亲密度上限随 D1 清理倒退 activeDays 原本从 D1 messages 全表统计，但月度归档会删 3 个月前数据， 导致上限从 1000 跌回 480，聊得越久反而越涨不动。 新增 relation-store.ts：把历史累计天数持久化到 KV（只增不减）， 与 D1 现值取较大者，D1 被清也能自愈。 2. 【严重】中等聊天频率下亲密度完全不涨 computeIntimacyGain 原来只按「每 10 轮 +1」，每天 8 轮算出 0， 聊满一年亲密度纹丝不动。改为「当天聊过保底 +1」，轮次作为额外加成。 3. 亲密度重复衰减 applyIntimacyChange 与 applyRelationDecay 都会按失联天数扣分， 两者都在归档流程里执行，同一天扣两次。现统一由 applyRelationDecay 负责。 4. 心情"
-        },
-        {
-          "hash": "1e54ade",
-          "date": "2026-10-23",
-          "type": "docs",
-          "area": "",
-          "title": "修正与代码不符的四处过期描述",
-          "why": "- architecture: KV 键移除已废弃的 proactive:sent:*，改为说明幂等已迁移到 D1 proactive_log 的 UNIQUE 约束（补上 memo:24h）；测试数 29 → 30 - design-notes: Workers AI 的 llama-3.1-8b 已被 Cloudflare 下架（错误 5007）， 改为实际的 @cf/meta/llama-3.2-3b-instruct；对话模型 deepseek-chat → deepseek-flash。该文件是初始决策记录，保留原貌并加注当前实际值 - README: AstrBot 的模型字段服务端不校验，如实说明按 DEEPSEEK_MODEL 转发"
         }
       ]
     }
