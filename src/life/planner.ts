@@ -46,10 +46,13 @@ export interface BuildDayInput {
 }
 
 /** 骨架空档：三餐和睡觉之间的可用时间。 */
-export function dayWindows(): Array<{ start: number; end: number }> {
+export function dayWindows(wakeAt = WAKE_AT): Array<{ start: number; end: number }> {
+  // 早饭跟着起床时间走：晚起半小时，就不会 09:10 吃早饭
+  const breakfast = Math.max(MEALS[0].start, wakeAt + 10);
   const blocks = [
-    { start: WAKE_AT, end: MEALS[0].start },
-    ...MEALS.map((m) => ({ start: m.start, end: m.start + m.minutes })),
+    { start: wakeAt, end: breakfast },
+    { start: breakfast, end: breakfast + MEALS[0].minutes },
+    ...MEALS.slice(1).map((m) => ({ start: m.start, end: m.start + m.minutes })),
   ];
   const windows: Array<{ start: number; end: number }> = [];
   for (let i = 0; i < blocks.length - 1; i += 1) {
@@ -110,6 +113,70 @@ export function antiRepeatWeight(
   return 1;
 }
 
+/**
+ * 单元级规则：天气依赖、时段、冷却。
+ *
+ * 池子里的 tags 只表达「室内的/户外的/怕雨的」，表达不了
+ * 「看雪得下雪」「夜宵不能出现在下午一点」「大扫除一个月一次」。
+ * 这些不写进池子（你改池子只该改内容），写在这张表里。
+ */
+interface UnitRule {
+  /** 只在这些天气里出现 */
+  weather?: string[];
+  /** 时段范围（分钟，可以多段） */
+  starts?: Array<[number, number]>;
+  minTemp?: number;
+  maxTemp?: number;
+  /** 冷却：N 天内用过就不再出现 */
+  cooldownDays?: number;
+}
+
+const UNIT_RULES: Record<string, UnitRule> = {
+  snow_watch: { weather: ['snow'] },
+  rainy_window: { weather: ['rain', 'snow'] },
+  summer_ice: { minTemp: 26 },
+  sunny_balcony: { weather: ['sunny'], starts: [[9 * 60, 16 * 60]] },
+  anime_marathon: { starts: [[19 * 60 + 30, 25 * 60]], cooldownDays: 14 },
+  clean_deep: { cooldownDays: 21 },
+  short_trip_hike: { cooldownDays: 14 },
+  short_trip_amusement: { cooldownDays: 21 },
+  short_trip_hotspring: { cooldownDays: 14 },
+  short_trip_museum: { cooldownDays: 14 },
+  short_trip_movie: { cooldownDays: 14 },
+  outing_haircut: { cooldownDays: 30 },
+  outing_swim: { minTemp: 24, cooldownDays: 30 },
+  meal_night: { starts: [[20 * 60, 26 * 60]] },
+  meal_snack: { starts: [[13 * 60, 18 * 60 + 30]] },
+  meal_normal: { starts: [[10 * 60, 13 * 60 + 30], [16 * 60 + 30, 20 * 60]] },
+  meal_takeout: { starts: [[10 * 60, 13 * 60 + 30], [16 * 60 + 30, 20 * 60]] },
+  idle_nap: { starts: [[11 * 60, 16 * 60]] },
+};
+
+/** 这条单元在「这个开始时间」合不合规矩。 */
+function ruleOk(unitId: string, startMin: number, env: DayEnv, date: string, recentUses?: Map<string, string[]>): boolean {
+  const rule = UNIT_RULES[unitId];
+  if (!rule) return true;
+  if (rule.weather && !rule.weather.includes(env.weather)) return false;
+  if (rule.minTemp !== undefined && env.tempC < rule.minTemp) return false;
+  if (rule.maxTemp !== undefined && env.tempC > rule.maxTemp) return false;
+  const start = ((startMin % 1440) + 1440) % 1440;
+  if (rule.starts && !rule.starts.some(([a, b]) => start >= (a % 1440) && start <= (b % 1440))) {
+    // 跨午夜的时间段（如 20:00–02:00）单独判断
+    const spansMidnight = rule.starts.some(([a, b]) => b > 1440 && (start >= (a % 1440) || start <= (b % 1440)));
+    if (!spansMidnight) return false;
+  }
+  if (rule.cooldownDays && recentUses) {
+    const uses = recentUses.get(unitId) ?? [];
+    const nowMs = Date.parse(date + 'T00:00:00+08:00');
+    const tooSoon = uses.some((d) => {
+      const diff = (nowMs - Date.parse(d + 'T00:00:00+08:00')) / 86400000;
+      return diff >= 0 && diff <= rule.cooldownDays!;
+    });
+    if (tooSoon) return false;
+  }
+  return true;
+}
+
 /** 往一个空档里装活动，装不下就留白。 */
 function fillWindow(
   rng: Rng,
@@ -118,6 +185,8 @@ function fillWindow(
   input: BuildDayInput,
   used: Set<string>,
   budget: number,
+  lazy = false,
+  socialUsed = 0,
 ): PlannedActivity[] {
   const out: PlannedActivity[] = [];
   let cursor = start;
@@ -127,21 +196,42 @@ function fillWindow(
     // 只按空档长度配单元，会永远只抽长单元（爬山、游乐园），
     // 60–120 分钟的日常（逛书店、洗衣服、看小说）就永远轮不到。
     // 下限 20 分钟：不然 15–30 分钟的小事（洗碗、浇花、洗澡）永远抽不到。
-    const target = rng.chance(0.22) ? free : rng.int(20, Math.min(free, 180));
-    const candidates = ACTIVITIES.filter((u) => {
-      if (used.has(u.id)) return false;
-      if (!tagsOk(u, input.env)) return false;
-      if (antiRepeatWeight(u.id, input.date, input.recentUses) <= 0) return false;
-      return u.min <= target && u.max * 1.2 >= target;
-    });
-    const picked = rng.weighted(candidates, (u) =>
-      u.weight * antiRepeatWeight(u.id, input.date, input.recentUses),
-    );
+    // 关键：不是「把空档填满」，而是「先想这件事大概要花多久」。
+    // 只按空档长度配单元，会永远只抽长单元（爬山、游乐园），
+    // 60–120 分钟的日常（逛书店、洗衣服、看小说）就永远轮不到。
+    // 候选为空时必须**降低目标时长重试**，否则一个抽不到的长目标会让整个下午空着。
+    const targets = [
+      rng.chance(0.22) ? free : rng.int(20, Math.min(free, 180)),
+      90,
+      60,
+      40,
+      25,
+    ];
+    let picked: (typeof ACTIVITIES)[number] | null = null;
+    for (const target of targets) {
+      if (target > free) continue;
+      const candidates = ACTIVITIES.filter((u) => {
+        if (used.has(u.id)) return false;
+        // 摆烂日只躺着、吃饭、找人聊两句，不出门做事
+        if (lazy && !(u.kind === 'idle' || u.kind === 'meal' || u.kind === 'social')) return false;
+        // 一天最多一次社交：她有朋友，但不是每天都有局
+        if (u.kind === 'social' && socialUsed >= 1) return false;
+        if (!tagsOk(u, input.env)) return false;
+        if (antiRepeatWeight(u.id, input.date, input.recentUses) <= 0) return false;
+        if (!ruleOk(u.id, cursor, input.env, input.date, input.recentUses)) return false;
+        return u.min <= target && u.max * 1.2 >= target;
+      });
+      picked = rng.weighted(candidates, (u) =>
+        u.weight * antiRepeatWeight(u.id, input.date, input.recentUses),
+      );
+      if (picked) break;
+    }
     if (!picked) break;
     const room = Math.min(free, SLEEP_START - cursor);
     if (room < picked.min) break;
     const span = Math.min(room, rng.int(picked.min, Math.max(picked.min, picked.max)));
     out.push({ unitId: picked.id, start: cursor, end: cursor + span });
+    if (picked.kind === 'social') socialUsed += 1;
     used.add(picked.id);
     cursor += span + rng.int(5, 20);
   }
@@ -154,9 +244,20 @@ export function buildDay(input: BuildDayInput): DayPlan {
   const rng = makeRng(seed);
   const used = new Set<string>();
   const activities: PlannedActivity[] = [];
-  for (const w of dayWindows()) {
-    if (activities.length >= MAX_ACTIVITIES) break;
-    activities.push(...fillWindow(rng, w.start, w.end, input, used, MAX_ACTIVITIES - activities.length));
+
+  // 摆烂日：3%/天。晚睡晚起、只躺着吃饭、最多三段。
+  // 每天都排满 4–5 段的话，她不像人，像排班表。
+  const lazy = rng.chance(0.03);
+  // 起床不是精确的 09:00：晚点起半小时很常见
+  const wakeAt = lazy ? 11 * 60 : WAKE_AT + rng.int(-20, 50);
+  const budget = lazy ? 3 : MAX_ACTIVITIES;
+  let socialUsed = 0;
+
+  for (const w of dayWindows(wakeAt)) {
+    if (activities.length >= budget) break;
+    const filled = fillWindow(rng, w.start, w.end, input, used, budget - activities.length, lazy, socialUsed);
+    socialUsed += filled.filter((a) => ACTIVITIES.find((u) => u.id === a.unitId)?.kind === 'social').length;
+    activities.push(...filled);
   }
   activities.sort((a, b) => a.start - b.start);
   return { date: input.date, seed, activities };

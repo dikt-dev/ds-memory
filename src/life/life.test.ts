@@ -109,8 +109,9 @@ describe('生成', () => {
       }
     }
     const unused = ACTIVITIES.filter((u) => !seen.has(u.id)).map((u) => u.id);
-    // 允许几条极端稀有的长期不在家/极端天气单元，但绝大多数必须被用到
-    expect(unused.length, JSON.stringify(unused)).toBeLessThanOrEqual(4);
+    // 少数单元天生稀有（下雪才有的「看雪」、只在深夜的「夜宵」），
+    // 允许 6 条以内一直抽不到；再多就说明规则卡过头了
+    expect(unused.length, JSON.stringify(unused)).toBeLessThanOrEqual(6);
   });
 
   it('反重复：3 天内用过降到 0.35，14 天内三次禁用', () => {
