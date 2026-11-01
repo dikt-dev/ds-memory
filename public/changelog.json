@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-01T12:48:13.809Z",
-  "count": 386,
+  "generated_at": "2026-11-01T12:50:26.272Z",
+  "count": 387,
   "days": [
     {
       "date": "2026-11-01",
       "items": [
+        {
+          "hash": "e3fad1c",
+          "date": "2026-11-01",
+          "type": "other",
+          "area": "",
+          "title": "MEMORY_ENGINE 切到 next",
+          "why": "三个渠道（mobile/web/qq）本来就已是 next，这次把全局默认也从 legacy 提到 next， 覆盖 cron、管理接口、后台任务这些不走渠道的路径。 依据见 docs/memory/dual-index-diff-2026-11-01.md：91/97 一致，差异 10 条全可解释， legacy 独有的 6 条是「回滚方案」的历史阶段残留，next 已合并成一条 [已完成]。 回滚：把 wrangler.local.toml 里 MEMORY_ENGINE 改回 legacy 再部署，一行。"
+        },
         {
           "hash": "4b83358",
           "date": "2026-11-01",

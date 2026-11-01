@@ -127,6 +127,7 @@ import { buildEmotionSnapshot, describeEmotionState } from './emotion-snapshot';
 import { decayEmotion, emptyEmotionVector, type EmotionVector } from './emotion-vector';
 import { elapsedMs, logTrace, REQUEST_ID_HEADER, shouldLogHttp, startTrace } from './trace';
 import { runLifeMorning } from './life/jobs';
+import { recordDualStats } from './memory-dual';
 import { flushHeldMessages } from './life/flush';
 import { maybeNightWake } from './life/night';
 import { collapseOngoingItems } from './memory-ongoing-job';
@@ -621,6 +622,8 @@ export default {
           await runLifeMorning(env, now);
           // 夜里醒来：凌晨四点偶尔醒一下，把压着的消息回掉（P3-2）
           await maybeNightWake(env, now).catch(() => {});
+          // 两套记忆索引的行数对账：每天一条，才能看出趋势（开关关着时什么都不做）
+          await recordDualStats(env, now).catch(() => {});
         })(),
       );
       logCron(env, ctx, cron, startedAt);
