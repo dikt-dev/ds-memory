@@ -29,7 +29,10 @@ function dateKey(now: Date): string {
   return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(now);
 }
 
-async function count(env: Env, table: string): Promise<number> {
+/** 只允许这几张表：表名会进 SQL 模板，不能是任意字符串。 */
+type CountableTable = 'memory_entries' | 'memory_chunks' | 'memory_facts' | 'memory_events';
+
+async function count(env: Env, table: CountableTable): Promise<number> {
   const row = await env.DB.prepare(`SELECT COUNT(*) AS c FROM ${table}`)
     .first<{ c: number }>()
     .catch(() => null);
