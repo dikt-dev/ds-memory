@@ -182,3 +182,13 @@ export async function settleDiaryConsent(
   }).catch(() => {});
   return verdict;
 }
+
+/** 有没有一篇日记正等着她表态（用户点了「问问她」）。 */
+export async function hasPendingDiaryAsk(env: Env): Promise<boolean> {
+  const row = await env.DB.prepare(
+    `SELECT date_key FROM ai_diary WHERE visibility = 'pending' LIMIT 1`,
+  )
+    .first<{ date_key: string }>()
+    .catch(() => null);
+  return row !== null;
+}

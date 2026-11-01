@@ -54,7 +54,7 @@ import { affectEngineFor, memoryEngineFor } from './engine-flags';
 import { recordEngineMetric } from './engine-metrics';
 import { logTrace } from './trace';
 import { recordRequest } from './request-log';
-import { settleDiaryConsent } from './life/diary-job';
+import { hasPendingDiaryAsk, settleDiaryConsent } from './life/diary-job';
 
 export interface ChatImage {
   key: string; // R2 对象键（images/日期/时间戳.jpg）
@@ -318,6 +318,11 @@ export async function streamChat(
   // 时间/心情/召回/摘要这些每轮都变的放到最后一条 system，紧贴用户消息。
   // 她此刻在干什么：读不到就当没有，聊天行为和以前一模一样
   const lifeLine = await lifePromptLine(env, now).catch(() => null);
+  // 用户在 App 里点了「问问她」之后，日记是 pending。没人告诉她要开口，
+  // 于是点完什么都不会发生。这里补一句，让她在下一句里自己决定给不给看。
+  const diaryAskNote = await hasPendingDiaryAsk(env)
+    ? '【日记】用户刚问起某一天的日记，你想不想给他看？自己决定，说一句就行（不用长篇解释）。'
+    : null;
   const promptSplit = buildSystemPromptSplit({
         now,
         ctx,
@@ -340,7 +345,7 @@ export async function streamChat(
         keepsakes: keepsakesBlock,
         characterName: env.CHARACTER_NAME,
         userAddress: env.USER_ADDRESS,
-        life: lifeLine,
+        life: [lifeLine, diaryAskNote].filter(Boolean).join('\n\n') || null,
   });
   const volatileBlock = [promptSplit.volatile, historyNote].filter(Boolean).join('\n\n');
   const messages: DeepSeekMessage[] = [
