@@ -339,9 +339,22 @@ export async function resolveDiaryConsent(env: Env): Promise<void> {
     note: meta?.share_reason ?? null,
     summaries,
   });
+  if (!judged) return;
   const herText = list.filter((m) => m.role !== 'user').map((m) => m.content).join(' ');
-  if (!judged || judged === 'deny' || judged === 'unclear') return;
-  if (judged === 'allow' && hasRefusal(herText)) return;
+  // 拒绝是有效回答：直接落 declined，让页面能说「她说不给」，
+  // 而不是继续显示「还没答」。之后想再问，重新点「问问她」就行。
+  if (judged === 'deny' || (judged === 'allow' && hasRefusal(herText))) {
+    for (const d of dates) {
+      await env.DB.prepare(
+        "UPDATE ai_diary SET visibility = 'declined', share_reason = ? WHERE date_key = ?",
+      )
+        .bind('聊天里没给', d)
+        .run()
+        .catch(() => {});
+    }
+    return;
+  }
+  if (judged === 'unclear') return;
 
   const target = judged === 'allow' ? 'shared' : 'peek';
   for (const d of dates) {
