@@ -320,14 +320,12 @@ function fillWindow(
     // 上限从 180 提到 240，并加了 180 这一档：
     // 爬山（180–360）和游乐园（240–420）之前永远抽不到，因为目标时长封顶 180。
     // 「填满整个空档」的概率从 22% 提到 30%：60 天里一次公园都没去，不像人。
-    const targets = [
-      rng.chance(0.3) ? free : rng.int(20, Math.min(free, 240)),
-      180,
-      90,
-      60,
-      40,
-      25,
-    ];
+    // 深夜那几小时要给「短活动」机会：原来的阶梯从 240/180 起，
+    // 泡澡（25–50）、整理歌单（25–60）永远排在长活动后面，抽不到。
+    const lateNight = cursor >= 22 * 60;
+    const targets = lateNight
+      ? [rng.int(25, Math.min(free, 75)), 60, 45, 30, 25]
+      : [rng.chance(0.3) ? free : rng.int(20, Math.min(free, 240)), 180, 90, 60, 40, 25];
     let picked: (typeof ACTIVITIES)[number] | null = null;
     for (const target of targets) {
       if (target > free) continue;
