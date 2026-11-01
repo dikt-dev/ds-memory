@@ -44,7 +44,7 @@ export interface WeatherNow {
  * 失败返回 null，调用方保留旧值/默认值——天气挂了不该让日程也挂。
  */
 export async function fetchWeather(city: string): Promise<WeatherNow | null> {
-  const geo = CITIES[city] ?? CITIES['北京'];
+const geo = CITIES[city] ?? CITIES['上海'];
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${geo.lat}&longitude=${geo.lon}` +
     '&current=temperature_2m,weather_code&timezone=Asia%2FShanghai';
@@ -64,6 +64,34 @@ export async function fetchWeather(city: string): Promise<WeatherNow | null> {
   }
 }
 
+export function nearestCity(lat: number, lng: number): string {
+  let best = '上海';
+  let bestD = Infinity;
+  for (const [name, g] of Object.entries(CITIES)) {
+    const d = (g.lat - lat) ** 2 + (g.lon - lng) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      best = name;
+    }
+  }
+  return best;
+}
+
+/** 刷新「他那边」的天气并写进 KV，供提示词分开引用。 */
+export async function refreshUserEnv(
+  env: Env,
+  dateKey: string,
+  city: string,
+): Promise<{ location: string; weather: string; tempC: number } | null> {
+  const now = await fetchWeather(city);
+  if (!now) return null;
+  const rec = { location: city, weather: now.weather, tempC: now.tempC, updatedAt: new Date().toISOString() };
+  await env.KV.put(`life:user-env:${dateKey}`, JSON.stringify(rec), {
+    expirationTtl: 60 * 60 * 36,
+  }).catch(() => {});
+  return rec;
+}
+
 export interface LifeEnvRecord {
   location: string;
   atHome: boolean;
@@ -78,7 +106,7 @@ export async function refreshLifeEnv(
   dateKey: string,
   opts: { city?: string } = {},
 ): Promise<LifeEnvRecord | null> {
-  const city = opts.city ?? (await env.KV.get('life:home-city').catch(() => null)) ?? '北京';
+  const city = opts.city ?? (await env.KV.get('life:home-city').catch(() => null)) ?? '上海';
   const now = await fetchWeather(city);
   const record: LifeEnvRecord = {
     location: city,
@@ -90,5 +118,8 @@ export async function refreshLifeEnv(
   await env.KV.put(`life:env:${dateKey}`, JSON.stringify(record), {
     expirationTtl: 60 * 60 * 36,
   }).catch(() => {});
+  // 他那边单独一份：她的天气按她所在城市，他的按他所在城市，别混成一条
+  const userCity = await env.KV.get('life:user-city').catch(() => null);
+  if (userCity) await refreshUserEnv(env, dateKey, userCity).catch(() => null);
   return now ? record : null;
 }

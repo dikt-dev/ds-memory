@@ -17,7 +17,7 @@ import { ensureLifeDay, lifeNow } from './life/jobs';
 import { maybeNightWake } from './life/night';
 import { lifePromptLine } from './life/now-text';
 import { generateDiary } from './life/diary-job';
-import { refreshLifeEnv } from './life/weather';
+import { CITIES, refreshLifeEnv } from './life/weather';
 import { gateDecision, lifeEnabled } from './life/gate';
 import { writeTrip } from './life/travel';
 import { generatePhoto } from './life/photo';
@@ -703,6 +703,35 @@ app.post('/api/admin/life/diary/summary', requireAuth, async (c) => {
   if (!summary) return c.json({ ok: false, error: '模型没给摘要' }, 502);
   await c.env.DB.prepare('UPDATE ai_diary SET summary = ? WHERE date_key = ?').bind(summary, date).run();
   return c.json({ ok: true, date, summary });
+});
+
+/**
+ * 搬家：她换常住城市只有这一条路。
+ *
+ * 旅游是临时的（readTrip 覆盖当天 location，结束自动回来）；
+ * 搬家是永久的——改 life:home-city，重生成今天的日程，并写一条记忆。
+ */
+app.post('/api/admin/life/move', requireAuth, async (c) => {
+  const city = String(c.req.query('city') ?? '').trim();
+  if (!city || !(city in CITIES)) {
+    return c.json({ ok: false, error: '不认识的城市', cities: Object.keys(CITIES) }, 400);
+  }
+  const from = (await c.env.KV.get('life:home-city').catch(() => null)) ?? '上海';
+  await c.env.KV.put('life:home-city', city);
+  const today = beijingDateKey();
+  await c.env.KV.delete(`life:env:${today}`).catch(() => {});
+  await c.env.KV.delete(`life:user-env:${today}`).catch(() => {});
+  await c.env.DB.prepare('DELETE FROM ai_activity WHERE date_key = ?').bind(today).run().catch(() => {});
+  await c.env.DB.prepare('DELETE FROM ai_day WHERE date_key = ?').bind(today).run().catch(() => {});
+  await refreshLifeEnv(c.env, today).catch(() => null);
+  await ensureLifeDay(c.env, today).catch(() => null);
+  await appendMemoryLine(c.env, {
+    section: '## 她的生活',
+    line: `- [${today.slice(2)}] 从${from}搬到了${city}。`,
+    keyword: `搬到了${city}`,
+    actor: 'human',
+  }).catch(() => {});
+  return c.json({ ok: true, from, to: city });
 });
 
 /** 「问问她」：标成 pending，等聊天里她回话。 */

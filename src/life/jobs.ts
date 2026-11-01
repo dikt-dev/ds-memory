@@ -28,7 +28,11 @@ export interface LifeInput {
   tempC: number;
 }
 
-const DEFAULT_INPUT: LifeInput = { location: '北京', atHome: true, weather: 'cloudy', tempC: 20 };
+/** 没有天气数据时的兜底：地点取她的常住城市，别写死成北京。 */
+async function defaultInput(env: Env): Promise<LifeInput> {
+  const home = (await env.KV.get('life:home-city').catch(() => null)) ?? '上海';
+  return { location: home, atHome: true, weather: 'cloudy', tempC: 20 };
+}
 
 /**
  * 读当天的环境输入（P1 接真实天气）。
@@ -38,17 +42,17 @@ const DEFAULT_INPUT: LifeInput = { location: '北京', atHome: true, weather: 'c
  */
 export async function readLifeInput(env: Env, dateKey: string): Promise<LifeInput> {
   const raw = await env.KV.get(`life:env:${dateKey}`).catch(() => null);
-  if (!raw) return DEFAULT_INPUT;
+  if (!raw) return defaultInput(env);
   try {
     const parsed = JSON.parse(raw) as Partial<LifeInput>;
     return {
-      location: typeof parsed.location === 'string' && parsed.location ? parsed.location : DEFAULT_INPUT.location,
+      location: typeof parsed.location === 'string' && parsed.location ? parsed.location : (await defaultInput(env)).location,
       atHome: parsed.atHome !== false,
-      weather: typeof parsed.weather === 'string' && parsed.weather ? parsed.weather : DEFAULT_INPUT.weather,
-      tempC: typeof parsed.tempC === 'number' ? parsed.tempC : DEFAULT_INPUT.tempC,
+      weather: typeof parsed.weather === 'string' && parsed.weather ? parsed.weather : (await defaultInput(env)).weather,
+      tempC: typeof parsed.tempC === 'number' ? parsed.tempC : (await defaultInput(env)).tempC,
     };
   } catch {
-    return DEFAULT_INPUT;
+    return defaultInput(env);
   }
 }
 
@@ -59,6 +63,11 @@ export async function ensureLifeDay(
 ): Promise<{ created: boolean; activities: number }> {
   // 行程可能在生成「回家日」时被清掉，所以先留一份，回来时好写进记忆
   const tripBefore = await readTrip(env).catch(() => null);
+  // 当天还没有环境数据（首次生成 / 手动补跑）：先刷一次真实天气，
+  // 否则会按兜底的「阴 20 度」生成，地点也是错的
+  if (!(await env.KV.get(`life:env:${dateKey}`).catch(() => null))) {
+    await refreshLifeEnv(env, dateKey).catch(() => {});
+  }
   const input = await readLifeInput(env, dateKey);
   const dayEnv: DayEnv = { weather: input.weather, tempC: input.tempC, atHome: input.atHome };
   const before = await env.DB.prepare('SELECT date_key FROM ai_day WHERE date_key = ?')

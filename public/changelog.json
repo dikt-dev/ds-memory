@@ -1,10 +1,26 @@
 {
-  "generated_at": "2026-11-01T16:45:55.932Z",
+  "generated_at": "2026-11-01T16:59:17.693Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-02",
       "items": [
+        {
+          "hash": "0939f23",
+          "date": "2026-11-02",
+          "type": "other",
+          "area": "",
+          "title": "记录公寓社交圈的落地计划（五期）",
+          "why": ""
+        },
+        {
+          "hash": "2a853f1",
+          "date": "2026-11-02",
+          "type": "other",
+          "area": "",
+          "title": "被拒后 30 分钟冷却；补/删记忆行改读 R2 原文，避免过期缓存把改动冲掉",
+          "why": ""
+        },
         {
           "hash": "3a39804",
           "date": "2026-11-02",
@@ -3232,22 +3248,6 @@
           "type": "feat",
           "area": "memory",
           "title": "时间金字塔周/月摘要 + 管理接口合并(reload/rollup)",
-          "why": ""
-        },
-        {
-          "hash": "0239bf7",
-          "date": "2026-10-24",
-          "type": "perf",
-          "area": "memory-index",
-          "title": "向量int8量化（~1.4KB/条）+ 查询embedding内存/KV缓存",
-          "why": ""
-        },
-        {
-          "hash": "a7c04c4",
-          "date": "2026-10-24",
-          "type": "fix",
-          "area": "memory-index",
-          "title": "保留已有向量不被覆盖、清理幽灵条目、无日期行解析、分批写入",
           "why": ""
         }
       ]

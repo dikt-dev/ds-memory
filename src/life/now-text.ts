@@ -81,6 +81,24 @@ export async function lifePromptLine(env: Env, now = new Date()): Promise<string
   } else {
     bits.push(`现在是 ${hhmm(minute)}，${where}`);
   }
+  // 他那边的天气单独一条：她所在城市 ≠ 他所在城市，混在一起她会说错
+  let userRaw: string | null = null;
+  try {
+    userRaw = (await env.KV?.get(`life:user-env:${dateKey}`)) ?? null;
+  } catch {
+    userRaw = null;
+  }
+  if (userRaw) {
+    try {
+      const u = JSON.parse(userRaw) as { location?: string; weather?: string; tempC?: number };
+      if (u.location) {
+        const wt = u.weather === 'rain' ? '在下雨' : u.weather === 'snow' ? '在下雪' : u.weather === 'sunny' ? '晴天' : '阴天';
+        bits.push(`他在${u.location}，那边${wt} ${typeof u.tempC === 'number' ? Math.round(u.tempC) + '℃' : ''}`.trim());
+      }
+    } catch {
+      // 坏数据当没有
+    }
+  }
   if (day.weather) {
     const t = typeof day.temp_c === 'number' ? `${Math.round(day.temp_c)}℃` : '';
     bits.push(`外面${day.weather === 'rain' ? '在下雨' : day.weather === 'snow' ? '在下雪' : day.weather === 'sunny' ? '是晴天' : '阴着'} ${t}`.trim());
