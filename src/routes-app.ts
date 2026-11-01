@@ -11,6 +11,7 @@ import { requireApp, requireAuth } from './middleware';
 import { messagesPage, messagesSince, type MessageRow } from './db';
 import { isoInBeijing } from './date';
 import { archivedMessagesBefore } from './archive';
+import { resolveDiaryConsent } from './life/diary-job';
 import { applyMemoryCorrection } from './memory-correction';
 import { parseRelationValues } from './memory-maintenance';
 import { stripAttachmentWrapper } from './openai';
@@ -65,6 +66,8 @@ app.get('/api/app/ai-diary/index', requireApp, async (c) => {
  */
 app.get('/api/app/ai-diary', requireApp, async (c) => {
   const date = c.req.query('date') ?? beijingDateKey();
+  // 有 pending 的就把聊天记录交给模型判一次（放这里而不是聊天请求里）
+  await resolveDiaryConsent(c.env).catch(() => {});
   const { row, text, shareReason } = await diaryOne(c.env, date);
   if (!row) return c.json({ ok: true, date, visible: false, reason: '这天没写' });
   if (!row.visible) {

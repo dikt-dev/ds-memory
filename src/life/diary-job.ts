@@ -280,3 +280,42 @@ export async function pendingDiaryAskDate(env: Env): Promise<string | null> {
     .catch(() => null);
   return row?.date_key ?? null;
 }
+
+/**
+ * 读取日记时才做「模型判断」，不放在聊天请求里。
+ *
+ * 为什么挪出来：聊天请求里再发一次模型调用，会把 Worker 拖过 CPU 上限，
+ * 流被掐断——用户看到的就是「发送失败」，而且已经存下来的回复是半句。
+ * 挪到打开日记这一刻，用户感知不到延迟，聊天也不受影响。
+ */
+export async function resolveDiaryConsent(env: Env): Promise<void> {
+  const pending = await env.DB.prepare(
+    "SELECT date_key FROM ai_diary WHERE visibility = 'pending' ORDER BY date_key DESC LIMIT 1",
+  )
+    .first<{ date_key: string }>()
+    .catch(() => null);
+  if (!pending) return;
+
+  const rows = await env.DB.prepare(
+    'SELECT role, content FROM messages ORDER BY id DESC LIMIT 10',
+  )
+    .all<{ role: string; content: string }>()
+    .catch(() => null);
+  const list = (rows?.results ?? []).slice().reverse();
+  if (list.length === 0) return;
+
+  const turns = list.map((m) => ({
+    role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+    content: m.content,
+  }));
+  const judged = await judgeDiaryConsent(env, turns);
+  const herText = list.filter((m) => m.role !== 'user').map((m) => m.content).join(' ');
+  if (judged !== 'allow' || hasRefusal(herText)) return;
+
+  await env.DB.prepare(
+    "UPDATE ai_diary SET visibility = 'shared', shared_at = ?, share_reason = ? WHERE date_key = ?",
+  )
+    .bind(new Date().toISOString(), '聊天里答应的', pending.date_key)
+    .run()
+    .catch(() => {});
+}

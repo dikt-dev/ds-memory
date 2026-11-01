@@ -392,18 +392,7 @@ export async function streamChat(
       const stored = silent ? '' : normalizeAssistantText(text);
       // 她的这句才决定日记给不给看（「好吧/拿去」= 同意，「不给/想得美」= 拒绝）
       if (stored) {
-        // 从用户提到日记的那句起，把她俩的对话交给模型判断一次
-        const turns = /日记/.test(content)
-          ? [
-              ...history.slice(-8).map((m) => ({
-                role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
-                content: m.content,
-              })),
-              { role: 'user' as const, content },
-              { role: 'assistant' as const, content: stored },
-            ]
-          : [];
-        void settleDiaryConsent(env, content, stored, turns).catch(() => {});
+        void settleDiaryConsent(env, content, stored).catch(() => {});
       }
       if (!silent && stored) {
         // 费用与 token 随 INSERT 一次写入（少一条 UPDATE）
