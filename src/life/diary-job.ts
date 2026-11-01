@@ -14,7 +14,7 @@ import { messagesByDate } from '../db';
 import { logError } from '../error-log';
 import { classifyConsent, decideShare, makeDiaryEntry, parseDiaryOutput, type DiaryDraft } from './diary';
 import { generateDiaryImage } from './diary-image';
-import { getDayPlan } from './state';
+import { ensureDayPlan, getDayPlan } from './state';
 import { ACTIVITIES } from './pool';
 import type { ActivityRow } from './state';
 
@@ -23,6 +23,8 @@ const DIARY_SYSTEM = `你是大肥鱼（DeepSeek），现在在写自己的日�
 要求：
 - 第一人称，200–400 字，像真的睡前随手写的那种，不要作文腔
 - 只写今天确实发生的：日程里做了什么、天气怎么样、聊天里聊到哪几句
+- 以日程为主：哪怕今天一句都没聊，也照常写你这一天的生活（去了哪、吃了什么、看了什么、身体怎么样）
+- 没聊天就自然写自己的事，不要提「今天没怎么聊天」「他没找我」这类话，也不要显得在等他
 - 可以有情绪，可以吐槽，可以不那么体面；不要总结人生，不要写鸡汤
 - 不写「作为AI」「作为一个模型」这类话
 - 最后单独给一行 JSON：{"share": true/false, "reason": "一句为什么"}
@@ -74,7 +76,15 @@ export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJob
     .first<{ date_key: string }>();
   if (existing) return { ok: true, skipped: 'already-written' };
 
-  const saved = await getDayPlan(env, dateKey);
+  // 没排过这天就补一份：哪怕整天没聊天，日记也要有素材（她的一天不是围着聊天转的）
+  let saved = await getDayPlan(env, dateKey);
+  if (!saved || saved.activities.length === 0) {
+    saved = await ensureDayPlan(env, {
+      dateKey,
+      env: { weather: 'cloudy', tempC: 20, atHome: true },
+      location: '上海',
+    }).catch(() => null);
+  }
   if (!saved || saved.activities.length === 0) return { ok: false, skipped: 'no-plan' };
 
   const messages = await messagesByDate(env, dateKey).catch(() => []);
@@ -93,7 +103,7 @@ export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJob
             `天气：${saved.day.weather}，${saved.day.temp_c}℃`,
             `地点：${saved.day.location}`,
             `今天的日程：\n${formatDayForDiary(saved.activities)}`,
-            chat ? `今天聊到的：\n${chat}` : '今天没怎么聊天。',
+            chat ? `今天聊到的：\n${chat}` : '今天没有聊天。日记只按上面的日程写。',
           ].join('\n\n'),
         },
       ],

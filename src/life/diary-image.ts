@@ -24,8 +24,10 @@ export const IMAGE_MODELS: Record<string, string> = {
 /** SD 系支持的否定词——flux 没有这个参数，所以只在 SD 上带。 */
 const NEGATIVE = 'text, letters, chinese characters, calligraphy, watermark, signature, caption, logo';
 
-export function diaryImageKey(dateKey: string, name = 'cover', ext = 'jpg'): string {
-  return `diary-images/${dateKey}/${name}.${ext}`;
+export function diaryImageKey(dateKey: string, name = 'cover', ext = 'jpg', stamp?: string): string {
+  // 带时间戳：同一天重画时换个 key，客户端才不会一直拿缓存里的旧图
+  const v = stamp ?? new Date().toISOString().replace(/[-:T]/g, '').slice(0, 12);
+  return `diary-images/${dateKey}/${name}-${v}.${ext}`;
 }
 
 /** 从日记正文里取一个可以画的场景。取开头两三句——那是当天的骨架。 */
