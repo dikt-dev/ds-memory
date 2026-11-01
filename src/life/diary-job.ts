@@ -183,7 +183,7 @@ export async function settleDiaryConsent(
   userText: string,
   replyText: string,
   turns?: Turn[],
-): Promise<'yes' | 'no' | 'unclear' | null> {
+): Promise<'yes' | 'peek' | 'no' | 'unclear' | null> {
   // 用户这句得真的在说日记，否则一律不结算——
   // 不然问「明天吃火锅行吗」她答「好吧」，日记就被解锁了。
   if (!/日记/.test(userText)) return null;
@@ -199,34 +199,38 @@ export async function settleDiaryConsent(
 
   // 先看正则：明确拒绝直接算拒绝，不必花钱问模型
   const quick = scoped ? classifyConsent(scoped) : 'unclear';
-  let verdict: 'yes' | 'no' | 'unclear' = quick;
+  let verdict: 'yes' | 'peek' | 'no' | 'unclear' = quick;
 
   // 正则判不出「就这一次」「你烦不烦……行吧」这类，交给模型理解。
   // 模型给 allow 还必须通过拒绝词复核——权力不能全交给它。
   if (quick !== 'no' && turns && turns.length) {
     const judged = await judgeDiaryConsent(env, turns);
     if (judged === 'allow' && !hasRefusal(scoped || replyText)) verdict = 'yes';
+    else if (judged === 'peek') verdict = 'peek';
     else if (judged === 'deny') verdict = 'no';
     else if (judged === 'allow') verdict = 'no';
   }
   // 只有明确同意才解锁；拒绝或含糊都保持「询问中」，交给 15 分钟超时收回去。
   // 这样即使判错一次拒绝，也不会永久关掉。
-  if (verdict !== 'yes') return verdict;
+  if (verdict !== 'yes' && verdict !== 'peek') return verdict;
 
   await env.DB.prepare(
-    "UPDATE ai_diary SET visibility = 'shared', shared_at = ?, share_reason = ? WHERE date_key = ?",
+    'UPDATE ai_diary SET visibility = ?, shared_at = ?, share_reason = ? WHERE date_key = ?',
   )
-    .bind(new Date().toISOString(), scoped.slice(0, 60), pending.date_key)
+    .bind(verdict === 'yes' ? 'shared' : 'peek', new Date().toISOString(), scoped.slice(0, 60), pending.date_key)
     .run()
     .catch(() => {});
 
   await appendMemoryLine(env, {
     section: '## 偏好与习惯',
-    line: `- 愿意看她的日记（${pending.date_key} 问过，说可以）`,
+    line:
+      verdict === 'yes'
+        ? `- 愿意看她的日记（${pending.date_key} 问过，说可以）`
+        : `- 日记只肯给看一眼（${pending.date_key}，别蹬鼻子上脸）`,
     keyword: '日记',
     actor: 'job',
   }).catch(() => {});
-  return 'yes';
+  return verdict;
 }
 
 /**
@@ -310,12 +314,13 @@ export async function resolveDiaryConsent(env: Env): Promise<void> {
   }));
   const judged = await judgeDiaryConsent(env, turns);
   const herText = list.filter((m) => m.role !== 'user').map((m) => m.content).join(' ');
-  if (judged !== 'allow' || hasRefusal(herText)) return;
+  if (!judged || judged === 'deny' || judged === 'unclear') return;
+  if (judged === 'allow' && hasRefusal(herText)) return;
 
   await env.DB.prepare(
-    "UPDATE ai_diary SET visibility = 'shared', shared_at = ?, share_reason = ? WHERE date_key = ?",
+    'UPDATE ai_diary SET visibility = ?, shared_at = ?, share_reason = ? WHERE date_key = ?',
   )
-    .bind(new Date().toISOString(), '聊天里答应的', pending.date_key)
+    .bind(judged === 'allow' ? 'shared' : 'peek', new Date().toISOString(), '聊天里答应的', pending.date_key)
     .run()
     .catch(() => {});
 }

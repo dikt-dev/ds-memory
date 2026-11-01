@@ -15,6 +15,7 @@
   --shadow:0 1px 2px rgba(61,43,31,.06),0 8px 24px rgba(61,43,31,.08);
   --serif:"Kaiti SC","KaiTi","STKaiti","LXGW WenKai","Noto Serif SC","Songti SC",serif;
 }
+.peek{font-size:12px;letter-spacing:1px;color:var(--stamp);margin:.2rem 0 .8rem;opacity:.85}
 .top-right{display:flex;align-items:center;gap:12px}
 a.home{font-size:13px;letter-spacing:1px;color:var(--ink-soft);text-decoration:none;border-bottom:1px solid var(--line);padding-bottom:1px}
 a.home:hover{color:var(--stamp)}
@@ -183,6 +184,7 @@ h1{font-size:32px;margin:0;letter-spacing:.12em;font-weight:600}
           +'<h2>'+esc(date)+'　'+esc(res.weekday)+'</h2>'
           +'<div class="pm">'+esc(weatherText(res))+'　·　'+esc(res.text.length)+' 字</div>'
           +(Array.isArray(res.images)&&res.images.length?'<img class="cover" src="/api/image/'+encodeURIComponent(res.images[0])+'" alt="">':'')
+          +(res.peek?'<div class="peek">她只给了你看这些，剩下的在她那儿</div>':'')
           +'<div class="text">'+esc(res.text)+'</div>'
           +'<div class="sign">——她</div>'
           +'</article>';

@@ -68,7 +68,7 @@ app.get('/api/app/ai-diary', requireApp, async (c) => {
   const date = c.req.query('date') ?? beijingDateKey();
   // 有 pending 的就把聊天记录交给模型判一次（放这里而不是聊天请求里）
   await resolveDiaryConsent(c.env).catch(() => {});
-  const { row, text, shareReason } = await diaryOne(c.env, date);
+  const { row, text, shareReason, peeked } = await diaryOne(c.env, date);
   if (!row) return c.json({ ok: true, date, visible: false, reason: '这天没写' });
   if (!row.visible) {
     return c.json({
@@ -86,6 +86,7 @@ app.get('/api/app/ai-diary', requireApp, async (c) => {
     ok: true,
     date: row.date,
     visible: true,
+    peeked: Boolean(peeked),
     text,
     shareReason,
     images: row.images,

@@ -25,6 +25,8 @@ export interface DiaryListRow {
   expired: boolean;
   /** 她拒过一次，还可以再问 */
   declined: boolean;
+  /** 只肯给看一眼：正文只出前一小段 */
+  peek: boolean;
   /** 配图（R2 key）。锁着的时候不给前端，避免提前看到画面。 */
   images: string[];
 }
@@ -93,6 +95,7 @@ export async function diaryList(env: Env, limit = 60, now = new Date()): Promise
     if (askedLongAgo) stale.push(r.date_key);
     const visibility = askedLongAgo ? 'private' : r.visibility;
     const fresh = visibility === 'shared' && consentFresh(r.shared_at, now);
+    const peekOh = visibility === 'peek' && consentFresh(r.shared_at, now);
     return {
       date: r.date_key,
       weekday: weekdayOf(r.date_key),
@@ -102,6 +105,7 @@ export async function diaryList(env: Env, limit = 60, now = new Date()): Promise
       recipe: r.recipe,
       health: typeof r.health === 'number' ? r.health : null,
       visible: fresh,
+      peek: peekOh,
       asked: visibility === 'pending',
       declined: visibility === 'declined',
       images: safeImages(r.images),
@@ -126,15 +130,20 @@ export async function diaryOne(
   env: Env,
   date: string,
   now = new Date(),
-): Promise<{ row: DiaryListRow | null; text: string | null; shareReason: string | null }> {
+): Promise<{ row: DiaryListRow | null; text: string | null; shareReason: string | null; peeked?: boolean }> {
   const all = await diaryList(env, 120, now);
   const row = all.find((r) => r.date === date) ?? null;
   if (!row) return { row: null, text: null, shareReason: null };
-  if (!row.visible) return { row, text: null, shareReason: null };
+  if (!row.visible && !row.peek) return { row, text: null, shareReason: null };
   const full = await env.DB.prepare('SELECT text, share_reason FROM ai_diary WHERE date_key = ?')
     .bind(date)
     .first<{ text: string; share_reason: string | null }>()
     .catch(() => null);
+  // 只肯给看一眼：只出开头一小段，剩下的留在她那儿
+  if (row.peek && !row.visible) {
+    const head = (full?.text ?? '').slice(0, 80).replace(/\s+$/, '');
+    return { row, text: head ? head + '……' : null, shareReason: full?.share_reason ?? null, peeked: true };
+  }
   return { row, text: full?.text ?? null, shareReason: full?.share_reason ?? null };
 }
 

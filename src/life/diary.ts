@@ -111,13 +111,15 @@ export function decideShare(draft: DiaryDraft, rng?: Rng): DiaryDraft {
   return keep ? draft : { ...draft, share: false, reason: draft.reason ?? '这篇写着写着有点不想给看' };
 }
 
-export type ConsentVerdict = 'yes' | 'no' | 'unclear';
+export type ConsentVerdict = 'yes' | 'peek' | 'no' | 'unclear';
 
 /** 明确的同意词。只有这些算同意。 */
 const YES = /(看吧|给你看|拿去|行吧|可以看|给你|看你看|拿去吧|好吧)/;
 /** 明确/反问式拒绝。「你自己不会想吗」「凭什么」一律按拒绝。 */
 const NO = /(不给|不想给|凭什么|想得美|没门|休想|自己不会想|不告诉|别看|不要看|不让你看|不要|不行|没得商量|算了|不必)/;
 const QUESTION = /[？?]/;
+/** 只肯给看一点点的说法。 */
+const PEEK = /(看一眼|瞄一眼|一行|只看格式|看一点点|看一眼就|就一眼)/;
 
 /**
  * 判断她在聊天里的回应算不算同意。
@@ -127,7 +129,8 @@ const QUESTION = /[？?]/;
 export function classifyConsent(reply: string): ConsentVerdict {
   const text = (reply ?? '').trim();
   if (!text) return 'unclear';
-  if (NO.test(text)) return 'no';
+  if (NO.test(text) && !PEEK.test(text)) return 'no';
+  if (PEEK.test(text)) return 'peek';
   if (YES.test(text)) return 'yes';
   if (QUESTION.test(text)) return 'no'; // 反问 = 拒绝，不是默许
   return 'unclear';
