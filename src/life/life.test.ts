@@ -26,10 +26,10 @@ function dayAfter(start: string, n: number): string {
 const input = (date: string, salt = '') => ({ date, env, salt });
 
 describe('池子', () => {
-  it('69 条，id 不重复，时长区间合法', () => {
+  it('74 条，id 不重复，时长区间合法', () => {
     // 64 条日常 + 5 条夜间（泡澡/看小说/整理歌单/收拾屋子/写点东西）
-    expect(ACTIVITIES.length).toBe(69);
-    expect(new Set(ACTIVITIES.map((u) => u.id)).size).toBe(69);
+    expect(ACTIVITIES.length).toBe(74);
+    expect(new Set(ACTIVITIES.map((u) => u.id)).size).toBe(74);
     for (const u of ACTIVITIES) {
       expect(u.min).toBeGreaterThan(0);
       expect(u.max).toBeGreaterThanOrEqual(u.min);

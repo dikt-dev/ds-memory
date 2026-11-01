@@ -1,3 +1,4 @@
+import { festivalOn } from './festivals';
 /**
  * 一天的生成：骨架 → 空档 → 装填（§5.2.2）。
  *
@@ -197,6 +198,11 @@ const UNIT_RULES: Record<string, UnitRule> = {
   meal_normal: { starts: [[7 * 60 + 30, 13 * 60 + 30], [17 * 60, 20 * 60]] },
   meal_takeout: { starts: [[7 * 60 + 30, 13 * 60 + 30], [17 * 60, 20 * 60]] },
   idle_nap: { starts: [[11 * 60, 16 * 60]] },
+  fest_mooncake: { starts: [] },
+  fest_tangyuan: { starts: [] },
+  fest_zongzi: { starts: [] },
+  fest_qingtuan: { starts: [] },
+  fest_chongyang: { starts: [] },
   night_bath: { starts: [[20 * 60 + 30, 25 * 60]] },
   night_reading: { starts: [[20 * 60 + 30, 25 * 60]] },
   night_music: { starts: [[20 * 60 + 30, 25 * 60]] },
@@ -376,6 +382,28 @@ export function buildDay(input: BuildDayInput): DayPlan {
   for (const slot of slots) {
     const meal = pickMeal(rng, slot, input, used);
     if (meal) activities.push(meal);
+  }
+
+  // 节日那口吃的：手动插一段，绕开三餐抽签（那两个单元 starts 是空的）
+  const festUnit: Record<string, string> = {
+    zhongqiu: 'fest_mooncake',
+    yuanxiao: 'fest_tangyuan',
+    duanwu: 'fest_zongzi',
+    qingming: 'fest_qingtuan',
+    chongyang: 'fest_chongyang',
+  };
+  const fest = recipe?.id === 'festival' ? festivalOn(input.date) : null;
+  const festId = fest ? festUnit[fest.id] : undefined;
+  if (festId) {
+    const unit = ACTIVITIES.find((u) => u.id === festId);
+    if (unit) {
+      for (const at of [15 * 60, 16 * 60 + 30, 20 * 60]) {
+        const busy = activities.some((a) => at < a.end && at + unit.min > a.start);
+        if (busy) continue;
+        activities.push({ unitId: unit.id, start: at, end: at + Math.min(unit.max, 30) });
+        break;
+      }
+    }
   }
 
   // 名额只算「活动」：三餐和加餐都在 activities 里，不能拿 length 当已用名额

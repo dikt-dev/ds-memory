@@ -77,6 +77,13 @@ export const ACTIVITIES: ActUnit[] = [
   { id: 'night_music', kind: 'idle', name: '整理歌单', min: 25, max: 60, tags: ['indoor'], mood: 0.25, interruptible: true, replyChance: 0.7, fill: '在听谁、循环哪首、为什么想起它', weight: 1 },
   { id: 'night_tidy', kind: 'chores', name: '收拾屋子', min: 20, max: 45, tags: ['indoor'], mood: 0.1, interruptible: true, replyChance: 0.6, fill: '收了哪堆东西、翻出什么旧物', weight: 1 },
   { id: 'night_write', kind: 'idle', name: '写点东西', min: 30, max: 70, tags: ['indoor'], mood: 0.2, interruptible: true, replyChance: 0.55, fill: '写了什么、写了几行就停了', weight: 1 },
+  // 节日那口吃的：kind 是 meal，但 starts 是空数组——不参与三餐抽签，
+  // 由 planner 在节日当天手动插一段，别让它变成「早饭吃月饼」。
+  { id: 'fest_mooncake', kind: 'meal', name: '吃月饼', min: 20, max: 30, tags: ['indoor'], mood: 0.3, interruptible: true, replyChance: 0.6, fill: '什么馅、甜不甜、吃了半个还是整个', weight: 1 },
+  { id: 'fest_tangyuan', kind: 'meal', name: '煮汤圆', min: 25, max: 40, tags: ['indoor'], mood: 0.3, interruptible: true, replyChance: 0.6, fill: '什么馅、煮破没有', weight: 1 },
+  { id: 'fest_zongzi', kind: 'meal', name: '吃粽子', min: 20, max: 30, tags: ['indoor'], mood: 0.25, interruptible: true, replyChance: 0.6, fill: '甜的还是咸的、有没有剥得满手黏', weight: 1 },
+  { id: 'fest_qingtuan', kind: 'meal', name: '吃青团', min: 15, max: 25, tags: ['indoor'], mood: 0.2, interruptible: true, replyChance: 0.6, fill: '什么馅、艾草味重不重', weight: 1 },
+  { id: 'fest_chongyang', kind: 'meal', name: '蒸重阳糕', min: 30, max: 50, tags: ['indoor'], mood: 0.25, interruptible: true, replyChance: 0.6, fill: '蒸了多久、甜度如何', weight: 1 },
 ];
 
 /** 按 id 索引，校验器和反重复都用得上。 */
