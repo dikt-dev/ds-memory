@@ -709,6 +709,7 @@ app.post('/api/admin/life/diary/summary', requireAuth, async (c) => {
 app.post('/api/admin/life/diary/ask', requireAuth, async (c) => {
   const date = c.req.query('date') ?? new Date().toISOString().slice(0, 10);
   const result = await askDiary(c.env, date);
+  if (result.cooldown) return c.json(result, 429);
   return c.json(result, result.ok ? 200 : 404);
 });
 

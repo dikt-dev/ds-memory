@@ -25,6 +25,10 @@ export interface DiaryListRow {
   expired: boolean;
   /** 她拒过一次，还可以再问 */
   declined: boolean;
+  /** 刚被拒还在冷却期：这段时间问了也是白问 */
+  cooling: boolean;
+  /** 冷却结束时间（ISO），给页面显示还有多久 */
+  retryAt: string | null;
   /** 只肯给看一眼：正文只出前一小段 */
   peek: boolean;
   /** 配图（R2 key）。锁着的时候不给前端，避免提前看到画面。 */
@@ -48,6 +52,15 @@ export function consentFresh(sharedAt: string | null | undefined, now = new Date
   return granted === beijingDateKey(now);
 }
 
+/** 被拒冷却还没到点就返回结束时间，否则 null。 */
+function coolingUntil(askedAt: string | null, now: Date): string | null {
+  if (!askedAt) return null;
+  const t = Date.parse(askedAt);
+  if (!Number.isFinite(t)) return null;
+  const until = t + DECLINE_COOLDOWN_MS;
+  return until > now.getTime() ? new Date(until).toISOString() : null;
+}
+
 /** images 是 JSON 数组字符串；坏数据不能让整页打不开。 */
 function safeImages(raw: string | null): string[] {
   if (!raw) return [];
@@ -61,6 +74,9 @@ function safeImages(raw: string | null): string[] {
 
 /** 「问问她」之后多久没回话就算没问过。聊几句就到，15 分钟足够。 */
 const ASK_TTL_MS = 15 * 60 * 1000;
+
+/** 被拒之后多久才能再问。刚拒完就再问，她只会把同一个人再拒一次。 */
+export const DECLINE_COOLDOWN_MS = 30 * 60 * 1000;
 
 export async function diaryList(env: Env, limit = 60, now = new Date()): Promise<DiaryListRow[]> {
   const rows = await env.DB.prepare(
@@ -108,6 +124,8 @@ export async function diaryList(env: Env, limit = 60, now = new Date()): Promise
       peek: peekOh,
       asked: visibility === 'pending',
       declined: visibility === 'declined',
+      cooling: visibility === 'declined' && coolingUntil(r.asked_at, now) !== null,
+      retryAt: visibility === 'declined' ? coolingUntil(r.asked_at, now) : null,
       images: safeImages(r.images),
       expired: visibility === 'shared' && !fresh,
     };
@@ -148,12 +166,27 @@ export async function diaryOne(
 }
 
 /** 「问问她」：标成 pending，等聊天里她回话。已经当面同意过的不重复问。 */
-export async function askDiary(env: Env, date: string, now = new Date()): Promise<{ ok: boolean; asked?: boolean; already?: boolean; error?: string }> {
-  const row = await env.DB.prepare('SELECT visibility, shared_at FROM ai_diary WHERE date_key = ?')
+export async function askDiary(
+  env: Env,
+  date: string,
+  now = new Date(),
+): Promise<{
+  ok: boolean;
+  asked?: boolean;
+  already?: boolean;
+  cooldown?: boolean;
+  retryAt?: string;
+  error?: string;
+}> {
+  const row = await env.DB.prepare('SELECT visibility, shared_at, asked_at FROM ai_diary WHERE date_key = ?')
     .bind(date)
-    .first<{ visibility: string; shared_at: string | null }>();
+    .first<{ visibility: string; shared_at: string | null; asked_at: string | null }>();
   if (!row) return { ok: false, error: '这天没写日记' };
   if (row.visibility === 'shared' && consentFresh(row.shared_at, now)) return { ok: true, already: true };
+  if (row.visibility === 'declined') {
+    const until = coolingUntil(row.asked_at, now);
+    if (until) return { ok: false, cooldown: true, retryAt: until, error: '她刚说过不给，过会儿再问' };
+  }
   await env.DB.prepare("UPDATE ai_diary SET visibility = 'pending', asked_at = ? WHERE date_key = ?")
     .bind(now.toISOString(), date)
     .run();

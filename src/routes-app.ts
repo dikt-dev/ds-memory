@@ -78,9 +78,13 @@ app.get('/api/app/ai-diary', requireApp, async (c) => {
       asked: row.asked,
       expired: row.expired,
       declined: row.declined,
+      cooling: row.cooling,
+      retryAt: row.retryAt,
       basics: { weekday: row.weekday, weather: row.weather, tempC: row.tempC, location: row.location },
       reason: row.declined
-      ? '她说不给'
+      ? row.cooling
+        ? '她刚说过不给，过会儿再问'
+        : '她说不给'
       : row.expired
         ? '那天给你看过，过了那天要再问她一次'
         : row.asked

@@ -346,9 +346,9 @@ export async function resolveDiaryConsent(env: Env): Promise<void> {
   if (judged === 'deny' || (judged === 'allow' && hasRefusal(herText))) {
     for (const d of dates) {
       await env.DB.prepare(
-        "UPDATE ai_diary SET visibility = 'declined', share_reason = ? WHERE date_key = ?",
+        "UPDATE ai_diary SET visibility = 'declined', share_reason = ?, asked_at = ? WHERE date_key = ?",
       )
-        .bind('聊天里没给', d)
+        .bind('聊天里没给', new Date().toISOString(), d)
         .run()
         .catch(() => {});
     }

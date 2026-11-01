@@ -189,14 +189,15 @@ h1{font-size:32px;margin:0;letter-spacing:.12em;font-weight:600}
           +'<div class="sign">——她</div>'
           +'</article>';
       }else{
-        var tip=res.asked?"问过了，正在等她回话":(res.declined?"她还没答应，想再问问就再问一次":(res.expired?"那天给你看过，已经收起来了":"这篇她还没说要不要给你看"));
+        var cool=res.cooling?Math.max(1,Math.ceil((Date.parse(res.retryAt)-Date.now())/60000)):0;
+        var tip=res.asked?"问过了，正在等她回话":(res.cooling?"她刚说过不给，" + cool + " 分钟后再问":(res.declined?"她说不太想给，过会儿可以再问":(res.expired?"那天给你看过，已经收起来了":"这篇她还没说要不要给你看")));
         view.innerHTML='<button class="back" id="back">← 回去</button><article class="page locked">'
           +'<div class="lockring">锁</div>'
           +'<h2 style="font-size:20px">'+esc(date)+'　'+esc(res.weekday||"")+'</h2>'
           +'<div class="pm">'+esc(weatherText(res))+'</div>'
           +'<p>'+esc(tip)+'</p>'
           +'<p style="font-size:13px;opacity:.8">只能看到日期和天气。正文在她那儿。</p>'
-          +(res.asked?'<button class="ask" disabled>等她说</button>':'<button class="ask" id="ask">问问她</button>')
+          +(res.asked?'<button class="ask" disabled>等她说</button>':(res.cooling?'<button class="ask" disabled>'+cool+' 分钟后再问</button>':'<button class="ask" id="ask">问问她</button>'))
           +'</article>';
         var ask=document.getElementById("ask");
         if(ask){ask.addEventListener("click",function(){
@@ -204,7 +205,7 @@ h1{font-size:32px;margin:0;letter-spacing:.12em;font-weight:600}
           fetch("/api/admin/life/diary/ask?date="+encodeURIComponent(date),{method:"POST",credentials:"same-origin"})
             .then(function(r){return r.json()}).then(function(j){
               if(j.already){toast("今天已经能看了");openDiary(date);return}
-              if(!j.ok){toast(j.error||"问不了");ask.disabled=false;ask.textContent="问问她";return}
+              if(!j.ok){toast(j.error||"问不了");ask.disabled=true;ask.textContent="过会儿再问";return}
               toast("跟她说了。等她回话吧");openDiary(date);
             }).catch(function(){toast("网络不太好");ask.disabled=false;ask.textContent="问问她"});
         })}

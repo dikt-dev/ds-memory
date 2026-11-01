@@ -35,6 +35,23 @@ export async function getMemory(env: Env): Promise<string> {
 }
 
 /**
+ * 读「以 R2 为准」的原文，跳过 KV 缓存。
+ *
+ * 给「读→改→写」这类操作（补一行、删一行）用：KV 是最终一致的，
+ * 刚写完马上读很可能拿到旧版本，改回去就把别人的修改冲掉了——
+ * 2026-11-01 真的发生过：删掉一行、紧接着补两行，旧行被从过期快照里带了回来。
+ */
+export async function getMemoryFresh(env: Env): Promise<string> {
+  try {
+    const obj = await getObject(env, MEMORY_R2_KEY);
+    return obj === null ? '' : await obj.text();
+  } catch (e) {
+    logError('[memory] R2 fresh read failed:', e);
+    return '';
+  }
+}
+
+/**
  * 写回长期记忆，返回是否**确认落盘**。
  *
  * 旧实现是"删缓存 → put → put 缓存"，三步都不检查结果：R2 单次 put 静默失败时，

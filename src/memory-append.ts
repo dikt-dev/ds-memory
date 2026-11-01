@@ -6,7 +6,7 @@
  * 少一样都会让记忆和派生数据对不上。
  */
 import type { Env } from './types';
-import { getMemory, putMemory } from './memory';
+import { getMemoryFresh, putMemory } from './memory';
 import { putObject } from './storage';
 import { recordAction } from './memory-actions';
 import { SECTION_COMMENTS, SECTION_ORDER, byteLength } from './memory-maintenance';
@@ -74,7 +74,7 @@ export async function appendMemoryLine(
   const line = input.line.trim();
   if (!section.startsWith('## ') || !line) return { applied: false, reason: 'bad-input' };
 
-  const before = await getMemory(env);
+  const before = await getMemoryFresh(env);
   if (!before.trim()) return { applied: false, reason: 'no-memory' };
   const { text: after, reason } = insertLineIntoText(before, section, line);
   if (reason) return { applied: false, reason };
@@ -111,7 +111,7 @@ export async function removeMemoryLine(
 ): Promise<{ removed: boolean; reason?: string }> {
   const target = line.trim();
   if (!target) return { removed: false, reason: 'empty' };
-  const before = await getMemory(env);
+  const before = await getMemoryFresh(env);
   const lines = before.split('\n');
   const idx = lines.findIndex((x) => x.trim() === target);
   if (idx < 0) return { removed: false, reason: 'not-found' };
