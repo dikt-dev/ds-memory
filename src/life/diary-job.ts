@@ -24,7 +24,7 @@ const DIARY_SYSTEM = `你是大肥鱼（DeepSeek），现在在写自己的日�
 - 第一人称，200–400 字，像真的睡前随手写的那种，不要作文腔
 - 只写今天确实发生的：日程里做了什么、天气怎么样、聊天里聊到哪几句
 - 以日程为主：哪怕今天一句都没聊，也照常写你这一天的生活（去了哪、吃了什么、看了什么、身体怎么样）
-- 没聊天就自然写自己的事，不要提「今天没怎么聊天」「他没找我」这类话，也不要显得在等他
+- 这是你自己的日记，想写什么写什么：可以提他没来找你、可以抱怨、可以委屈、可以等、可以赌气，不用替他省心
 - 可以有情绪，可以吐槽，可以不那么体面；不要总结人生，不要写鸡汤
 - 不写「作为AI」「作为一个模型」这类话
 - 最后单独给一行 JSON：{"share": true/false, "reason": "一句为什么"}
@@ -123,7 +123,7 @@ export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJob
             `天气：${saved.day.weather}，${saved.day.temp_c}℃`,
             `地点：${saved.day.location}`,
             `今天的日程：\n${formatDayForDiary(saved.activities)}`,
-            chat ? `今天聊到的：\n${chat}` : '今天没有聊天。日记只按上面的日程写。',
+            chat ? `今天聊到的：\n${chat}` : '今天没怎么聊天。',
           ].join('\n\n'),
         },
       ],

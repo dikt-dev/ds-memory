@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-01T14:50:10.926Z",
+  "generated_at": "2026-11-01T14:52:36.023Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-01",
       "items": [
+        {
+          "hash": "2e39976",
+          "date": "2026-11-01",
+          "type": "other",
+          "area": "",
+          "title": "日记配图：尾巴属于她本人，不再单独画鲸鱼；补日程用真实地点",
+          "why": ""
+        },
         {
           "hash": "f947bd1",
           "date": "2026-11-01",
@@ -3241,14 +3249,6 @@
           "area": "proactive",
           "title": "修复主动消息投递链路的 7 个缺陷",
           "why": "审查 astrbot_plugin_memory_push 与 Worker 队列实现，逐项修复： 【安全】 1. 群聊劫持（P0）：auto_learn 监听所有消息并无条件覆盖 target_umo， 加入的群里有人随口说一句，主动消息（私密对话内容）就会发到那个群。 新增 is_private_umo()：只有私聊会话可自动学习，群聊/频道必须显式 /肥鱼记住这里。无法识别时按非私聊处理（宁可不学，不能发错）。 2. /肥鱼立即推送 语义错误（P0）：原来用 yield event.plain_result()， 那是「回复当前消息」而非主动发到 target_umo，在群里调试会当众发出。 改为统一走 _send_to_target()，与轮询同一条路径。 【可靠性】 3. 30 天清理永不生效：sent_at 存 ， 而 SQL 用 datetime('now','-30 day"
-        },
-        {
-          "hash": "928b382",
-          "date": "2026-10-23",
-          "type": "docs",
-          "area": "",
-          "title": "按当前代码修正 4 份文档中与实现不符的内容",
-          "why": "architecture.md - 测试数 30 → 32（新增 identity / relation-store 等） - 目录结构补 identity.ts、relation-store.ts - KV 表补全：原 9 个 → 19 个，含 relation:active_days（永久）、 session:mood、mood:drift、profile:*、aversion:candidates 等 - R2 结构补 memory/archive.md（档案层），说明归档清理范围 - 关系值章节细化：好感度由质量驱动（±5）、亲密度由量驱动（+4/天， 上限 300+天数×2）、心情双通道各 ±80；补充「天数不会倒退」机制 - 标题与头像注释去掉写死的角色名（现由 CHARACTER_NAME 决定） liveliness-plan.md - 状态卡示例改为代码实际输出字段（原为"
         }
       ]
     }
