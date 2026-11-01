@@ -205,7 +205,6 @@ export const RESPECT_DEFAULT = 650;
 export const ATTRACTION_DEFAULT = 300;
 /** 心情值单日变化上限（快变量）。 */
 // 常量统一来自 relation-model（保持 export 以兼容既有引用）
-export { MOOD_MAX_DAILY_DELTA };
 
 const AFFINITY_VAL_RE = /好感度[:：]\s*(\d{1,4})/;
 const INTIMACY_VAL_RE = /亲密度[:：]\s*(\d{1,4})/;

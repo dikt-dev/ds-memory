@@ -21,7 +21,6 @@ export interface Stage {
 export const RELATION_MAX_SCORE = RELATION_MAX;
 
 /** 心情值单日最大变化（统一来自 relation-model，保留旧导出名） */
-export { MOOD_MAX_DAILY_DELTA };
 
 /** 好感度阶段 */
 export const AFFINITY_STAGES: Stage[] = [
