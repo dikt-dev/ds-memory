@@ -11,6 +11,7 @@ import { MEMORY_KV_KEY, getMemory, putMemory } from './memory';
 import { appendMemoryLine, removeMemoryLine } from './memory-append';
 import { ensureLifeDay, lifeNow } from './life/jobs';
 import { maybeNightWake } from './life/night';
+import { lifePromptLine } from './life/now-text';
 import { generateDiary } from './life/diary-job';
 import { refreshLifeEnv } from './life/weather';
 import { gateDecision, lifeEnabled } from './life/gate';
@@ -656,6 +657,12 @@ app.post('/api/admin/life/day', requireAuth, async (c) => {
     day: saved?.day ?? null,
     activities: saved?.activities ?? [],
   });
+});
+
+/** 看一眼她此刻拿到的提示词片段（排查「她不知道自己病了」这类问题用）。 */
+app.get('/api/admin/life/prompt', requireAuth, async (c) => {
+  const line = await lifePromptLine(c.env, new Date()).catch(() => null);
+  return c.json({ ok: true, line });
 });
 
 app.post('/api/admin/life/night', requireAuth, async (c) => {

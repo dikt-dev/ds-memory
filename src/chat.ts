@@ -9,6 +9,7 @@ import type { Env } from './types';
 import { buildPromptMemoryFor } from './memory-index';
 import { shouldSkipMemoryRecall, buildMemoryPack  } from './context-pack';
 import { consumePendingRecall, looksLikePinRequest, recordRecallUsage, rememberPendingRecall, setChunkPinned } from './memory-rehearsal';
+import { lifePromptLine } from './life/now-text';
 import { buildSystemPromptSplit, type MessageChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, STYLE_REMINDER } from './prompt';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
@@ -315,6 +316,8 @@ export async function streamChat(
     .join('\n');
   // ★ 稳定段（人设+长期记忆）单独作为第一条 system，每轮字节一致才能吃到缓存命中价；
   // 时间/心情/召回/摘要这些每轮都变的放到最后一条 system，紧贴用户消息。
+  // 她此刻在干什么：读不到就当没有，聊天行为和以前一模一样
+  const lifeLine = await lifePromptLine(env, now).catch(() => null);
   const promptSplit = buildSystemPromptSplit({
         now,
         ctx,
@@ -337,6 +340,7 @@ export async function streamChat(
         keepsakes: keepsakesBlock,
         characterName: env.CHARACTER_NAME,
         userAddress: env.USER_ADDRESS,
+        life: lifeLine,
   });
   const volatileBlock = [promptSplit.volatile, historyNote].filter(Boolean).join('\n\n');
   const messages: DeepSeekMessage[] = [

@@ -8,6 +8,7 @@
  * 免得模型随手把「委屈」那篇也标成可分享。
  */
 import type { Env } from '../types';
+import { appendMemoryLine } from '../memory-append';
 import { completeDeepSeek } from '../deepseek';
 import { messagesByDate } from '../db';
 import { logError } from '../error-log';
@@ -166,5 +167,18 @@ export async function settleDiaryConsent(
     )
     .run()
     .catch(() => {});
+
+  // 写进记忆：不然下一周她还会再问一遍，用户会觉得「我说过可以了」
+  // 记在「偏好与习惯」——这是他的态度，不是你们之间发生的一件事。
+  const line =
+    verdict === 'yes'
+      ? `- 愿意看她的日记（${pending.date_key} 问过，说可以）`
+      : `- 不太想看她的日记（${pending.date_key} 问过，被拒了，别天天问）`;
+  await appendMemoryLine(env, {
+    section: '## 偏好与习惯',
+    line,
+    keyword: '日记',
+    actor: 'job',
+  }).catch(() => {});
   return verdict;
 }

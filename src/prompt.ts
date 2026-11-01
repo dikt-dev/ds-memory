@@ -76,6 +76,8 @@ export interface BasePromptArgs {
   avoidPhrases?: string[] | null;
   /** 长期缓慢漂移出的近期性格倾向（见 persona-drift.ts） */
   personaDrift?: string | null;
+  /** 她此刻在干什么（生活系统）。没开生活系统时为 null，提示词一字不变。 */
+  life?: string | null;
   /** 只取某一段：stable = ①②（人设+长期记忆，可缓存前缀）；volatile = ③之后（每轮都变） */
   part?: 'all' | 'stable' | 'volatile';
 }
@@ -108,6 +110,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     avoidOpeners,
     avoidPhrases,
     personaDrift,
+    life,
   } = args;
   const lines: string[] = [];
 
@@ -254,6 +257,12 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   if (memoryParts.volatile) {
     lines.push('');
     lines.push(memoryParts.volatile);
+  }
+
+  // ── ⑥.7 易变：她此刻在干什么（生活系统；没开就没有这一段）──────────────
+  if (life) {
+    lines.push('');
+    lines.push(life);
   }
 
   // ── ⑦ 易变：今日摘要（可按需保留，与中期记忆互补）──────────────────────
