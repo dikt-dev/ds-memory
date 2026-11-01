@@ -54,7 +54,7 @@ import { affectEngineFor, memoryEngineFor } from './engine-flags';
 import { recordEngineMetric } from './engine-metrics';
 import { logTrace } from './trace';
 import { recordRequest } from './request-log';
-import { hasPendingDiaryAsk, settleDiaryConsent } from './life/diary-job';
+import { pendingDiaryAskDate, settleDiaryConsent } from './life/diary-job';
 
 export interface ChatImage {
   key: string; // R2 对象键（images/日期/时间戳.jpg）
@@ -320,8 +320,13 @@ export async function streamChat(
   const lifeLine = await lifePromptLine(env, now).catch(() => null);
   // 用户在 App 里点了「问问她」之后，日记是 pending。没人告诉她要开口，
   // 于是点完什么都不会发生。这里补一句，让她在下一句里自己决定给不给看。
-  const diaryAskNote = await hasPendingDiaryAsk(env)
-    ? '【日记】用户刚问起某一天的日记，你想不想给他看？自己决定，说一句就行（不用长篇解释）。'
+  const pendingDiary = await pendingDiaryAskDate(env).catch(() => null);
+  // 她在 App 里点「问问她」之后需要她开口。但只给一句「你想不想给看」不够——
+  // 人设里没有「她会写日记」这件事，模型会直接否认日记存在（实测："本小姐哪来的日记啊"）。
+  // 所以这里给的是**事实**加约束，不是提问。
+  const diaryAskNote = pendingDiary
+    ? `【日记】你 ${pendingDiary} 写过一篇日记，用户正在问能不能看。你可以答应，也可以拒绝，` +
+      '但日记是存在的，别否认自己写过。说一两句就够了，不用解释规则。'
     : null;
   const promptSplit = buildSystemPromptSplit({
         now,
