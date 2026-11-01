@@ -17,6 +17,19 @@ function hhmm(minute: number): string {
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
 
+/**
+ * 当天的基调（C3）。
+ *
+ * mood_seed 是一直在算、一直落库、却没人读的那个字段。它不该新造一套情绪系统，
+ * 只该给当天的话染一点底色：晴天出门的日子话多一点，大扫除/生病的话淡一点。
+ */
+function moodLine(mood: number | null): string | null {
+  if (typeof mood !== 'number' || Number.isNaN(mood)) return null;
+  if (mood > 0.35) return '你今天心情是亮的，说话带点轻快，愿意多说两句。';
+  if (mood < -0.35) return '你今天心情有点闷，话不那么多，别硬撑着热情。';
+  return null;
+}
+
 function bodyLine(health: number, recipe: string | null): string | null {
   if (recipe === 'sick' || health < 60) {
     return '你今天病着，低烧、浑身发软，一整天基本躺着。说话短一点、慢一点，别逞强装没事；可以顺口提一句不舒服，但别反复诉苦，也别主动要人照顾。';
@@ -30,10 +43,10 @@ function bodyLine(health: number, recipe: string | null): string | null {
 export async function lifePromptLine(env: Env, now = new Date()): Promise<string | null> {
   const { dateKey, minute } = lifeClock(now);
   const day = await env.DB.prepare(
-    'SELECT recipe, health, weather, temp_c, location FROM ai_day WHERE date_key = ?',
+    'SELECT recipe, health, weather, temp_c, location, mood_seed FROM ai_day WHERE date_key = ?',
   )
     .bind(dateKey)
-    .first<{ recipe: string | null; health: number; weather: string | null; temp_c: number | null; location: string | null }>()
+    .first<{ recipe: string | null; health: number; weather: string | null; temp_c: number | null; location: string | null; mood_seed: number | null }>()
     .catch(() => null);
   if (!day) return null;
 
@@ -72,6 +85,8 @@ export async function lifePromptLine(env: Env, now = new Date()): Promise<string
     const t = typeof day.temp_c === 'number' ? `${Math.round(day.temp_c)}℃` : '';
     bits.push(`外面${day.weather === 'rain' ? '在下雨' : day.weather === 'snow' ? '在下雪' : day.weather === 'sunny' ? '是晴天' : '阴着'} ${t}`.trim());
   }
+  const mood = moodLine(day.mood_seed ?? null);
+  if (mood) bits.push(mood);
   const body = bodyLine(day.health, day.recipe);
   if (body) bits.push(body);
 
