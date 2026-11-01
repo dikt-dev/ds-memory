@@ -165,3 +165,41 @@ export function collapseOngoing(text: string, opts: { maxRemove?: number } = {})
   const next = [...lines.slice(0, head + 1), ...outBody, ...lines.slice(tail)].join('\n');
   return { text: next, removed, groups };
 }
+
+/**
+ * 晾太久的「进行中」降级成「挂起」。
+ *
+ * 为什么需要：她每天读这些条目，会对着两周没动的事反复追问进度
+ * （用户：「回滚那个事不是早做完了吗，你怎么老问」）。
+ * 与其指望每天有人手动清理，不如让时间自己降级。
+ *
+ * 两条豁免：
+ *   1. 已经有明确未来日期的（下月/预计/下周…）——那是真的在等，不是忘了
+ *   2. 带 [已完成] / [挂起] 的
+ */
+const FUTURE_HINT = /下月|下周|明年|预计|之后|回头|等.{0,3}(再说|再看|做完)/;
+
+function lineDateKey(line: string): string | null {
+  const m = line.match(/^\s*- \[(\d{2})-(\d{2})-(\d{2})\]/);
+  if (!m) return null;
+  return `20${m[1]}-${m[2]}-${m[3]}`;
+}
+
+export function suspendStaleOngoing(text: string, todayKey: string, days = 7): {
+  text: string;
+  suspended: string[];
+} {
+  const today = Date.parse(todayKey + 'T00:00:00Z');
+  const suspended: string[] = [];
+  const out = text.split('\n').map((line) => {
+    if (!line.includes('[进行中]')) return line;
+    if (FUTURE_HINT.test(line)) return line;
+    const key = lineDateKey(line);
+    if (!key) return line;
+    const age = (today - Date.parse(key + 'T00:00:00Z')) / 86400000;
+    if (!Number.isFinite(age) || age <= days) return line;
+    suspended.push(line.trim());
+    return line.replace('[进行中]', '[挂起]');
+  });
+  return { text: out.join('\n'), suspended };
+}

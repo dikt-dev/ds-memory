@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-01T13:24:54.424Z",
-  "count": 395,
+  "generated_at": "2026-11-01T13:39:55.155Z",
+  "count": 396,
   "days": [
     {
       "date": "2026-11-01",
       "items": [
+        {
+          "hash": "3a30d77",
+          "date": "2026-11-01",
+          "type": "other",
+          "area": "",
+          "title": "主动消息带上她此刻在干什么",
+          "why": "generateProactive 自己拼提示词，从来没调用过 lifePromptLine， 所以会出现「在刷手机，你呢」而同一时刻日程里她在泡澡。 现在在 system 里接上同一段状态块（【你此刻的状态】（事实参考，别逐字复述…））， 和聊天那边共用 now-text.ts 的输出，不另写一套。 lifePromptLine 返回 null（当天没 ai_day）时拼空串，行为和以前一致。 1192 测试全过。"
+        },
         {
           "hash": "ce7ae6d",
           "date": "2026-11-01",

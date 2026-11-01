@@ -10,7 +10,7 @@ import { putObject } from './storage';
 import { recordAction } from './memory-actions';
 import { replaceMemoryContext } from './memory-context-store';
 import { byteLength } from './memory-maintenance';
-import { collapseOngoing } from './memory-ongoing';
+import { collapseOngoing, suspendStaleOngoing } from './memory-ongoing';
 
 export interface CollapseOutcome {
   removed: number;
@@ -19,11 +19,15 @@ export interface CollapseOutcome {
 }
 
 export async function collapseOngoingItems(env: Env): Promise<CollapseOutcome> {
-  const before = await getMemory(env);
-  if (!before.trim()) return { removed: 0, lines: [] };
+  const original = await getMemory(env);
+  if (!original.trim()) return { removed: 0, lines: [] };
 
+  // 先降级晾太久的，再合并同主题的（顺序反了会把刚挂起的又并掉）
+  const todayKey = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date());
+  const { text: suspendedText, suspended } = suspendStaleOngoing(original, todayKey);
+  const before = suspendedText;
   const { text, removed } = collapseOngoing(before);
-  if (removed.length === 0) return { removed: 0, lines: [] };
+  if (removed.length === 0 && suspended.length === 0) return { removed: 0, lines: [] };
 
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const backupKey = `memory/ongoing/${stamp}.md`;
@@ -47,5 +51,5 @@ export async function collapseOngoingItems(env: Env): Promise<CollapseOutcome> {
   ).catch(() => {});
 
   await replaceMemoryContext(env, text, 'legacy').catch(() => null);
-  return { removed: removed.length, lines: removed, backupKey };
+  return { removed: removed.length + suspended.length, lines: [...removed, ...suspended], backupKey };
 }
