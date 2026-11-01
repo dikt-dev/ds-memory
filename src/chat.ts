@@ -54,7 +54,7 @@ import { affectEngineFor, memoryEngineFor } from './engine-flags';
 import { recordEngineMetric } from './engine-metrics';
 import { logTrace } from './trace';
 import { recordRequest } from './request-log';
-import { pendingDiaryAskDate, reopenDiaryAsk, settleDiaryConsent } from './life/diary-job';
+import { noteDiaryInterest, pendingDiaryAskDate, settleDiaryConsent } from './life/diary-job';
 
 export interface ChatImage {
   key: string; // R2 对象键（images/日期/时间戳.jpg）
@@ -75,7 +75,8 @@ export async function streamChat(
   // 0) 上一轮她提过的往事，如果这句是"对/记得"，就算一次确认复习
   void consumePendingRecall(env, content, now.getTime());
   // 用户又提了一次日记 → 之前拒过的那篇重新摆上桌，她这次可能改口
-  void reopenDiaryAsk(env, content).catch(() => {});
+  // 认出他说的是哪一篇日记，把那一篇标成「问过了」
+  void noteDiaryInterest(env, content).catch(() => {});
   // 日记给不给看由**她的回答**决定，不是由用户的措辞决定。
   // 之前拿用户输入判：用户问「可以给我看一下吗？」带问号 → 反问=拒绝，
   // 而她明明答了「好吧」，界面照样锁着。结算改到 onFinish 里。

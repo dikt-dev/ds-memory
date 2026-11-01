@@ -265,6 +265,41 @@ export function diarySentences(reply: string): string {
  * 一次拒绝不是终局——实测她会先顶两句，磨几次就松口。
  * 所以这里在用户提到日记时把 declined 重开成 pending，让她有机会改口。
  */
+/**
+ * 用户提到日记时，认出他说的是**哪一篇**，把那一篇标成 pending。
+ *
+ * 原来只会看「最新一篇」，用户说「看看昨天的」时判断的却是别的日子。
+ * 识别顺序：显式日期 > 昨天/前天/今天 > 最新一篇。
+ */
+export async function noteDiaryInterest(env: Env, text: string): Promise<void> {
+  if (!/日记/.test(text)) return;
+  const rows = await env.DB.prepare('SELECT date_key, visibility FROM ai_diary ORDER BY date_key DESC LIMIT 30')
+    .all<{ date_key: string; visibility: string }>()
+    .catch(() => null);
+  const list = rows?.results ?? [];
+  if (list.length === 0) return;
+
+  const toKey = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(d);
+  const today = new Date();
+  const shift = (n: number) => toKey(new Date(today.getTime() - n * 86400000));
+
+  let target = list[0].date_key; // 默认最新一篇
+  const explicit = text.match(/\d{4}-\d{2}-\d{2}/);
+  if (explicit && list.some((r) => r.date_key === explicit[0])) target = explicit[0];
+  else if (/昨天|昨晚/.test(text)) target = shift(1);
+  else if (/前天/.test(text)) target = shift(2);
+  else if (/今天|今晚/.test(text)) target = shift(0);
+
+  const row = list.find((r) => r.date_key === target);
+  if (!row) return;
+  if (row.visibility === 'shared' || row.visibility === 'peek') return;
+
+  await env.DB.prepare("UPDATE ai_diary SET visibility = 'pending', asked_at = ? WHERE date_key = ?")
+    .bind(new Date().toISOString(), target)
+    .run()
+    .catch(() => {});
+}
+
 export async function reopenDiaryAsk(env: Env, userText: string): Promise<void> {
   if (!/日记/.test(userText)) return;
   const cutoff = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
@@ -312,7 +347,14 @@ export async function resolveDiaryConsent(env: Env): Promise<void> {
     role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
     content: m.content,
   }));
-  const judged = await judgeDiaryConsent(env, turns);
+  const meta = await env.DB.prepare('SELECT share_reason FROM ai_diary WHERE date_key = ?')
+    .bind(pending.date_key)
+    .first<{ share_reason: string | null }>()
+    .catch(() => null);
+  const judged = await judgeDiaryConsent(env, turns, {
+    date: pending.date_key,
+    note: meta?.share_reason ?? null,
+  });
   const herText = list.filter((m) => m.role !== 'user').map((m) => m.content).join(' ');
   if (!judged || judged === 'deny' || judged === 'unclear') return;
   if (judged === 'allow' && hasRefusal(herText)) return;

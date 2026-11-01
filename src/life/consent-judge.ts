@@ -37,15 +37,23 @@ export function buildTranscript(turns: Turn[]): string {
   return `<对话>\n${lines.join('\n')}\n</对话>`;
 }
 
-export async function judgeDiaryConsent(env: Env, turns: Turn[]): Promise<ConsentDecision | null> {
+export async function judgeDiaryConsent(
+  env: Env,
+  turns: Turn[],
+  meta?: { date?: string; note?: string | null },
+): Promise<ConsentDecision | null> {
   if (turns.length === 0) return null;
+  // 让她知道要判断的是哪一篇：日期 + 她写这篇时自己的理由
+  const about = meta?.date
+    ? `要判断的是 ${meta.date} 这一篇。${meta.note ? `她当时写下的态度：${meta.note.slice(0, 60)}。` : ''}`
+    : '';
   try {
     const res = await Promise.race([
       completeDeepSeek(
         env,
         [
           { role: 'system', content: SYSTEM },
-          { role: 'user', content: buildTranscript(turns) },
+          { role: 'user', content: (about ? about + '\n' : '') + buildTranscript(turns) },
         ],
         new Date(),
         120,
