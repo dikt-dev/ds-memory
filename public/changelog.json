@@ -1,10 +1,26 @@
 {
-  "generated_at": "2026-11-01T16:59:17.693Z",
+  "generated_at": "2026-11-01T17:05:05.388Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-02",
       "items": [
+        {
+          "hash": "d0d89e2",
+          "date": "2026-11-02",
+          "type": "other",
+          "area": "",
+          "title": "记录待办：搬家按钮、天气两边分别获取",
+          "why": ""
+        },
+        {
+          "hash": "0b174ac",
+          "date": "2026-11-02",
+          "type": "other",
+          "area": "",
+          "title": "位置分层：她的城市跟 life:home-city（旅游临时覆盖，搬家才永久改），他的城市跟定位写 life:user-city",
+          "why": ""
+        },
         {
           "hash": "0939f23",
           "date": "2026-11-02",
@@ -3232,22 +3248,6 @@
           "type": "test",
           "area": "voice",
           "title": "高亲密档口癖断言更新为“哼哼”",
-          "why": ""
-        },
-        {
-          "hash": "9774983",
-          "date": "2026-10-24",
-          "type": "other",
-          "area": "",
-          "title": "高亲密档口癖改为“哼哼”，对齐大肥鱼语气",
-          "why": ""
-        },
-        {
-          "hash": "36bb59b",
-          "date": "2026-10-24",
-          "type": "feat",
-          "area": "memory",
-          "title": "时间金字塔周/月摘要 + 管理接口合并(reload/rollup)",
           "why": ""
         }
       ]

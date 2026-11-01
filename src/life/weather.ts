@@ -6,6 +6,7 @@
  */
 import type { Env } from '../types';
 import { logError } from '../error-log';
+import { dayIndexOnTrip, readTrip } from './travel';
 
 /** 12 个城市（§6.1 已定）。她住默认城市，偶尔回老家。 */
 export const CITIES: Record<string, { lat: number; lon: number }> = {
@@ -106,7 +107,15 @@ export async function refreshLifeEnv(
   dateKey: string,
   opts: { city?: string } = {},
 ): Promise<LifeEnvRecord | null> {
-  const city = opts.city ?? (await env.KV.get('life:home-city').catch(() => null)) ?? '上海';
+  // 天气要跟着她的实际位置：旅游期间是目的地，否则是常住城市
+  let tripCity: string | null = null;
+  try {
+    const trip = await readTrip(env);
+    if (trip && dayIndexOnTrip(trip, dateKey) !== null) tripCity = trip.city;
+  } catch {
+    tripCity = null;
+  }
+  const city = opts.city ?? tripCity ?? (await env.KV.get('life:home-city').catch(() => null)) ?? '上海';
   const now = await fetchWeather(city);
   const record: LifeEnvRecord = {
     location: city,
