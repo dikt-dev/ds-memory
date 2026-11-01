@@ -8,6 +8,8 @@ import type { Hono } from 'hono';
 import type { AppEnv } from './types';
 import { requireAuth } from './middleware';
 import { MEMORY_KV_KEY, getMemory, putMemory } from './memory';
+import { ensureLifeDay, lifeNow } from './life/jobs';
+import { beijingDateKey, getDayPlan } from './life/state';
 import { byteLength, mergeMemoryEntry, parseRelationValues, setRelationValues } from './memory-maintenance';
 import { reindexMemory, buildPromptMemoryFor } from './memory-index';
 import { listSnapshots, restoreSnapshot } from './memory-snapshot';
@@ -548,6 +550,32 @@ app.post('/api/admin/memory/subject-fix', requireAuth, async (c) => {
   await rebuildFactsDoc(c.env).catch(() => {});
 
   return c.json({ ok: true, applied: changes.length, backupKey, changes, rebuild });
+});
+
+/**
+ * 生活系统：生成/查看某一天的日程（排查用）。
+ *
+ * 线上没有 wrangler tail，cron 又只能等 04:00，所以留一个手动入口：
+ * GET ?date=2026-11-01 生成并返回当天计划，失败会直接看到原因。
+ */
+app.post('/api/admin/life/day', requireAuth, async (c) => {
+  const dateKey = c.req.query('date') || beijingDateKey();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+    return c.json({ ok: false, error: 'date 要写成 YYYY-MM-DD' }, 400);
+  }
+  const result = await ensureLifeDay(c.env, dateKey);
+  const saved = await getDayPlan(c.env, dateKey);
+  return c.json({
+    ok: true,
+    ...result,
+    day: saved?.day ?? null,
+    activities: saved?.activities ?? [],
+  });
+});
+
+app.get('/api/admin/life/now', requireAuth, async (c) => {
+  const status = await lifeNow(c.env);
+  return c.json({ ok: true, ...status });
 });
 
 /**

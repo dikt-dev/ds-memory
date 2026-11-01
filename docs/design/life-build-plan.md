@@ -24,14 +24,14 @@
 
 ### B. 存起来
 
-- [ ] **B1** D1 迁移：`ai_day` / `ai_activity` / `ai_arc` / `ai_people`
-- [ ] **B2** `src/life/state.ts`：读写当天计划、14 天使用历史、弧线进度
-- [ ] **B3** 写库幂等：同一天重复生成结果一致（靠种子，不靠去重）
-- [ ] **B4** cron：每天 00:05 生成当天计划（`AI_LIFE=off` 时只写库不启用）
+- [x] **B1** D1 迁移 014-life.sql：`ai_day` / `ai_activity` / `ai_arc` / `ai_people` / `ai_diary`（已应用到远程库）
+- [x] **B2** `src/life/state.ts`：读写当天计划、14 天使用历史、（弧线进度 P0 未接）
+- [x] **B3** 写库幂等：`ON CONFLICT` + 先删后插，靠种子保证同一天结果一致
+- [x] **B4** cron：接在每天 04:00 那条里生成当天计划；另有 `POST /api/admin/life/day` 手动入口
 
 ### C. 看得见
 
-- [ ] **C1** `GET /api/app/ai-status`：现在 + 下一段（§7.2）
+- [x] **C1** `GET /api/app/ai-status`：现在 + 下一段（§7.2），已上线可查
 - [ ] **C2** 状态栏三档（在忙 / 有空 / 睡了）；`health < 80` 才多一行
 - [ ] **C3** 心情耦合：活动结束按 `mood` 累加进情绪向量（不改情绪系统本身）
 
@@ -49,7 +49,7 @@
 - [ ] **P1-1** 位置：双城（默认城 + 老家），按日期存在 `ai_day.location`
 - [ ] **P1-2** 天气：两份取值（实时 + 当日预报），按 `weather`/`tempC` 喂给装填
 - [ ] **P1-3** 天气影响池子（`tagsOk` 已就位，缺真实输入）
-- [ ] **P1-4** `ai_diary` 表 + `src/life/diary.ts`（已完成解析/同意/隐私三块）
+- [x] **P1-4** `ai_diary` 表 + `src/life/diary.ts`（解析 / 同意判定 / 隐私出口，已单测）
 - [ ] **P1-5** 日记生成 job：每天 04:00，第一人称 200–400 字，读日程+对话+天气
 - [ ] **P1-6** `GET /api/app/ai-diary?date=`、`GET /api/app/ai-diary/index`
 - [ ] **P1-7** 「问问她」走聊天：pending → 她回 → `classifyConsent` 落权限

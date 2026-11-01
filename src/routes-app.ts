@@ -15,6 +15,7 @@ import { applyMemoryCorrection } from './memory-correction';
 import { parseRelationValues } from './memory-maintenance';
 import { stripAttachmentWrapper } from './openai';
 import { putRuntimeState } from './runtime-store';
+import { lifeNow } from './life/jobs';
 
 type AppEnv = { Bindings: Env; Variables: { requestId: string } };
 
@@ -44,7 +45,34 @@ export function registerAppRoutes(app: Hono<AppEnv>): void {
   }
 
   /** 一次性配对码换设备 Token；配对码优先网页设置（KV），未配置时回退环境变量。 */
-  app.post('/api/app/pair', async (c) => {
+  /**
+ * 她现在的状态（状态栏 + 状态页）。
+ *
+ * 只读、不改聊天行为：P0 阶段 App 拉这个接口也不会影响回复。
+ */
+app.get('/api/app/ai-status', requireApp, async (c) => {
+  const status = await lifeNow(c.env);
+  return c.json({
+    ok: true,
+    date: status.dateKey,
+    state: status.status,
+    health: status.health,
+    current: status.current
+      ? {
+          title: status.current.title,
+          kind: status.current.kind,
+          start: status.current.start_min,
+          end: status.current.end_min,
+          interruptible: status.current.interruptible === 1,
+        }
+      : null,
+    next: status.next
+      ? { title: status.next.title, kind: status.next.kind, start: status.next.start_min }
+      : null,
+  });
+});
+
+app.post('/api/app/pair', async (c) => {
     const body = await c.req.json().catch(() => null) as {
       pair_code?: unknown;
       device_name?: unknown;

@@ -126,6 +126,7 @@ import { applyEventsToVector, extractEmotionEvents, reconcileWithApology, type E
 import { buildEmotionSnapshot, describeEmotionState } from './emotion-snapshot';
 import { decayEmotion, emptyEmotionVector, type EmotionVector } from './emotion-vector';
 import { elapsedMs, logTrace, REQUEST_ID_HEADER, shouldLogHttp, startTrace } from './trace';
+import { runDailyLife } from './life/jobs';
 import { pruneRequestLog, readPathStats, readRecentRequests, recordRequest } from './request-log';
 import { deleteRuntimeState, getRuntimeState, putRuntimeState } from './runtime-store';
 import { getHeartbeat } from './profile-cache';
@@ -610,6 +611,8 @@ export default {
           );
           if (dayOfMonth === 1) await runMonthlyMerge(env, now);
           await pruneRequestLog(env);
+          // 生活系统：生成「今天」的日程。P0 阶段只写库，聊天行为不变。
+          await runDailyLife(env, now);
         })(),
       );
       logCron(env, ctx, cron, startedAt);
