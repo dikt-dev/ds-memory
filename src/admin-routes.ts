@@ -14,6 +14,7 @@ import { refreshLifeEnv } from './life/weather';
 import { gateDecision, lifeEnabled } from './life/gate';
 import { writeTrip } from './life/travel';
 import { generatePhoto } from './life/photo';
+import { sendPostcard } from './life/postcard';
 import { beijingDateKey, getDayPlan } from './life/state';
 import { byteLength, mergeMemoryEntry, parseRelationValues, setRelationValues } from './memory-maintenance';
 import { reindexMemory, buildPromptMemoryFor } from './memory-index';
@@ -566,9 +567,20 @@ app.post('/api/admin/life/photo', requireAuth, async (c) => {
   const scene = c.req.query('scene');
   if (!scene) return c.json({ ok: false, error: '需要 scene' }, 400);
   const dateKey = c.req.query('date') || beijingDateKey();
-  const seed = c.req.query('seed') ? Number(c.req.query('seed')) : undefined;
-  const result = await generatePhoto(c.env, { scene, dateKey, seed });
+  const result = await generatePhoto(c.env, { scene, dateKey });
   return c.json({ ...result, url: result.key ? `/api/image/${result.key}` : undefined, scene });
+});
+
+/** 生活系统：立刻发一条旅行见闻（排查用，会真发消息）。 */
+app.post('/api/admin/life/postcard', requireAuth, async (c) => {
+  try {
+    // 排查用：先清掉「今天已发」的标记，否则永远返回 already
+    await c.env.KV.delete(`life:postcard:${beijingDateKey()}`).catch(() => {});
+    const result = await sendPostcard(c.env);
+    return c.json(result);
+  } catch (e) {
+    return c.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500);
+  }
 });
 
 /** 生活系统：手动安排/取消一次旅行（排查用）。 */

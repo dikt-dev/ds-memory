@@ -15,8 +15,48 @@ import { logError } from '../error-log';
 export const PHOTO_STYLE =
   '35mm film photo, slight grain, warm tungsten light, shallow depth of field, casual snapshot, not professional, no text';
 
-/** 不要人、不要地标：她拍的是「手边」，不是游客照。 */
-const NEGATIVE = 'no people, no faces, no landmarks, no postcard view';
+/**
+ * 负面词。文字类要写死：画面里一出现带字的物件（包装、招牌、标签），
+ * 模型就会画出乱码——这是实测里最明显的穿帮点。
+ */
+const NEGATIVE =
+  'no people, no faces, no landmarks, no postcard view, no text, no letters, ' +
+  'no signs, no labels, no packaging, no logos, no watermark';
+
+/**
+ * 能稳定出图的题材。没在这里的题材一律不出图——
+ * 桂花糕那次就是反例：模型不认识的东西，画出来必然穿帮。
+ */
+export const SAFE_SCENES: Array<{ prompt: string; tags: string[] }> = [
+  { prompt: 'a rain-streaked window from inside, blurry warm street lights outside', tags: ['雨', '窗', '檐', '湿', '阴'] },
+  { prompt: 'a window with autumn sunlight falling across a wooden sill, dust in the light', tags: ['太阳', '阳光', '晒', '晴', '窗'] },
+  { prompt: 'worn canvas sneakers on wet stone steps, fallen autumn leaves', tags: ['鞋', '台阶', '石阶', '湿', '走', '脚'] },
+  { prompt: 'a bowl of hot noodles on a small wooden table, steam rising, chopsticks resting', tags: ['面', '汤', '碗', '吃', '热'] },
+  { prompt: 'a glass of iced tea on a scratched wooden table, afternoon light, condensation', tags: ['喝', '杯', '豆浆', '茶', '咖啡', '冰'] },
+  { prompt: 'a narrow old street seen from waist height, blurred hanging lanterns, warm evening light', tags: ['街', '巷', '灯', '人潮', '路口'] },
+  { prompt: 'a paper cup of hot tea held in one hand, blurred street behind', tags: ['手', '捧', '拿', '握', '掌心', '拎'] },
+  { prompt: 'a quiet wet alley corner, moss on stone, soft overcast light', tags: ['巷', '湿', '路', '安静'] },
+];
+
+/**
+ * 按文案里的词挑画面：先算每个画面的标签命中数，命中多的优先。
+ *
+ * 不能只看「有没有雨」——实测里文案写「雨还没停」，图却是晴天窗台，
+ * 图字对不上比不配图更假。
+ */
+export function pickScene(text: string, rng: () => number): string | null {
+  let best = -1;
+  let pool: string[] = [];
+  for (const scene of SAFE_SCENES) {
+    const score = scene.tags.reduce((n, tag) => (text.includes(tag) ? n + 1 : n), 0);
+    if (score > best) {
+      best = score;
+      pool = [scene.prompt];
+    } else if (score === best) pool.push(scene.prompt);
+  }
+  if (pool.length === 0) return null;
+  return pool[Math.floor(rng() * pool.length)] ?? null;
+}
 
 export interface PhotoResult {
   ok: boolean;
@@ -26,14 +66,13 @@ export interface PhotoResult {
 
 export async function generatePhoto(
   env: Env,
-  input: { scene: string; dateKey: string; seed?: number },
+  input: { scene: string; dateKey: string },
 ): Promise<PhotoResult> {
+  // 注意：flux-1-schnell 不认 seed/num_steps，多传字段会直接 5006
   const prompt = `${input.scene}, ${PHOTO_STYLE}, ${NEGATIVE}`;
   try {
-    // flux-1-schnell 只认 prompt/steps/seed，多传字段会直接报 5006
     const out = (await env.AI.run('@cf/black-forest-labs/flux-1-schnell' as never, {
       prompt,
-      ...(input.seed !== undefined ? { seed: input.seed } : {}),
     } as never)) as { image?: string } | undefined;
     const b64 = out?.image;
     if (!b64) return { ok: false, error: '模型没返回图片' };

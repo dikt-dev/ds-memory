@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-01T09:40:02.740Z",
-  "count": 357,
+  "generated_at": "2026-11-01T09:52:23.438Z",
+  "count": 358,
   "days": [
     {
       "date": "2026-11-01",
       "items": [
+        {
+          "hash": "380419f",
+          "date": "2026-11-01",
+          "type": "other",
+          "area": "",
+          "title": "见闻配图：生成样片，先看效果再决定",
+          "why": "src/life/photo.ts flux-1-schnell + 统一风格串（35mm 胶片、暖光、浅景深、随手拍、不要文字） 提示词加 no people / no landmarks —— 她拍的是手边，不是游客照。 存在 R2 的 images/ai-photo/{date}/{id}.jpg，走现有 /api/image 回放。 POST /api/admin/life/photo?scene=... 手动出样片（只给排查用，不进消息）。 踩到的一个坑 env.AI.run 传 num_steps 直接报 5006「不允许的字段」——flux-1-schnell 的 入参 schema 只认 prompt/steps/seed。去掉就好了。 6 张样片的结论（图已发给用户） 好：雨窗（光影+虚化灯光）、湿石阶上的帆布鞋（第一视角，自己的腿/鞋）、 热汤面（暖光、热气、桌面） 差"
+        },
         {
           "hash": "2a91ed6",
           "date": "2026-11-01",

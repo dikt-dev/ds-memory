@@ -13,7 +13,7 @@ import { dateKeyInBeijing, isoInBeijing } from './date';
 
 export type MessageRole = 'user' | 'assistant';
 export type TurnType = 'chat' | 'proactive';
-export type ProactiveKind = 'morning' | 'evening' | 'random';
+export type ProactiveKind = 'morning' | 'evening' | 'random'; // 见闻也落 random（表上有 CHECK 约束）
 export type Channel = 'web' | 'astrobot' | 'mobile' | 'desktop' | 'pet';
 
 export interface MessageRow {

@@ -128,6 +128,7 @@ import { decayEmotion, emptyEmotionVector, type EmotionVector } from './emotion-
 import { elapsedMs, logTrace, REQUEST_ID_HEADER, shouldLogHttp, startTrace } from './trace';
 import { runLifeMorning } from './life/jobs';
 import { flushHeldMessages } from './life/flush';
+import { maybeSendPostcard } from './life/postcard';
 import { pruneRequestLog, readPathStats, readRecentRequests, recordRequest } from './request-log';
 import { deleteRuntimeState, getRuntimeState, putRuntimeState } from './runtime-store';
 import { getHeartbeat } from './profile-cache';
@@ -626,6 +627,8 @@ export default {
       ctx.waitUntil(runWebProactiveRandom(env, now));
       // 闸门补发：到点的压着消息在这里回（§8.3 cron 兜底）
       ctx.waitUntil(flushHeldMessages(env, now));
+      // 旅行期间：白天每小时掷一次，掷中就发一条见闻
+      ctx.waitUntil(maybeSendPostcard(env, now));
       // 这条 cron 实际覆盖 UTC 8 点 → 北京 16:00 的 context 刷新
       ctx.waitUntil(maybeRefreshContext(env, now));
       logCron(env, ctx, cron, startedAt);
