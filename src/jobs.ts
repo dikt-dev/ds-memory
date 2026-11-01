@@ -115,7 +115,7 @@ export function isProvisionalArchiveRun(runAt: string, target: string): boolean 
   return dateKeyInBeijing(new Date(runAt)) <= target;
 }
 
-async function claimJob(env: Env, jobType: string, target: string): Promise<boolean> {
+export async function claimJob(env: Env, jobType: string, target: string): Promise<boolean> {
   const row = await env.DB.prepare(
     'SELECT status, run_at FROM cron_runs WHERE job_type = ? AND target = ?',
   )
@@ -157,7 +157,7 @@ export function completeConversationRows(
   return [...rows, reply];
 }
 
-async function finishJob(env: Env, jobType: string, target: string, detail: string, ok: boolean): Promise<void> {
+export async function finishJob(env: Env, jobType: string, target: string, detail: string, ok: boolean): Promise<void> {
   await env.DB.prepare(
     'UPDATE cron_runs SET status = ?, detail = ?, run_at = ? WHERE job_type = ? AND target = ?',
   )

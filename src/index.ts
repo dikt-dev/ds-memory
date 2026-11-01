@@ -46,7 +46,14 @@ import {
   putObject,
   secondaryEnabled,
 } from './storage';
-import { runDailyArchive, runContextRefresh, runMonthlyMerge, archiveOneDay } from './jobs';
+import {
+  archiveOneDay,
+  claimJob,
+  finishJob,
+  runContextRefresh,
+  runDailyArchive,
+  runMonthlyMerge,
+} from './jobs';
 import {
   extractPromptMemory,
   MEMORY_INLINE_MAX_BYTES,
@@ -126,7 +133,7 @@ import { applyEventsToVector, extractEmotionEvents, reconcileWithApology, type E
 import { buildEmotionSnapshot, describeEmotionState } from './emotion-snapshot';
 import { decayEmotion, emptyEmotionVector, type EmotionVector } from './emotion-vector';
 import { elapsedMs, logTrace, REQUEST_ID_HEADER, shouldLogHttp, startTrace } from './trace';
-import { runLifeMorning } from './life/jobs';
+import { runLifeDiary, runLifeMorning } from './life/jobs';
 import { recordDualStats } from './memory-dual';
 import { flushHeldMessages } from './life/flush';
 import { maybeNightWake } from './life/night';
@@ -620,10 +627,37 @@ export default {
           await pruneRequestLog(env);
           // 生活系统：生成「今天」的日程。P0 阶段只写库，聊天行为不变。
           await runLifeMorning(env, now);
-          // 夜里醒来：凌晨四点偶尔醒一下，把压着的消息回掉（P3-2）
-          await maybeNightWake(env, now).catch(() => {});
           // 两套记忆索引的行数对账：每天一条，才能看出趋势（开关关着时什么都不做）
           await recordDualStats(env, now).catch(() => {});
+        })(),
+      );
+      logCron(env, ctx, cron, startedAt);
+      return;
+    }
+
+    if (cron === '5 20 * * *') {
+      // 04:05 单独跑日记：实测把「归档 + 写日记」挤在一条 cron 里，
+      // 前面一旦补跑或提炼变慢，日记就来不及；而且日记现在开思考更慢。
+      ctx.waitUntil(
+        (async () => {
+          const target = addDays(dateKeyInBeijing(now), -1);
+          const claimed = await claimJob(env, 'daily_diary', target).catch(() => false);
+          if (!claimed) {
+            logWarn(`[life] 日记 ${target} 已有记录，跳过`);
+            return;
+          }
+          const r = await runLifeDiary(env, now).catch((e) => {
+            logError('[life] 日记任务失败:', e);
+            return { ok: false, skipped: 'exception' };
+          });
+          await finishJob(
+            env,
+            'daily_diary',
+            target,
+            r.skipped ? `跳过：${r.skipped}` : '已生成',
+            r.ok && !r.skipped,
+          ).catch(() => {});
+          await maybeNightWake(env, now).catch(() => {});
         })(),
       );
       logCron(env, ctx, cron, startedAt);

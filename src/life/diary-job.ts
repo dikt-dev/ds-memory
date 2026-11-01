@@ -129,7 +129,7 @@ export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJob
         },
       ],
       new Date(),
-      2048,
+      8192,
       { thinking: true },
     );
     if ('error' in res) {

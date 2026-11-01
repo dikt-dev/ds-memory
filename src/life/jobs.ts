@@ -18,6 +18,7 @@ import { generateDiary } from './diary-job';
 import { refreshLifeEnv } from './weather';
 import { readTrip } from './travel';
 import { appendMemoryLine } from '../memory-append';
+import { logError } from '../error-log';
 
 /** 天气/位置的输入。P1 之前从 KV 读，没有就用默认值。 */
 export interface LifeInput {
@@ -107,10 +108,15 @@ export async function lifeNow(env: Env, now = new Date()): Promise<NowStatus & {
  *
  * 她的一天到次日 01:00 才结束，04:00 落笔时素材刚好齐；再早会漏掉夜里那段。
  */
-export async function runLifeDiary(env: Env, now = new Date()): Promise<void> {
+export async function runLifeDiary(env: Env, now = new Date()): Promise<{ ok: boolean; skipped?: string }> {
   const today = beijingDateKey(now);
   const yesterday = shiftDate(today, -1);
-  await generateDiary(env, yesterday).catch(() => {});
+  try {
+    return await generateDiary(env, yesterday);
+  } catch (e) {
+    logError('[life] 日记生成异常:', e);
+    return { ok: false, skipped: 'exception' };
+  }
 }
 
 /** 04:00 先刷天气再生成日程：装填要知道今天下不下雨。 */
@@ -118,5 +124,4 @@ export async function runLifeMorning(env: Env, now = new Date()): Promise<void> 
   const dateKey = beijingDateKey(now);
   await refreshLifeEnv(env, dateKey).catch(() => {});
   await ensureLifeDay(env, dateKey);
-  await runLifeDiary(env, now);
 }
