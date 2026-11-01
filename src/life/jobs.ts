@@ -8,11 +8,14 @@ import {
   beijingDateKey,
   ensureDayPlan,
   lifeClock,
+  shiftDate,
   statusAt,
   type ActivityRow,
   type NowStatus,
 } from './state';
 import type { DayEnv } from './types';
+import { generateDiary } from './diary-job';
+import { refreshLifeEnv } from './weather';
 
 /** 天气/位置的输入。P1 之前从 KV 读，没有就用默认值。 */
 export interface LifeInput {
@@ -78,4 +81,23 @@ export async function lifeNow(env: Env, now = new Date()): Promise<NowStatus & {
   const saved = await ensureDayPlan(env, { dateKey, env: dayEnv, location: input.location });
   const activities: ActivityRow[] = saved.activities;
   return { dateKey, ...statusAt(activities, minute, saved.day.health) };
+}
+
+/**
+ * 每天 04:00 给「昨天」写日记。
+ *
+ * 她的一天到次日 02:00 才结束，04:00 落笔时素材刚好齐；再早会漏掉夜里那段。
+ */
+export async function runLifeDiary(env: Env, now = new Date()): Promise<void> {
+  const today = beijingDateKey(now);
+  const yesterday = shiftDate(today, -1);
+  await generateDiary(env, yesterday).catch(() => {});
+}
+
+/** 04:00 先刷天气再生成日程：装填要知道今天下不下雨。 */
+export async function runLifeMorning(env: Env, now = new Date()): Promise<void> {
+  const dateKey = beijingDateKey(now);
+  await refreshLifeEnv(env, dateKey).catch(() => {});
+  await ensureLifeDay(env, dateKey);
+  await runLifeDiary(env, now);
 }

@@ -53,6 +53,7 @@ import { affectEngineFor, memoryEngineFor } from './engine-flags';
 import { recordEngineMetric } from './engine-metrics';
 import { logTrace } from './trace';
 import { recordRequest } from './request-log';
+import { settleDiaryConsent } from './life/diary-job';
 
 export interface ChatImage {
   key: string; // R2 对象键（images/日期/时间戳.jpg）
@@ -71,6 +72,8 @@ export async function streamChat(
 
   // 0) 上一轮她提过的往事，如果这句是"对/记得"，就算一次确认复习
   void consumePendingRecall(env, content, now.getTime());
+  // 日记「问问她」之后，这一句就决定给不给看（只认明确同意，反问算拒绝）
+  void settleDiaryConsent(env, content);
 
   // 1) 组装上下文（先取历史，再落 user 消息，避免历史里重复出现本条）
   const dateKey = dateKeyInBeijing(now);

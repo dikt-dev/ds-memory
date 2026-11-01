@@ -41,24 +41,47 @@ export interface DiaryDraft {
 export function parseDiaryOutput(raw: string): DiaryDraft {
   const text = (raw ?? '').trim();
   if (!text) return { text: '', share: false, reason: '生成失败' };
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
+
+  // 模型经常把 JSON 写成转义过的 {"share": true}，也可能忘了转义。
+  // 先按「最后一段花括号」把它切出来，两种写法都试一次。
+  const body = text.replace(/\\"/g, '"');
+  const start = body.lastIndexOf('{');
+  const end = body.lastIndexOf('}');
+  let shareBlock = '';
+  let journal = body;
   if (start >= 0 && end > start) {
+    shareBlock = body.slice(start, end + 1);
+    journal = body.slice(0, start).trim();
+  }
+
+  let share = false;
+  let reason: string | undefined;
+  if (shareBlock) {
     try {
-      const parsed = JSON.parse(text.slice(start, end + 1)) as Record<string, unknown>;
-      const body = String(parsed.text ?? '').trim();
-      if (body) {
+      const parsed = JSON.parse(shareBlock) as { text?: unknown; share?: unknown; reason?: unknown };
+      // 整篇就是 JSON 的情况（{"text": "...", "share": ...}）
+      if (typeof parsed.text === 'string' && parsed.text.trim()) {
         return {
-          text: body,
+          text: parsed.text.trim(),
           share: parsed.share === true,
           reason: typeof parsed.reason === 'string' ? parsed.reason : undefined,
         };
       }
+      share = parsed.share === true;
+      reason = typeof parsed.reason === 'string' ? parsed.reason : undefined;
     } catch {
-      // 解析失败就走下面的兜底：整段当正文，按私密处理
+      // JSON 坏了也别把整篇丢掉：正则捞一下 share
+      const m = shareBlock.match(/"share"\s*:\s*(true|false)/);
+      share = m?.[1] === 'true';
+      const r = shareBlock.match(/"reason"\s*:\s*"([^"]*)"/);
+      reason = r?.[1];
     }
   }
-  return { text, share: false, reason: '没给出是否愿意分享' };
+
+  // 正文是空的时候（模型只给了 JSON）才退回整段，免得把 JSON 当日记存起来
+  const finalText = journal || (shareBlock ? '' : text);
+  if (!finalText) return { text: '', share: false, reason: '只有 JSON，没有正文' };
+  return { text: finalText, share, reason: reason ?? (shareBlock ? undefined : '没给出是否愿意分享') };
 }
 
 /** 内容倾向 → 愿分享的先验概率（§10.3 的参考分布）。 */

@@ -16,6 +16,7 @@ import { parseRelationValues } from './memory-maintenance';
 import { stripAttachmentWrapper } from './openai';
 import { putRuntimeState } from './runtime-store';
 import { lifeNow } from './life/jobs';
+import { beijingDateKey } from './life/state';
 
 type AppEnv = { Bindings: Env; Variables: { requestId: string } };
 
@@ -46,6 +47,70 @@ export function registerAppRoutes(app: Hono<AppEnv>): void {
 
   /** 一次性配对码换设备 Token；配对码优先网页设置（KV），未配置时回退环境变量。 */
   /**
+ * 日记列表：只给日期和能不能看，不泄正文（§10.4）。
+ */
+app.get('/api/app/ai-diary/index', requireApp, async (c) => {
+  const rows = await c.env.DB.prepare(
+    'SELECT date_key, visibility, created_at FROM ai_diary ORDER BY date_key DESC LIMIT 60',
+  )
+    .all<{ date_key: string; visibility: string; created_at: string }>();
+  return c.json({
+    ok: true,
+    items: (rows.results ?? []).map((row) => ({
+      date: row.date_key,
+      visible: row.visibility === 'shared',
+      asked: row.visibility === 'pending',
+    })),
+  });
+});
+
+/**
+ * 看某一天的日记。
+ *
+ * 不可见时正文**不出服务端**：前端拿到的是「她还没说要不要给你看」，
+ * 不是藏起来的一段文字（§10.4）。
+ */
+app.get('/api/app/ai-diary', requireApp, async (c) => {
+  const date = c.req.query('date') ?? beijingDateKey();
+  const row = await c.env.DB.prepare(
+    'SELECT date_key, text, visibility, share_reason FROM ai_diary WHERE date_key = ?',
+  )
+    .bind(date)
+    .first<{ date_key: string; text: string; visibility: string; share_reason: string | null }>();
+  if (!row) return c.json({ ok: true, date, visible: false, reason: '这天没写' });
+  if (row.visibility !== 'shared') {
+    return c.json({
+      ok: true,
+      date: row.date_key,
+      visible: false,
+      asked: row.visibility === 'pending',
+      reason: row.visibility === 'pending' ? '问过了，她还没答' : '这篇她还没说要不要给你看',
+    });
+  }
+  return c.json({ ok: true, date: row.date_key, visible: true, text: row.text });
+});
+
+/**
+ * 「问问她」：把这篇标成 pending，等你到聊天里跟她说。
+ *
+ * 不做审批弹窗——那会把「她的日记」变成「系统功能」（§10.2）。
+ */
+app.post('/api/app/ai-diary/ask', requireApp, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { date?: string } | null;
+  const date = body?.date;
+  if (!date) return c.json({ ok: false, error: '需要 date' }, 400);
+  const row = await c.env.DB.prepare('SELECT visibility FROM ai_diary WHERE date_key = ?')
+    .bind(date)
+    .first<{ visibility: string }>();
+  if (!row) return c.json({ ok: false, error: '这天没写日记' }, 404);
+  if (row.visibility === 'shared') return c.json({ ok: true, already: true });
+  await c.env.DB.prepare("UPDATE ai_diary SET visibility = 'pending' WHERE date_key = ?")
+    .bind(date)
+    .run();
+  return c.json({ ok: true, asked: true, hint: '去聊天里问她吧，她答了才算' });
+});
+
+/**
  * 她现在的状态（状态栏 + 状态页）。
  *
  * 只读、不改聊天行为：P0 阶段 App 拉这个接口也不会影响回复。

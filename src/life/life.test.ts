@@ -146,7 +146,14 @@ describe('日记', () => {
       reason: '挺开心',
     });
     expect(parseDiaryOutput('今天什么都没干').share).toBe(false);
-    expect(parseDiaryOutput('{"text":').share).toBe(false);
+    // 模型常见的两种坏格式：JSON 转义过 / 忘了转义
+    const escaped = parseDiaryOutput('今天追了番，挺开心。{\\"share\\": false, \\"reason\\": \\"有点累\\"}');
+    expect(escaped.share).toBe(false);
+    expect(escaped.text).toBe('今天追了番，挺开心。');
+    const trailing = parseDiaryOutput('今天没什么事。{"share": true, "reason": "普通的一天"}');
+    expect(trailing.share).toBe(true);
+    expect(trailing.text).toBe('今天没什么事。');
+    expect(trailing.reason).toBe('普通的一天');
   });
 
   it('不同意的一律私密', () => {

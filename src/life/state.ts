@@ -191,11 +191,21 @@ export async function ensureDayPlan(
     recentUses: uses,
     salt: input.salt,
   });
+  // 当天基调 = 各段活动 mood 的均值。先只存着：P0 不喂给情绪向量，
+  // 等 P2 打开闸门再进 processEmotionTurn 的 environment 通道。
+  const moodSeed =
+    input.moodSeed ??
+    (plan.activities.length > 0
+      ? plan.activities.reduce((sum, a) => {
+          const unit = ACTIVITIES.find((u) => u.id === a.unitId);
+          return sum + (unit?.mood ?? 0);
+        }, 0) / plan.activities.length
+      : 0);
   await saveDayPlan(env, {
     plan,
     env: input.env,
     location: input.location,
-    moodSeed: input.moodSeed ?? 0,
+    moodSeed,
     health: input.health,
   });
   const saved = await getDayPlan(env, input.dateKey);

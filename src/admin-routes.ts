@@ -9,6 +9,8 @@ import type { AppEnv } from './types';
 import { requireAuth } from './middleware';
 import { MEMORY_KV_KEY, getMemory, putMemory } from './memory';
 import { ensureLifeDay, lifeNow } from './life/jobs';
+import { generateDiary } from './life/diary-job';
+import { refreshLifeEnv } from './life/weather';
 import { beijingDateKey, getDayPlan } from './life/state';
 import { byteLength, mergeMemoryEntry, parseRelationValues, setRelationValues } from './memory-maintenance';
 import { reindexMemory, buildPromptMemoryFor } from './memory-index';
@@ -550,6 +552,29 @@ app.post('/api/admin/memory/subject-fix', requireAuth, async (c) => {
   await rebuildFactsDoc(c.env).catch(() => {});
 
   return c.json({ ok: true, applied: changes.length, backupKey, changes, rebuild });
+});
+
+/** 生活系统：手动写某天的日记（排查/补写用）。 */
+app.post('/api/admin/life/diary', requireAuth, async (c) => {
+  const dateKey = c.req.query('date') || beijingDateKey();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+    return c.json({ ok: false, error: 'date 要写成 YYYY-MM-DD' }, 400);
+  }
+  const result = await generateDiary(c.env, dateKey);
+  const row = await c.env.DB.prepare(
+    'SELECT date_key, text, visibility, share_reason FROM ai_diary WHERE date_key = ?',
+  )
+    .bind(dateKey)
+    .first();
+  return c.json({ ok: result.ok, result, row: row ?? null });
+});
+
+/** 生活系统：刷新天气（城市经纬度查 Open-Meteo，写入 KV）。 */
+app.post('/api/admin/life/weather', requireAuth, async (c) => {
+  const dateKey = c.req.query('date') || beijingDateKey();
+  const city = c.req.query('city') || undefined;
+  const record = await refreshLifeEnv(c.env, dateKey, { city });
+  return c.json({ ok: Boolean(record), record });
 });
 
 /**

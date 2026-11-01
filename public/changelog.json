@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-01T09:10:38.743Z",
-  "count": 350,
+  "generated_at": "2026-11-01T09:15:23.868Z",
+  "count": 351,
   "days": [
     {
       "date": "2026-11-01",
       "items": [
+        {
+          "hash": "8259b49",
+          "date": "2026-11-01",
+          "type": "other",
+          "area": "",
+          "title": "生活系统 P0-B/C：落库、cron、状态接口",
+          "why": "B1 迁移 014-life.sql（已应用到远程 D1） ai_day / ai_activity / ai_arc / ai_people / ai_diary，全部 IF NOT EXISTS。 ai_activity 的 start_min/end_min 可以超过 1440——她凌晨 1 点还在活动，不能折回 60。 B2 src/life/state.ts 读/写当天计划、最近 14 天使用记录（反重复的输入）、状态三档。 lifeClock() 把 0–2 点算前一天，因为她 02:00 才睡。 B3 幂等 ON CONFLICT(date_key) DO UPDATE + 先删后插活动。同一天重算不会留两份。 真正保证「结果一致」的是种子，不是去重。 B4 cron 接在每天 04:00 那条 cron 里生成当天日程（北京 04:00 生成，09:00 起床正好用）。 另"
+        },
         {
           "hash": "5e46de3",
           "date": "2026-11-01",
