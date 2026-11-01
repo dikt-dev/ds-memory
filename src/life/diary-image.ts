@@ -9,6 +9,7 @@
 import type { Env } from '../types';
 import { getObject, putObject } from '../storage';
 import { logError } from '../error-log';
+import { completeDeepSeek } from '../deepseek';
 
 const IMAGE_MODEL = '@cf/black-forest-labs/flux-1-schnell';
 
@@ -49,6 +50,15 @@ export function imageScene(text: string): string {
 /** 最近一次失败原因（排查用，进程内即可）。 */
 export let lastImageError: string | null = null;
 
+/** 统一的画风前缀：不管场景是什么，长相要一致。 */
+export function withStyle(scene: string): string {
+  return [
+    'Japanese watercolor illustration, soft natural light, gentle brush texture, muted pastel palette.',
+    'Scene: ' + scene,
+    'No text, no letters, no characters, no watermark, no signature.',
+  ].join(' ');
+}
+
 export async function generateDiaryImage(
   env: Env,
   dateKey: string,
@@ -57,10 +67,12 @@ export async function generateDiaryImage(
 ): Promise<string | null> {
   try {
     const model = IMAGE_MODELS[opts?.model ?? 'flux'] ?? IMAGE_MODEL;
+    // 先问「这一天最该画的是哪一幕」，再画；失败就退回原来抽句子的做法
+    const scene = (await diaryScenePrompt(env, text)) ?? imageScene(text);
     const isFlux = model === IMAGE_MODEL;
     const input = isFlux
-      ? { prompt: imageScene(text), steps: 4 }
-      : { prompt: imageScene(text), negative_prompt: NEGATIVE, num_steps: 4 };
+      ? { prompt: withStyle(scene), steps: 4 }
+      : { prompt: withStyle(scene), negative_prompt: NEGATIVE, num_steps: 4 };
     const out = (await env.AI.run(model as never, input as never)) as { image?: string };
     const anyOut = out as unknown as { image?: string; result?: { image?: string } };
     // 有的模型直接吐二进制流，不吐 base64
@@ -91,6 +103,39 @@ export async function generateDiaryImage(
   } catch (e) {
     lastImageError = (e as Error)?.message ?? String(e);
     logError('[diary-image] 生成失败:', lastImageError);
+    return null;
+  }
+}
+
+/**
+ * 让模型先把日记读成「一个能画的画面」，再交给 flux。
+ *
+ * 直接拿正文开头几句当提示词时，flux 只会画一张泛泛的水彩风景，
+ * 跟日记里发生的事毫无关系（烤饼干、看漫画、逛书店全没体现）。
+ * 所以中间加一步：用一次很便宜的调用，把日记压成一句**具体的英文场景**。
+ */
+export async function diaryScenePrompt(env: Env, text: string): Promise<string | null> {
+  try {
+    const res = await completeDeepSeek(
+      env,
+      [
+        {
+          role: 'system',
+          content:
+            'You turn a Chinese diary entry into ONE English image prompt (max 40 words). ' +
+            'Pick the single most visual moment: the place, what she is doing, time of day, weather, key objects. ' +
+            'Be concrete and physical. No metaphors, no emotions, no text in the image. ' +
+            'Reply with the prompt only.',
+        },
+        { role: 'user', content: text.slice(0, 800) },
+      ],
+      new Date(),
+      160,
+    );
+    if ('error' in res) return null;
+    const line = res.text.trim().replace(/^["']|["']$/g, '').replace(/\s+/g, ' ');
+    return line.length > 10 ? line.slice(0, 300) : null;
+  } catch {
     return null;
   }
 }

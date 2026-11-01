@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-01T14:39:36.298Z",
+  "generated_at": "2026-11-01T14:42:40.115Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-01",
       "items": [
+        {
+          "hash": "220f1b2",
+          "date": "2026-11-01",
+          "type": "other",
+          "area": "",
+          "title": "网页：加日记入口",
+          "why": ""
+        },
         {
           "hash": "544fd57",
           "date": "2026-11-01",
@@ -3241,14 +3249,6 @@
           "area": "",
           "title": "修正与代码不符的四处过期描述",
           "why": "- architecture: KV 键移除已废弃的 proactive:sent:*，改为说明幂等已迁移到 D1 proactive_log 的 UNIQUE 约束（补上 memo:24h）；测试数 29 → 30 - design-notes: Workers AI 的 llama-3.1-8b 已被 Cloudflare 下架（错误 5007）， 改为实际的 @cf/meta/llama-3.2-3b-instruct；对话模型 deepseek-chat → deepseek-flash。该文件是初始决策记录，保留原貌并加注当前实际值 - README: AstrBot 的模型字段服务端不校验，如实说明按 DEEPSEEK_MODEL 转发"
-        },
-        {
-          "hash": "f4f41d8",
-          "date": "2026-10-23",
-          "type": "feat",
-          "area": "",
-          "title": "角色名与称呼抽成环境变量（CHARACTER_NAME / USER_ADDRESS）",
-          "why": "- 新增 src/identity.ts：解析角色名，开源默认「小忆」，缺失/空白自动回退 - prompt.ts / character-card.ts 不再写死角色名，改为参数注入 - index.ts 新增兜底路由：HTML 透传时替换角色名，网页标题也跟着变； /api/* 与 /v1/* 不在此列，保持 JSON 404 - wrangler.toml 配 run_worker_first 只让首页走 Worker，静态资源仍由 CDN 直出 - 补 identity 单测与 prompt 的角色名/称呼测试（425 个测试全通过）"
         }
       ]
     }

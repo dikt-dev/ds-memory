@@ -195,7 +195,7 @@ h1{font-size:32px;margin:0;letter-spacing:.12em;font-weight:600}
               if(!j.ok){toast(j.error||"问不了");ask.disabled=false;ask.textContent="问问她";return}
               toast("跟她说了。等她回话吧");openDiary(date);
             }).catch(function(){toast("网络不太好");ask.disabled=false;ask.textContent="问问她"});
-        })})
+        })}
       }
       bindBack();
     }).catch(function(e){
