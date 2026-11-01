@@ -155,7 +155,14 @@ export async function settleDiaryConsent(
   if (!pending) return null;
 
   const verdict = classifyConsent(userText);
-  if (verdict === 'unclear') return 'unclear';
+  // 判不出来也按「锁着」处理：日记默认私密，不能一直挂在「等她说」上。
+  // 只是不写「被拒」那条记忆——那会把一次含糊的回应记成他的态度。
+  if (verdict === 'unclear') {
+    await env.DB.prepare(
+      "UPDATE ai_diary SET visibility = 'private' WHERE date_key = ?",
+    ).bind(pending.date_key).run().catch(() => {});
+    return 'unclear';
+  }
   await env.DB.prepare(
     'UPDATE ai_diary SET visibility = ?, shared_at = ?, share_reason = ? WHERE date_key = ?',
   )

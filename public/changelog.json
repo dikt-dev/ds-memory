@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-01T13:59:51.776Z",
+  "generated_at": "2026-11-01T14:06:08.226Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-01",
       "items": [
+        {
+          "hash": "2a8dbfa",
+          "date": "2026-11-01",
+          "type": "other",
+          "area": "",
+          "title": "日记：给不给看由她的回答决定，不由用户措辞决定",
+          "why": ""
+        },
         {
           "hash": "081ff1c",
           "date": "2026-11-01",
@@ -3246,14 +3254,6 @@
           "area": "",
           "title": "插件元数据同步改名",
           "why": ""
-        },
-        {
-          "hash": "8de8ad6",
-          "date": "2026-10-22",
-          "type": "other",
-          "area": "",
-          "title": "Initial commit: ds-memory — 给 DeepSeek 加上长期记忆的 Cloudflare Worker",
-          "why": "- 四层记忆：memory.md 核心 / R2 档案按需检索 / 24h 中期纪要 / 最近原文 - 每日 04:00 自动归档提炼，密度优先写作 + 分区配额 + 分层搬移 - 关系数值（好感度/亲密度/心情值）与「活人感」语言层 - 主动消息打分决策 + AstrBot 队列/直连两种投递 - 网页 SSE 聊天 + OpenAI 兼容端点 + 图片/文件 - 411 个单元测试"
         }
       ]
     }
