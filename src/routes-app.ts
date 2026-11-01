@@ -79,7 +79,13 @@ app.get('/api/app/ai-diary', requireApp, async (c) => {
       expired: row.expired,
       declined: row.declined,
       basics: { weekday: row.weekday, weather: row.weather, tempC: row.tempC, location: row.location },
-      reason: row.expired ? '那天给你看过，过了那天要再问她一次' : row.asked ? '问过了，她还没答' : '这篇她还没说要不要给你看',
+      reason: row.declined
+      ? '她说不给'
+      : row.expired
+        ? '那天给你看过，过了那天要再问她一次'
+        : row.asked
+          ? '问过了，她还没答'
+          : '这篇她还没说要不要给你看',
     });
   }
   return c.json({

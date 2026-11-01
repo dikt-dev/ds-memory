@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-01T16:34:31.595Z",
+  "generated_at": "2026-11-01T16:39:28.322Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-02",
       "items": [
+        {
+          "hash": "a200e55",
+          "date": "2026-11-02",
+          "type": "other",
+          "area": "",
+          "title": "拒绝就落 declined，页面显示她说不给；路由快照更新",
+          "why": ""
+        },
         {
           "hash": "f4b5527",
           "date": "2026-11-02",
@@ -3240,14 +3248,6 @@
           "type": "feat",
           "area": "",
           "title": "常驻核心+按需检索注入（D1条目索引+向量双路召回+KV热缓存）；memory.md不限大小",
-          "why": ""
-        },
-        {
-          "hash": "55efe5c",
-          "date": "2026-10-24",
-          "type": "feat",
-          "area": "",
-          "title": "复刻大肥鱼人设 + wipe-data 管理接口 + 记忆上限放开到24KB",
           "why": ""
         }
       ]
