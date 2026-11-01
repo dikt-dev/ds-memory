@@ -105,7 +105,7 @@ export async function lifeNow(env: Env, now = new Date()): Promise<NowStatus & {
 /**
  * 每天 04:00 给「昨天」写日记。
  *
- * 她的一天到次日 02:00 才结束，04:00 落笔时素材刚好齐；再早会漏掉夜里那段。
+ * 她的一天到次日 01:00 才结束，04:00 落笔时素材刚好齐；再早会漏掉夜里那段。
  */
 export async function runLifeDiary(env: Env, now = new Date()): Promise<void> {
   const today = beijingDateKey(now);

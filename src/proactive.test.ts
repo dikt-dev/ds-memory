@@ -23,12 +23,12 @@ describe('beijingMinutes', () => {
 });
 
 describe('currentSlot', () => {
-  it('早间窗口 07:45–08:15', () => {
-    expect(currentSlot(7 * 60 + 44)).toBeNull();
-    expect(currentSlot(7 * 60 + 45)).toBe('morning');
-    expect(currentSlot(8 * 60 + 14)).toBe('morning');
-    expect(currentSlot(8 * 60 + 15)).toBe('morning'); // 含 end 的 5 分钟 tick
-    expect(currentSlot(8 * 60 + 16)).toBeNull();
+  it('早间窗口 08:10–08:40（她 08:00 起）', () => {
+    expect(currentSlot(8 * 60 + 9)).toBeNull();
+    expect(currentSlot(8 * 60 + 10)).toBe('morning');
+    expect(currentSlot(8 * 60 + 39)).toBe('morning');
+    expect(currentSlot(8 * 60 + 40)).toBe('morning'); // 含 end 的 5 分钟 tick
+    expect(currentSlot(8 * 60 + 41)).toBeNull();
   });
 
   it('深夜窗口 22:45–23:15', () => {

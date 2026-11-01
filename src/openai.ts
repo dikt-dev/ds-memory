@@ -749,7 +749,7 @@ openaiApp.post('/chat/completions', async (c) => {
   if (!skipRecording && userMessageId && recordContent) {
     const gate: GateDecision = await gateDecision(c.env, now).catch(() => ({ hold: false }));
     if (gate.hold) {
-      await markHeld(c.env, userMessageId, untilMs(now, gate.until ?? '09:00'));
+      await markHeld(c.env, userMessageId, untilMs(now, gate.until ?? '08:00'));
       return c.json({
         held: true,
         until: gate.until,

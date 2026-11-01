@@ -14,13 +14,13 @@ export interface ValidationIssue {
 
 const DAY = 1440;
 
-/** 把跨午夜的时间折回 0~1440，方便和「02:00–09:00 睡觉」比较。 */
+/** 把跨午夜的时间折回 0~1440，方便和「01:00–08:00 睡觉」比较。 */
 function norm(minute: number): number {
   return ((minute % DAY) + DAY) % DAY;
 }
 
 /**
- * 醒着的时间轴是 09:00 → 次日 02:00（540 → 1560）。
+ * 醒着的时间轴是 08:00 → 次日 01:00（480 → 1500）。
  *
  * 早先按「折回 0~1440 后判断端点」写，会漏掉两种：
  * 活动整个压在睡眠里，以及刚好停在 02:00 被判成越界。直接比时间轴最稳。
@@ -33,12 +33,12 @@ export function validateDay(plan: DayPlan): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const acts = [...plan.activities].sort((a, b) => a.start - b.start);
 
-  // ① 02:00–09:00 必须是 sleep
+  // ① 01:00–08:00 必须是 sleep
   for (const a of acts) {
     if (outOfAwake(a.start, a.end)) {
       issues.push({
         rule: 'sleep-window',
-        detail: `${BY_ID.get(a.unitId)?.name ?? a.unitId} 压在 02:00–09:00 的睡眠上`,
+        detail: `${BY_ID.get(a.unitId)?.name ?? a.unitId} 压在 01:00–08:00 的睡眠上`,
       });
     }
   }
@@ -59,7 +59,7 @@ export function validateDay(plan: DayPlan): ValidationIssue[] {
   }
 
   // ④ 可回消息时长 ≥ 清醒时长 60%
-  // 清醒 = 09:00 → 次日 02:00，共 17 小时；睡眠 02:00–09:00 是 7 小时
+  // 清醒 = 08:00 → 次日 01:00，共 17 小时；睡眠 01:00–08:00 是 7 小时
   const awake = SLEEP_START - WAKE_AT;
   const blocked = acts
     .filter((a) => BY_ID.get(a.unitId)?.interruptible === false)

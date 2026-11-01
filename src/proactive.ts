@@ -14,7 +14,7 @@ export type ProactiveSlot = 'morning' | 'evening';
 
 /** 发送窗口（北京时间，分钟数） */
 export const PROACTIVE_WINDOWS: Record<ProactiveSlot, { start: number; end: number; name: string }> = {
-  morning: { start: 7 * 60 + 45, end: 8 * 60 + 15, name: '早上' },
+  morning: { start: 8 * 60 + 10, end: 8 * 60 + 40, name: '早上' },
   evening: { start: 22 * 60 + 45, end: 23 * 60 + 15, name: '深夜' },
 };
 

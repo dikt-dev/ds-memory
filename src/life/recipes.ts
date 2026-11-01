@@ -46,7 +46,7 @@ export const RECIPES: Record<string, Recipe> = {
     id: 'deepclean',
     label: '大扫除日',
     budget: 3,
-    wakeAt: 9 * 60,
+    wakeAt: 8 * 60,
     kinds: ['chores', 'meal', 'idle'],
   },
   marathon: {

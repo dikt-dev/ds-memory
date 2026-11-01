@@ -48,7 +48,7 @@ export async function gateDecision(env: Env, now = new Date()): Promise<GateDeci
 
   const status = await lifeNow(env, now);
   if (status.status === 'sleeping') {
-    return { hold: true, until: '09:00', reason: 'asleep', state: 'sleeping' };
+    return { hold: true, until: '08:00', reason: 'asleep', state: 'sleeping' };
   }
   if (status.status === 'busy' && status.current) {
     const chance = status.current.reply_chance ?? 0.3;

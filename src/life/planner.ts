@@ -11,15 +11,15 @@ import { makeRng, type Rng } from './seed';
 import type { ActUnit, DayEnv } from './types';
 import type { Recipe } from './recipes';
 
-/** 睡觉时间：次日 02:00（用超过 1440 的分钟数表示）。 */
-export const SLEEP_START = 26 * 60;
-/** 起床时间：09:00。 */
-export const WAKE_AT = 9 * 60;
+/** 睡觉时间：次日 01:00（用超过 1440 的分钟数表示）。 */
+export const SLEEP_START = 25 * 60;
+/** 起床时间：08:00。 */
+export const WAKE_AT = 8 * 60;
 /** 一天最多几段活动。多了就显得「一天到晚都在做事」，不像人。 */
 export const MAX_ACTIVITIES = 4;
 
 const MEALS = [
-  { name: '早餐', start: 9 * 60 + 10, minutes: 40 },
+  { name: '早餐', start: 8 * 60 + 10, minutes: 40 },
   { name: '午饭', start: 12 * 60 + 30, minutes: 50 },
   { name: '晚饭', start: 19 * 60, minutes: 50 },
 ];
@@ -148,7 +148,7 @@ const UNIT_RULES: Record<string, UnitRule> = {
   short_trip_movie: { cooldownDays: 14 },
   outing_haircut: { cooldownDays: 30 },
   outing_swim: { minTemp: 24, cooldownDays: 30 },
-  meal_night: { starts: [[19 * 60 + 50, 26 * 60]] },
+  meal_night: { starts: [[19 * 60 + 50, 25 * 60]] },
   meal_snack: { starts: [[13 * 60, 18 * 60 + 30]] },
   meal_normal: { starts: [[10 * 60, 13 * 60 + 30], [16 * 60 + 30, 20 * 60]] },
   meal_takeout: { starts: [[10 * 60, 13 * 60 + 30], [16 * 60 + 30, 20 * 60]] },

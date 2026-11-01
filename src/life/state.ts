@@ -24,7 +24,7 @@ export function beijingDateKey(now = new Date()): string {
 /**
  * 当前属于哪一天的「生活日」，以及在这一天里的第几分钟。
  *
- * 凌晨 0–2 点算前一天，因为那会儿她还没睡（睡觉是次日 02:00）。
+ * 凌晨 0–1 点算前一天，因为那会儿她还没睡（睡觉是次日 01:00）。
  */
 export function lifeClock(now = new Date()): { dateKey: string; minute: number } {
   const bj = new Date(now.getTime() + BEIJING_OFFSET_MS);
@@ -283,7 +283,7 @@ export function statusAt(
   minute: number,
   health = 100,
 ): NowStatus {
-  const sleeping = minute >= 26 * 60 || minute < 9 * 60;
+  const sleeping = minute >= 25 * 60 || minute < 8 * 60;
   const hit = activities.find((a) => minute >= a.start_min && minute < a.end_min) ?? null;
   const next = activities.find((a) => a.start_min > minute) ?? null;
   if (sleeping && !hit) return { status: 'sleeping', current: null, next, health };
