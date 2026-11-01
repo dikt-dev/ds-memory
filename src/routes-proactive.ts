@@ -108,6 +108,13 @@ export function registerProactiveRoutes(app: Hono<AppEnv>): void {
       last_error: typeof body?.last_error === 'string' ? body.last_error.slice(0, 200) : null,
     };
     await putRuntimeState(c.env, HEARTBEAT_KV_KEY, JSON.stringify(payload), HEARTBEAT_TTL_SECONDS);
+    // 留一份最近 20 条心跳：出问题时能分辨「闹钟真的响了」还是「只有打开 App 才连」
+    try {
+      const prev = await getRuntimeState(c.env, 'proactive:heartbeat_log');
+      const log = prev ? (JSON.parse(prev) as unknown[]) : [];
+      log.push({ at: payload.at, v: payload.version, e: payload.last_error });
+      await putRuntimeState(c.env, 'proactive:heartbeat_log', JSON.stringify(log.slice(-20)), HEARTBEAT_TTL_SECONDS);
+    } catch { /* 日志是辅助，失败不影响心跳 */ }
     return c.json({ ok: true });
   });
 
