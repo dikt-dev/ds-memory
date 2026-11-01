@@ -13,6 +13,7 @@ import { generateDiary } from './life/diary-job';
 import { refreshLifeEnv } from './life/weather';
 import { gateDecision, lifeEnabled } from './life/gate';
 import { writeTrip } from './life/travel';
+import { generatePhoto } from './life/photo';
 import { beijingDateKey, getDayPlan } from './life/state';
 import { byteLength, mergeMemoryEntry, parseRelationValues, setRelationValues } from './memory-maintenance';
 import { reindexMemory, buildPromptMemoryFor } from './memory-index';
@@ -554,6 +555,20 @@ app.post('/api/admin/memory/subject-fix', requireAuth, async (c) => {
   await rebuildFactsDoc(c.env).catch(() => {});
 
   return c.json({ ok: true, applied: changes.length, backupKey, changes, rebuild });
+});
+
+/**
+ * 生活系统：生成一张见闻配图样片（看效果用，不进消息）。
+ *
+ * scene 就是「画面里有什么」，风格串在代码里统一加。
+ */
+app.post('/api/admin/life/photo', requireAuth, async (c) => {
+  const scene = c.req.query('scene');
+  if (!scene) return c.json({ ok: false, error: '需要 scene' }, 400);
+  const dateKey = c.req.query('date') || beijingDateKey();
+  const seed = c.req.query('seed') ? Number(c.req.query('seed')) : undefined;
+  const result = await generatePhoto(c.env, { scene, dateKey, seed });
+  return c.json({ ...result, url: result.key ? `/api/image/${result.key}` : undefined, scene });
 });
 
 /** 生活系统：手动安排/取消一次旅行（排查用）。 */
