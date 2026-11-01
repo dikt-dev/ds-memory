@@ -9,6 +9,7 @@ import type { AppEnv } from './types';
 import { requireAuth } from './middleware';
 import { MEMORY_KV_KEY, getMemory, putMemory } from './memory';
 import { appendMemoryLine, removeMemoryLine } from './memory-append';
+import { askDiary, diaryList, diaryOne } from './life/diary-api';
 import { collapseOngoingItems } from './memory-ongoing-job';
 import { ensureLifeDay, lifeNow } from './life/jobs';
 import { maybeNightWake } from './life/night';
@@ -629,6 +630,28 @@ app.post('/api/admin/life/diary', requireAuth, async (c) => {
     .bind(dateKey)
     .first();
   return c.json({ ok: result.ok, result, row: row ?? null });
+});
+
+/** 日记列表（网页 /diary.html 用）：锁着也返回日期/天气/身体这些基本信息。 */
+app.get('/api/admin/life/diary/list', requireAuth, async (c) => {
+  const items = await diaryList(c.env, Number(c.req.query('limit') ?? 60));
+  return c.json({ ok: true, items });
+});
+
+/** 某一篇：没同意就只有基本信息，正文不出服务端。 */
+app.get('/api/admin/life/diary/item', requireAuth, async (c) => {
+  const date = c.req.query('date');
+  if (!date) return c.json({ ok: false, error: '需要 date' }, 400);
+  const { row, text, shareReason } = await diaryOne(c.env, date);
+  if (!row) return c.json({ ok: false, error: '这天没写' }, 404);
+  return c.json({ ok: true, ...row, text, shareReason });
+});
+
+/** 「问问她」：标成 pending，等聊天里她回话。 */
+app.post('/api/admin/life/diary/ask', requireAuth, async (c) => {
+  const date = c.req.query('date') ?? new Date().toISOString().slice(0, 10);
+  const result = await askDiary(c.env, date);
+  return c.json(result, result.ok ? 200 : 404);
 });
 
 /** 生活系统：刷新天气（城市经纬度查 Open-Meteo，写入 KV）。 */

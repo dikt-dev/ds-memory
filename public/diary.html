@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>她的日记</title>
+<style>
+:root{
+  --paper:#fffbeb; --paper-2:#fdf6e3; --ink:#3d2b1f; --ink-soft:#6b5344;
+  --rule:#e9dcc3; --margin:#d9a7a0; --stamp:#a33a32; --line:#efe3cc;
+  --shadow:0 1px 2px rgba(61,43,31,.06),0 8px 24px rgba(61,43,31,.08);
+  --serif:"Kaiti SC","KaiTi","STKaiti","LXGW WenKai","Noto Serif SC","Songti SC",serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:
+    radial-gradient(1200px 600px at 50% -10%, #fffdf5 0%, transparent 60%),
+    repeating-linear-gradient(0deg, transparent 0 31px, var(--rule) 31px 32px),
+    var(--paper);
+  color:var(--ink); font-family:var(--serif); min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+}
+/* 书脊那条红线 */
+body::before{
+  content:""; position:fixed; top:0; bottom:0; left:max(20px, calc(50vw - 340px));
+  width:1px; background:linear-gradient(180deg,transparent,var(--margin) 8%,var(--margin) 92%,transparent);
+  opacity:.55; pointer-events:none;
+}
+@media (max-width:760px){ body::before{left:22px} }
+.wrap{max-width:680px;margin:0 auto;padding:40px 24px 96px;}
+@media (max-width:760px){ .wrap{padding:24px 20px 80px 44px} }
+
+header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:28px}
+h1{font-size:32px;margin:0;letter-spacing:.12em;font-weight:600}
+.sub{color:var(--ink-soft);font-size:13px;letter-spacing:.16em;margin-top:6px}
+.seal{
+  width:52px;height:52px;border-radius:8px;background:var(--stamp);color:#fff;flex:0 0 auto;
+  display:flex;align-items:center;justify-content:center;font-size:20px;letter-spacing:0;
+  transform:rotate(-6deg);box-shadow:inset 0 0 0 2px rgba(255,255,255,.25);opacity:.92;
+}
+
+.list{display:flex;flex-direction:column;gap:14px}
+.entry{
+  position:relative;background:linear-gradient(180deg,var(--paper-2),#fffdf7);
+  border:1px solid var(--line);border-radius:4px;padding:18px 20px 16px 24px;
+  box-shadow:var(--shadow);cursor:pointer;transition:transform .22s ease,box-shadow .22s ease;
+  display:block;width:100%;text-align:left;font:inherit;color:inherit;
+}
+.entry::after{ /* 页角 */
+  content:"";position:absolute;right:0;bottom:0;width:22px;height:22px;
+  background:linear-gradient(135deg,transparent 50%,var(--line) 50%,#fffdf7 52%);
+  border-bottom-right-radius:4px;
+}
+.entry:hover{transform:translateY(-2px);box-shadow:0 2px 4px rgba(61,43,31,.08),0 14px 32px rgba(61,43,31,.12)}
+.entry:active{transform:translateY(0)}
+.row1{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.date{font-size:21px;letter-spacing:.04em}
+.wd{font-size:13px;color:var(--ink-soft);letter-spacing:.1em}
+.wx{font-size:13px;color:var(--ink-soft);margin-left:auto;letter-spacing:.06em}
+.meta{margin-top:8px;font-size:13px;color:var(--ink-soft);display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.tag{
+  display:inline-block;padding:1px 8px;border:1px solid var(--line);border-radius:999px;
+  font-size:11px;letter-spacing:.08em;color:var(--ink-soft);background:rgba(255,255,255,.6)
+}
+.tag.lock{color:#8a6d3b;border-color:#e6d3a8}
+.tag.wait{color:#8a5a3b;border-color:#e0c1a8}
+.tag.open{color:#3f6b4a;border-color:#c7dcc9}
+
+/* 阅读页 */
+.page{
+  position:relative;
+  background:linear-gradient(180deg,#fffdf5,#fffaf0);
+  border:1px solid var(--line);border-radius:6px;padding:34px 30px 40px 34px;
+  box-shadow:var(--shadow);animation:unfold .26s ease both;
+}
+.page::before{ /* 页边线：比满纸横线干净，文字也不会和线对不齐 */
+  content:"";position:absolute;top:0;bottom:0;left:26px;width:1px;
+  background:linear-gradient(180deg,transparent,rgba(217,167,160,.5) 12%,rgba(217,167,160,.5) 88%,transparent);
+}
+@keyframes unfold{from{opacity:0;transform:translateY(6px) scale(.995)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.page{animation:none}.entry{transition:none}}
+.page h2{margin:0 0 4px;font-size:24px;letter-spacing:.06em;font-weight:600}
+.page .pm{color:var(--ink-soft);font-size:13px;letter-spacing:.08em;margin-bottom:22px}
+.text{font-size:17.5px;line-height:2.05;text-indent:2em;white-space:pre-wrap;word-break:break-word;letter-spacing:.01em}
+.text::first-letter{font-size:1.05em}
+.sign{margin-top:26px;text-align:right;color:var(--ink-soft);font-size:14px;letter-spacing:.08em}
+
+/* 锁着的页 */
+.locked{text-align:center;padding:56px 24px}
+.lockring{width:76px;height:76px;margin:0 auto 18px;border:1px dashed var(--margin);border-radius:50%;
+  display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--stamp);opacity:.8}
+.locked p{margin:0 0 6px;color:var(--ink-soft);font-size:15px;line-height:1.8}
+.ask{margin-top:20px;display:inline-flex;align-items:center;gap:8px;padding:10px 22px;border-radius:4px;
+  border:1.5px solid var(--stamp);background:transparent;color:var(--stamp);font-family:var(--serif);
+  font-size:15px;letter-spacing:.14em;cursor:pointer;transition:background .2s,color .2s}
+.ask:hover{background:var(--stamp);color:#fff}
+.ask[disabled]{opacity:.5;cursor:default}
+
+.back{display:inline-flex;align-items:center;gap:6px;background:none;border:0;color:var(--ink-soft);
+  font-family:var(--serif);font-size:14px;letter-spacing:.12em;cursor:pointer;padding:0;margin-bottom:18px}
+.back:hover{color:var(--ink)}
+.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:rgba(61,43,31,.92);
+  color:#fff8ea;padding:10px 18px;border-radius:4px;font-size:14px;letter-spacing:.06em;opacity:0;
+  transition:opacity .25s;pointer-events:none;z-index:9}
+.toast.on{opacity:1}
+.empty{color:var(--ink-soft);text-align:center;padding:60px 0;font-size:15px;letter-spacing:.1em}
+.foot{margin-top:34px;color:#a08e7e;font-size:12px;letter-spacing:.1em;text-align:center;line-height:1.9}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>她的日记</h1>
+      <div class="sub" id="sub">每天凌晨，写前一天</div>
+    </div>
+    <div class="seal">记</div>
+  </header>
+  <div id="view"></div>
+  <div class="foot">看得到的，是她那天愿意给你看的<br/>过了那天，就得再问她一次</div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+(function(){
+  var view=document.getElementById("view");
+  var toastEl=document.getElementById("toast");
+  var WX={sunny:"☀️",cloudy:"☁️",rain:"🌧️",snow:"❄️"};
+  function toast(t){toastEl.textContent=t;toastEl.classList.add("on");setTimeout(function(){toastEl.classList.remove("on")},2200)}
+  function api(path){
+    return fetch(path,{credentials:"same-origin"}).then(function(r){
+      if(r.status===401){throw new Error("unauth")}
+      return r.json();
+    });
+  }
+  function esc(s){return String(s==null?"":s).replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c]})}
+  function weatherText(it){
+    var w=it.weather? (WX[it.weather]||"")+" " : "";
+    var t=it.tempC==null? "": it.tempC+"℃";
+    var loc=it.location? it.location: "";
+    return [w+t,loc].filter(Boolean).join(" · ");
+  }
+  function stateTag(it){
+    if(it.visible) return '<span class="tag open">今天能看到</span>';
+    if(it.asked) return '<span class="tag wait">问过了，她还没答</span>';
+    if(it.expired) return '<span class="tag lock">收起来了，要再问</span>';
+    return '<span class="tag lock">锁着</span>';
+  }
+  function renderList(items){
+    if(!items.length){view.innerHTML='<div class="empty">还没有写过日记</div>';return}
+    var h='<div class="list">';
+    items.forEach(function(it){
+      h+='<button class="entry" data-date="'+esc(it.date)+'">';
+      h+='<div class="row1"><span class="date">'+parseInt(it.date.slice(5,7),10)+'月'+parseInt(it.date.slice(8,10),10)+'日</span>';
+      h+='<span class="wd">'+esc(it.weekday)+'</span>';
+      h+='<span class="wx">'+esc(weatherText(it))+'</span></div>';
+      h+='<div class="meta">'+stateTag(it); if(it.health!=null&&it.health<80){h+='<span class="tag">那天有点虚</span>'} h+='</div>';
+      h+='</button>';
+    });
+    h+='</div>';
+    view.innerHTML=h;
+    Array.prototype.forEach.call(view.querySelectorAll(".entry"),function(el){
+      el.addEventListener("click",function(){openDiary(el.getAttribute("data-date"))});
+    });
+  }
+  function openDiary(date){
+    view.innerHTML='<div class="page locked"><p>翻开中…</p></div>';
+    api("/api/admin/life/diary/item?date="+encodeURIComponent(date)).then(function(res){
+      if(!res.ok){view.innerHTML='<button class="back" id="back">← 回去</button><div class="page locked"><p>'+esc(res.error||"打不开")+'</p></div>';bindBack();return}
+      if(res.visible && res.text){
+        view.innerHTML='<button class="back" id="back">← 回去</button><article class="page">'
+          +'<h2>'+esc(date)+'　'+esc(res.weekday)+'</h2>'
+          +'<div class="pm">'+esc(weatherText(res))+'　·　'+esc(res.text.length)+' 字</div>'
+          +'<div class="text">'+esc(res.text)+'</div>'
+          +'<div class="sign">——她</div>'
+          +'</article>';
+      }else{
+        var tip=res.asked?"问过了，正在等她回话":(res.expired?"那天给你看过，已经收起来了":"这篇她还没说要不要给你看");
+        view.innerHTML='<button class="back" id="back">← 回去</button><article class="page locked">'
+          +'<div class="lockring">锁</div>'
+          +'<h2 style="font-size:20px">'+esc(date)+'　'+esc(res.weekday||"")+'</h2>'
+          +'<div class="pm">'+esc(weatherText(res))+'</div>'
+          +'<p>'+esc(tip)+'</p>'
+          +'<p style="font-size:13px;opacity:.8">只能看到日期和天气。正文在她那儿。</p>'
+          +(res.asked?'<button class="ask" disabled>等她说</button>':'<button class="ask" id="ask">问问她</button>')
+          +'</article>';
+        var ask=document.getElementById("ask");
+        if(ask){ask.addEventListener("click",function(){
+          ask.disabled=true;ask.textContent="问了…";
+          fetch("/api/admin/life/diary/ask?date="+encodeURIComponent(date),{method:"POST",credentials:"same-origin"})
+            .then(function(r){return r.json()}).then(function(j){
+              if(j.already){toast("今天已经能看了");openDiary(date);return}
+              if(!j.ok){toast(j.error||"问不了");ask.disabled=false;ask.textContent="问问她";return}
+              toast("跟她说了。等她回话吧");openDiary(date);
+            }).catch(function(){toast("网络不太好");ask.disabled=false;ask.textContent="问问她"});
+        })})
+      }
+      bindBack();
+    }).catch(function(e){
+      view.innerHTML='<div class="page locked"><p>'+(e.message==="unauth"?"先去主界面登录一下":"加载失败")+'</p></div>';
+    });
+  }
+  function bindBack(){var b=document.getElementById("back");if(b){b.addEventListener("click",load)}}
+  function load(){
+    api("/api/admin/life/diary/list?limit=60").then(function(res){
+      document.getElementById("sub").textContent = res.items.length? ("共 "+res.items.length+" 篇　每天凌晨写前一天") : "每天凌晨，写前一天";
+      renderList(res.items||[]);
+    }).catch(function(e){
+      view.innerHTML='<div class="page locked"><p>'+(e.message==="unauth"?"先去主界面登录一下，再回来看":"加载失败")+'</p></div>';
+    });
+  }
+  load();
+})();
+</script>
+</body>
+</html>
