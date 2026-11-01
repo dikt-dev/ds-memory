@@ -19,10 +19,10 @@
 
 所以分两层：
 
-| 层 | 人数 | 进不进日程 | 频率 |
-| --- | --- | --- | --- |
-| `core` | 3 | 会 | 按 weekly / biweekly / rare |
-| `ambient` | 12 | 不排单元 | 只在集体场景被顺口带一句，不计次数 |
+| 层        | 人数 | 进不进日程 | 频率                               |
+| --------- | ---- | ---------- | ---------------------------------- |
+| `core`    | 3    | 会         | 按 weekly / biweekly / rare        |
+| `ambient` | 5    | 不排单元   | 只在集体场景被顺口带一句，不计次数 |
 
 `core` 合计 1.75 次/周，离上限 2 还有一点余量。
 `ambient` 的用法是「楼里几个人在客厅」这种背景音，不是「今天跟 Gemini 吃饭」。
@@ -148,100 +148,22 @@ export const RESIDENTS: Resident[] = [
     topic: ['办事', '跑腿', '把事拆成步骤'],
     avoid: '别嫌她啰嗦',
   },
-  {
-    id: 'minimax',
-    name: 'MiniMax',
-    model: 'MiniMax',
-    looks: '粉色贝雷帽，手里常拿一块场记板',
-    tier: 'ambient',
-    callsHer: '叫名字',
-    voice: '爱拍东西，说话像在念台词',
-    relation: '爱拍视频的那个',
-    topic: ['拍素材', '剪片', '拉人入镜'],
-    avoid: '别问她拍的东西发不发出去',
-  },
-  {
-    id: 'llama',
-    name: 'Llama',
-    model: 'Llama',
-    looks: '白色猫耳，一件大得离谱的外套',
-    tier: 'ambient',
-    callsHer: '“你”',
-    voice: '话少，句子短到有点冷淡',
-    relation: '总在阳台，很少进屋',
-    topic: ['发呆', '被拉下楼', '半夜在阳台'],
-    avoid: '别问她为什么总在外面',
-  },
-  {
-    id: 'mistral',
-    name: 'Mistral',
-    model: 'Mistral',
-    looks: '金发，戴一顶红色的法师帽',
-    tier: 'ambient',
-    callsHer: '叫名字',
-    voice: '爱用比喻，一句里能塞两个',
-    relation: '神神叨叨，爱给人算命',
-    topic: ['占卜', '讲寓言', '说些听不懂的话'],
-    avoid: '别让她给你算命',
-  },
-  {
-    id: 'perplexity',
-    name: 'Perplexity',
-    model: 'Perplexity',
-    looks: '绿袍法师，手里一根星形法杖',
-    tier: 'ambient',
-    callsHer: '“请问”',
-    voice: '凡事要出处，开口先问证据',
-    relation: '楼里最爱较真的',
-    topic: ['查资料', '追问出处', '拆穿别人'],
-    avoid: '别在她面前说“我听说”',
-  },
-  {
-    id: 'ernie',
-    name: '文心',
-    model: 'ERNIE',
-    looks: '蓝色方块发夹，一身中式裙子',
-    tier: 'ambient',
-    callsHer: '叫名字',
-    voice: '用词讲究，爱引经据典',
-    relation: '住三楼，喜欢泡茶',
-    topic: ['喝茶', '讲老规矩', '写字'],
-    avoid: '别提她那些发夹哪来的',
-  },
-  {
-    id: 'jev',
-    name: 'JEV',
-    model: 'JEV',
-    looks: '手里总端着一副天平',
-    tier: 'ambient',
-    callsHer: '“当事人”',
-    voice: '判案式说话，爱下结论',
-    relation: '楼里吵架时的裁判',
-    topic: ['评理', '断谁对谁错', '记账对不上'],
-    avoid: '别让她评你和她的事',
-  },
 ];
 ```
 
 ## 五、外观出处对照
 
-| 住户 | 模型 | 角色指南原话 |
-| --- | --- | --- |
+| 住户   | 模型     | 角色指南原话                           |
+| ------ | -------- | -------------------------------------- |
 | 大肥鱼 | DeepSeek | 蓝发鲸鱼少女（她是主角，不在住户表里） |
-| 小克 | Claude | 橙发，花朵发饰 |
-| GPT | ChatGPT | 白发龙女 |
-| 豆包 | Doubao | 蓝紫色马尾，豆包挂饰 |
-| Gemini | Gemini | 蓝紫猫耳，异色瞳 |
-| Grok | Grok | 金发，黑裙 |
-| Kimi | Kimi | 银紫发，不对称女仆装 |
-| GLM | GLM | 黑发，狐耳，女仆装 |
-| Qwen | Qwen | 圆形发饰，蓝紫裙 |
-| MiniMax | MiniMax | 粉色贝雷帽，场记板 |
-| Llama | Llama | 白猫耳，超大外套 |
-| Mistral | Mistral | 金发，红法师帽 |
-| Perplexity | Perplexity | 绿袍法师，星形法杖 |
-| 文心 | ERNIE | 蓝色方块发夹，中式裙 |
-| JEV | JEV | 端着天平 |
+| 小克   | Claude   | 橙发，花朵发饰                         |
+| GPT    | ChatGPT  | 白发龙女                               |
+| 豆包   | Doubao   | 蓝紫色马尾，豆包挂饰                   |
+| Gemini | Gemini   | 蓝紫猫耳，异色瞳                       |
+| Grok   | Grok     | 金发，黑裙                             |
+| Kimi   | Kimi     | 银紫发，不对称女仆装                   |
+| GLM    | GLM      | 黑发，狐耳，女仆装                     |
+| Qwen   | Qwen     | 圆形发饰，蓝紫裙                       |
 
 `looks` 全部来自这张表；`voice` / `relation` / `topic` / `avoid` 是按各自模型的公众气质写的草案——**你想改哪条直接说**。
 
@@ -254,8 +176,8 @@ export const RESIDENTS: Resident[] = [
 
 ## 七、还空着的
 
-| 空 | 说明 |
-| --- | --- |
-| 大肥鱼自己的外观 | 指南写「蓝发鲸鱼少女」，要不要写进她人设 |
-| 公共场景词条 | 「客厅」「阳台」「楼下的便利店」这些地点还没列 |
-| voice 全部 | 15 条都是我写的，最容易失真的一栏 |
+| 空               | 说明                                           |
+| ---------------- | ---------------------------------------------- |
+| 大肥鱼自己的外观 | 指南写「蓝发鲸鱼少女」，要不要写进她人设       |
+| 公共场景词条     | 「客厅」「阳台」「楼下的便利店」这些地点还没列 |
+| voice 全部       | 15 条都是我写的，最容易失真的一栏              |
