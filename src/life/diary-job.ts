@@ -13,6 +13,7 @@ import { completeDeepSeek } from '../deepseek';
 import { messagesByDate } from '../db';
 import { logError } from '../error-log';
 import { classifyConsent, decideShare, makeDiaryEntry, parseDiaryOutput, type DiaryDraft } from './diary';
+import { hasRefusal, judgeDiaryConsent, type Turn } from './consent-judge';
 import { generateDiaryImage } from './diary-image';
 import { ensureDayPlan, getDayPlan } from './state';
 import { ACTIVITIES } from './pool';
@@ -181,6 +182,7 @@ export async function settleDiaryConsent(
   env: Env,
   userText: string,
   replyText: string,
+  turns?: Turn[],
 ): Promise<'yes' | 'no' | 'unclear' | null> {
   // 用户这句得真的在说日记，否则一律不结算——
   // 不然问「明天吃火锅行吗」她答「好吧」，日记就被解锁了。
@@ -194,9 +196,19 @@ export async function settleDiaryConsent(
   if (!pending) return null;
 
   const scoped = diarySentences(replyText);
-  if (!scoped) return 'unclear';
 
-  const verdict = classifyConsent(scoped);
+  // 先看正则：明确拒绝直接算拒绝，不必花钱问模型
+  const quick = scoped ? classifyConsent(scoped) : 'unclear';
+  let verdict: 'yes' | 'no' | 'unclear' = quick;
+
+  // 正则判不出「就这一次」「你烦不烦……行吧」这类，交给模型理解。
+  // 模型给 allow 还必须通过拒绝词复核——权力不能全交给它。
+  if (quick !== 'no' && turns && turns.length) {
+    const judged = await judgeDiaryConsent(env, turns);
+    if (judged === 'allow' && !hasRefusal(scoped || replyText)) verdict = 'yes';
+    else if (judged === 'deny') verdict = 'no';
+    else if (judged === 'allow') verdict = 'no';
+  }
   // 只有明确同意才解锁；拒绝或含糊都保持「询问中」，交给 15 分钟超时收回去。
   // 这样即使判错一次拒绝，也不会永久关掉。
   if (verdict !== 'yes') return verdict;

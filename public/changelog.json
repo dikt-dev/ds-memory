@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-01T15:03:17.775Z",
+  "generated_at": "2026-11-01T15:13:25.034Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-01",
       "items": [
+        {
+          "hash": "24c22ae",
+          "date": "2026-11-01",
+          "type": "other",
+          "area": "",
+          "title": "日记：只认她回复里跟日记有关的那句；只有同意才解锁，其余留给 15 分钟超时",
+          "why": ""
+        },
         {
           "hash": "f81c6dd",
           "date": "2026-11-01",
@@ -3241,14 +3249,6 @@
           "area": "",
           "title": "情感系统重构 + 活人感打磨 + 记忆质量落地",
           "why": "一次合并提交，含四个方向： 【1】记忆质量（12KB 优先，不做有损压缩） - memory.md 目标 6.5KB → 12KB；注入前 compactMemoryForPrompt 去注释/空行/引用行 - 日期前缀改 [YY-MM-DD]，与旧 [YYYY-MM-DD] 双向兼容 - 档案层取消行数上限；同内容不同日期保留两条，注入时同内容只取一次 - 停用 LLM 全量压缩（compressMemory 已删），超限只走无损分层 - 中期纪要 5~8 条 / 每条 24 字；历史消息压缩到 400 字 【2】情感系统：从 3 个标量到事件驱动 - emotion-events.ts：14 类情感事件（褒/谢/歉/倾诉/表白/调侃/使唤/拒绝/辱骂/爽约…）， 带强度、对象、原话；规则词典优先，Workers AI 只在每日任务里复核歧义消息 （单日 ≤8 次，不进聊天关键路径） -"
-        },
-        {
-          "hash": "fe34509",
-          "date": "2026-10-23",
-          "type": "fix",
-          "area": "file-plugin",
-          "title": "优化文件读取插件的 5 个点",
-          "why": "审查 astrbot_plugin_file_reader 后逐项优化： 1. 兜底正则误读无关路径 原来 TEMP_PATH_RE 会把消息里任何 /root/... 都当文件去读， 用户说「我把项目放在 /home/me/project 里了」就会注入一条 「读取失败：文件不存在」。现在要求路径必须以已知扩展名结尾。 2. 同一文件重复注入 消息链组件、File Attachment 标记、裸路径三个来源可能给出 不同写法的同一路径（/root/a.txt vs /root/./a.txt）， 不归一化会读两遍、注入两遍。新增 _normalize_posix_path 去重。 ★ 修这个时发现一个真 bug：原打算用 os.path.normpath， 但它在 Windows 上会把 /root/a.txt 变成 \\root\\a.txt， 而 AstrBot 跑 Linux，路径必须"
         }
       ]
     }
