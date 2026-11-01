@@ -74,11 +74,20 @@ app.get('/api/app/ai-diary', requireApp, async (c) => {
       visible: false,
       asked: row.asked,
       expired: row.expired,
+      declined: row.declined,
       basics: { weekday: row.weekday, weather: row.weather, tempC: row.tempC, location: row.location },
       reason: row.expired ? '那天给你看过，过了那天要再问她一次' : row.asked ? '问过了，她还没答' : '这篇她还没说要不要给你看',
     });
   }
-  return c.json({ ok: true, date: row.date, visible: true, text, shareReason, basics: { weekday: row.weekday, weather: row.weather, tempC: row.tempC, location: row.location } });
+  return c.json({
+    ok: true,
+    date: row.date,
+    visible: true,
+    text,
+    shareReason,
+    images: row.images,
+    basics: { weekday: row.weekday, weather: row.weather, tempC: row.tempC, location: row.location },
+  });
 });
 
 /** 「问问她」：标成 pending，等聊天里她回话。 */
