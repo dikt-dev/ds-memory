@@ -1,10 +1,26 @@
 {
-  "generated_at": "2026-11-01T12:42:01.142Z",
-  "count": 384,
+  "generated_at": "2026-11-01T12:48:13.809Z",
+  "count": 386,
   "days": [
     {
       "date": "2026-11-01",
       "items": [
+        {
+          "hash": "4b83358",
+          "date": "2026-11-01",
+          "type": "other",
+          "area": "",
+          "title": "双索引比对：差异是结构性的，可以切 next",
+          "why": "新增 docs/memory/dual-index-diff-2026-11-01.md + scripts/dual-diff.mjs。 实测 legacy 97 / next 96，归一化后 91 条完全一致，差异 10 条全部可解释： 只在 legacy 的 6 条全是「回滚方案」的不同阶段，legacy 还没清理的残留； next 把同一件事合并成了一条 [已完成]。 只在 next 的 5 条是 facts 抽取和摘要压缩，粒度不同，不是新内容。 结论：数量对账不能用来证明等价（next 本来就有损合并），它的价值是回归检测。 切换前要问的是「合并掉的中间状态还需不需要」，按现有设计不需要。"
+        },
+        {
+          "hash": "45780e0",
+          "date": "2026-11-01",
+          "type": "other",
+          "area": "",
+          "title": "memory-dual：先让两套索引的差异能被看见",
+          "why": "legacy（memory_entries）与 next（memory_chunks/facts/events）并存，切 next 之前必须先能看见差异， 否则切换那天由用户发现哪条记忆丢了。 这一版只记数量，不改任何索引内容——数量级都不一致时，逐条比对只是在比对噪声。 src/memory-dual.ts  recordDualStats(env)：读四张表的行数，写 KV memory:dual:{date} 调用点              reindexMemory 末尾（重建完顺手记一笔） 开关                KV memory:dual = 1；关着时整个函数只有一次 KV 读 告警                两套差超过 30% 时 logWarn，不是让数字对齐，是让人知道 读代码确认的事：legacy 不是逐条写入，而是 reindexMemory 从"
+        },
         {
           "hash": "1f8dd31",
           "date": "2026-11-01",
