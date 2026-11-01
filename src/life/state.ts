@@ -11,6 +11,7 @@ import type { Env } from '../types';
 import { buildDay, type DayPlan, type PlannedActivity } from './planner';
 import { ACTIVITIES } from './pool';
 import type { DayEnv } from './types';
+import { healthForDay, pickRecipe, type Recipe } from './recipes';
 
 const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000;
 
@@ -36,6 +37,7 @@ export function lifeClock(now = new Date()): { dateKey: string; minute: number }
 
 export interface DayRow {
   date_key: string;
+  recipe?: string | null;
   location: string;
   at_home: number;
   mood_seed: number;
@@ -85,14 +87,15 @@ export async function saveDayPlan(
     location: string;
     moodSeed: number;
     health?: number;
+    recipe?: string | null;
     generatedAt?: string;
   },
 ): Promise<void> {
   const { plan, env: dayEnv } = input;
   const statements = [
     env.DB.prepare(
-      `INSERT INTO ai_day (date_key, location, at_home, mood_seed, health, weather, temp_c, plan_json, generated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO ai_day (date_key, location, at_home, mood_seed, health, weather, temp_c, plan_json, generated_at, recipe)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(date_key) DO UPDATE SET
          location = excluded.location,
          at_home = excluded.at_home,
@@ -101,7 +104,8 @@ export async function saveDayPlan(
          weather = excluded.weather,
          temp_c = excluded.temp_c,
          plan_json = excluded.plan_json,
-         generated_at = excluded.generated_at`,
+         generated_at = excluded.generated_at,
+         recipe = excluded.recipe`,
     ).bind(
       plan.date,
       input.location,
@@ -112,6 +116,7 @@ export async function saveDayPlan(
       dayEnv.tempC,
       JSON.stringify(plan),
       input.generatedAt ?? new Date().toISOString(),
+      input.recipe ?? null,
     ),
     env.DB.prepare('DELETE FROM ai_activity WHERE date_key = ?').bind(plan.date),
   ];
@@ -185,11 +190,21 @@ export async function ensureDayPlan(
   const existing = await getDayPlan(env, input.dateKey);
   if (existing) return existing;
   const uses = await recentUses(env, input.dateKey);
+  // 特殊日 + 健康度：都要看前几天的记录，所以先查历史再生成
+  const history = await recipeHistory(env, input.dateKey);
+  const choice = pickRecipe(input.dateKey, history);
+  const prev = await previousHealth(env, input.dateKey);
+  const health = healthForDay({
+    yesterdayHealth: prev ?? 100,
+    sickToday: choice.recipe?.id === 'sick',
+    daysSinceSick: history.daysSinceSick,
+  });
   const plan = buildDay({
     date: input.dateKey,
     env: input.env,
     recentUses: uses,
     salt: input.salt,
+    recipe: choice.recipe,
   });
   // 当天基调 = 各段活动 mood 的均值。先只存着：P0 不喂给情绪向量，
   // 等 P2 打开闸门再进 processEmotionTurn 的 environment 通道。
@@ -206,7 +221,7 @@ export async function ensureDayPlan(
     env: input.env,
     location: input.location,
     moodSeed,
-    health: input.health,
+    health: choice.recipe?.health ?? health,
   });
   const saved = await getDayPlan(env, input.dateKey);
   if (saved) return saved;
@@ -263,4 +278,37 @@ export function statusAt(
   if (sleeping && !hit) return { status: 'sleeping', current: null, next, health };
   if (!hit) return { status: 'free', current: null, next, health };
   return { status: hit.interruptible ? 'free' : 'busy', current: hit, next, health };
+}
+
+/** 最近一次「生病 / 大扫除 / 通宵」距今天多少天。冷却和康复曲线都靠它。 */
+export async function recipeHistory(
+  env: Env,
+  dateKey: string,
+): Promise<{ daysSinceSick: number | null; daysSinceDeepclean: number | null; daysSinceMarathon: number | null }> {
+  const rows = await env.DB.prepare(
+    `SELECT recipe, MAX(date_key) AS last FROM ai_day
+     WHERE recipe IN ('sick', 'deepclean', 'marathon') AND date_key < ?
+     GROUP BY recipe`,
+  )
+    .bind(dateKey)
+    .all<{ recipe: string; last: string }>()
+    .catch(() => null);
+  const gap = (recipe: string): number | null => {
+    const hit = (rows?.results ?? []).find((r) => r.recipe === recipe);
+    if (!hit?.last) return null;
+    const diff = (Date.parse(dateKey + 'T00:00:00+08:00') - Date.parse(hit.last + 'T00:00:00+08:00')) / 86400000;
+    return Number.isFinite(diff) ? Math.round(diff) : null;
+  };
+  return { daysSinceSick: gap('sick'), daysSinceDeepclean: gap('deepclean'), daysSinceMarathon: gap('marathon') };
+}
+
+/** 前一天的健康度；没有记录就当 100。 */
+export async function previousHealth(env: Env, dateKey: string): Promise<number | null> {
+  const row = await env.DB.prepare(
+    'SELECT health FROM ai_day WHERE date_key < ? ORDER BY date_key DESC LIMIT 1',
+  )
+    .bind(dateKey)
+    .first<{ health: number }>()
+    .catch(() => null);
+  return row ? row.health : null;
 }

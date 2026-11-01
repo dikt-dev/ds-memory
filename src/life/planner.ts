@@ -9,6 +9,7 @@
 import { ACTIVITIES, BY_ID } from './pool';
 import { makeRng, type Rng } from './seed';
 import type { ActUnit, DayEnv } from './types';
+import type { Recipe } from './recipes';
 
 /** 睡觉时间：次日 02:00（用超过 1440 的分钟数表示）。 */
 export const SLEEP_START = 26 * 60;
@@ -43,6 +44,8 @@ export interface BuildDayInput {
   recentUses?: Map<string, string[]>;
   /** 额外种子，出问题时换个值就能重抽 */
   salt?: string;
+  /** 特殊日配方（生病/摆烂/大扫除/通宵）。不传就是普通的一天。 */
+  recipe?: Recipe | null;
 }
 
 /** 骨架空档：三餐和睡觉之间的可用时间。 */
@@ -204,6 +207,7 @@ function fillWindow(
   budget: number,
   lazy = false,
   socialUsed = 0,
+  kinds?: string[],
 ): PlannedActivity[] {
   const out: PlannedActivity[] = [];
   let cursor = start;
@@ -229,6 +233,8 @@ function fillWindow(
       if (target > free) continue;
       const candidates = ACTIVITIES.filter((u) => {
         if (used.has(u.id)) return false;
+        // 配方日只允许那几类（生病在家只躺着吃饭、大扫除日只打扫）
+        if (kinds && !kinds.includes(u.kind)) return false;
         // 摆烂日只躺着、吃饭、找人聊两句，不出门做事
         if (lazy && !(u.kind === 'idle' || u.kind === 'meal' || u.kind === 'social')) return false;
         // 一天最多一次社交：她有朋友，但不是每天都有局
@@ -262,17 +268,17 @@ export function buildDay(input: BuildDayInput): DayPlan {
   const used = new Set<string>();
   const activities: PlannedActivity[] = [];
 
-  // 摆烂日：3%/天。晚睡晚起、只躺着吃饭、最多三段。
-  // 每天都排满 4–5 段的话，她不像人，像排班表。
-  const lazy = rng.chance(0.03);
-  // 起床不是精确的 09:00：晚点起半小时很常见
-  const wakeAt = lazy ? 11 * 60 : WAKE_AT + rng.int(-20, 50);
-  const budget = lazy ? 3 : MAX_ACTIVITIES;
+  // 特殊日配方优先于普通装填；没有配方时按普通日子排。
+  // 没有这层的话，每天都排满 4 段——她不像人，像排班表。
+  const recipe = input.recipe ?? null;
+  const wakeAt = recipe ? recipe.wakeAt : WAKE_AT + rng.int(-20, 50);
+  const budget = recipe ? recipe.budget : MAX_ACTIVITIES;
+  const lazy = recipe?.id === 'lazy';
   let socialUsed = 0;
 
   for (const w of dayWindows(wakeAt)) {
     if (activities.length >= budget) break;
-    const filled = fillWindow(rng, w.start, w.end, input, used, budget - activities.length, lazy, socialUsed);
+    const filled = fillWindow(rng, w.start, w.end, input, used, budget - activities.length, lazy, socialUsed, recipe?.kinds);
     socialUsed += filled.filter((a) => ACTIVITIES.find((u) => u.id === a.unitId)?.kind === 'social').length;
     activities.push(...filled);
   }
