@@ -15,6 +15,9 @@
   --shadow:0 1px 2px rgba(61,43,31,.06),0 8px 24px rgba(61,43,31,.08);
   --serif:"Kaiti SC","KaiTi","STKaiti","LXGW WenKai","Noto Serif SC","Songti SC",serif;
 }
+.top-right{display:flex;align-items:center;gap:12px}
+a.home{font-size:13px;letter-spacing:1px;color:var(--ink-soft);text-decoration:none;border-bottom:1px solid var(--line);padding-bottom:1px}
+a.home:hover{color:var(--stamp)}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
 body{
@@ -120,7 +123,10 @@ h1{font-size:32px;margin:0;letter-spacing:.12em;font-weight:600}
       <h1>她的日记</h1>
       <div class="sub" id="sub">每天凌晨，写前一天</div>
     </div>
-    <div class="seal">记</div>
+    <div class="top-right">
+      <a class="home" href="/" title="回聊天">← 回主页</a>
+      <div class="seal">记</div>
+    </div>
   </header>
   <div id="view"></div>
   <div class="foot">看得到的，是她那天愿意给你看的<br/>过了那天，就得再问她一次</div>
