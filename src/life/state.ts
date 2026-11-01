@@ -275,6 +275,8 @@ export interface NowStatus {
   current: ActivityRow | null;
   next: ActivityRow | null;
   health: number;
+  /** 今天是什么日子（sick/deepclean/marathon…），普通日子为 null */
+  recipe?: string | null;
 }
 
 /** 「现在 + 下一段」（§7.2）。 */

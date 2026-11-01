@@ -16,6 +16,7 @@ import { parseRelationValues } from './memory-maintenance';
 import { stripAttachmentWrapper } from './openai';
 import { putRuntimeState } from './runtime-store';
 import { lifeNow } from './life/jobs';
+import { RECIPES } from './life/recipes';
 import { askDiary, diaryList, diaryOne } from './life/diary-api';
 import { beijingDateKey } from './life/state';
 
@@ -111,6 +112,8 @@ app.get('/api/app/ai-status', requireApp, async (c) => {
     // 状态名两个都带：老客户端读 state，新客户端读 status
     state: status.status,
     status: status.status,
+    // 今天是什么日子（大扫除日/通宵追番日/生病日…）；普通日子为 null
+    day_type: status.recipe ? { id: status.recipe, label: RECIPES[status.recipe as keyof typeof RECIPES]?.label ?? status.recipe } : null,
     health: status.health,
     current: status.current
       ? {

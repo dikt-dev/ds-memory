@@ -99,7 +99,7 @@ export async function lifeNow(env: Env, now = new Date()): Promise<NowStatus & {
   const dayEnv: DayEnv = { weather: input.weather, tempC: input.tempC, atHome: input.atHome };
   const saved = await ensureDayPlan(env, { dateKey, env: dayEnv, location: input.location });
   const activities: ActivityRow[] = saved.activities;
-  return { dateKey, ...statusAt(activities, minute, saved.day.health) };
+  return { dateKey, recipe: saved.day.recipe ?? null, ...statusAt(activities, minute, saved.day.health) };
 }
 
 /**
