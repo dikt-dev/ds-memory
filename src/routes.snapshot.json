@@ -577,6 +577,14 @@
   ],
   [
     "POST",
+    "/api/admin/memory/collapse-ongoing"
+  ],
+  [
+    "POST",
+    "/api/admin/memory/collapse-ongoing"
+  ],
+  [
+    "POST",
     "/api/admin/memory/embed"
   ],
   [

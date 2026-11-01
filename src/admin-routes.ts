@@ -9,6 +9,7 @@ import type { AppEnv } from './types';
 import { requireAuth } from './middleware';
 import { MEMORY_KV_KEY, getMemory, putMemory } from './memory';
 import { appendMemoryLine, removeMemoryLine } from './memory-append';
+import { collapseOngoingItems } from './memory-ongoing-job';
 import { ensureLifeDay, lifeNow } from './life/jobs';
 import { maybeNightWake } from './life/night';
 import { lifePromptLine } from './life/now-text';
@@ -702,6 +703,12 @@ app.post('/api/admin/memory/section-line', requireAuth, async (c) => {
   return c.json({ ok: result.applied, ...result });
 });
 
+
+/** 手动跑一次「进行中的事项」合并（默认 cron 04:00 自动跑）。 */
+app.post('/api/admin/memory/collapse-ongoing', requireAuth, async (c) => {
+  const result = await collapseOngoingItems(c.env);
+  return c.json({ ok: true, ...result });
+});
 
 /** 删掉 memory.md 里完全匹配的一行（测试数据/纠错用）。 */
 app.post('/api/admin/memory/remove-line', requireAuth, async (c) => {
