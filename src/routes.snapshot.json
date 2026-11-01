@@ -41,6 +41,22 @@
   ],
   [
     "GET",
+    "/api/admin/life/diary/item"
+  ],
+  [
+    "GET",
+    "/api/admin/life/diary/item"
+  ],
+  [
+    "GET",
+    "/api/admin/life/diary/list"
+  ],
+  [
+    "GET",
+    "/api/admin/life/diary/list"
+  ],
+  [
+    "GET",
     "/api/admin/life/gate"
   ],
   [
@@ -510,6 +526,14 @@
   [
     "POST",
     "/api/admin/life/diary"
+  ],
+  [
+    "POST",
+    "/api/admin/life/diary/ask"
+  ],
+  [
+    "POST",
+    "/api/admin/life/diary/ask"
   ],
   [
     "POST",
