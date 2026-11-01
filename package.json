@@ -18,7 +18,8 @@
     "changelog": "node scripts/gen-changelog.mjs",
     "deploy:record": "node scripts/record-deploy.mjs",
     "dead-code": "node scripts/dead-code.mjs",
-    "style-audit": "node scripts/style-audit.mjs"
+    "style-audit": "node scripts/style-audit.mjs",
+    "gen:pool": "node scripts/gen-pool.mjs"
   },
   "dependencies": {
     "@types/spark-md5": "^3.0.5",
