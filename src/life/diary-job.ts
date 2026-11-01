@@ -180,7 +180,12 @@ export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJob
 export async function settleDiaryConsent(
   env: Env,
   userText: string,
+  replyText: string,
 ): Promise<'yes' | 'no' | 'unclear' | null> {
+  // 用户这句得真的在说日记，否则一律不结算——
+  // 不然问「明天吃火锅行吗」她答「好吧」，日记就被解锁了。
+  if (!/日记/.test(userText)) return null;
+
   const pending = await env.DB.prepare(
     `SELECT date_key FROM ai_diary WHERE visibility IN ('pending','declined') ORDER BY date_key DESC LIMIT 1`,
   )
@@ -188,41 +193,54 @@ export async function settleDiaryConsent(
     .catch(() => null);
   if (!pending) return null;
 
-  const verdict = classifyConsent(userText);
-  // 判不出来也按「锁着」处理：日记默认私密，不能一直挂在「等她说」上。
-  // 只是不写「被拒」那条记忆——那会把一次含糊的回应记成他的态度。
-  if (verdict === 'unclear') {
-    await env.DB.prepare(
-      "UPDATE ai_diary SET visibility = 'private' WHERE date_key = ?",
-    ).bind(pending.date_key).run().catch(() => {});
-    return 'unclear';
-  }
+  const scoped = diarySentences(replyText);
+  if (!scoped) return 'unclear';
+
+  const verdict = classifyConsent(scoped);
+  // 只有明确同意才解锁；拒绝或含糊都保持「询问中」，交给 15 分钟超时收回去。
+  // 这样即使判错一次拒绝，也不会永久关掉。
+  if (verdict !== 'yes') return verdict;
+
   await env.DB.prepare(
-    'UPDATE ai_diary SET visibility = ?, shared_at = ?, share_reason = ? WHERE date_key = ?',
+    "UPDATE ai_diary SET visibility = 'shared', shared_at = ?, share_reason = ? WHERE date_key = ?",
   )
-    .bind(
-      verdict === 'yes' ? 'shared' : 'declined',
-      verdict === 'yes' ? new Date().toISOString() : null,
-      userText.slice(0, 60),
-      pending.date_key,
-    )
+    .bind(new Date().toISOString(), scoped.slice(0, 60), pending.date_key)
     .run()
     .catch(() => {});
 
-  // 写进记忆：不然下一周她还会再问一遍，用户会觉得「我说过可以了」
-  // 记在「偏好与习惯」——这是他的态度，不是你们之间发生的一件事。
-  const line =
-    verdict === 'yes'
-      ? `- 愿意看她的日记（${pending.date_key} 问过，说可以）`
-      : `- 不太想看她的日记（${pending.date_key} 问过，被拒了，别天天问）`;
   await appendMemoryLine(env, {
     section: '## 偏好与习惯',
-    line,
+    line: `- 愿意看她的日记（${pending.date_key} 问过，说可以）`,
     keyword: '日记',
     actor: 'job',
   }).catch(() => {});
-  return verdict;
+  return 'yes';
 }
+
+/**
+ * 只看她回复里**跟日记有关的句子**。
+ *
+ * 「好吧」这种词到处都在用（同意吃火锅、同意明天早点睡），
+ * 整段丢给分类器必然误判。所以先按句切，只留提到日记/看/翻的句子，
+ * 一句话都不沾就说明她压根没接这个话头。
+ */
+export function diarySentences(reply: string): string {
+  const parts = (reply ?? '')
+    .split(/[。！？!?\n]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const keep: string[] = [];
+  parts.forEach((s, i) => {
+    if (/日记|翻|看|给你/.test(s)) {
+      keep.push(s);
+      // 紧接着的那句也算进来：「日记？」「你自己不会想吗」——
+      // 表态往往跟在提问后面一句，只看关键词那句会把拒绝漏掉。
+      if (parts[i + 1]) keep.push(parts[i + 1]);
+    }
+  });
+  return keep.join('。');
+}
+
 
 /** 有没有一篇日记正等着她表态（用户点了「问问她」）。 */
 /**

@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-01T14:52:36.023Z",
+  "generated_at": "2026-11-01T15:03:17.775Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-01",
       "items": [
+        {
+          "hash": "f81c6dd",
+          "date": "2026-11-01",
+          "type": "other",
+          "area": "",
+          "title": "日记：允许她抱怨没聊天、写自己的情绪",
+          "why": ""
+        },
         {
           "hash": "2e39976",
           "date": "2026-11-01",
@@ -3241,14 +3249,6 @@
           "area": "file-plugin",
           "title": "优化文件读取插件的 5 个点",
           "why": "审查 astrbot_plugin_file_reader 后逐项优化： 1. 兜底正则误读无关路径 原来 TEMP_PATH_RE 会把消息里任何 /root/... 都当文件去读， 用户说「我把项目放在 /home/me/project 里了」就会注入一条 「读取失败：文件不存在」。现在要求路径必须以已知扩展名结尾。 2. 同一文件重复注入 消息链组件、File Attachment 标记、裸路径三个来源可能给出 不同写法的同一路径（/root/a.txt vs /root/./a.txt）， 不归一化会读两遍、注入两遍。新增 _normalize_posix_path 去重。 ★ 修这个时发现一个真 bug：原打算用 os.path.normpath， 但它在 Windows 上会把 /root/a.txt 变成 \\root\\a.txt， 而 AstrBot 跑 Linux，路径必须"
-        },
-        {
-          "hash": "057f255",
-          "date": "2026-10-23",
-          "type": "fix",
-          "area": "proactive",
-          "title": "修复主动消息投递链路的 7 个缺陷",
-          "why": "审查 astrbot_plugin_memory_push 与 Worker 队列实现，逐项修复： 【安全】 1. 群聊劫持（P0）：auto_learn 监听所有消息并无条件覆盖 target_umo， 加入的群里有人随口说一句，主动消息（私密对话内容）就会发到那个群。 新增 is_private_umo()：只有私聊会话可自动学习，群聊/频道必须显式 /肥鱼记住这里。无法识别时按非私聊处理（宁可不学，不能发错）。 2. /肥鱼立即推送 语义错误（P0）：原来用 yield event.plain_result()， 那是「回复当前消息」而非主动发到 target_umo，在群里调试会当众发出。 改为统一走 _send_to_target()，与轮询同一条路径。 【可靠性】 3. 30 天清理永不生效：sent_at 存 ， 而 SQL 用 datetime('now','-30 day"
         }
       ]
     }

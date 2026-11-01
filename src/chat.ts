@@ -391,7 +391,7 @@ export async function streamChat(
       const silent = isSilentEnd(text) && (channel === 'mobile' || channel === 'web');
       const stored = silent ? '' : normalizeAssistantText(text);
       // 她的这句才决定日记给不给看（「好吧/拿去」= 同意，「不给/想得美」= 拒绝）
-      if (stored) void settleDiaryConsent(env, stored).catch(() => {});
+      if (stored) void settleDiaryConsent(env, content, stored).catch(() => {});
       if (!silent && stored) {
         // 费用与 token 随 INSERT 一次写入（少一条 UPDATE）
         const saved = await insertAssistantReply(env, stored, userId, now, {
