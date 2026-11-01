@@ -57,6 +57,14 @@
   ],
   [
     "GET",
+    "/api/admin/life/prompt"
+  ],
+  [
+    "GET",
+    "/api/admin/life/prompt"
+  ],
+  [
+    "GET",
     "/api/admin/memory/actions"
   ],
   [
