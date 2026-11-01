@@ -106,7 +106,8 @@ export async function refreshLifeEnv(
   const now = await fetchWeather(city);
   const record: LifeEnvRecord = {
     location: city,
-    atHome: true,
+    // 旅游日不在家：atHome 决定装填只挑户外单元
+    atHome: tripCity === null,
     weather: now?.weather ?? 'cloudy',
     tempC: now?.tempC ?? 20,
     updatedAt: new Date().toISOString(),
