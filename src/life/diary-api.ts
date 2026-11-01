@@ -57,9 +57,12 @@ function safeImages(raw: string | null): string[] {
   }
 }
 
+/** 「问问她」之后多久没回话就算没问过。聊几句就到，15 分钟足够。 */
+const ASK_TTL_MS = 15 * 60 * 1000;
+
 export async function diaryList(env: Env, limit = 60, now = new Date()): Promise<DiaryListRow[]> {
   const rows = await env.DB.prepare(
-    `SELECT d.date_key, d.visibility, d.shared_at, d.images,
+    `SELECT d.date_key, d.visibility, d.shared_at, d.asked_at, d.images,
             y.weather, y.temp_c, y.location, y.recipe, y.health
        FROM ai_diary d
        LEFT JOIN ai_day y ON y.date_key = d.date_key
@@ -71,6 +74,7 @@ export async function diaryList(env: Env, limit = 60, now = new Date()): Promise
       date_key: string;
       visibility: string;
       shared_at: string | null;
+      asked_at: string | null;
       images: string | null;
       weather: string | null;
       temp_c: number | null;
@@ -80,8 +84,15 @@ export async function diaryList(env: Env, limit = 60, now = new Date()): Promise
     }>()
     .catch(() => null);
 
-  return (rows?.results ?? []).map((r) => {
-    const fresh = r.visibility === 'shared' && consentFresh(r.shared_at, now);
+  const stale: string[] = [];
+  const list = (rows?.results ?? []).map((r) => {
+    // 问出去太久没回话，就当没问过：锁回去，别一直挂着「等她说」
+    const askedLongAgo =
+      r.visibility === 'pending' &&
+      (!r.asked_at || now.getTime() - Date.parse(r.asked_at) > ASK_TTL_MS);
+    if (askedLongAgo) stale.push(r.date_key);
+    const visibility = askedLongAgo ? 'private' : r.visibility;
+    const fresh = visibility === 'shared' && consentFresh(r.shared_at, now);
     return {
       date: r.date_key,
       weekday: weekdayOf(r.date_key),
@@ -91,12 +102,23 @@ export async function diaryList(env: Env, limit = 60, now = new Date()): Promise
       recipe: r.recipe,
       health: typeof r.health === 'number' ? r.health : null,
       visible: fresh,
-      asked: r.visibility === 'pending',
-      declined: r.visibility === 'declined',
+      asked: visibility === 'pending',
+      declined: visibility === 'declined',
       images: safeImages(r.images),
-      expired: r.visibility === 'shared' && !fresh,
+      expired: visibility === 'shared' && !fresh,
     };
   });
+
+  // 过期的 pending 直接落库成私密，下次读就不用再算一遍
+  if (stale.length) {
+    await env.DB.prepare(
+      `UPDATE ai_diary SET visibility = 'private' WHERE date_key IN (${stale.map(() => '?').join(',')})`,
+    )
+      .bind(...stale)
+      .run()
+      .catch(() => {});
+  }
+  return list;
 }
 
 /** 单篇：锁着就只给上面那些，正文不出服务端。 */
@@ -123,6 +145,8 @@ export async function askDiary(env: Env, date: string, now = new Date()): Promis
     .first<{ visibility: string; shared_at: string | null }>();
   if (!row) return { ok: false, error: '这天没写日记' };
   if (row.visibility === 'shared' && consentFresh(row.shared_at, now)) return { ok: true, already: true };
-  await env.DB.prepare("UPDATE ai_diary SET visibility = 'pending' WHERE date_key = ?").bind(date).run();
+  await env.DB.prepare("UPDATE ai_diary SET visibility = 'pending', asked_at = ? WHERE date_key = ?")
+    .bind(now.toISOString(), date)
+    .run();
   return { ok: true, asked: true };
 }

@@ -22,13 +22,17 @@ export function imageScene(text: string): string {
     .split(/[。！？!?\n]/)
     .map((s) => s.trim())
     .filter((s) => s.length > 4)
-    .slice(0, 3)
-    .join('。');
+    .slice(0, 2)
+    .join('，');
+  // 实测：只写「不要文字」没用，flux 还是会画一排假汉字。
+  // 换成英文指令 + 反复强调 no text，并指定日系水彩，画面才干净。
   return [
-    '日系水彩插画，柔和的自然光，安静的生活气息。',
-    '画面内容：' + body.slice(0, 140),
-    '不要文字，不要字母，不要正脸特写。',
-  ].join('');
+    'Japanese watercolor illustration, soft natural light, cozy slice-of-life scene.',
+    'Scene: ' + body.slice(0, 100) + '.',
+    'Style: muted pastel palette, gentle brush texture, shallow depth, calm mood.',
+    'No text, no letters, no Chinese characters, no calligraphy, no captions, no watermark, no signature.',
+    'No face close-up, no logo.',
+  ].join(' ');
 }
 
 /** 最近一次失败原因（排查用，进程内即可）。 */

@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-01T14:14:49.220Z",
+  "generated_at": "2026-11-01T14:17:41.146Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-01",
       "items": [
+        {
+          "hash": "af74ef1",
+          "date": "2026-11-01",
+          "type": "other",
+          "area": "",
+          "title": "日记配图：修正 flux 参数与 R2 写入校验，10-31 补图成功",
+          "why": ""
+        },
         {
           "hash": "5c34822",
           "date": "2026-11-01",
@@ -3240,14 +3248,6 @@
           "type": "chore",
           "area": "",
           "title": "插件元数据指向开源仓库",
-          "why": ""
-        },
-        {
-          "hash": "68f0f0b",
-          "date": "2026-10-23",
-          "type": "chore",
-          "area": "",
-          "title": "忽略本地部署配置 wrangler.local.toml",
           "why": ""
         }
       ]
