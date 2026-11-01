@@ -1,10 +1,34 @@
 {
-  "generated_at": "2026-11-01T12:34:09.614Z",
-  "count": 381,
+  "generated_at": "2026-11-01T12:42:01.142Z",
+  "count": 384,
   "days": [
     {
       "date": "2026-11-01",
       "items": [
+        {
+          "hash": "1f8dd31",
+          "date": "2026-11-01",
+          "type": "other",
+          "area": "",
+          "title": "常量收敛：删掉情绪/关系常量的全部转发出口",
+          "why": "上一步只删了 RELATION_MAX 在 memory-maintenance 的那一处，其余还在： attitude.ts            MOOD_MAX_DAILY_DELTA memory-maintenance.ts  MOOD_MAX_DAILY_DELTA relation-growth.ts     RELATION_MAX relation-drivers.ts    RELATION_MAX / INTIMACY_BASE / INTIMACY_PER_DAY 这些常量原本都只有 relation-model.ts 一个定义，转发只是为了少改几行 import， 结果同一个值有了多条合法路径。现在全部删掉，引用直接指向 relation-model。 tsc 干净，1191 测试全过。下一步才是 legacy/next 双索引。"
+        },
+        {
+          "hash": "dbe36c1",
+          "date": "2026-11-01",
+          "type": "other",
+          "area": "",
+          "title": "常量收敛第一步：删掉 RELATION_MAX 的转发出口",
+          "why": "RELATION_MAX 的唯一来源一直是 relation-model.ts，但 memory-maintenance.ts 和 relation-drivers.ts 各自又 export 了一遍，于是同一个常量有三条合法 import 路径： 改 relation-model 却漏了某条路径的语义变体时，线上就是两套口径。 这次删掉两个转发出口，所有引用回到 relation-model.ts。tsc 无报错，1191 测试全过。 下一步（未做）：情绪那一组常量同样只剩单一来源，然后才动 legacy/next 双索引。"
+        },
+        {
+          "hash": "79f80a2",
+          "date": "2026-11-01",
+          "type": "other",
+          "area": "",
+          "title": "除夕在家，初一才出发；节日预演",
+          "why": "state.ts 里大节日出发前加一条：id === 'chuxi' 不出发，那天照常在家过。 预演（2026 节日周，只看配方层） 02-16 除夕  节日（在家） 02-17 春节  节日 + 出发旅行 09-25 中秋  节日（吃月饼） 10-01 国庆  节日 + 出发旅行 预演只是配方层：行程的持续（第 2/3 天、回家日）在 resolveTravel 里，需要库， 所以 02-18/19 显示「普通」是预演假象，线上那两天仍是行程中的日子。 同理 10-02/03 的「通宵追番日」在旅行期间不会触发。"
+        },
         {
           "hash": "25e80e6",
           "date": "2026-11-01",

@@ -216,6 +216,8 @@ export async function embedTexts(env: Env, texts: string[]): Promise<number[][]>
 }
 
 /** 重建 D1 记忆索引（可重复执行，幂等）。 */
+import { recordDualStats } from './memory-dual';
+
 export async function reindexMemory(
   env: Env,
 ): Promise<{ entries: number; withVec: number; errors: string | null }> {
@@ -369,6 +371,9 @@ export async function reindexMemory(
         chunk.map((id) => env.DB.prepare('DELETE FROM memory_entries WHERE id = ?').bind(id)),
       );
     }
+
+    // 重建完顺手记一笔两边各多少行（开关关着时什么都不做）
+    await recordDualStats(env).catch(() => {});
 
     const vecCount = await env.DB.prepare(
       'SELECT COUNT(*) AS c FROM memory_entries WHERE vec IS NOT NULL',
