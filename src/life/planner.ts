@@ -206,7 +206,9 @@ const UNIT_RULES: Record<string, UnitRule> = {
   night_bath: { starts: [[20 * 60 + 30, 25 * 60]] },
   night_reading: { starts: [[20 * 60 + 30, 25 * 60]] },
   night_music: { starts: [[20 * 60 + 30, 25 * 60]] },
-  night_tidy: { starts: [[20 * 60, 24 * 60]] },
+  // 24*60 在 ruleOk 里会被 %1440 变成 0，于是「20:00–24:00」这条永远判不过，
+  // 收拾屋子 480 天粒度里一次都没出现过。改成和别的夜间单元一致的 25*60。
+  night_tidy: { starts: [[20 * 60, 25 * 60]] },
   night_write: { starts: [[21 * 60, 25 * 60]] },
 };
 
