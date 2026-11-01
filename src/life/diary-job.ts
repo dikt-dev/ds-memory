@@ -70,6 +70,24 @@ function formatChatForDiary(rows: Array<{ role: string; content: string }>): str
 }
 
 /** 给某一天写日记。已经有就跳过（幂等）。 */
+/** 读当天的环境输入（KV life:env:{date}）；读不到就用默认「北京 阴 20 度在家」。 */
+async function readDayEnv(env: Env, dateKey: string): Promise<{ location: string; atHome: boolean; weather: string; tempC: number }> {
+  const fallback = { location: '北京', atHome: true, weather: 'cloudy', tempC: 20 };
+  const raw = await env.KV.get(`life:env:${dateKey}`).catch(() => null);
+  if (!raw) return fallback;
+  try {
+    const p = JSON.parse(raw) as { location?: string; atHome?: boolean; weather?: string; tempC?: number };
+    return {
+      location: p.location || fallback.location,
+      atHome: p.atHome !== false,
+      weather: p.weather || fallback.weather,
+      tempC: typeof p.tempC === 'number' ? p.tempC : fallback.tempC,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJobResult> {
   const existing = await env.DB.prepare('SELECT date_key FROM ai_diary WHERE date_key = ?')
     .bind(dateKey)
@@ -79,10 +97,12 @@ export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJob
   // 没排过这天就补一份：哪怕整天没聊天，日记也要有素材（她的一天不是围着聊天转的）
   let saved = await getDayPlan(env, dateKey);
   if (!saved || saved.activities.length === 0) {
+    // 用当天真实的环境输入：她没出门旅行时，位置就跟用户一致
+    const envInput = await readDayEnv(env, dateKey);
     saved = await ensureDayPlan(env, {
       dateKey,
-      env: { weather: 'cloudy', tempC: 20, atHome: true },
-      location: '上海',
+      env: { weather: envInput.weather, tempC: envInput.tempC, atHome: envInput.atHome },
+      location: envInput.location,
     }).catch(() => null);
   }
   if (!saved || saved.activities.length === 0) return { ok: false, skipped: 'no-plan' };

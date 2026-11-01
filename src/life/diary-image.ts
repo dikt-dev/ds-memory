@@ -60,7 +60,7 @@ export let lastImageError: string | null = null;
  */
 export const CHARACTER =
   'the same character: a young woman with long blue hair, blue eyes, fin-like ears, ' +
-  'a white maid headband, wearing a black-and-white maid dress, with a large whale tail behind her';
+  'a white maid headband, wearing a black-and-white maid dress, and a blue whale-like tail fin growing from her own body';
 
 /** 统一的画风 + 固定人物：不管场景是什么，长相要一致。 */
 export function withStyle(scene: string): string {
@@ -69,7 +69,7 @@ export function withStyle(scene: string): string {
     CHARACTER + '.',
     'Scene: ' + scene,
     // 加了形象描述之后模型爱画成两个人——明确只画一个
-    'Only one person in the frame.',
+    'Only one person in the frame. Her tail is part of her body — no separate whale or fish anywhere.',
     'No text, no letters, no characters on screen, no watermark, no signature.',
   ].join(' ');
 }

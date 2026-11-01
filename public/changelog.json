@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-01T14:46:52.406Z",
+  "generated_at": "2026-11-01T14:50:10.926Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-01",
       "items": [
+        {
+          "hash": "f947bd1",
+          "date": "2026-11-01",
+          "type": "other",
+          "area": "",
+          "title": "日记配图：图片 key 带时间戳，重画后客户端不再读缓存；日记以日程为主",
+          "why": ""
+        },
         {
           "hash": "d087ddc",
           "date": "2026-11-01",
@@ -3241,14 +3249,6 @@
           "area": "",
           "title": "按当前代码修正 4 份文档中与实现不符的内容",
           "why": "architecture.md - 测试数 30 → 32（新增 identity / relation-store 等） - 目录结构补 identity.ts、relation-store.ts - KV 表补全：原 9 个 → 19 个，含 relation:active_days（永久）、 session:mood、mood:drift、profile:*、aversion:candidates 等 - R2 结构补 memory/archive.md（档案层），说明归档清理范围 - 关系值章节细化：好感度由质量驱动（±5）、亲密度由量驱动（+4/天， 上限 300+天数×2）、心情双通道各 ±80；补充「天数不会倒退」机制 - 标题与头像注释去掉写死的角色名（现由 CHARACTER_NAME 决定） liveliness-plan.md - 状态卡示例改为代码实际输出字段（原为"
-        },
-        {
-          "hash": "55e6cc3",
-          "date": "2026-10-23",
-          "type": "fix",
-          "area": "liveliness",
-          "title": "修复活人感验收发现的 3 个缺陷",
-          "why": "按 docs/liveliness-plan.md 验收，发现实现打折，逐项修复： 1.【P0】心情值对状态卡几乎不敏感（影响验收标准 1） 原来只有 350/600 两个阈值参与判断，心情在 350~600 之间对状态卡 毫无影响，而情绪残留幅度只有 ±40，基本落不到阈值上——导致文档说的 「上一轮情绪会漏到下一轮」名义上实现、体感上没有。 新增 moodTier() 五档（low/meh/calm/good/great）： - timeOfDayState 每档独立描述 - dispositionFor 按档位调整亲昵倾向权重（×1 / ×2 / ×4）， 心情偏低时抑制亲昵倾向 实测状态卡变化点从 3 个增加到 5 个，亲昵倾向占比 550→100/200、700→132/200、900→160/200。 2.【P1】情绪残留衰减比文档慢 3 倍 文档要求「约 12 分钟指数衰减」"
         }
       ]
     }
