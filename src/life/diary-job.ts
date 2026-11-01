@@ -188,12 +188,14 @@ export async function settleDiaryConsent(
   // 不然问「明天吃火锅行吗」她答「好吧」，日记就被解锁了。
   if (!/日记/.test(userText)) return null;
 
-  const pending = await env.DB.prepare(
-    `SELECT date_key FROM ai_diary WHERE visibility IN ('pending','declined') ORDER BY date_key DESC LIMIT 1`,
+  const pendingRows = await env.DB.prepare(
+    `SELECT date_key FROM ai_diary WHERE visibility IN ('pending','declined') ORDER BY date_key DESC LIMIT 5`,
   )
-    .first<{ date_key: string }>()
+    .all<{ date_key: string }>()
     .catch(() => null);
-  if (!pending) return null;
+  const dates = (pendingRows?.results ?? []).map((r) => r.date_key);
+  if (dates.length === 0) return null;
+  const pending = { date_key: dates[0] };
 
   const scoped = diarySentences(replyText);
 
@@ -214,12 +216,16 @@ export async function settleDiaryConsent(
   // 这样即使判错一次拒绝，也不会永久关掉。
   if (verdict !== 'yes' && verdict !== 'peek') return verdict;
 
-  await env.DB.prepare(
-    'UPDATE ai_diary SET visibility = ?, shared_at = ?, share_reason = ? WHERE date_key = ?',
-  )
-    .bind(verdict === 'yes' ? 'shared' : 'peek', new Date().toISOString(), scoped.slice(0, 60), pending.date_key)
-    .run()
-    .catch(() => {});
+  const nowIso = new Date().toISOString();
+  const target = verdict === 'yes' ? 'shared' : 'peek';
+  for (const d of dates) {
+    await env.DB.prepare(
+      'UPDATE ai_diary SET visibility = ?, shared_at = ?, share_reason = ? WHERE date_key = ?',
+    )
+      .bind(target, nowIso, scoped.slice(0, 60), d)
+      .run()
+      .catch(() => {});
+  }
 
   await appendMemoryLine(env, {
     section: '## 偏好与习惯',
@@ -265,40 +271,6 @@ export function diarySentences(reply: string): string {
  * 一次拒绝不是终局——实测她会先顶两句，磨几次就松口。
  * 所以这里在用户提到日记时把 declined 重开成 pending，让她有机会改口。
  */
-/**
- * 用户提到日记时，认出他说的是**哪一篇**，把那一篇标成 pending。
- *
- * 原来只会看「最新一篇」，用户说「看看昨天的」时判断的却是别的日子。
- * 识别顺序：显式日期 > 昨天/前天/今天 > 最新一篇。
- */
-export async function noteDiaryInterest(env: Env, text: string): Promise<void> {
-  if (!/日记/.test(text)) return;
-  const rows = await env.DB.prepare('SELECT date_key, visibility FROM ai_diary ORDER BY date_key DESC LIMIT 30')
-    .all<{ date_key: string; visibility: string }>()
-    .catch(() => null);
-  const list = rows?.results ?? [];
-  if (list.length === 0) return;
-
-  const toKey = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(d);
-  const today = new Date();
-  const shift = (n: number) => toKey(new Date(today.getTime() - n * 86400000));
-
-  let target = list[0].date_key; // 默认最新一篇
-  const explicit = text.match(/\d{4}-\d{2}-\d{2}/);
-  if (explicit && list.some((r) => r.date_key === explicit[0])) target = explicit[0];
-  else if (/昨天|昨晚/.test(text)) target = shift(1);
-  else if (/前天/.test(text)) target = shift(2);
-  else if (/今天|今晚/.test(text)) target = shift(0);
-
-  const row = list.find((r) => r.date_key === target);
-  if (!row) return;
-  if (row.visibility === 'shared' || row.visibility === 'peek') return;
-
-  await env.DB.prepare("UPDATE ai_diary SET visibility = 'pending', asked_at = ? WHERE date_key = ?")
-    .bind(new Date().toISOString(), target)
-    .run()
-    .catch(() => {});
-}
 
 export async function reopenDiaryAsk(env: Env, userText: string): Promise<void> {
   if (!/日记/.test(userText)) return;
@@ -311,13 +283,13 @@ export async function reopenDiaryAsk(env: Env, userText: string): Promise<void> 
     .catch(() => {});
 }
 
-export async function pendingDiaryAskDate(env: Env): Promise<string | null> {
-  const row = await env.DB.prepare(
-    `SELECT date_key FROM ai_diary WHERE visibility = 'pending' LIMIT 1`,
+export async function pendingDiaryAskDates(env: Env): Promise<string[]> {
+  const rows = await env.DB.prepare(
+    `SELECT date_key FROM ai_diary WHERE visibility IN ('pending','declined') ORDER BY date_key DESC LIMIT 5`,
   )
-    .first<{ date_key: string }>()
+    .all<{ date_key: string }>()
     .catch(() => null);
-  return row?.date_key ?? null;
+  return (rows?.results ?? []).map((r) => r.date_key);
 }
 
 /**
@@ -328,12 +300,14 @@ export async function pendingDiaryAskDate(env: Env): Promise<string | null> {
  * 挪到打开日记这一刻，用户感知不到延迟，聊天也不受影响。
  */
 export async function resolveDiaryConsent(env: Env): Promise<void> {
-  const pending = await env.DB.prepare(
-    "SELECT date_key FROM ai_diary WHERE visibility = 'pending' ORDER BY date_key DESC LIMIT 1",
+  const pendingRows = await env.DB.prepare(
+    "SELECT date_key FROM ai_diary WHERE visibility = 'pending' ORDER BY date_key DESC LIMIT 5",
   )
-    .first<{ date_key: string }>()
+    .all<{ date_key: string }>()
     .catch(() => null);
-  if (!pending) return;
+  const dates = (pendingRows?.results ?? []).map((r) => r.date_key);
+  if (dates.length === 0) return;
+  const pending = { date_key: dates[0] };
 
   const rows = await env.DB.prepare(
     'SELECT role, content FROM messages ORDER BY id DESC LIMIT 10',
@@ -352,17 +326,20 @@ export async function resolveDiaryConsent(env: Env): Promise<void> {
     .first<{ share_reason: string | null }>()
     .catch(() => null);
   const judged = await judgeDiaryConsent(env, turns, {
-    date: pending.date_key,
+    dates,
     note: meta?.share_reason ?? null,
   });
   const herText = list.filter((m) => m.role !== 'user').map((m) => m.content).join(' ');
   if (!judged || judged === 'deny' || judged === 'unclear') return;
   if (judged === 'allow' && hasRefusal(herText)) return;
 
-  await env.DB.prepare(
-    'UPDATE ai_diary SET visibility = ?, shared_at = ?, share_reason = ? WHERE date_key = ?',
-  )
-    .bind(judged === 'allow' ? 'shared' : 'peek', new Date().toISOString(), '聊天里答应的', pending.date_key)
-    .run()
-    .catch(() => {});
+  const target = judged === 'allow' ? 'shared' : 'peek';
+  for (const d of dates) {
+    await env.DB.prepare(
+      'UPDATE ai_diary SET visibility = ?, shared_at = ?, share_reason = ? WHERE date_key = ?',
+    )
+      .bind(target, new Date().toISOString(), '聊天里答应的', d)
+      .run()
+      .catch(() => {});
+  }
 }
