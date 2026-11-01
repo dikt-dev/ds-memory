@@ -55,6 +55,7 @@ import { affectEngineFor, memoryEngineFor } from './engine-flags';
 import { recordEngineMetric } from './engine-metrics';
 import { logTrace, resolveRequestId } from './trace';
 import { recordFiles, recentFilesBlock } from './recent-files';
+import { gateDecision, markHeld, untilMs, type GateDecision } from './life/gate';
 
 type AppEnv = { Bindings: Env; Variables: { requestId: string } };
 export const openaiApp = new Hono<AppEnv>();
@@ -740,6 +741,21 @@ openaiApp.post('/chat/completions', async (c) => {
       });
       userMessageId = saved.id;
       await markProfileDirty(c.env).catch(() => {});
+    }
+  }
+
+  // ★ 消息闸门（P2）：她忙/在睡时先落库不回，到点由 cron 或 App 拉。
+  // 开关默认关（KV life:enabled），关着时这里只多一次 KV 读，行为与原来完全一致。
+  if (!skipRecording && userMessageId && recordContent) {
+    const gate: GateDecision = await gateDecision(c.env, now).catch(() => ({ hold: false }));
+    if (gate.hold) {
+      await markHeld(c.env, userMessageId, untilMs(now, gate.until ?? '09:00'));
+      return c.json({
+        held: true,
+        until: gate.until,
+        reason: gate.reason,
+        user_message_id: userMessageId,
+      });
     }
   }
 

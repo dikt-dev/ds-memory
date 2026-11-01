@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-01T09:15:23.868Z",
-  "count": 351,
+  "generated_at": "2026-11-01T09:22:14.241Z",
+  "count": 352,
   "days": [
     {
       "date": "2026-11-01",
       "items": [
+        {
+          "hash": "01a553f",
+          "date": "2026-11-01",
+          "type": "other",
+          "area": "",
+          "title": "生活系统 P1：真实天气、日记生成、同意流程",
+          "why": "天气（src/life/weather.ts） 12 城经纬度 + Open-Meteo（免 key，国内可达）。WMO 代码映射成 sunny/cloudy/rain/snow， 结果写 KV life:env:{date}，装填只读 KV，不在聊天关键路径上发请求。 实测：杭州 → rain 20℃。 日程生成接真实天气 04:00 cron 改成 runLifeMorning：刷天气 → 生成当天日程 → 写前一天的日记。 雨天不会抽到没 rainy_ok 的出门项，晴天才会去公园晒太阳。 日记（src/life/diary-job.ts） 读三样写一段：当天日程（带填充提示）、当天对话的最后 20 条、天气与位置。 语气不走聊天 persona——日记是她自己写的，可以更直白。 实测生成（2026-10-31，真有这条）： 「今天上午看漫画，翻到最新一话停在个要命的地方，气得我在床"
+        },
         {
           "hash": "8259b49",
           "date": "2026-11-01",

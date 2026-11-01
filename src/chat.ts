@@ -66,6 +66,7 @@ export async function streamChat(
   image?: ChatImage,
   channel: MessageChannel = 'web',
   requestId?: string,
+  opts: { reuseUserMessageId?: number } = {},
 ): Promise<Response> {
   const apiKey = env.DEEPSEEK_API_KEY;
   if (!apiKey) return Response.json({ error: 'DEEPSEEK_API_KEY 未配置' }, { status: 500 });
@@ -273,9 +274,16 @@ export async function streamChat(
 
   // 2) 落用户消息（D1 只存文本，图片记 R2 路径）
   const recordContent = image ? [content, `[图片:${image.key}]`].filter(Boolean).join('\n') : content;
-  const userRow = await insertUserMessage(env, recordContent, now, { channel });
-  // 有新用户消息 → 用户画像需要重算（下次主动消息决策时生效）
-  await markProfileDirty(env).catch(() => {});
+  // 闸门补发时消息已经在库里了，复用它的 id，不再插一条（否则历史里会出现两条一样的话）
+  let userId: number;
+  if (opts.reuseUserMessageId) {
+    userId = opts.reuseUserMessageId;
+  } else {
+    const userRow = await insertUserMessage(env, recordContent, now, { channel });
+    userId = userRow.id;
+    // 有新用户消息 → 用户画像需要重算（下次主动消息决策时生效）
+    await markProfileDirty(env).catch(() => {});
+  }
 
   // 3) 发给 DeepSeek 的图片从 R2 读回（压缩后的版本）
   let userContent: DeepSeekMessage['content'] = content;
@@ -367,7 +375,7 @@ export async function streamChat(
       const stored = silent ? '' : normalizeAssistantText(text);
       if (!silent && stored) {
         // 费用与 token 随 INSERT 一次写入（少一条 UPDATE）
-        const saved = await insertAssistantReply(env, stored, userRow.id, now, {
+        const saved = await insertAssistantReply(env, stored, userId, now, {
           channel,
           cost: usage ? calcCost(usage, loadPricing(env), now) : 0,
           promptTokens: usage
@@ -390,7 +398,7 @@ export async function streamChat(
         });
       }
       // 把 id 一并返回：前端用它推进轮询游标，避免重复渲染同一轮
-      return { cost, ids: { user: userRow.id, assistant: assistantId } };
+      return { cost, ids: { user: userId, assistant: assistantId } };
     },
   });
 }

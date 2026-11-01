@@ -23,6 +23,7 @@ export interface Env {
   MEMORY_SNAPSHOT?: string; // 'off' 关闭每日记忆快照（默认开启，见 docs/memory-rollback-plan.md）
   LLM_RERANK?: string; // 条件 LLM 重排开关：默认开，设 '0' 关闭（省一次调用的延迟）
   REQUEST_LOG?: string; // 'off' 关闭请求级 trace 落 D1（默认开，见 src/request-log.ts）
+  AI_LIFE?: string; // 'off' 强制关闭生活系统（P2 闸门总开关；默认由 KV life:enabled 决定）
   // DeepSeek 计费单价（高峰时段，元/百万 tokens；闲时自动减半）
   PRICE_INPUT_HIT_PEAK: string;
   PRICE_INPUT_MISS_PEAK: string;

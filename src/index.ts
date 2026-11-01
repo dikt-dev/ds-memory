@@ -127,6 +127,7 @@ import { buildEmotionSnapshot, describeEmotionState } from './emotion-snapshot';
 import { decayEmotion, emptyEmotionVector, type EmotionVector } from './emotion-vector';
 import { elapsedMs, logTrace, REQUEST_ID_HEADER, shouldLogHttp, startTrace } from './trace';
 import { runLifeMorning } from './life/jobs';
+import { flushHeldMessages } from './life/flush';
 import { pruneRequestLog, readPathStats, readRecentRequests, recordRequest } from './request-log';
 import { deleteRuntimeState, getRuntimeState, putRuntimeState } from './runtime-store';
 import { getHeartbeat } from './profile-cache';
@@ -623,6 +624,8 @@ export default {
       // QQ 通道掉线检查：与主动消息是否暂停无关，每次 tick 都查
       // 白天随机主动消息：打分决策 + 落库 + 推送 QQ（直连或队列）
       ctx.waitUntil(runWebProactiveRandom(env, now));
+      // 闸门补发：到点的压着消息在这里回（§8.3 cron 兜底）
+      ctx.waitUntil(flushHeldMessages(env, now));
       // 这条 cron 实际覆盖 UTC 8 点 → 北京 16:00 的 context 刷新
       ctx.waitUntil(maybeRefreshContext(env, now));
       logCron(env, ctx, cron, startedAt);
@@ -633,6 +636,7 @@ export default {
       // QQ 通道掉线检查（同上）
       // 早晚固定主动消息：打分决策 + 落库 + 推送 QQ（直连或队列）
       ctx.waitUntil(runWebProactiveSlot(env, now));
+      ctx.waitUntil(flushHeldMessages(env, now));
       // 这条 cron 覆盖 UTC 0 / 16 点 → 北京 08:00 / 24:00 的 context 刷新
       ctx.waitUntil(maybeRefreshContext(env, now));
       logCron(env, ctx, cron, startedAt);

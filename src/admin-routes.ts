@@ -11,6 +11,7 @@ import { MEMORY_KV_KEY, getMemory, putMemory } from './memory';
 import { ensureLifeDay, lifeNow } from './life/jobs';
 import { generateDiary } from './life/diary-job';
 import { refreshLifeEnv } from './life/weather';
+import { gateDecision, lifeEnabled } from './life/gate';
 import { beijingDateKey, getDayPlan } from './life/state';
 import { byteLength, mergeMemoryEntry, parseRelationValues, setRelationValues } from './memory-maintenance';
 import { reindexMemory, buildPromptMemoryFor } from './memory-index';
@@ -552,6 +553,21 @@ app.post('/api/admin/memory/subject-fix', requireAuth, async (c) => {
   await rebuildFactsDoc(c.env).catch(() => {});
 
   return c.json({ ok: true, applied: changes.length, backupKey, changes, rebuild });
+});
+
+/** 生活系统：闸门开关（P2）。默认关，出事改一个 KV 键就能退。 */
+app.post('/api/admin/life/flag', requireAuth, async (c) => {
+  const on = c.req.query('on') === '1';
+  await c.env.KV.put('life:enabled', on ? '1' : '0');
+  return c.json({ ok: true, enabled: on });
+});
+
+/** 生活系统：现在这条消息会不会被压住（dry run，不动数据）。 */
+app.get('/api/admin/life/gate', requireAuth, async (c) => {
+  const enabled = await lifeEnabled(c.env);
+  const decision = await gateDecision(c.env);
+  const status = await lifeNow(c.env);
+  return c.json({ ok: true, enabled, decision, status });
 });
 
 /** 生活系统：手动写某天的日记（排查/补写用）。 */
