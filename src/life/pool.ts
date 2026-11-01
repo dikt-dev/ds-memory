@@ -71,6 +71,12 @@ export const ACTIVITIES: ActUnit[] = [
   { id: 'outing_friend', kind: 'social', name: '和朋友逛街', min: 120, max: 240, tags: ['outdoor'], mood: 0.4, interruptible: true, replyChance: 0.1, fill: '和谁、买了什么、谁付的钱', weight: 1 },
   { id: 'chat_friend', kind: 'social', name: '和朋友发消息', min: 15, max: 40, tags: ['indoor', 'tired_ok'], mood: 0.2, interruptible: true, replyChance: 0.5, fill: '和谁、聊什么、有没有吐槽人', weight: 1 },
   { id: 'visit_friend', kind: 'social', name: '朋友来家里', min: 120, max: 240, tags: ['indoor'], mood: 0.4, interruptible: true, replyChance: 0.1, fill: '谁来了、做了什么、几点走的', weight: 1 },
+  // 夜里那段以前几乎没单元可用：九点后只剩追番和打游戏，重复率高得像复读。
+  { id: 'night_bath', kind: 'idle', name: '泡澡', min: 25, max: 50, tags: ['indoor'], mood: 0.3, interruptible: true, replyChance: 0.6, fill: '水温、泡了多久、出来头发还湿着', weight: 1 },
+  { id: 'night_reading', kind: 'idle', name: '躺着看小说', min: 40, max: 100, tags: ['indoor'], mood: 0.2, interruptible: true, replyChance: 0.7, fill: '看的哪本、看到哪一段、有没有看到睡着', weight: 1 },
+  { id: 'night_music', kind: 'idle', name: '整理歌单', min: 25, max: 60, tags: ['indoor'], mood: 0.25, interruptible: true, replyChance: 0.7, fill: '在听谁、循环哪首、为什么想起它', weight: 1 },
+  { id: 'night_tidy', kind: 'chores', name: '收拾屋子', min: 20, max: 45, tags: ['indoor'], mood: 0.1, interruptible: true, replyChance: 0.6, fill: '收了哪堆东西、翻出什么旧物', weight: 1 },
+  { id: 'night_write', kind: 'idle', name: '写点东西', min: 30, max: 70, tags: ['indoor'], mood: 0.2, interruptible: true, replyChance: 0.55, fill: '写了什么、写了几行就停了', weight: 1 },
 ];
 
 /** 按 id 索引，校验器和反重复都用得上。 */

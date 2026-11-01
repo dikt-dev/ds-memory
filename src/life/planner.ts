@@ -197,6 +197,11 @@ const UNIT_RULES: Record<string, UnitRule> = {
   meal_normal: { starts: [[7 * 60 + 30, 13 * 60 + 30], [17 * 60, 20 * 60]] },
   meal_takeout: { starts: [[7 * 60 + 30, 13 * 60 + 30], [17 * 60, 20 * 60]] },
   idle_nap: { starts: [[11 * 60, 16 * 60]] },
+  night_bath: { starts: [[20 * 60 + 30, 25 * 60]] },
+  night_reading: { starts: [[20 * 60 + 30, 25 * 60]] },
+  night_music: { starts: [[20 * 60 + 30, 25 * 60]] },
+  night_tidy: { starts: [[20 * 60, 24 * 60]] },
+  night_write: { starts: [[21 * 60, 25 * 60]] },
 };
 
 /**
