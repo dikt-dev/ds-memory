@@ -329,6 +329,14 @@
   ],
   [
     "GET",
+    "/api/app/diary-image/*"
+  ],
+  [
+    "GET",
+    "/api/app/diary-image/*"
+  ],
+  [
+    "GET",
     "/api/app/events"
   ],
   [
@@ -534,6 +542,14 @@
   [
     "POST",
     "/api/admin/life/diary/ask"
+  ],
+  [
+    "POST",
+    "/api/admin/life/diary/cover"
+  ],
+  [
+    "POST",
+    "/api/admin/life/diary/cover"
   ],
   [
     "POST",

@@ -15,6 +15,7 @@ import { applyMemoryCorrection } from './memory-correction';
 import { parseRelationValues } from './memory-maintenance';
 import { stripAttachmentWrapper } from './openai';
 import { putRuntimeState } from './runtime-store';
+import { getObject } from './storage';
 import { lifeNow } from './life/jobs';
 import { RECIPES } from './life/recipes';
 import { askDiary, diaryList, diaryOne } from './life/diary-api';
@@ -103,6 +104,20 @@ function clockText(minute: number): string {
   const mm = String(m % 60).padStart(2, '0');
   return over ? `${hh}:${mm}+1` : `${hh}:${mm}`;
 }
+
+/** 日记配图（手机端，走 app token）。只放行 diary-images/ 前缀。 */
+app.get('/api/app/diary-image/*', requireApp, async (c) => {
+  const key = decodeURIComponent(c.req.path.replace(/^\/api\/app\/diary-image\//, ''));
+  if (!key.startsWith('diary-images/')) return c.json({ error: 'not found' }, 404);
+  const obj = await getObject(c.env, key);
+  if (!obj) return c.json({ error: 'not found' }, 404);
+  return new Response(await obj.arrayBuffer(), {
+    headers: {
+      'content-type': obj.httpMetadata?.contentType ?? 'image/jpeg',
+      'cache-control': 'private, max-age=604800',
+    },
+  });
+});
 
 app.get('/api/app/ai-status', requireApp, async (c) => {
   const status = await lifeNow(c.env);

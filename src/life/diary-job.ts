@@ -13,6 +13,7 @@ import { completeDeepSeek } from '../deepseek';
 import { messagesByDate } from '../db';
 import { logError } from '../error-log';
 import { classifyConsent, decideShare, makeDiaryEntry, parseDiaryOutput, type DiaryDraft } from './diary';
+import { generateDiaryImage } from './diary-image';
 import { getDayPlan } from './state';
 import { ACTIVITIES } from './pool';
 import type { ActivityRow } from './state';
@@ -118,9 +119,11 @@ export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJob
     mood: saved.day.mood_seed,
     location: saved.day.location,
   });
+  // 配图：失败就当没有，日记照写
+  const cover = await generateDiaryImage(env, dateKey, entry.text).catch(() => null);
   await env.DB.prepare(
-    `INSERT INTO ai_diary (date_key, text, mood, location, visibility, share_reason, shared_at, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO ai_diary (date_key, text, mood, location, visibility, share_reason, shared_at, created_at, images)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(date_key) DO NOTHING`,
   )
     .bind(
@@ -132,6 +135,7 @@ export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJob
       entry.shareReason ?? null,
       entry.sharedAt ?? null,
       entry.createdAt,
+      cover ? JSON.stringify([cover]) : null,
     )
     .run();
   return { ok: true, text: entry.text, share: draft.share };
@@ -148,7 +152,7 @@ export async function settleDiaryConsent(
   userText: string,
 ): Promise<'yes' | 'no' | 'unclear' | null> {
   const pending = await env.DB.prepare(
-    `SELECT date_key FROM ai_diary WHERE visibility = 'pending' ORDER BY date_key DESC LIMIT 1`,
+    `SELECT date_key FROM ai_diary WHERE visibility IN ('pending','declined') ORDER BY date_key DESC LIMIT 1`,
   )
     .first<{ date_key: string }>()
     .catch(() => null);
@@ -167,7 +171,7 @@ export async function settleDiaryConsent(
     'UPDATE ai_diary SET visibility = ?, shared_at = ?, share_reason = ? WHERE date_key = ?',
   )
     .bind(
-      verdict === 'yes' ? 'shared' : 'private',
+      verdict === 'yes' ? 'shared' : 'declined',
       verdict === 'yes' ? new Date().toISOString() : null,
       userText.slice(0, 60),
       pending.date_key,
@@ -191,6 +195,23 @@ export async function settleDiaryConsent(
 }
 
 /** 有没有一篇日记正等着她表态（用户点了「问问她」）。 */
+/**
+ * 用户又提了一次日记：把之前「她拒过」的那篇重新摆到台面上。
+ *
+ * 一次拒绝不是终局——实测她会先顶两句，磨几次就松口。
+ * 所以这里在用户提到日记时把 declined 重开成 pending，让她有机会改口。
+ */
+export async function reopenDiaryAsk(env: Env, userText: string): Promise<void> {
+  if (!/日记/.test(userText)) return;
+  const cutoff = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
+  await env.DB.prepare(
+    `UPDATE ai_diary SET visibility = 'pending' WHERE visibility = 'declined' AND date_key >= ?`,
+  )
+    .bind(cutoff)
+    .run()
+    .catch(() => {});
+}
+
 export async function pendingDiaryAskDate(env: Env): Promise<string | null> {
   const row = await env.DB.prepare(
     `SELECT date_key FROM ai_diary WHERE visibility = 'pending' LIMIT 1`,

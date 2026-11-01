@@ -23,6 +23,10 @@ export interface DiaryListRow {
   asked: boolean;
   /** 之前同意过，但已经过期——需要重新问她 */
   expired: boolean;
+  /** 她拒过一次，还可以再问 */
+  declined: boolean;
+  /** 配图（R2 key）。锁着的时候不给前端，避免提前看到画面。 */
+  images: string[];
 }
 
 const WEEK = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
@@ -42,9 +46,20 @@ export function consentFresh(sharedAt: string | null | undefined, now = new Date
   return granted === beijingDateKey(now);
 }
 
+/** images 是 JSON 数组字符串；坏数据不能让整页打不开。 */
+function safeImages(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function diaryList(env: Env, limit = 60, now = new Date()): Promise<DiaryListRow[]> {
   const rows = await env.DB.prepare(
-    `SELECT d.date_key, d.visibility, d.shared_at,
+    `SELECT d.date_key, d.visibility, d.shared_at, d.images,
             y.weather, y.temp_c, y.location, y.recipe, y.health
        FROM ai_diary d
        LEFT JOIN ai_day y ON y.date_key = d.date_key
@@ -56,6 +71,7 @@ export async function diaryList(env: Env, limit = 60, now = new Date()): Promise
       date_key: string;
       visibility: string;
       shared_at: string | null;
+      images: string | null;
       weather: string | null;
       temp_c: number | null;
       location: string | null;
@@ -76,6 +92,8 @@ export async function diaryList(env: Env, limit = 60, now = new Date()): Promise
       health: typeof r.health === 'number' ? r.health : null,
       visible: fresh,
       asked: r.visibility === 'pending',
+      declined: r.visibility === 'declined',
+      images: safeImages(r.images),
       expired: r.visibility === 'shared' && !fresh,
     };
   });

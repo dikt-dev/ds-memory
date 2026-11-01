@@ -617,7 +617,9 @@ export function registerMediaRoutes(app: Hono<AppEnv>): void {
   /** 聊天图片回放（需登录；图片存在 R2 images/ 下，主账号优先、小号兜底）。 */
   app.get('/api/image/*', requireAuth, async (c) => {
     const key = decodeURIComponent(c.req.path.replace(/^\/api\/image\//, ''));
-    if (!key.startsWith('images/')) return c.json({ error: 'not found' }, 404);
+    if (!key.startsWith('images/') && !key.startsWith('diary-images/')) {
+      return c.json({ error: 'not found' }, 404);
+    }
     const obj = await getObject(c.env, key);
     if (!obj) return c.json({ error: 'not found' }, 404);
     return new Response(await obj.arrayBuffer(), {

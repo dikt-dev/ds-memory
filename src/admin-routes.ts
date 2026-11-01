@@ -9,6 +9,7 @@ import type { AppEnv } from './types';
 import { requireAuth } from './middleware';
 import { MEMORY_KV_KEY, getMemory, putMemory } from './memory';
 import { appendMemoryLine, removeMemoryLine } from './memory-append';
+import { generateDiaryImage } from './life/diary-image';
 import { askDiary, diaryList, diaryOne } from './life/diary-api';
 import { collapseOngoingItems } from './memory-ongoing-job';
 import { ensureLifeDay, lifeNow } from './life/jobs';
@@ -645,6 +646,23 @@ app.get('/api/admin/life/diary/item', requireAuth, async (c) => {
   const { row, text, shareReason } = await diaryOne(c.env, date);
   if (!row) return c.json({ ok: false, error: '这天没写' }, 404);
   return c.json({ ok: true, ...row, text, shareReason });
+});
+
+/** 给某篇日记生成配图（补历史图 / 排查用）。失败返回 ok:false，不影响日记正文。 */
+app.post('/api/admin/life/diary/cover', requireAuth, async (c) => {
+  const date = c.req.query('date');
+  if (!date) return c.json({ ok: false, error: '需要 date' }, 400);
+  const row = await c.env.DB.prepare('SELECT text FROM ai_diary WHERE date_key = ?')
+    .bind(date)
+    .first<{ text: string }>()
+    .catch(() => null);
+  if (!row) return c.json({ ok: false, error: '这天没写' }, 404);
+  const key = await generateDiaryImage(c.env, date, row.text);
+  if (!key) return c.json({ ok: false, error: '生成失败' }, 502);
+  await c.env.DB.prepare('UPDATE ai_diary SET images = ? WHERE date_key = ?')
+    .bind(JSON.stringify([key]), date)
+    .run();
+  return c.json({ ok: true, key, url: `/api/image/${key}` });
 });
 
 /** 「问问她」：标成 pending，等聊天里她回话。 */

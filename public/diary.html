@@ -106,6 +106,7 @@ h1{font-size:32px;margin:0;letter-spacing:.12em;font-weight:600}
 .toast.on{opacity:1}
 .empty{color:var(--ink-soft);text-align:center;padding:60px 0;font-size:15px;letter-spacing:.1em}
 .foot{margin-top:34px;color:#a08e7e;font-size:12px;letter-spacing:.1em;text-align:center;line-height:1.9}
+.cover{width:100%;border-radius:14px;margin:.6rem 0 1rem;display:block}
 </style>
 </head>
 <body>
@@ -171,11 +172,12 @@ h1{font-size:32px;margin:0;letter-spacing:.12em;font-weight:600}
         view.innerHTML='<button class="back" id="back">← 回去</button><article class="page">'
           +'<h2>'+esc(date)+'　'+esc(res.weekday)+'</h2>'
           +'<div class="pm">'+esc(weatherText(res))+'　·　'+esc(res.text.length)+' 字</div>'
+          +(Array.isArray(res.images)&&res.images.length?'<img class="cover" src="/api/image/'+encodeURIComponent(res.images[0])+'" alt="">':'')
           +'<div class="text">'+esc(res.text)+'</div>'
           +'<div class="sign">——她</div>'
           +'</article>';
       }else{
-        var tip=res.asked?"问过了，正在等她回话":(res.expired?"那天给你看过，已经收起来了":"这篇她还没说要不要给你看");
+        var tip=res.asked?"问过了，正在等她回话":(res.declined?"她还没答应，想再问问就再问一次":(res.expired?"那天给你看过，已经收起来了":"这篇她还没说要不要给你看"));
         view.innerHTML='<button class="back" id="back">← 回去</button><article class="page locked">'
           +'<div class="lockring">锁</div>'
           +'<h2 style="font-size:20px">'+esc(date)+'　'+esc(res.weekday||"")+'</h2>'
