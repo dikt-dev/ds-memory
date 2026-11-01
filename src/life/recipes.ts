@@ -97,9 +97,16 @@ export function pickRecipe(dateKey: string, history: RecipeHistory): RecipeChoic
   if ((history.daysSinceSick === null || history.daysSinceSick >= 30) && rng.chance(0.02)) {
     return { recipe: RECIPES.sick, reason: '2% 掷中，且 30 天内没生过病' };
   }
-  // 通宵追番：约每月一次
-  if ((history.daysSinceMarathon === null || history.daysSinceMarathon >= 25) && rng.chance(0.05)) {
-    return { recipe: RECIPES.marathon, reason: '每月一次的通宵，25 天冷却' };
+  // 通宵追番：约每月一次，且只排在周五周六。
+  // 光在单元上限制住时段不够——配方抽到周三，那天整晚就没有追番单元可用，
+  // 只剩躺着和吃饭，等于白排一天。所以骰子本身也要看星期。
+  const weekday = (() => {
+    const ms = Date.parse(dateKey + 'T00:00:00Z');
+    return Number.isFinite(ms) ? new Date(ms).getUTCDay() : -1;
+  })();
+  const weekendEve = weekday === 5 || weekday === 6;
+  if (weekendEve && (history.daysSinceMarathon === null || history.daysSinceMarathon >= 25) && rng.chance(0.12)) {
+    return { recipe: RECIPES.marathon, reason: '每月一次的通宵，25 天冷却（仅周五/周六，所以只在周末掷 12%）' };
   }
   // 大扫除日：约每月一次
   if ((history.daysSinceDeepclean === null || history.daysSinceDeepclean >= 25) && rng.chance(0.04)) {

@@ -135,6 +135,8 @@ interface UnitRule {
   maxTemp?: number;
   /** 冷却：N 天内用过就不再出现 */
   cooldownDays?: number;
+  /** 只在这几天出现（0=周日 … 6=周六）。通宵追番只排周五周六。 */
+  weekdays?: number[];
 }
 
 const UNIT_RULES: Record<string, UnitRule> = {
@@ -142,8 +144,10 @@ const UNIT_RULES: Record<string, UnitRule> = {
   rainy_window: { weather: ['rain', 'snow'] },
   summer_ice: { minTemp: 26 },
   sunny_balcony: { weather: ['sunny'], starts: [[9 * 60, 16 * 60]] },
-  anime_marathon: { starts: [[19 * 60 + 30, 25 * 60]], cooldownDays: 14 },
-  clean_deep: { cooldownDays: 21 },
+  // 通宵只排在周五、周六——周三凌晨四点还在追番，第二天上班的人设崩了
+  anime_marathon: { starts: [[19 * 60 + 30, 25 * 60]], cooldownDays: 14, weekdays: [5, 6] },
+  // 大扫除是白天的事：晚上八点开始拖地不像人，也吵到邻居
+  clean_deep: { cooldownDays: 21, starts: [[8 * 60, 17 * 60 + 30]] },
   short_trip_hike: { cooldownDays: 14 },
   short_trip_amusement: { cooldownDays: 21 },
   short_trip_hotspring: { cooldownDays: 14 },
@@ -190,6 +194,11 @@ function ruleOk(unitId: string, startMin: number, env: DayEnv, date: string, rec
     // 跨午夜的时间段（如 20:00–02:00）单独判断
     const spansMidnight = rule.starts.some(([a, b]) => b > 1440 && (start >= (a % 1440) || start <= (b % 1440)));
     if (!spansMidnight) return false;
+  }
+  if (rule.weekdays) {
+    const utc = Date.parse(date + 'T00:00:00Z');
+    const wd = Number.isFinite(utc) ? new Date(utc).getUTCDay() : -1;
+    if (!rule.weekdays.includes(wd)) return false;
   }
   if (rule.cooldownDays && recentUses) {
     const uses = recentUses.get(unitId) ?? [];
@@ -349,9 +358,11 @@ export function buildDay(input: BuildDayInput): DayPlan {
     const at = extra.at + rng.int(0, 20);
     const unit = ACTIVITIES.find((u) => u.id === extra.id);
     if (!unit || !ruleOk(unit.id, at, input.env, input.date, input.recentUses)) continue;
-    const busy = activities.some((a) => at < a.end && at + unit.min > a.start);
-    if (busy) continue;
+    // 撞车要按「实际会占多久」算。以前拿 unit.min 判断、拿 width 落地：
+    // 下午茶最短 15 分钟但一摆 45 分钟，于是 15:57 的茶和 16:12 的种田叠了 15 分钟。
     const minutes = Math.min(extra.width, unit.max);
+    const busy = activities.some((a) => at < a.end && at + minutes > a.start);
+    if (busy) continue;
     activities.push({ unitId: unit.id, start: at, end: at + minutes });
   }
 
