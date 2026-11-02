@@ -237,9 +237,9 @@ export function socialPartnerFor(dateKey: string, unitId?: string): Resident {
   return core[idx];
 }
 
-/** 把池子里的「和朋友吃饭」换成「和豆包吃饭」。 */
+/** 把池子里的「和住户吃饭」换成「和豆包吃饭」。 */
 export function withPartner(title: string, r: Resident): string {
-  return title.replace('朋友', r.name);
+  return title.replace('住户', r.name);
 }
 
 /** 一行名录用（约 20 字）：名字 + 一句关系。 */

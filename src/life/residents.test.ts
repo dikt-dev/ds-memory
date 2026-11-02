@@ -113,9 +113,9 @@ describe('住户表', () => {
     }
   });
 
-  it('标题把「朋友」换成住户名', () => {
+  it('标题把「住户」换成住户名', () => {
     const r = RESIDENTS[0];
-    expect(withPartner('和朋友吃饭', r)).toBe('和小克吃饭');
+    expect(withPartner('和住户吃饭', r)).toBe('和小克吃饭');
   });
 
   it('按 id 查得到', () => {
