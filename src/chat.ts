@@ -9,7 +9,8 @@ import type { Env } from './types';
 import { buildPromptMemoryFor } from './memory-index';
 import { shouldSkipMemoryRecall, buildMemoryPack  } from './context-pack';
 import { consumePendingRecall, looksLikePinRequest, recordRecallUsage, rememberPendingRecall, setChunkPinned } from './memory-rehearsal';
-import { lifePromptLine } from './life/now-text';
+import { lifePromptLine, residentNowLine } from './life/now-text';
+import { residentRoster } from './life/residents';
 import { buildSystemPromptSplit, type MessageChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, STYLE_REMINDER } from './prompt';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
@@ -320,6 +321,8 @@ export async function streamChat(
   // 时间/心情/召回/摘要这些每轮都变的放到最后一条 system，紧贴用户消息。
   // 她此刻在干什么：读不到就当没有，聊天行为和以前一模一样
   const lifeLine = await lifePromptLine(env, now).catch(() => null);
+  // 今天跟谁混：有住户才给卡片（约 90 字），没有就整段不出现
+  const residentLine = await residentNowLine(env, now).catch(() => null);
   // 用户在 App 里点了「问问她」之后，日记是 pending。没人告诉她要开口，
   // 于是点完什么都不会发生。这里补一句，让她在下一句里自己决定给不给看。
   const pendingDates = await pendingDiaryAskDates(env).catch(() => [] as string[]);
@@ -353,7 +356,9 @@ export async function streamChat(
         keepsakes: keepsakesBlock,
         characterName: env.CHARACTER_NAME,
         userAddress: env.USER_ADDRESS,
-        life: [lifeLine, diaryAskNote].filter(Boolean).join('\n\n') || null,
+        // 名录放易变段：放稳定段时它离用户消息太远，实测她会说「跟小克不熟」
+        residents: null,
+        life: [lifeLine, residentLine, residentRoster(), diaryAskNote].filter(Boolean).join('\n\n') || null,
   });
   const volatileBlock = [promptSplit.volatile, historyNote].filter(Boolean).join('\n\n');
   const messages: DeepSeekMessage[] = [

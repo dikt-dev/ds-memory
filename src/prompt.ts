@@ -78,6 +78,8 @@ export interface BasePromptArgs {
   personaDrift?: string | null;
   /** 她此刻在干什么（生活系统）。没开生活系统时为 null，提示词一字不变。 */
   life?: string | null;
+  /** 公寓住户名录（稳定段，约 140 字）。没接公寓时为 null。 */
+  residents?: string | null;
   /** 只取某一段：stable = ①②（人设+长期记忆，可缓存前缀）；volatile = ③之后（每轮都变） */
   part?: 'all' | 'stable' | 'volatile';
 }
@@ -97,6 +99,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     attitude,
   temper,
   keepsakes,
+  residents,
     channel,
     characterCard,
     voice,
@@ -159,6 +162,12 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   if (keepsakes?.trim()) {
     lines.push('');
     lines.push(keepsakes.trim());
+  }
+  // 稳定段：名录每天不变，放这里才能吃到前缀缓存
+  if (residents?.trim()) {
+    lines.push('');
+    lines.push('## 她在公寓里');
+    lines.push(residents.trim());
   }
   lines.push('');
   lines.push('## 记忆怎么用');

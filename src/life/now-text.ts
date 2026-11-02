@@ -11,6 +11,7 @@
  */
 import type { Env } from '../types';
 import { beijingDateKey, lifeClock, statusAt } from './state';
+import { diaryPeopleBlock } from './residents';
 
 function hhmm(minute: number): string {
   const m = minute % 1440;
@@ -40,6 +41,18 @@ function bodyLine(health: number, recipe: string | null): string | null {
 }
 
 /** 返回给提示词的一小段（没有当天日程就返回 null，聊天行为和以前完全一致）。 */
+/** 今天日程里有住户时给一张卡片；没有就返回 null（提示词一字不变）。 */
+export async function residentNowLine(env: Env, now = new Date()): Promise<string | null> {
+  const dateKey = lifeClock(now).dateKey;
+  const row = await env.DB.prepare('SELECT people FROM ai_day WHERE date_key = ?')
+    .bind(dateKey)
+    .first<{ people: string | null }>()
+    .catch(() => null);
+  const block = diaryPeopleBlock(row?.people ?? null);
+  if (!block) return null;
+  return block.split('\n')[0] === '' ? null : block;
+}
+
 export async function lifePromptLine(env: Env, now = new Date()): Promise<string | null> {
   const { dateKey, minute } = lifeClock(now);
   const day = await env.DB.prepare(
