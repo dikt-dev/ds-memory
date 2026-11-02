@@ -169,11 +169,16 @@ export function limitStageDirections(text: string, max = 1): string {
  * 只补逗号，不改任何字。
  */
 export function fixParticlePunctuation(text: string): string {
-  // 只认独立的语气词：不含「好」（「好啊」「你好啊」会被误断），
-  // 后面紧跟着的还是语气词时也不动（「嗯嗯」「哦哦」是叠词，不是两句话）
-  return text.replace(
+  // 第一类：句首独立的语气词（嗯/哦/哼…）。不含「好」，「好啊」「你好啊」会被误断。
+  const head = text.replace(
     /(^|[，。！？…\n])(嗯|哦|噢|哼|唉|诶|行吧)(?=[\u4e00-\u9fa5])(?![嗯哦噢哼唉诶])/gu,
     (m: string, pre: string, particle: string) => `${pre}${particle}，`,
+  );
+  // 第二类：句子中间的句末语气词直接接下一句（「加饭啊不是刚定的嘛」）。
+  // 真正常见的是「啊/呀/呢/吧/嘛/诶」后面该断开却没断，读起来像乱码。
+  return head.replace(
+    /([\u4e00-\u9fa5])([啊呀呢吧嘛诶])(?=[\u4e00-\u9fa5])(?![啊呀呢吧嘛诶])/gu,
+    (m: string, before: string, particle: string) => `${before}${particle}，`,
   );
 }
 

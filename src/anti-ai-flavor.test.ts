@@ -183,9 +183,16 @@ describe('stripLeadingStageDirection（去掉句首动作）', () => {
 describe('fixParticlePunctuation（语气词后补逗号）', () => {
   it('把挤在一起的语气词和句子断开', () => {
     expect(fixParticlePunctuation('嗯挑着呢')).toBe('嗯，挑着呢');
-    expect(fixParticlePunctuation('在超市呢拎着篮子')).toBe('在超市呢拎着篮子');
+    expect(fixParticlePunctuation('在超市呢拎着篮子')).toBe('在超市呢，拎着篮子');
     expect(fixParticlePunctuation('哦，那鸡蛋我自己看吧')).toBe('哦，那鸡蛋我自己看吧');
     expect(fixParticlePunctuation('哼上班才想起我')).toBe('哼，上班才想起我');
+  });
+
+  it('句子中间漏掉的逗号也补（啊/呀/呢/吧/嘛）', () => {
+    expect(fixParticlePunctuation('你倒是会问番茄炒蛋加饭啊不是刚定的嘛')).toBe(
+      '你倒是会问番茄炒蛋加饭啊，不是刚定的嘛',
+    );
+    expect(fixParticlePunctuation('你在干嘛呢我这边刚忙完')).toBe('你在干嘛呢，我这边刚忙完');
   });
 
   it('叠词和已经有标点的地方不动', () => {
