@@ -6,7 +6,7 @@
  */
 import type { Env } from './types';
 import { assertAllowed } from './policy';
-import { expireSupersededFacts } from './fact-expiry';
+import { dedupeIdenticalFacts, expireSupersededFacts } from './fact-expiry';
 import { confidenceForSource, mergeConfidence } from './fact-confidence';
 import { autoTags, bigrams } from './memory-archive';
 import { embedTexts, quantizeVec } from './memory-index';
@@ -64,7 +64,10 @@ async function insertFacts(env: Env, facts: MemoryFact[], origin: string): Promi
     { kind: 'fact.upsert', sourceMessageIds: provenance, legacyOrigin: origin !== 'conversation' },
     { actor: 'job' },
   );
-  for (const batch of chunksOf(facts)) {
+  // 「同一事实只留一条」：object 完全相同的并进旧行，不再插新行。
+  const skip = origin === 'conversation' ? await dedupeIdenticalFacts(env, facts, Date.now()).catch(() => new Set<string>()) : new Set<string>();
+  const fresh = facts.filter((f) => !skip.has(f.id));
+  for (const batch of chunksOf(fresh)) {
     await env.DB.batch(
       batch.map((f) =>
         env.DB.prepare(

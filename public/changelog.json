@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-02T05:49:12.708Z",
+  "generated_at": "2026-11-02T06:01:29.039Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-02",
       "items": [
+        {
+          "hash": "259594f",
+          "date": "2026-11-02",
+          "type": "other",
+          "area": "",
+          "title": "重置记忆并换新人设（鲸鱼娘/杭州独居/损友向），人设开关走 env",
+          "why": ""
+        },
         {
           "hash": "8f7945f",
           "date": "2026-11-02",
@@ -3240,14 +3248,6 @@
           "type": "refactor",
           "area": "p2",
           "title": "memory context and shadow gate",
-          "why": ""
-        },
-        {
-          "hash": "1de4ae7",
-          "date": "2026-10-24",
-          "type": "refactor",
-          "area": "p2c",
-          "title": "validity, extraction, projection writeback",
           "why": ""
         }
       ]

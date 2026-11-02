@@ -183,3 +183,115 @@ export async function expireSupersededFacts(
   }
   return changed;
 }
+
+
+export interface FactMergeRow extends FactKeyRow {
+  source_message_ids?: string | null;
+  confidence?: number | null;
+}
+
+export interface IdenticalMerge {
+  id: string;
+  sourceMessageIds: number[];
+  confidence: number;
+  validFrom: string | null;
+  updatedAt: number;
+}
+
+function parseIds(raw: string | null | undefined): number[] {
+  if (!raw) return [];
+  try {
+    const arr = JSON.parse(raw) as unknown;
+    return Array.isArray(arr) ? arr.filter((x): x is number => typeof x === 'number' && Number.isFinite(x)) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 「同一事实只留一条」的合并计划。
+ *
+ * 冲突（object 不同）走 planExpiry；这里管重复（object 完全相同）：
+ * 不出新行，把出处并到已有那条上，置信度取高的，valid_from 取更早的。
+ */
+export function planIdenticalMerges(
+  existing: FactMergeRow[],
+  incoming: MemoryFact[],
+  nowMs: number,
+): { updates: IdenticalMerge[]; skip: string[] } {
+  const index = new Map<string, FactMergeRow>();
+  for (const row of existing) {
+    const key = factKey({ subject: row.subject, predicate: row.predicate });
+    if (!key) continue;
+    if (row.valid_to && row.valid_to.trim() !== '') continue;
+    index.set(key + '\u0001' + norm(row.object), row);
+  }
+  const updates: IdenticalMerge[] = [];
+  const skip: string[] = [];
+  const merged = new Map<string, IdenticalMerge>();
+  for (const fact of incoming) {
+    const key = factKey(fact);
+    if (!key) continue;
+    const row = index.get(key + '\u0001' + norm(fact.object));
+    if (!row || row.id === fact.id) continue;
+    const prev = merged.get(row.id);
+    const ids = new Set([...(prev?.sourceMessageIds ?? parseIds(row.source_message_ids)), ...(fact.sourceMessageIds ?? [])]);
+    const validFrom = prev?.validFrom ?? row.valid_from ?? fact.validFrom;
+    merged.set(row.id, {
+      id: row.id,
+      sourceMessageIds: [...ids],
+      confidence: Math.max(prev?.confidence ?? row.confidence ?? 0, fact.confidence ?? 0),
+      validFrom: validFrom && fact.validFrom && fact.validFrom < validFrom ? fact.validFrom : validFrom,
+      updatedAt: nowMs,
+    });
+    skip.push(fact.id);
+  }
+  return { updates: [...merged.values()], skip };
+}
+
+/** 拉同 subject 的现有事实（含出处与置信度），给合并用。 */
+export async function loadMergeCandidates(env: Env, facts: MemoryFact[]): Promise<FactMergeRow[]> {
+  const subjects = [...new Set(facts.map((f) => (f.subject ?? '').trim()).filter(Boolean))];
+  if (subjects.length === 0) return [];
+  const placeholders = subjects.map(() => '?').join(',');
+  const res = await env.DB.prepare(
+    `SELECT id, subject, predicate, object, valid_from, valid_to, source_message_ids, confidence
+     FROM memory_facts
+     WHERE lower(subject) IN (${placeholders})
+     LIMIT 500`,
+  )
+    .bind(...subjects.map((s) => s.toLowerCase()))
+    .all<FactMergeRow>();
+  return res.results ?? [];
+}
+
+/**
+ * 落库前把「同一条事实」并进已有行，返回应当跳过插入的 id。
+ * 失败时返回空集合：宁可多一条重复，也不能把新事实丢了。
+ */
+export async function dedupeIdenticalFacts(
+  env: Env,
+  incoming: MemoryFact[],
+  nowMs: number,
+): Promise<Set<string>> {
+  if (incoming.length === 0) return new Set();
+  let candidates: FactMergeRow[] = [];
+  try {
+    candidates = await loadMergeCandidates(env, incoming);
+  } catch {
+    return new Set();
+  }
+  const { updates, skip } = planIdenticalMerges(candidates, incoming, nowMs);
+  if (updates.length > 0) {
+    await env.DB.batch(
+      updates.map((u) =>
+        env.DB.prepare(
+          `UPDATE memory_facts
+           SET source_message_ids = ?, confidence = ?, valid_from = ?, updated_at = ?
+           WHERE id = ?`,
+        ).bind(JSON.stringify(u.sourceMessageIds), u.confidence, u.validFrom, u.updatedAt, u.id),
+      ),
+    );
+  }
+  return new Set(skip);
+}

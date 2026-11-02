@@ -788,7 +788,19 @@ app.post('/api/admin/ops/prune-r2', requireAuth, async (c) => {
   const prefixes = Array.isArray(body?.prefixes)
     ? (body?.prefixes as unknown[]).filter((x): x is string => typeof x === 'string' && x.length > 0)
     : ['chat_logs/', 'images/', 'memory/archive.md'];
-  if (!body?.confirm) return c.json({ ok: true, preview: true, prefixes });
+  if (!body?.confirm) {
+    // 预览时顺便把命中的 key 列出来，方便核对「到底还剩什么」
+    const found: string[] = [];
+    for (const prefix of prefixes) {
+      let cursor: string | undefined;
+      do {
+        const listed = await c.env.R2.list({ prefix, cursor, limit: 1000 });
+        for (const obj of listed.objects) found.push(obj.key);
+        cursor = listed.truncated ? listed.cursor : undefined;
+      } while (cursor);
+    }
+    return c.json({ ok: true, preview: true, prefixes, objects: found.slice(0, 200), count: found.length });
+  }
   let deleted = 0;
   const errors: string[] = [];
   for (const prefix of prefixes) {
