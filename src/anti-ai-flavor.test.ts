@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createStreamScrubber, isMeaninglessResidue, limitStageDirections, scrubAiFlavor, stripLeadingTimeLabels } from './anti-ai-flavor';
+import { createStreamScrubber, fixParticlePunctuation, isMeaninglessResidue, limitStageDirections, scrubAiFlavor, stripLeadingTimeLabels } from './anti-ai-flavor';
 
 describe('scrubAiFlavor —— AI 味兜底清洗', () => {
   it('删除客服套话', () => {
@@ -168,6 +168,20 @@ describe('createStreamScrubber —— 流式清洗', () => {
   });
 });
 
+describe('fixParticlePunctuation（语气词后补逗号）', () => {
+  it('把挤在一起的语气词和句子断开', () => {
+    expect(fixParticlePunctuation('嗯挑着呢')).toBe('嗯，挑着呢');
+    expect(fixParticlePunctuation('在超市呢拎着篮子')).toBe('在超市呢拎着篮子');
+    expect(fixParticlePunctuation('哦，那鸡蛋我自己看吧')).toBe('哦，那鸡蛋我自己看吧');
+    expect(fixParticlePunctuation('哼上班才想起我')).toBe('哼，上班才想起我');
+  });
+
+  it('叠词和已经有标点的地方不动', () => {
+    expect(fixParticlePunctuation('嗯嗯，知道了')).toBe('嗯嗯，知道了');
+    expect(fixParticlePunctuation('好啊，那就这样')).toBe('好啊，那就这样');
+  });
+});
+
 describe('limitStageDirections（舞台指示限流）', () => {
   it('语气说明直接去掉', () => {
     const out = limitStageDirections('行吧本小姐不问了（语气软下来，尾音带着点懒）你早点睡。');
@@ -176,9 +190,9 @@ describe('limitStageDirections（舞台指示限流）', () => {
     expect(out).toContain('你早点睡。');
   });
 
-  it('动作括号最多留两个', () => {
+  it('动作括号默认只留一个', () => {
     const out = limitStageDirections('（歪头）（抱枕一搂）（顿了一下）说完了。');
-    expect((out.match(/[（(]/g) ?? []).length).toBe(2);
+    expect((out.match(/[（(]/g) ?? []).length).toBe(1);
     expect(out).toContain('说完了。');
   });
 

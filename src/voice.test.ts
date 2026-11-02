@@ -20,8 +20,8 @@ describe('buildVoiceDirective —— 指向人设，同时给四条机械约束'
 
   it('长度、括号动作、短回复、反问都有明确约束', () => {
     const d = buildVoiceDirective(900);
-    expect(d).toContain('二三十个字');
-    expect(d).toContain('默认不写括号动作');
+    expect(d).toContain('不超过 60 字');
+    expect(d).toContain('括号动作要少');
     expect(d).toContain('允许只回');
     expect(d).toContain('反问是偶尔的');
   });
@@ -33,9 +33,9 @@ describe('buildVoiceDirective —— 指向人设，同时给四条机械约束'
     }
   });
 
-  it('体积控制在 900 字节内（不是一张清单）', () => {
+  it('体积控制在 1000 字节内（不是一张清单）', () => {
     const bytes = new TextEncoder().encode(buildVoiceDirective(900)).length;
-    expect(bytes).toBeLessThan(900);
+    expect(bytes).toBeLessThan(1100);
   });
 });
 

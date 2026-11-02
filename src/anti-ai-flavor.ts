@@ -94,7 +94,7 @@ function applyRules(raw: string): { text: string; cleaned: boolean } {
     cleaned = true;
   }
 
-  const next = replaceNin(text);
+  const next = fixParticlePunctuation(replaceNin(text));
   if (next !== text) {
     text = next;
     cleaned = true;
@@ -149,7 +149,7 @@ const TONE_PAREN = /[（(](?:语气|声音|语调|尾音|嗓音|嗓门|音量)[^
  * 这里只做**减法**，不改语义：语气括号直接去掉，动作括号最多留两个（留前面的，
  * 后面的一般是补充描述）。
  */
-export function limitStageDirections(text: string, max = 2): string {
+export function limitStageDirections(text: string, max = 1): string {
   let out = text.replace(TONE_PAREN, '');
   const parens = /[（(][^）)]{0,60}[）)]/g;
   const found = out.match(parens) ?? [];
@@ -160,6 +160,21 @@ export function limitStageDirections(text: string, max = 2): string {
     return kept <= max ? m : '';
   });
   return tidySpaces(out);
+}
+
+/**
+ * 语气词后面补逗号：「嗯挑着呢」→「嗯，挑着呢」。
+ *
+ * 只在句首或标点之后补，避免把「嗯嗯」「好嘞」这类词拆开；
+ * 只补逗号，不改任何字。
+ */
+export function fixParticlePunctuation(text: string): string {
+  // 只认独立的语气词：不含「好」（「好啊」「你好啊」会被误断），
+  // 后面紧跟着的还是语气词时也不动（「嗯嗯」「哦哦」是叠词，不是两句话）
+  return text.replace(
+    /(^|[，。！？…\n])(嗯|哦|噢|哼|唉|诶|行吧)(?=[\u4e00-\u9fa5])(?![嗯哦噢哼唉诶])/gu,
+    (m: string, pre: string, particle: string) => `${pre}${particle}，`,
+  );
 }
 
 /** 删掉括号后留下的重复标点与多余空格。 */

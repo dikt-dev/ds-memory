@@ -94,6 +94,10 @@ export async function lifePromptLine(env: Env, now = new Date()): Promise<string
   } else {
     bits.push(`现在是 ${hhmm(minute)}，${where}`);
   }
+  // 位置/活动一致性：模型容易把记忆里的活动塞进此刻，实测出现过「在超市里说刚追完一集番」
+  if (status.current) {
+    bits.push('这一条是你此刻唯一的位置和活动；不要在同一轮里描述自己在别处做别的事');
+  }
   // 他那边的天气单独一条：她所在城市 ≠ 他所在城市，混在一起她会说错
   let userRaw: string | null = null;
   try {
