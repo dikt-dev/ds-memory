@@ -187,10 +187,23 @@ function tidySpaces(text: string): string {
     .trim();
 }
 
+/**
+ * 去掉句首的括号动作：「（顿了顿）行吧」→「行吧」。
+ *
+ * 句首动作最容易把聊天读成剧本；句中保留一个还能接受，开头一个都不该有。
+ */
+export function stripLeadingStageDirection(text: string): string {
+  const m = text.match(/^\s*[（(][^）)]{1,20}[）)]\s*/);
+  if (!m) return text;
+  const rest = text.slice(m[0].length);
+  // 全是动作、后面没话了，就留着（不然会变成空消息）
+  return rest.trim() ? rest : text;
+}
+
 export function scrubAiFlavor(raw: string): { text: string; cleaned: boolean } {
   // 主动消息的收尾清理收进这里：以前是两份实现，一份线上、一份只有测试
   const source = sanitizeProactiveText(raw);
-  const withoutTime = limitStageDirections(stripLeadingTimeLabels(source));
+  const withoutTime = limitStageDirections(stripLeadingStageDirection(stripLeadingTimeLabels(source)));
   const applied = applyRules(withoutTime);
   const finalText = applied.text.trim();
 

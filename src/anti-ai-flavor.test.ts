@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createStreamScrubber, fixParticlePunctuation, isMeaninglessResidue, limitStageDirections, scrubAiFlavor, stripLeadingTimeLabels } from './anti-ai-flavor';
+import { createStreamScrubber, fixParticlePunctuation, isMeaninglessResidue, limitStageDirections, scrubAiFlavor, stripLeadingStageDirection, stripLeadingTimeLabels } from './anti-ai-flavor';
 
 describe('scrubAiFlavor —— AI 味兜底清洗', () => {
   it('删除客服套话', () => {
@@ -165,6 +165,18 @@ describe('createStreamScrubber —— 流式清洗', () => {
   it('中文标点后面的半角空格会被吃掉', () => {
     expect(scrubAiFlavor('摆着看的。 不过也挺好').text).toBe('摆着看的。不过也挺好');
     expect(scrubAiFlavor('嗯， 好吧').text).toBe('嗯，好吧');
+  });
+});
+
+describe('stripLeadingStageDirection（去掉句首动作）', () => {
+  it('句首括号删掉，句中保留', () => {
+    expect(stripLeadingStageDirection('（顿了顿）行吧。')).toBe('行吧。');
+    expect(stripLeadingStageDirection('（把碗一推）不吃了。')).toBe('不吃了。');
+    expect(stripLeadingStageDirection('行吧（顿了顿）你说。')).toBe('行吧（顿了顿）你说。');
+  });
+
+  it('整句都是动作时不删（不能变成空消息）', () => {
+    expect(stripLeadingStageDirection('（笑）')).toBe('（笑）');
   });
 });
 
