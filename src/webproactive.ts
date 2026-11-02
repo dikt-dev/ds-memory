@@ -31,6 +31,7 @@ import { proactiveEngineFor } from './engine-flags';
 import { recordEngineMetric } from './engine-metrics';
 import { getOrCreateDayContext, type DayContextFile } from './context';
 import { getTodaySummary } from './summary';
+import { proactiveContinuityRule, renderRecentProactive } from './proactive-context';
 import { historyTimeLabel, recentProactiveMessages, insertProactiveMessage, updateMessageUsage } from './db';
 import { loadRecentRounds, PROACTIVE_RECENT_ROUNDS } from './recent-context';
 import { byteLength, parseRelationValues } from './memory-maintenance';

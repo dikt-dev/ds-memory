@@ -54,3 +54,47 @@ export function detectFarewell(
     mutual: userSaid && assistantSaid,
   };
 }
+
+/** 主动消息的「上文」：上一次主动说了什么、什么时候说的。 */
+export interface RecentProactive {
+  content: string;
+  created_at?: string | null;
+}
+
+/** ISO 字符串 → 「11-01 17:47」（按 +08:00 展示）。 */
+function stamp(iso: string | null | undefined): string {
+  if (!iso) return '时间未知';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '时间未知';
+  const bj = new Date(d.getTime() + 8 * 3600 * 1000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return [pad(bj.getUTCMonth() + 1), '-', pad(bj.getUTCDate()), ' ', pad(bj.getUTCHours()), ':', pad(bj.getUTCMinutes())].join('');
+}
+
+/**
+ * 「最近已主动发送」渲染：带时间，模型才能判断是不是同一天、隔了多久。
+ * 以前只有内容没有时间，所以 17:47 说「电影散场」，18:13 会另起一句「奶茶呢」。
+ */
+export function renderRecentProactive(rows: RecentProactive[]): string {
+  if (!rows.length) return '（无）';
+  return rows.map((m) => ['- ', stamp(m.created_at), '｜', m.content].join('')).join('\n');
+}
+
+/**
+ * 距上一条主动消息不到 3 小时时，要求接着上一条说，而不是另起一个场景。
+ * 返回 null 表示不需要这条约束（很久没主动发过，随便起头）。
+ */
+export function proactiveContinuityRule(rows: RecentProactive[], now: Date): string | null {
+  const last = rows[0];
+  if (!last?.created_at) return null;
+  const at = new Date(last.created_at).getTime();
+  if (!Number.isFinite(at)) return null;
+  const gapMin = (now.getTime() - at) / 60000;
+  if (gapMin < 0 || gapMin > 180) return null;
+  const minutes = Math.max(1, Math.round(gapMin));
+  return [
+    '## 接着上一条说',
+    '你 ' + minutes + ' 分钟前刚主动说过上面第一条；这一条要接着它，不要另起一个场景。',
+    '规则：不换地点、不换活动、不引入新的事情；可以是补充、追问、抱怨、或者继续之前那件事。',
+  ].join('\n');
+}
