@@ -56,8 +56,7 @@ import { recordEngineMetric } from './engine-metrics';
 import { logTrace, resolveRequestId } from './trace';
 import { recordFiles, recentFilesBlock } from './recent-files';
 import { gateDecision, markHeld, untilMs, type GateDecision } from './life/gate';
-import { lifePromptLine, residentNowLine } from './life/now-text';
-import { residentRoster } from './life/residents';
+import { loadLifeBlocks } from './chat-blocks';
 
 type AppEnv = { Bindings: Env; Variables: { requestId: string } };
 export const openaiApp = new Hono<AppEnv>();
@@ -597,6 +596,7 @@ openaiApp.post('/chat/completions', async (c) => {
     ...textMessages.filter((m) => m.role === 'assistant').map((m) => contentToText(m.content)),
   ]);
   const personaDrift = buildPersonaDriftLine(personaState);
+  const lifeBlocks = await loadLifeBlocks(c.env, now);
   const mergedSystem = [
     ...astrbotSystems,
     buildBaseSystemPrompt({
@@ -619,17 +619,12 @@ openaiApp.post('/chat/completions', async (c) => {
       attitude,
       characterName: c.env.CHARACTER_NAME,
       userAddress: c.env.USER_ADDRESS,
-      // 名录 140 字，每天不变 → 放稳定段吃缓存
-      residents: residentRoster(),
+      residents: lifeBlocks.residents,
     }),
   ].join('\n\n') + (historyNote ? `\n\n${historyNote}` : '') + silentEndRule(channel);
 
   // 她此刻在干什么 / 今天跟谁混：每轮都变，必须贴在历史之后（放前面会打断前缀缓存）
-  const [lifeLine, residentLine] = await Promise.all([
-    lifePromptLine(c.env, now).catch(() => null),
-    residentNowLine(c.env, now).catch(() => null),
-  ]);
-  const lifeBlock = [lifeLine, residentLine].filter(Boolean).join('\n\n');
+  const lifeBlock = lifeBlocks.life;
 
   const upstream: DeepSeekMessage[] = [
     { role: 'system', content: mergedSystem },
