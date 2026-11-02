@@ -47,7 +47,7 @@
 
 ## P1 · 有地点、有天气、有日记（仍不影响聊天）
 
-- [x] **P1-1** 12 城经纬度表；默认城读 KV `life:home-city`（缺省北京），落在 `ai_day.location`
+- [x] **P1-1** 12 城经纬度表；默认城读 KV `life:home-city`（缺省上海），落在 `ai_day.location`
 - [x] **P1-2** Open-Meteo 实时天气（免 key），写 KV `life:env:{date}`，装填只读 KV
 - [x] **P1-3** 真实天气已接进 `tagsOk`：雨天不出去、晴天才去公园
 - [x] **P1-4** `ai_diary` 表 + `src/life/diary.ts`（解析 / 同意判定 / 隐私出口，已单测）

@@ -8,6 +8,7 @@ import { festivalOn } from './festivals';
  *   3. 只有「往空档里装什么」是随机的，而且必须可复现
  */
 import { ACTIVITIES, BY_ID } from './pool';
+import { openAt } from './opening-hours';
 import { makeRng, type Rng } from './seed';
 import type { ActUnit, DayEnv } from './types';
 import type { Recipe } from './recipes';
@@ -310,7 +311,8 @@ function fillWindow(
 ): PlannedActivity[] {
   const out: PlannedActivity[] = [];
   let cursor = start;
-  while (end - cursor >= 30 && out.length < Math.min(3, budget - out.length)) {
+  // 单个窗口最多 4 件（原来 3 件），否则下午 15:00 到 22:00 之间会整段空着
+  while (end - cursor >= 30 && out.length < Math.min(4, budget - out.length)) {
     const free = end - cursor;
     // 关键：不是「把空档填满」，而是「先想这件事大概要花多久」。
     // 只按空档长度配单元，会永远只抽长单元（爬山、游乐园），
@@ -341,6 +343,8 @@ function fillWindow(
         // 一天最多一次社交：她有朋友，但不是每天都有局
         if (u.kind === 'social' && socialUsed >= 1) return false;
         if (!tagsOk(u, input.env)) return false;
+        // 有门的店要看营业时间：商场 10 点前不开门
+        if (!openAt(u.id, cursor)) return false;
         if (antiRepeatWeight(u.id, input.date, input.recentUses) <= 0) return false;
         if (!ruleOk(u.id, cursor, input.env, input.date, input.recentUses)) return false;
         return u.min <= target && u.max * 1.2 >= target;

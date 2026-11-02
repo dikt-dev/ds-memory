@@ -131,6 +131,7 @@ export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJob
   const chat = formatChatForDiary(messages.map((m) => ({ role: m.role, content: m.content })));
 
   let raw = '';
+  let finishReason: string | null = null;
   try {
     const res = await completeDeepSeek(
       env,
@@ -160,6 +161,7 @@ export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJob
       return { ok: false, skipped: res.error };
     }
     raw = res.text;
+    finishReason = res.finishReason ?? null;
   } catch (e) {
     logError('[life] 日记生成异常:', e);
     return { ok: false, skipped: 'exception' };
@@ -167,9 +169,17 @@ export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJob
 
   const parsed0 = parseDiaryOutput(raw);
   // 摘要缺失（JSON 被截断/模型漏写）就单独补一次：授权判断要靠它
+  let summarySource: 'model' | 'fallback' | 'none' = parsed0.summary ? 'model' : 'none';
   if (parsed0.text && !parsed0.summary) {
     const s = await generateDiarySummary(env, parsed0.text);
-    if (s) parsed0.summary = s;
+    if (s) {
+      parsed0.summary = s;
+      summarySource = 'fallback';
+    }
+  }
+  // 质量监控：截断/补摘要都要留痕，不然只有翻日记才发现哪篇坏了
+  if (finishReason && finishReason !== 'stop') {
+    logWarn('[life] 日记输出未正常结束：', dateKey, finishReason, raw.length);
   }
   const parsed = parsed0;
   if (!parsed.text) return { ok: false, skipped: 'empty' };
@@ -185,8 +195,8 @@ export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJob
   // 配图：失败就当没有，日记照写
   const cover = await generateDiaryImage(env, dateKey, entry.text).catch(() => null);
   await env.DB.prepare(
-    `INSERT INTO ai_diary (date_key, text, mood, location, visibility, share_reason, shared_at, created_at, images, summary)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO ai_diary (date_key, text, mood, location, visibility, share_reason, shared_at, created_at, images, summary, finish_reason, summary_source, text_len)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(date_key) DO NOTHING`,
   )
     .bind(
@@ -200,6 +210,9 @@ export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJob
       entry.createdAt,
       cover ? JSON.stringify([cover]) : null,
       entry.summary ?? null,
+      finishReason,
+      summarySource,
+      entry.text.length,
     )
     .run();
   return { ok: true, text: entry.text, share: draft.share };
