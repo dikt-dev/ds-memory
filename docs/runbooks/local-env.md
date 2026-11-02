@@ -1,74 +1,53 @@
-# 本地可复现环境
+﻿# 鏈湴鍙鐜扮幆澧?
+> 2026-10-31 寤虹珛銆傝В鍐崇殑鏄繖涓」鐩渶璐电殑涓€涓棶棰橈細**鏀逛簡鐪嬩笉瑙?*銆?
+## 1. 涓轰粈涔堥渶瑕佸畠
 
-> 2026-10-31 建立。解决的是这个项目最贵的一个问题：**改了看不见**。
-
-## 1. 为什么需要它
-
-`wrangler tail` 在开发者的网络上连不上（到 `173.231.12.107:443` 超时），线上日志等于没有。
-于是过去三次翻车都是同一个模式：改代码 → 部署 → 用户说「没变化」→ 分不清是代码、缓存还是部署没生效。
-
-有了本地环境，改动可以在「真实数据 + 真实 SQL」上先跑出结论，再决定上不上线。
-配套的 `request_log`（见 `src/request-log.ts`）让线上也有可比对的耗时数据。
-
-## 2. 用法
+`wrangler tail` 鍦ㄥ紑鍙戣€呯殑缃戠粶涓婅繛涓嶄笂锛堝埌 `173.231.12.107:443` 瓒呮椂锛夛紝绾夸笂鏃ュ織绛変簬娌℃湁銆?浜庢槸杩囧幓涓夋缈昏溅閮芥槸鍚屼竴涓ā寮忥細鏀逛唬鐮?鈫?閮ㄧ讲 鈫?鐢ㄦ埛璇淬€屾病鍙樺寲銆嶁啋 鍒嗕笉娓呮槸浠ｇ爜銆佺紦瀛樿繕鏄儴缃叉病鐢熸晥銆?
+鏈変簡鏈湴鐜锛屾敼鍔ㄥ彲浠ュ湪銆岀湡瀹炴暟鎹?+ 鐪熷疄 SQL銆嶄笂鍏堣窇鍑虹粨璁猴紝鍐嶅喅瀹氫笂涓嶄笂绾裤€?閰嶅鐨?`request_log`锛堣 `src/request-log.ts`锛夎绾夸笂涔熸湁鍙瘮瀵圭殑鑰楁椂鏁版嵁銆?
+## 2. 鐢ㄦ硶
 
 ```powershell
-cd D:\WorkSpace\ds-memory
+cd D:\WorkSpace\ds\ds-memory
 
-# 导出线上 D1 → 清空本地 → 导入 → 起 worker（默认 8799 端口）
-.\scripts\local-env.ps1
+# 瀵煎嚭绾夸笂 D1 鈫?娓呯┖鏈湴 鈫?瀵煎叆 鈫?璧?worker锛堥粯璁?8799 绔彛锛?.\scripts\local-env.ps1
 
-# 复用上次的快照，直接起（省 20~60 秒）
+# 澶嶇敤涓婃鐨勫揩鐓э紝鐩存帴璧凤紙鐪?20~60 绉掞級
 .\scripts\local-env.ps1 -SkipExport
 ```
 
-起来之后：
-
+璧锋潵涔嬪悗锛?
 ```powershell
 curl http://127.0.0.1:8799/api/health
 curl http://127.0.0.1:8799/api/day
 ```
 
-## 3. 覆盖范围与已知空白
-
-| 资源 | 本地状态 | 说明 |
+## 3. 瑕嗙洊鑼冨洿涓庡凡鐭ョ┖鐧?
+| 璧勬簮 | 鏈湴鐘舵€?| 璇存槑 |
 |---|---|---|
-| D1 | 与线上一致 | messages / memory_facts / memory_events / memory_chunks / runtime_state / engine_metrics / cron_runs … 全部导入 |
-| KV | 空 | 记忆缓存、摘要、锁都在这里；空 KV 会让代码走「回源/重建」路径，恰好能测降级 |
-| R2 | 空 | **`memory.md` 在 R2 里，所以本地长期记忆为空**——需要完整复现时手动放一份 |
-| Workers AI | 本地是桩 | 向量召回在本地退化成纯关键词，正好是我们要测的降级路径 |
-| DeepSeek | 真 key | `.dev.vars` 里的 key 会真的被调用，**聊天会计费** |
+| D1 | 涓庣嚎涓婁竴鑷?| messages / memory_facts / memory_events / memory_chunks / runtime_state / engine_metrics / cron_runs 鈥?鍏ㄩ儴瀵煎叆 |
+| KV | 绌?| 璁板繂缂撳瓨銆佹憳瑕併€侀攣閮藉湪杩欓噷锛涚┖ KV 浼氳浠ｇ爜璧般€屽洖婧?閲嶅缓銆嶈矾寰勶紝鎭板ソ鑳芥祴闄嶇骇 |
+| R2 | 绌?| **`memory.md` 鍦?R2 閲岋紝鎵€浠ユ湰鍦伴暱鏈熻蹇嗕负绌?*鈥斺€旈渶瑕佸畬鏁村鐜版椂鎵嬪姩鏀句竴浠?|
+| Workers AI | 鏈湴鏄々 | 鍚戦噺鍙洖鍦ㄦ湰鍦伴€€鍖栨垚绾叧閿瘝锛屾濂芥槸鎴戜滑瑕佹祴鐨勯檷绾ц矾寰?|
+| DeepSeek | 鐪?key | `.dev.vars` 閲岀殑 key 浼氱湡鐨勮璋冪敤锛?*鑱婂ぉ浼氳璐?* |
 
-要把 `memory.md` 也搬下来，二选一：
-
+瑕佹妸 `memory.md` 涔熸惉涓嬫潵锛屼簩閫変竴锛?
 ```powershell
-# A. 用仓库里已有的记忆快照
-Copy-Item .\backup\r2\memory.md .\tmp\memory.md
+# A. 鐢ㄤ粨搴撻噷宸叉湁鐨勮蹇嗗揩鐓?Copy-Item .\backup\r2\memory.md .\tmp\memory.md
 
-# B. 从线上接口确认当前大小（需要登录 cookie）
-curl -H "Cookie: ds_token=..." https://fae.us.ci/api/admin/stats
+# B. 浠庣嚎涓婃帴鍙ｇ‘璁ゅ綋鍓嶅ぇ灏忥紙闇€瑕佺櫥褰?cookie锛?curl -H "Cookie: ds_token=..." https://fae.us.ci/api/admin/stats
 ```
 
-本地 R2 落盘位置在 `.wrangler\state\v3\r2\`，把文件放进去即可被 `getObject` 读到。
+鏈湴 R2 钀界洏浣嶇疆鍦?`.wrangler\state\v3\r2\`锛屾妸鏂囦欢鏀捐繘鍘诲嵆鍙 `getObject` 璇诲埌銆?
+## 4. 鐧诲綍鏈湴瀹炰緥
 
-## 4. 登录本地实例
+鏈湴鍚屾牱鐢ㄧ鍚?cookie銆備袱绉嶅姙娉曪細
 
-本地同样用签名 cookie。两种办法：
+1. **璧版甯哥櫥褰?*锛氭祻瑙堝櫒寮€ `http://127.0.0.1:8799`锛岀敤骞虫椂鐨勫彛浠わ紙`ACCESS_PASSWORD_HASH` 鍦?`.dev.vars` 閲岋級銆?2. **鐩存帴绛句竴涓?token**锛堣剼鏈皟璇曠敤锛夛細`AUTH_SECRET` 鍦?`.dev.vars` 閲岋紝鐢?HMAC-SHA256 绛?   `base64url(payload) + "." + base64url(sig)`锛宲ayload 鏄?`{v:1, iat, exp, jti}`锛屽甫 header
+   `Cookie: ds_token=<token>`銆傚疄鐜拌 `src/auth.ts` 鐨?`signAuthToken`銆?
+> 鍙湪鏈湴鐢ㄣ€傜敓浜х殑 `AUTH_SECRET` 鏄彟涓€浠斤紝绛句笉鍑烘潵鈥斺€旇繖鏈韩涔熸槸銆岄儴缃叉槸鍚︾敤瀵瑰瘑閽ャ€嶇殑妫€楠屽姙娉曘€?
+## 5. 鏁版嵁瀹夊叏
 
-1. **走正常登录**：浏览器开 `http://127.0.0.1:8799`，用平时的口令（`ACCESS_PASSWORD_HASH` 在 `.dev.vars` 里）。
-2. **直接签一个 token**（脚本调试用）：`AUTH_SECRET` 在 `.dev.vars` 里，用 HMAC-SHA256 签
-   `base64url(payload) + "." + base64url(sig)`，payload 是 `{v:1, iat, exp, jti}`，带 header
-   `Cookie: ds_token=<token>`。实现见 `src/auth.ts` 的 `signAuthToken`。
-
-> 只在本地用。生产的 `AUTH_SECRET` 是另一份，签不出来——这本身也是「部署是否用对密钥」的检验办法。
-
-## 5. 数据安全
-
-- 快照里有真实对话， `tmp/` 与 `.wrangler/` 已写进 `.gitignore`；
-- 调试完 `Remove-Item -Recurse .\tmp`；
-- 不要把 `wrangler.local.toml`（含资源 id）和 `.dev.vars`（含密钥）提交。
-
-## 6. 已验证
-
-2026-10-31 实测：导入 276 条消息 + 21 张表 → `/api/health` 全 ok（d1/kv/r2 本地均通过）→
-`/api/admin/requests` 返回 200，且 `request_log` 被惰性建好、写入了 3 行。
+- 蹇収閲屾湁鐪熷疄瀵硅瘽锛?`tmp/` 涓?`.wrangler/` 宸插啓杩?`.gitignore`锛?- 璋冭瘯瀹?`Remove-Item -Recurse .\tmp`锛?- 涓嶈鎶?`wrangler.local.toml`锛堝惈璧勬簮 id锛夊拰 `.dev.vars`锛堝惈瀵嗛挜锛夋彁浜ゃ€?
+## 6. 宸查獙璇?
+2026-10-31 瀹炴祴锛氬鍏?276 鏉℃秷鎭?+ 21 寮犺〃 鈫?`/api/health` 鍏?ok锛坉1/kv/r2 鏈湴鍧囬€氳繃锛夆啋
+`/api/admin/requests` 杩斿洖 200锛屼笖 `request_log` 琚儼鎬у缓濂姐€佸啓鍏ヤ簡 3 琛屻€
