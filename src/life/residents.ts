@@ -330,5 +330,5 @@ export function diaryPeopleBlock(peopleJson: string | null | undefined): string 
 
 /** 整栋楼的一行名录（固定开头，便于命中提示词缓存）。 */
 export function residentRoster(): string {
-  return `她住在 AI 中继站公寓：${RESIDENTS.map(residentBrief).join('、')}。`;
+  return `她住在杭州的中继站公寓：${RESIDENTS.map(residentBrief).join('、')}。`;
 }
