@@ -11,9 +11,10 @@ import type { Env } from '../types';
 import { appendMemoryLine } from '../memory-append';
 import { completeDeepSeek } from '../deepseek';
 import { messagesByDate } from '../db';
-import { logError } from '../error-log';
+import { logError, logWarn } from '../error-log';
 import { classifyConsent, decideShare, makeDiaryEntry, parseDiaryOutput, type DiaryDraft } from './diary';
 import { hasRefusal, judgeDiaryConsent, type Turn } from './consent-judge';
+import { generateDiarySummary } from './diary-summary-gen';
 import { generateDiaryImage } from './diary-image';
 import { ensureDayPlan, getDayPlan } from './state';
 import { ACTIVITIES } from './pool';
@@ -39,6 +40,22 @@ share 是「这篇愿不愿意给他看」：
 输出格式：
 <日记正文>
 {"share": false, "summary": "今天去看了展，写了点委屈，没提他", "reason": "..."}`;
+
+/** weather 存的是代码（sunny/cloudy/rain/snow），直接塞进提示词模型会理解成「天气：rain」。 */
+function weatherCn(w: string | null | undefined): string {
+  switch (w) {
+    case 'sunny':
+      return '晴';
+    case 'rain':
+      return '下雨';
+    case 'snow':
+      return '下雪';
+    case 'cloudy':
+      return '阴';
+    default:
+      return '阴';
+  }
+}
 
 export interface DiaryJobResult {
   ok: boolean;
@@ -122,7 +139,7 @@ export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJob
           role: 'user',
           content: [
             `日期：${dateKey}`,
-            `天气：${saved.day.weather}，${saved.day.temp_c}℃`,
+            `天气：${weatherCn(saved.day.weather)}，${saved.day.temp_c}℃`,
             `地点：${saved.day.location}`,
             `今天的日程：\n${formatDayForDiary(saved.activities)}`,
             chat ? `今天聊到的：\n${chat}` : '今天没怎么聊天。',
@@ -143,7 +160,13 @@ export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJob
     return { ok: false, skipped: 'exception' };
   }
 
-  const parsed = parseDiaryOutput(raw);
+  const parsed0 = parseDiaryOutput(raw);
+  // 摘要缺失（JSON 被截断/模型漏写）就单独补一次：授权判断要靠它
+  if (parsed0.text && !parsed0.summary) {
+    const s = await generateDiarySummary(env, parsed0.text);
+    if (s) parsed0.summary = s;
+  }
+  const parsed = parsed0;
   if (!parsed.text) return { ok: false, skipped: 'empty' };
   // 输出被截断时正文还在、JSON 没了：记一笔，不然摘要一直空着也没人知道
   if (!parsed.summary) logWarn('[life] 日记 JSON 不完整（可能被截断），无摘要：', dateKey, raw.slice(-60));

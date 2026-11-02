@@ -1,10 +1,26 @@
 {
-  "generated_at": "2026-11-02T00:58:02.426Z",
+  "generated_at": "2026-11-02T01:04:09.933Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-02",
       "items": [
+        {
+          "hash": "f64c2ed",
+          "date": "2026-11-02",
+          "type": "other",
+          "area": "",
+          "title": "删掉临时调试测试",
+          "why": ""
+        },
+        {
+          "hash": "51338a7",
+          "date": "2026-11-02",
+          "type": "other",
+          "area": "",
+          "title": "日记解析：JSON 被截断时只留正文；缺摘要时记警告（11-01 那篇已修）",
+          "why": ""
+        },
         {
           "hash": "083b58f",
           "date": "2026-11-02",
@@ -3232,22 +3248,6 @@
           "type": "other",
           "area": "",
           "title": "加大大咧咧/傲娇权重，强制断句可读，每轮贴语气提醒",
-          "why": ""
-        },
-        {
-          "hash": "14aab30",
-          "date": "2026-10-24",
-          "type": "feat",
-          "area": "recall",
-          "title": "LLM重排恢复默认开启，可用 LLM_RERANK=0 关闭",
-          "why": ""
-        },
-        {
-          "hash": "20cfe01",
-          "date": "2026-10-24",
-          "type": "fix",
-          "area": "recall",
-          "title": "重要度不再单独成候选；LLM重排默认关闭，避免每轮多一次调用",
           "why": ""
         }
       ]

@@ -553,6 +553,14 @@
   ],
   [
     "POST",
+    "/api/admin/life/diary/generate"
+  ],
+  [
+    "POST",
+    "/api/admin/life/diary/generate"
+  ],
+  [
+    "POST",
     "/api/admin/life/diary/summary"
   ],
   [

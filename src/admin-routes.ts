@@ -11,6 +11,7 @@ import { MEMORY_KV_KEY, getMemory, putMemory } from './memory';
 import { appendMemoryLine, removeMemoryLine } from './memory-append';
 import { generateDiaryImage, lastImageError, IMAGE_MODELS } from './life/diary-image';
 import { completeDeepSeek } from './deepseek';
+import { SUMMARY_SYSTEM } from './life/diary-summary-gen';
 import { askDiary, diaryList, diaryOne } from './life/diary-api';
 import { collapseOngoingItems } from './memory-ongoing-job';
 import { ensureLifeDay, lifeNow } from './life/jobs';
@@ -688,11 +689,7 @@ app.post('/api/admin/life/diary/summary', requireAuth, async (c) => {
   const res = await completeDeepSeek(
     c.env,
     [
-      {
-        role: 'system',
-        content:
-          '你在帮一个角色给她自己的日记写备忘。只输出一句话，30 字以内，回答三件事：这篇里有没有他（提到了什么）、有没有暴露软肋（吃醋/委屈/自我怀疑/想他）、她当时大概什么心情。不是剧情简介，不要写推送文案或标题。',
-      },
+      { role: 'system', content: SUMMARY_SYSTEM },
       { role: 'user', content: '她的日记正文：\n' + row.text },
     ],
     new Date(),
@@ -732,6 +729,17 @@ app.post('/api/admin/life/move', requireAuth, async (c) => {
     actor: 'human',
   }).catch(() => {});
   return c.json({ ok: true, from, to: city });
+});
+
+/** 补写某天的日记（force=1 会先删掉旧的）。历史地点/天气修错后用。 */
+app.post('/api/admin/life/diary/generate', requireAuth, async (c) => {
+  const date = c.req.query('date');
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return c.json({ ok: false, error: '需要 date' }, 400);
+  if (c.req.query('force') === '1') {
+    await c.env.DB.prepare('DELETE FROM ai_diary WHERE date_key = ?').bind(date).run().catch(() => {});
+  }
+  const r = await generateDiary(c.env, date);
+  return c.json({ date, ...r }, r.ok ? 200 : 502);
 });
 
 /** 「问问她」：标成 pending，等聊天里她回话。 */
