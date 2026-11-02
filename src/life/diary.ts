@@ -53,9 +53,11 @@ export function parseDiaryOutput(raw: string): DiaryDraft {
   const end = body.lastIndexOf('}');
   let shareBlock = '';
   let journal = body;
-  if (start >= 0 && end > start) {
-    shareBlock = body.slice(start, end + 1);
+  // 只要出现了「{」，后面就不是正文——哪怕 JSON 被截断（模型在推理后把额度用光了），
+  // 也不能把半截 JSON 当日记存下来。2026-11-01 那篇就是这么坏的。
+  if (start >= 0) {
     journal = body.slice(0, start).trim();
+    if (end > start) shareBlock = body.slice(start, end + 1);
   }
 
   let share = false;

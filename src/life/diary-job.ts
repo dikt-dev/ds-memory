@@ -145,6 +145,8 @@ export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJob
 
   const parsed = parseDiaryOutput(raw);
   if (!parsed.text) return { ok: false, skipped: 'empty' };
+  // 输出被截断时正文还在、JSON 没了：记一笔，不然摘要一直空着也没人知道
+  if (!parsed.summary) logWarn('[life] 日记 JSON 不完整（可能被截断），无摘要：', dateKey, raw.slice(-60));
   const draft: DiaryDraft = decideShare(parsed);
   const entry = makeDiaryEntry({
     dateKey,

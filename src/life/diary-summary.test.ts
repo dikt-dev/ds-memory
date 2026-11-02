@@ -34,3 +34,10 @@ it('摘要会进判断提示词（让模型知道这篇写了什么）', async (
   expect(sent).toContain('写了委屈，没提他');
   expect(sent).toContain('2026-10-31');
 });
+
+it('JSON 被截断时也要把正文留下、别把半截 JSON 当日记', () => {
+  const raw = '今天下了点雨，没出门。{"share": false, "summary": "提到他，有点想';
+  const d = parseDiaryOutput(raw);
+  expect(d.text).toBe('今天下了点雨，没出门。');
+  expect(d.summary).toBeUndefined();
+});
