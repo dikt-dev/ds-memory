@@ -87,7 +87,6 @@ import {
   diagnoseProactive,
   runProactiveNow,
   runWebProactiveRandom,
-  runWebProactiveSlot,
 } from './webproactive';
 import { fallbackPlanTimes, readPlan } from './proactive-plan';
 import { openaiApp, stripAttachmentWrapper, checkBearer } from './openai';
@@ -680,8 +679,7 @@ export default {
 
     if (cron === '* 23,0,14,15,16 * * *') {
       // QQ 通道掉线检查（同上）
-      // 早晚固定主动消息：打分决策 + 落库 + 推送 QQ（直连或队列）
-      ctx.waitUntil(runWebProactiveSlot(env, now));
+      // 早晚固定档已停用（改为只发白天随机档）
       ctx.waitUntil(flushHeldMessages(env, now));
       // 这条 cron 覆盖 UTC 0 / 16 点 → 北京 08:00 / 24:00 的 context 刷新
       ctx.waitUntil(maybeRefreshContext(env, now));

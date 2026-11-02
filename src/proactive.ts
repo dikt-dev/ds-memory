@@ -80,17 +80,36 @@ export function sanitizeProactiveText(text: string): string {
 
 /** 随机主动聊天的时段边界（北京时间分钟数）：避开早晚固定时段与凌晨睡眠。 */
 export const RANDOM_WINDOW = { start: 9 * 60, end: 22 * 60 + 30 };
-/** 单日最多随机消息条数 */
-export const RANDOM_MAX_PER_DAY = 2;
+/** 单日最多随机消息条数（按强度档，亲密度越高上限越高） */
+export const RANDOM_MAX_PER_DAY = 3;
+export const RANDOM_MAX_BY_LEVEL = { quiet: 1, normal: 2, active: 3 } as const;
 /** 两次随机消息的最小间隔（分钟） */
 export const RANDOM_MIN_GAP = 90;
 
-/** 当天是否发随机消息、发几条（纯随机：0 / 1 / 2）。 */
-export function randomCountFor(dateKey: string): number {
-  const r = seededRandom01(`${dateKey}:random-count`);
-  if (r < 0.35) return 0; // 35% 概率今天不发
-  if (r < 0.85) return 1; // 50% 概率发 1 条
-  return 2; // 15% 概率发 2 条
+/**
+ * 当天是否发随机消息、发几条。
+ *
+ * 亲密度决定「概率」和「上限」，不是每天必发：
+ *   quiet  → 75% 不发，最多 1 条
+ *   normal → 45% 不发，最多 2 条
+ *   active → 15% 不发，最多 3 条
+ * 结果按日期种子确定性生成，同一天刷新计划不会变。
+ */
+export function randomCountFor(
+  dateKey: string,
+  level: 'quiet' | 'normal' | 'active' = 'normal',
+): number {
+  const r = seededRandom01(`${dateKey}:random-count:${level}`);
+  if (level === 'quiet') return r < 0.75 ? 0 : 1;
+  if (level === 'active') {
+    if (r < 0.15) return 0;
+    if (r < 0.7) return 1;
+    if (r < 0.93) return 2;
+    return 3;
+  }
+  if (r < 0.45) return 0;
+  if (r < 0.85) return 1;
+  return 2;
 }
 
 /**

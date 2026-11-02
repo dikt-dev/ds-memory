@@ -74,6 +74,16 @@ export interface Decision {
   topics: string[];
 }
 
+/**
+ * 亲密度 → 主动强度档。
+ * 关系没到之前不该天天找话：<400 安静、<700 正常、≥700 活跃。
+ */
+export function levelForIntimacy(intimacy: number): 'quiet' | 'normal' | 'active' {
+  if (intimacy < 400) return 'quiet';
+  if (intimacy < 700) return 'normal';
+  return 'active';
+}
+
 /** 各强度档的阈值与倍数。 */
 const LEVEL_CONFIG = {
   quiet: { threshold: 70, cooldownMultiplier: 2 },

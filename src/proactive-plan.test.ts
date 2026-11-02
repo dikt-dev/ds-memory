@@ -49,17 +49,14 @@ function fakeEnv(opts: {
 describe('buildPlanSlots', () => {
   const dateKey = '2026-12-25';
 
-  it('总是先给出早上与深夜两档，且落在各自窗口内', () => {
+  it('不再有早晚固定档，只剩白天随机档', () => {
     const slots = buildPlanSlots(dateKey);
-    const morning = slots.find((s) => s.key === 'morning')!;
-    const evening = slots.find((s) => s.key === 'evening')!;
-
-    expect(morning.kind).toBe('morning');
-    expect(morning.at_minutes).toBeGreaterThanOrEqual(PROACTIVE_WINDOWS.morning.start);
-    expect(morning.at_minutes).toBeLessThanOrEqual(PROACTIVE_WINDOWS.morning.end);
-
-    expect(evening.at_minutes).toBeGreaterThanOrEqual(PROACTIVE_WINDOWS.evening.start);
-    expect(evening.at_minutes).toBeLessThanOrEqual(PROACTIVE_WINDOWS.evening.end);
+    expect(slots.some((s) => s.key === 'morning' || s.key === 'evening')).toBe(false);
+    for (const s of slots) {
+      expect(s.kind).toBe('random');
+      expect(s.at_minutes).toBeGreaterThanOrEqual(RANDOM_WINDOW.start);
+      expect(s.at_minutes).toBeLessThan(RANDOM_WINDOW.end);
+    }
   });
 
   it('按时间升序排列（客户端按顺序设闹钟）', () => {
@@ -67,16 +64,13 @@ describe('buildPlanSlots', () => {
     expect(minutes).toEqual([...minutes].sort((a, b) => a - b));
   });
 
-  it('随机档数量与 randomCountFor 一致', () => {
+  it('随机档数量与 randomCountFor 一致（含亲密度档位）', () => {
+    for (const level of ['quiet', 'normal', 'active'] as const) {
+      const n = randomCountFor(dateKey, level);
+      expect(buildPlanSlots(dateKey, level)).toHaveLength(n);
+    }
     const zero = findDate((k) => randomCountFor(k) === 0);
-    expect(buildPlanSlots(zero)).toHaveLength(2);
-    expect(buildPlanSlots(zero).some((s) => s.kind === 'random')).toBe(false);
-
-    const one = findDate((k) => randomCountFor(k) === 1);
-    expect(buildPlanSlots(one)).toHaveLength(3);
-
-    const two = findDate((k) => randomCountFor(k) === 2);
-    expect(buildPlanSlots(two)).toHaveLength(4);
+    expect(buildPlanSlots(zero)).toHaveLength(0);
   });
 
   it('随机档落在 09:00-22:30 内，第二条与第一条至少隔 90 分钟', () => {
@@ -98,29 +92,33 @@ describe('buildPlanSlots', () => {
 });
 
 describe('readPlan', () => {
+  // 选一个「normal 档会发 2 条」的日子，保证随机档存在
+  const busy = findDate((k) => randomCountFor(k, 'normal') >= 2);
   it('未生成过的档 generated=false', async () => {
-    const plan = await readPlan(fakeEnv({}), new Date('2026-12-25T12:00:00+08:00'), '2026-12-25');
-    expect(plan.date).toBe('2026-12-25');
+    const plan = await readPlan(fakeEnv({}), new Date(`${busy}T12:00:00+08:00`), busy);
+    expect(plan.date).toBe(busy);
     expect(plan.slots.every((s) => s.generated === false && s.status === null)).toBe(true);
   });
 
   it('proactive_log 里有的档带上状态与 message_id', async () => {
     const plan = await readPlan(
-      fakeEnv({ log: [{ slot_key: 'morning', status: 'sent', message_id: 8123 }] }),
-      new Date('2026-12-25T12:00:00+08:00'),
-      '2026-12-25',
+      fakeEnv({ log: [{ slot_key: 'random-0', status: 'sent', message_id: 8123 }] }),
+      new Date(`${busy}T12:00:00+08:00`),
+      busy,
     );
-    const morning = plan.slots.find((s) => s.key === 'morning')!;
+    const slot = plan.slots.find((s) => s.key === 'random-0');
+    expect(slot).toBeDefined();
+    const morning = slot!;
     expect(morning.generated).toBe(true);
     expect(morning.status).toBe('sent');
     expect(morning.message_id).toBe(8123);
 
-    const evening = plan.slots.find((s) => s.key === 'evening')!;
-    expect(evening.generated).toBe(false);
+    const second = plan.slots.find((s) => s.key === 'random-1')!;
+    expect(second.generated).toBe(false);
   });
 
   it('at 是 HH:MM 且与 at_minutes 对得上', async () => {
-    const plan = await readPlan(fakeEnv({}), new Date('2026-12-25T12:00:00+08:00'), '2026-12-25');
+    const plan = await readPlan(fakeEnv({}), new Date(`${busy}T12:00:00+08:00`), busy);
     for (const s of plan.slots) {
       const [h, m] = s.at.split(':').map(Number);
       expect(h * 60 + m).toBe(s.at_minutes);
@@ -129,29 +127,29 @@ describe('readPlan', () => {
 
   it('暂停时间未到 → paused=true', async () => {
     const plan = await readPlan(
-      fakeEnv({ pausedUntil: '2026-12-25T20:00:00+08:00' }),
-      new Date('2026-12-25T12:00:00+08:00'),
-      '2026-12-25',
+      fakeEnv({ pausedUntil: `${busy}T20:00:00+08:00` }),
+      new Date(`${busy}T12:00:00+08:00`),
+      busy,
     );
     expect(plan.paused).toBe(true);
   });
 
   it('暂停时间已过 / 没暂停 → paused=false', async () => {
     const past = await readPlan(
-      fakeEnv({ pausedUntil: '2026-12-25T08:00:00+08:00' }),
-      new Date('2026-12-25T12:00:00+08:00'),
-      '2026-12-25',
+      fakeEnv({ pausedUntil: `${busy}T08:00:00+08:00` }),
+      new Date(`${busy}T12:00:00+08:00`),
+      busy,
     );
     expect(past.paused).toBe(false);
-    expect(past.paused_until).toBe('2026-12-25T08:00:00+08:00');
+    expect(past.paused_until).toBe(`${busy}T08:00:00+08:00`);
 
-    const none = await readPlan(fakeEnv({}), new Date('2026-12-25T12:00:00+08:00'), '2026-12-25');
+    const none = await readPlan(fakeEnv({}), new Date(`${busy}T12:00:00+08:00`), busy);
     expect(none.paused).toBe(false);
     expect(none.paused_until).toBeNull();
   });
 
   it('带上客户端需要的容差常量', async () => {
-    const plan = await readPlan(fakeEnv({}), new Date('2026-12-25T12:00:00+08:00'), '2026-12-25');
+    const plan = await readPlan(fakeEnv({}), new Date(`${busy}T12:00:00+08:00`), busy);
     expect(plan.tolerance_min).toBe(PLAN_TOLERANCE_MIN);
     expect(plan.notify_deadline_min).toBe(PLAN_NOTIFY_DEADLINE_MIN);
     expect(plan.level).toBe('normal');
@@ -172,22 +170,15 @@ describe('readPlan', () => {
       },
       KV: { get: async () => null },
     } as unknown as Env;
-    const plan = await readPlan(env, new Date('2026-12-25T12:00:00+08:00'), '2026-12-25');
+    const plan = await readPlan(env, new Date(`${busy}T12:00:00+08:00`), busy);
     expect(plan.slots.length).toBeGreaterThanOrEqual(2);
     expect(plan.slots.every((s) => s.generated === false)).toBe(true);
   });
 });
 
 describe('fallbackPlanTimes', () => {
-  it('给两个固定时段且落在窗口内（计划接口挂了也能提醒）', () => {
-    const fb = fallbackPlanTimes();
-    expect(fb.map((f) => f.kind)).toEqual(['morning', 'evening']);
-    for (const f of fb) {
-      const [h, m] = f.at.split(':').map(Number);
-      const minutes = h * 60 + m;
-      const w = f.kind === 'morning' ? PROACTIVE_WINDOWS.morning : PROACTIVE_WINDOWS.evening;
-      expect(minutes).toBeGreaterThanOrEqual(w.start);
-      expect(minutes).toBeLessThanOrEqual(w.end);
-    }
+  it('没有固定早晚档之后，兜底列表为空', () => {
+    expect(fallbackPlanTimes()).toEqual([]);
   });
 });
+

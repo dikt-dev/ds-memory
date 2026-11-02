@@ -1,10 +1,42 @@
 {
-  "generated_at": "2026-11-02T06:01:29.039Z",
+  "generated_at": "2026-11-02T09:57:55.096Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-02",
       "items": [
+        {
+          "hash": "1c67b61",
+          "date": "2026-11-02",
+          "type": "other",
+          "area": "",
+          "title": "统一公寓名称为「杭州的中继站公寓」",
+          "why": ""
+        },
+        {
+          "hash": "4cde6ef",
+          "date": "2026-11-02",
+          "type": "other",
+          "area": "",
+          "title": "文档路径跟着工作区整理更新",
+          "why": ""
+        },
+        {
+          "hash": "5d189eb",
+          "date": "2026-11-02",
+          "type": "other",
+          "area": "",
+          "title": "文档里的路径跟着工作区整理更新",
+          "why": ""
+        },
+        {
+          "hash": "6221ea9",
+          "date": "2026-11-02",
+          "type": "other",
+          "area": "",
+          "title": "蒸馏补上同一事实合并（值相同并出处、值不同走失效链）",
+          "why": ""
+        },
         {
           "hash": "259594f",
           "date": "2026-11-02",
@@ -3216,38 +3248,6 @@
           "type": "docs",
           "area": "p5",
           "title": "record phone preflight and dry-run",
-          "why": ""
-        },
-        {
-          "hash": "0b4470f",
-          "date": "2026-10-24",
-          "type": "refactor",
-          "area": "p5a",
-          "title": "cutover preflight and channel flags",
-          "why": ""
-        },
-        {
-          "hash": "8414ba8",
-          "date": "2026-10-24",
-          "type": "refactor",
-          "area": "p4",
-          "title": "hybrid retrieval and context packing",
-          "why": ""
-        },
-        {
-          "hash": "745613b",
-          "date": "2026-10-24",
-          "type": "refactor",
-          "area": "p3",
-          "title": "affect context and attitude policy",
-          "why": ""
-        },
-        {
-          "hash": "439f29c",
-          "date": "2026-10-24",
-          "type": "refactor",
-          "area": "p2",
-          "title": "memory context and shadow gate",
           "why": ""
         }
       ]

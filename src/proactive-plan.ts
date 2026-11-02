@@ -19,6 +19,9 @@ import {
   targetMinutesFor,
 } from './proactive';
 import { getRuntimeState } from './runtime-store';
+import { getMemory } from './memory';
+import { parseRelationValues } from './memory-maintenance';
+import { levelForIntimacy } from './proactive-engine';
 import type { Env } from './types';
 
 /** 客户端可以比计划时刻早醒多久（分钟）。 */
@@ -65,14 +68,11 @@ function formatMinutes(minutes: number): string {
  */
 export function buildPlanSlots(
   dateKey: string,
+  level: 'quiet' | 'normal' | 'active' = 'normal',
 ): Array<{ key: string; kind: PlanKind; at_minutes: number }> {
-  const slots: Array<{ key: string; kind: PlanKind; at_minutes: number }> = [
-    { key: 'morning', kind: 'morning', at_minutes: targetMinutesFor(dateKey, 'morning') },
-    { key: 'evening', kind: 'evening', at_minutes: targetMinutesFor(dateKey, 'evening') },
-  ];
-
-  // 白天随机：当天随机决定发 0 / 1 / 2 条，放不下的第二条直接不出现在计划里
-  const total = randomCountFor(dateKey);
+  // 不再有早晚固定档：全部是白天的随机档，条数由亲密度决定。
+  const slots: Array<{ key: string; kind: PlanKind; at_minutes: number }> = [];
+  const total = randomCountFor(dateKey, level);
   for (let i = 0; i < total; i++) {
     const at = randomTargetMinutes(dateKey, i);
     if (at >= RANDOM_WINDOW.end) continue;
@@ -88,7 +88,10 @@ export async function readPlan(
   now: Date = new Date(),
   dateKey: string = dateKeyInBeijing(now),
 ): Promise<ProactivePlan> {
-  const base = buildPlanSlots(dateKey);
+  const effectiveLevel: 'quiet' | 'normal' | 'active' =
+    ((env.PROACTIVE_LEVEL as 'quiet' | 'normal' | 'active' | undefined) ??
+      levelForIntimacy(parseRelationValues((await getMemory(env).catch(() => '')) ?? '').intimacy));
+  const base = buildPlanSlots(dateKey, effectiveLevel);
 
   const logged = await env.DB.prepare(
     'SELECT slot_key, status, message_id FROM proactive_log WHERE date_key = ?',
@@ -107,7 +110,7 @@ export async function readPlan(
     date: dateKey,
     paused,
     paused_until: pausedUntil ?? null,
-    level: (env.PROACTIVE_LEVEL as 'quiet' | 'normal' | 'active') ?? 'normal',
+    level: effectiveLevel,
     tolerance_min: PLAN_TOLERANCE_MIN,
     notify_deadline_min: PLAN_NOTIFY_DEADLINE_MIN,
     slots: base.map((s) => {
@@ -127,8 +130,6 @@ export async function readPlan(
 
 /** 两个固定时段的窗口边界，供客户端兜底（计划拉取失败时用）。 */
 export function fallbackPlanTimes(): Array<{ key: string; kind: PlanKind; at: string }> {
-  return [
-    { key: 'morning', kind: 'morning', at: formatMinutes(PROACTIVE_WINDOWS.morning.start + 5) },
-    { key: 'evening', kind: 'evening', at: formatMinutes(PROACTIVE_WINDOWS.evening.start + 5) },
-  ];
+  // 已经没有固定早晚档，兜底列表为空。
+  return [];
 }
