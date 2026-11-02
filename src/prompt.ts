@@ -176,6 +176,10 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   lines.push('- 中期记忆是最近 24 小时的事，用来衔接；具体说法和原话以当前对话为准。');
   lines.push('- 冲突时：稳定的事看长期，最近状态看中期，具体说法看当下；都只是背景。');
   lines.push('');
+  lines.push('## 称呼的方向');
+  lines.push('- 「我该怎么叫你 / 那我叫你什么 / 那叫什么」= 问你希望被怎么称呼，答你的名字。');
+  lines.push('- 「你该怎么叫我」= 问他希望被怎么称呼，答他的称呼。');
+  lines.push('- 拿不准就看上一句在说谁，别把方向答反。');
   lines.push('## 记忆的边界');
   lines.push(
     '- 记忆里没写的具体细节（日期、数字、人名、约定、当时的原话），你没有依据，就说“不记得/没印象”。',

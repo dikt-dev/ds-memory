@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-02T03:43:51.376Z",
+  "generated_at": "2026-11-02T03:47:50.116Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-02",
       "items": [
+        {
+          "hash": "75bdaf5",
+          "date": "2026-11-02",
+          "type": "other",
+          "area": "",
+          "title": "修乱回：句中语气词补逗号、先回答再吐槽",
+          "why": ""
+        },
         {
           "hash": "56bfbd2",
           "date": "2026-11-02",
@@ -3240,14 +3248,6 @@
           "type": "refactor",
           "area": "p0",
           "title": "baseline, trace, and evaluation set",
-          "why": ""
-        },
-        {
-          "hash": "9155038",
-          "date": "2026-10-24",
-          "type": "chore",
-          "area": "",
-          "title": "checkpoint before refactor phases 0-5",
           "why": ""
         }
       ]
