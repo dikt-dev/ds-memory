@@ -246,6 +246,9 @@ describe('时间与诚实性规则', () => {
     const prompt = buildSystemPrompt(base);
     expect(prompt).toContain('## 记忆的边界');
     expect(prompt).toContain('你没有依据，就说“不记得/没印象”');
+    expect(prompt).toContain('那也是在编');
+    expect(prompt).toContain('不要替他复述');
+    expect(prompt).toContain('他说你记错了，直接认');
     expect(prompt).toContain('感受、态度、反应你随便说；事实不行');
     expect(prompt).not.toContain('硬规则');
   });
