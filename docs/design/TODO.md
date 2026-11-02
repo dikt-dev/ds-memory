@@ -1,6 +1,6 @@
 # 待办
 
-最后更新：2026-11-02
+最后更新：2026-11-02（含评审改进清单）
 
 ## 一、下一步要做的功能
 
@@ -53,3 +53,48 @@
 
 - **/v1/chat/completions 走的是 src/openai.ts，不是 src/chat.ts**。生活行（她此刻在干什么）一直只接在 chat.ts 上，所以聊天里她其实「不知道自己今天在哪」——已补到 openai.ts（稳定段放名录、易变段放生活行+当天卡片）。chat.ts 现在疑似死代码，待确认后删。
 - 住户卡片的「别碰」会被当真：问大白龙搬走的事，她会装不认识（实测），这是设定生效，不是 bug。
+
+## 五、代码评审改进清单（2026-11-02）
+
+来源：外部评估 + 我逐条复核。复核发现它的「召回撞墙」结论不成立（`memory_chunks` 只有 103 条，JS 打分是微秒级；503ms 应来自 Workers AI embedding 或 D1 往返）。
+
+### 基线（实测）
+
+| 指标 | 值 |
+|---|---|
+| memory_chunks / entries | 103 / 97 |
+| messages / ai_diary | 65 / 1 |
+| admin-routes.ts | 1399 行 / 88 路由 |
+| 测试 | 1235 通过 |
+| MEMORY_ENGINE 声明 | 8 处，全 shadow |
+
+### P0 会静默出错（今天做）
+
+- [ ] **配对接口限流**：`POST /api/app/pair` 是唯一公网无凭据写入端点，无限流。复用 `index.ts` 的 `login:fail:${ip}` 模式，建 `pair:fail:${ip}`，10 次/小时/IP（约 30 分钟）
+- [ ] **设备 Token 吊销**：`app:device:<token>` 被 middleware / openai / queue-auth / routes-app 四处各读一份，没有删除接口。加 `POST /api/app/unpair`（删自己的 key）+ 后台设备列表/吊销 + 四处读取收敛成 `readDeviceToken()`（服务端 1 小时）
+- [ ] **DeepSeek 超时**：`deepseek.ts` 的 fetch 无 AbortController，上游卡住用户一直转圈。加 60s 超时 + 一次重试；**流式已开始回调后不要 abort**，否则半截回复会被当成功落库（约 40 分钟）
+- [ ] **/api/health 收敛**：公开返回 `deepseek_key` / `password` / `storage_mode` 等配置状态，搬到 requireAuth 的 `/api/admin/readiness`（约 20 分钟）
+- [ ] **16 处 `void promise(...)` 补 `.catch()`**：`void` 只表示不管返回值，不表示不会抛；未处理拒绝在 Workers 里可能打断请求（约 30 分钟）
+
+### P1 结构性（本周）
+
+- [ ] **移动端测试基建**：`ds-mobile` 无 test 源集、gradle 无 testImplementation。先把 ApiClient 的 JSON 解析、ChatText 纯函数抽出来，加 junit + coroutines-test（约半天）
+- [ ] **拆 admin-routes.ts**：88 条路由切成 `admin/memory-routes.ts`、`admin/life-routes.ts`、`admin/ops-routes.ts`。改完删 `src/routes.snapshot.json` 让它重生成，核对一条不少（2–3 小时）
+
+### P2 整洁（顺手做）
+
+- [ ] **仓库根目录**：39 个文件里 31 个是 png/log。约定 `*.log`、调试截图不进根目录，产物进 `.tmp/`（约 20 分钟）
+- [ ] **文档数字**：`docs/HANDOFF.md` 还写着「881 用例 / ChatActivity.kt 3153 行」，实际 1235 / 1391（约 15 分钟）
+- [ ] **cron 分发**：5 个表达式合并后在 `scheduled()` 字符串比对，抽成常量映射表 + 一条「每个 cron 都有处理分支」的断言
+
+### 明确不做（有理由）
+
+- **上 Vectorize / 重写召回**：103 条向量，瓶颈不在打分。先给 recall 加分段计时（D1 / embedding / 打分），再决定
+- **关闭 shadow 引擎**：它是切换前的对照。先做采样比对（5% 流量比召回差异），定切换日期，否则等于盲切
+- **全流程合并 chat.ts / openai.ts**：生活块已合并成 `chat-blocks.ts`；剩下的历史组织/计费差异改动面大、收益低
+
+### 待拍板
+
+- 吊销入口放哪：App 设置页 / 网页后台 / 两边都要
+- 配对限流阈值：建议 10 次/小时/IP
+- 移动端是否引入测试依赖：只影响 test 配置，不影响 APK 体积
