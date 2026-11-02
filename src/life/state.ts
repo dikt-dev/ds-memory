@@ -10,6 +10,7 @@
 import type { Env } from '../types';
 import { buildDay, type DayPlan, type PlannedActivity } from './planner';
 import { ACTIVITIES } from './pool';
+import { socialPartnerFor, withPartner } from './residents';
 import type { DayEnv } from './types';
 import { RECIPES, healthForDay, pickRecipe, type Recipe } from './recipes';
 import { festivalOn } from './festivals';
@@ -36,6 +37,23 @@ export function lifeClock(now = new Date()): { dateKey: string; minute: number }
     return { dateKey: prev.toISOString().slice(0, 10), minute: minutes + 24 * 60 };
   }
   return { dateKey: bj.toISOString().slice(0, 10), minute: minutes };
+}
+
+/**
+ * 当天出现了哪些住户：只记 core（会排单元的那个）。
+ * ambient 只做背景音，不进库——不然每天都能「发生」一场偶遇，很假。
+ */
+export function peopleJson(activities: { unitId: string }[], dateKey: string): string | null {
+  const hasSocial = activities.some((a) => {
+    const u = ACTIVITIES.find((x) => x.id === a.unitId);
+    return u?.kind === 'social';
+  });
+  if (!hasSocial) return null;
+  const social = activities.find((a) => {
+    const u = ACTIVITIES.find((x) => x.id === a.unitId);
+    return u?.kind === 'social';
+  });
+  return social ? JSON.stringify({ core: socialPartnerFor(dateKey, social.unitId).id }) : null;
 }
 
 export interface DayRow {
@@ -97,8 +115,8 @@ export async function saveDayPlan(
   const { plan, env: dayEnv } = input;
   const statements = [
     env.DB.prepare(
-      `INSERT INTO ai_day (date_key, location, at_home, mood_seed, health, weather, temp_c, plan_json, generated_at, recipe)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO ai_day (date_key, location, at_home, mood_seed, health, weather, temp_c, plan_json, generated_at, recipe, people)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(date_key) DO UPDATE SET
          location = excluded.location,
          at_home = excluded.at_home,
@@ -108,7 +126,8 @@ export async function saveDayPlan(
          temp_c = excluded.temp_c,
          plan_json = excluded.plan_json,
          generated_at = excluded.generated_at,
-         recipe = excluded.recipe`,
+         recipe = excluded.recipe,
+         people = excluded.people`,
     ).bind(
       plan.date,
       input.location,
@@ -120,6 +139,7 @@ export async function saveDayPlan(
       JSON.stringify(plan),
       input.generatedAt ?? new Date().toISOString(),
       input.recipe ?? null,
+      peopleJson(plan.activities, plan.date),
     ),
     env.DB.prepare('DELETE FROM ai_activity WHERE date_key = ?').bind(plan.date),
   ];
@@ -135,7 +155,7 @@ export async function saveDayPlan(
         act.end,
         act.unitId,
         unit?.kind ?? 'idle',
-        unit?.name ?? act.unitId,
+        unit?.kind === 'social' ? withPartner(unit?.name ?? '', socialPartnerFor(plan.date, act.unitId)) : unit?.name ?? act.unitId,
         null,
         unit?.interruptible === false ? 0 : 1,
         unit?.replyChance ?? 0.5,
@@ -259,7 +279,7 @@ export async function ensureDayPlan(
         end_min: a.end,
         unit_id: a.unitId,
         kind: unit?.kind ?? 'idle',
-        title: unit?.name ?? a.unitId,
+        title: unit?.kind === 'social' ? withPartner(unit?.name ?? '', socialPartnerFor(input.dateKey, a.unitId)) : unit?.name ?? a.unitId,
         place: null,
         interruptible: unit?.interruptible === false ? 0 : 1,
         reply_chance: unit?.replyChance ?? 0.5,

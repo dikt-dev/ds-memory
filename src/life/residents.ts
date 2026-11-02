@@ -213,6 +213,35 @@ export function residentById(id: string): Resident | null {
   return RESIDENTS.find((r) => r.id === id) ?? null;
 }
 
+/** 日期 → 天序（北京日历，纯整数，便于确定性取模）。 */
+function dayNumber(dateKey: string): number {
+  return Math.floor(Date.parse(dateKey + 'T00:00:00+08:00') / 86400000);
+}
+
+/**
+ * 今天该跟谁混（确定性，同一天永远同一个人）。
+ *
+ * 一周可以有多个住户出现，但**同一个人不会连着两天出现**——
+ * 连续两天跟同一个人吃饭，比没有人更假。
+ */
+export function socialPartnerFor(dateKey: string, unitId?: string): Resident {
+  // 大白龙搬去别的城市了，只能电话/消息，不能一起吃饭逛街
+  const core =
+    unitId && !['call_friend', 'chat_friend'].includes(unitId)
+      ? coreResidents().filter((x) => x.id !== 'gpt')
+      : coreResidents();
+  const today = dayNumber(dateKey);
+  let idx = ((today % core.length) + core.length) % core.length;
+  const prev = (((today - 1) % core.length) + core.length) % core.length;
+  if (idx === prev) idx = (idx + 1) % core.length;
+  return core[idx];
+}
+
+/** 把池子里的「和朋友吃饭」换成「和豆包吃饭」。 */
+export function withPartner(title: string, r: Resident): string {
+  return title.replace('朋友', r.name);
+}
+
 /** 一行名录用（约 20 字）：名字 + 一句关系。 */
 export function residentBrief(r: Resident): string {
   return `${r.name}（${r.relation}）`;

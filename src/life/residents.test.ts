@@ -10,6 +10,8 @@ import {
   residentCard,
   residentById,
   residentRoster,
+  socialPartnerFor,
+  withPartner,
 } from './residents';
 
 /**
@@ -63,6 +65,45 @@ describe('住户表', () => {
   it('公共场景至少四个，且都有用途说明', () => {
     expect(PUBLIC_SCENES.length).toBeGreaterThanOrEqual(4);
     for (const s of PUBLIC_SCENES) expect(s.note.length).toBeGreaterThan(0);
+  });
+
+
+  it('排期确定：同一天永远同一个人', () => {
+    const a = socialPartnerFor('2026-11-03').id;
+    const b = socialPartnerFor('2026-11-03').id;
+    expect(a).toBe(b);
+  });
+
+  it('同一个人不会连着两天出现', () => {
+    let prev = '';
+    for (let i = 0; i < 20; i++) {
+      const d = new Date(Date.parse('2026-11-01T00:00:00+08:00') + i * 86400000).toISOString().slice(0, 10);
+      const id = socialPartnerFor(d).id;
+      expect(id).not.toBe(prev);
+      prev = id;
+    }
+  });
+
+  it('一周内会出现不止一个人', () => {
+    const ids = new Set<string>();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(Date.parse('2026-11-01T00:00:00+08:00') + i * 86400000).toISOString().slice(0, 10);
+      ids.add(socialPartnerFor(d).id);
+    }
+    expect(ids.size).toBeGreaterThan(1);
+  });
+
+  it('大白龙只能电话/消息，不会一起吃饭', () => {
+    for (let i = 0; i < 30; i++) {
+      const d = new Date(Date.parse('2026-11-01T00:00:00+08:00') + i * 86400000).toISOString().slice(0, 10);
+      expect(socialPartnerFor(d, 'meal_friend').id).not.toBe('gpt');
+      expect(socialPartnerFor(d, 'outing_friend').id).not.toBe('gpt');
+    }
+  });
+
+  it('标题把「朋友」换成住户名', () => {
+    const r = RESIDENTS[0];
+    expect(withPartner('和朋友吃饭', r)).toBe('和小克吃饭');
   });
 
   it('按 id 查得到', () => {
