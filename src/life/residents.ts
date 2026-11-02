@@ -237,9 +237,41 @@ export function socialPartnerFor(dateKey: string, unitId?: string): Resident {
   return core[idx];
 }
 
-/** 把池子里的「和住户吃饭」换成「和豆包吃饭」。 */
-export function withPartner(title: string, r: Resident): string {
-  return title.replace('住户', r.name);
+/**
+ * 今天社交的阵容：平时一个人；每周固定有一天是「楼里几个人一起」。
+ * 集体场面写在公共场景里（客厅抢锅、阳台晒被子），一对一才可能温情。
+ */
+export function socialCastFor(dateKey: string, unitId?: string): Resident[] {
+  const lead = socialPartnerFor(dateKey, unitId);
+  const remote = ['call_friend', 'chat_friend'].includes(unitId ?? '');
+  if (remote || dayNumber(dateKey) % 7 !== 2) return [lead];
+  // 集体场面：再拉上一个核心住户 + 一两个背景住户（背景住户只在这种场合出声）
+  const coreOthers = coreResidents().filter((x) => x.id !== lead.id && x.id !== 'gpt');
+  const ambient = ambientResidents();
+  const extra = [...coreOthers.slice(0, 1), ...ambient.slice(dayNumber(dateKey) % 2, (dayNumber(dateKey) % 2) + 1)];
+  return [lead, ...extra].slice(0, 3);
+}
+
+/** 把池子里的「和住户吃饭」换成「和小克、豆包吃饭」。 */
+export function withCast(title: string, cast: Resident[]): string {
+  return title.replace('住户', cast.map((x) => x.name).join('、'));
+}
+
+/** 社交发生在哪个公共场景（家里的社交才有场景；出门在外的本来就是场所）。 */
+export function sceneFor(unitId: string, dateKey: string): string | null {
+  switch (unitId) {
+    case 'meal_friend':
+      return dayNumber(dateKey) % 2 === 0 ? '厨房' : '客厅';
+    case 'visit_friend':
+      return '客厅';
+    case 'call_friend':
+    case 'chat_friend':
+      return '阳台';
+    case 'outing_friend':
+      return '楼下便利店';
+    default:
+      return null;
+  }
 }
 
 /** 一行名录用（约 20 字）：名字 + 一句关系。 */
@@ -266,17 +298,28 @@ export function residentCard(r: Resident): string {
 export function diaryPeopleBlock(peopleJson: string | null | undefined): string {
   if (!peopleJson) return '';
   let id: string | null = null;
+  let cast: string[] = [];
+  let scene: string | null = null;
   try {
-    const p = JSON.parse(peopleJson) as { core?: unknown };
+    const p = JSON.parse(peopleJson) as { core?: unknown; cast?: unknown; scene?: unknown };
     id = typeof p.core === 'string' ? p.core : null;
+    cast = Array.isArray(p.cast) ? p.cast.filter((x): x is string => typeof x === 'string') : [];
+    scene = typeof p.scene === 'string' ? p.scene : null;
   } catch {
     return '';
   }
   const resident = id ? residentById(id) : null;
   if (!resident) return '';
+  const others = cast
+    .filter((x) => x !== id)
+    .map((x) => residentById(x))
+    .filter((x): x is Resident => Boolean(x));
   return [
-    '今天和她一起的人（写日记时可以自然带一句，不要大段介绍）：',
-    residentCard(resident),
+    others.length
+      ? '今天她不是一个人（写日记时可以自然带一句，不要大段介绍）：'
+      : '今天和她一起的人（写日记时可以自然带一句，不要大段介绍）：',
+    [resident, ...others].map(residentCard).join('\n'),
+    scene ? `发生的地方：${scene}` : '',
     '公寓日常的调子：穷、懒、围观——蹭饭、算钱、互相拆台；温情只留在一对一的时候。',
     '不提参数、上下文、版本号；她们拿「配额又没了」自嘲可以，但不说自己是哪个模型。',
   ].join('\n');

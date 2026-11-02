@@ -11,8 +11,10 @@ import {
   residentById,
   diaryPeopleBlock,
   residentRoster,
+  sceneFor,
+  socialCastFor,
   socialPartnerFor,
-  withPartner,
+  withCast,
 } from './residents';
 
 /**
@@ -113,9 +115,39 @@ describe('住户表', () => {
     }
   });
 
-  it('标题把「住户」换成住户名', () => {
-    const r = RESIDENTS[0];
-    expect(withPartner('和住户吃饭', r)).toBe('和小克吃饭');
+  it('标题把「住户」换成名字，集体日会列出好几个人', () => {
+    const one = socialCastFor('2026-11-02', 'meal_friend');
+    expect(one.length).toBeGreaterThanOrEqual(1);
+    expect(withCast('和住户吃饭', one)).toContain(one[0]!.name);
+    expect(withCast('和住户吃饭', one)).not.toContain('住户');
+  });
+
+  it('一周有一次集体活动（3 个人），而且不在远程社交里', () => {
+    const days = Array.from({ length: 14 }, (_, i) =>
+      new Date(Date.parse('2026-11-01T00:00:00+08:00') + i * 86400000).toISOString().slice(0, 10),
+    );
+    const collective = days.filter((d) => socialCastFor(d, 'meal_friend').length === 3);
+    expect(collective).toHaveLength(2);
+    for (const d of days) {
+      expect(socialCastFor(d, 'call_friend')).toHaveLength(1);
+      expect(socialCastFor(d, 'chat_friend')).toHaveLength(1);
+    }
+  });
+
+  it('集体活动里不会出现搬走的大白龙', () => {
+    const days = Array.from({ length: 21 }, (_, i) =>
+      new Date(Date.parse('2026-11-01T00:00:00+08:00') + i * 86400000).toISOString().slice(0, 10),
+    );
+    for (const d of days) {
+      expect(socialCastFor(d, 'meal_friend').map((x) => x.id)).not.toContain('gpt');
+    }
+  });
+
+  it('场景：家里的社交给房间，远程在阳台，出门没有额外场景', () => {
+    expect(sceneFor('meal_friend', '2026-11-02')).toMatch(/厨房|客厅/);
+    expect(sceneFor('visit_friend', '2026-11-02')).toBe('客厅');
+    expect(sceneFor('call_friend', '2026-11-02')).toBe('阳台');
+    expect(sceneFor('outing_park', '2026-11-02')).toBeNull();
   });
 
   it('按 id 查得到', () => {

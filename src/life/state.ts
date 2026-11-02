@@ -10,7 +10,8 @@
 import type { Env } from '../types';
 import { buildDay, type DayPlan, type PlannedActivity } from './planner';
 import { ACTIVITIES } from './pool';
-import { socialPartnerFor, withPartner } from './residents';
+import { sceneFor, socialCastFor, socialPartnerFor, withCast } from './residents';
+import { placeFor } from './place';
 import type { DayEnv } from './types';
 import { RECIPES, healthForDay, pickRecipe, type Recipe } from './recipes';
 import { festivalOn } from './festivals';
@@ -43,17 +44,16 @@ export function lifeClock(now = new Date()): { dateKey: string; minute: number }
  * 当天出现了哪些住户：只记 core（会排单元的那个）。
  * ambient 只做背景音，不进库——不然每天都能「发生」一场偶遇，很假。
  */
-export function peopleJson(activities: { unitId: string }[], dateKey: string): string | null {
-  const hasSocial = activities.some((a) => {
-    const u = ACTIVITIES.find((x) => x.id === a.unitId);
-    return u?.kind === 'social';
+/** 当天的住户记录：核心人 + 一起的人 + 场景。没有社交就是 null。 */
+export function peopleFor(activities: { unitId: string }[], dateKey: string): string | null {
+  const social = activities.find((a) => ACTIVITIES.find((x) => x.id === a.unitId)?.kind === 'social');
+  if (!social) return null;
+  const cast = socialCastFor(dateKey, social.unitId);
+  return JSON.stringify({
+    core: cast[0]!.id,
+    cast: cast.map((x) => x.id),
+    scene: sceneFor(social.unitId, dateKey),
   });
-  if (!hasSocial) return null;
-  const social = activities.find((a) => {
-    const u = ACTIVITIES.find((x) => x.id === a.unitId);
-    return u?.kind === 'social';
-  });
-  return social ? JSON.stringify({ core: socialPartnerFor(dateKey, social.unitId).id }) : null;
 }
 
 export interface DayRow {
@@ -141,7 +141,7 @@ export async function saveDayPlan(
       JSON.stringify(plan),
       input.generatedAt ?? new Date().toISOString(),
       input.recipe ?? null,
-      peopleJson(plan.activities, plan.date),
+      peopleFor(plan.activities, plan.date),
     ),
     env.DB.prepare('DELETE FROM ai_activity WHERE date_key = ?').bind(plan.date),
   ];
@@ -157,8 +157,10 @@ export async function saveDayPlan(
         act.end,
         act.unitId,
         unit?.kind ?? 'idle',
-        unit?.kind === 'social' ? withPartner(unit?.name ?? '', socialPartnerFor(plan.date, act.unitId)) : unit?.name ?? act.unitId,
-        null,
+        unit?.kind === 'social'
+          ? withCast(unit?.name ?? '', socialCastFor(plan.date, act.unitId))
+          : unit?.name ?? act.unitId,
+        unit?.kind === 'social' ? sceneFor(act.unitId, plan.date) : placeFor(act.unitId, dayEnv.atHome),
         unit?.interruptible === false ? 0 : 1,
         unit?.replyChance ?? 0.5,
         unit?.mood ?? 0,
@@ -281,8 +283,10 @@ export async function ensureDayPlan(
         end_min: a.end,
         unit_id: a.unitId,
         kind: unit?.kind ?? 'idle',
-        title: unit?.kind === 'social' ? withPartner(unit?.name ?? '', socialPartnerFor(input.dateKey, a.unitId)) : unit?.name ?? a.unitId,
-        place: null,
+        title: unit?.kind === 'social'
+          ? withCast(unit?.name ?? '', socialCastFor(input.dateKey, a.unitId))
+          : unit?.name ?? a.unitId,
+        place: unit?.kind === 'social' ? sceneFor(a.unitId, input.dateKey) : placeFor(a.unitId, dayEnv.atHome),
         interruptible: unit?.interruptible === false ? 0 : 1,
         reply_chance: unit?.replyChance ?? 0.5,
         mood_delta: unit?.mood ?? 0,
