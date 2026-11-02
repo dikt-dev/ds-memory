@@ -30,7 +30,15 @@ export interface Env {
   PRICE_OUTPUT_PEAK: string;
   // ── 角色身份（部署方可覆盖，开源默认值见 src/identity.ts）──
   CHARACTER_NAME?: string; // 角色自称：缺省为「小忆」，可自行改（见 src/identity.ts）
-  USER_ADDRESS?: string;  // 期望对方怎么称呼自己：缺省按记忆自然称呼
+  USER_ADDRESS?: string;
+  /** 人设：自称（默认「本小姐」） */
+  PERSONA_SELF_CALL?: string;
+  /** 人设：关系定位（默认「他的专属 AI 女友」） */
+  PERSONA_ROLE?: string;
+  /** 人设：固定称呼后的说明句 */
+  PERSONA_ADDRESS_NOTE?: string;
+  /** 人设语气：auto 按亲密度 / peer 损友式一开始就放松 */
+  PERSONA_TONE?: string;  // 期望对方怎么称呼自己：缺省按记忆自然称呼
 
   // secrets（可选：未配置时对应功能降级）
   DEEPSEEK_API_KEY?: string;

@@ -1,10 +1,42 @@
 {
-  "generated_at": "2026-11-02T03:47:50.116Z",
+  "generated_at": "2026-11-02T05:49:12.708Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-02",
       "items": [
+        {
+          "hash": "8f7945f",
+          "date": "2026-11-02",
+          "type": "other",
+          "area": "",
+          "title": "整理人设模板：去重、补代码层字段",
+          "why": ""
+        },
+        {
+          "hash": "2683144",
+          "date": "2026-11-02",
+          "type": "other",
+          "area": "",
+          "title": "新人设草案与模板补代码层字段",
+          "why": ""
+        },
+        {
+          "hash": "b9c9629",
+          "date": "2026-11-02",
+          "type": "other",
+          "area": "",
+          "title": "新人设模板",
+          "why": ""
+        },
+        {
+          "hash": "fcd7a3b",
+          "date": "2026-11-02",
+          "type": "other",
+          "area": "",
+          "title": "称呼方向：回答「那我叫你什么」时先辨方向，别答反",
+          "why": ""
+        },
         {
           "hash": "75bdaf5",
           "date": "2026-11-02",
@@ -3216,38 +3248,6 @@
           "type": "refactor",
           "area": "p2c",
           "title": "validity, extraction, projection writeback",
-          "why": ""
-        },
-        {
-          "hash": "e928a60",
-          "date": "2026-10-24",
-          "type": "refactor",
-          "area": "p2b",
-          "title": "memory jobs, provenance, shadow eval",
-          "why": ""
-        },
-        {
-          "hash": "517eb42",
-          "date": "2026-10-24",
-          "type": "refactor",
-          "area": "p2a",
-          "title": "memory context core",
-          "why": ""
-        },
-        {
-          "hash": "ee4c8bd",
-          "date": "2026-10-24",
-          "type": "refactor",
-          "area": "p1",
-          "title": "runtime state, signed auth, kv diet",
-          "why": ""
-        },
-        {
-          "hash": "46056ab",
-          "date": "2026-10-24",
-          "type": "refactor",
-          "area": "p0",
-          "title": "baseline, trace, and evaluation set",
           "why": ""
         }
       ]

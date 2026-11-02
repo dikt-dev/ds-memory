@@ -889,6 +889,14 @@
   ],
   [
     "POST",
+    "/api/admin/ops/prune-r2"
+  ],
+  [
+    "POST",
+    "/api/admin/ops/prune-r2"
+  ],
+  [
+    "POST",
     "/api/admin/pair-code"
   ],
   [

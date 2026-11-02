@@ -11,6 +11,8 @@ import { shouldSkipMemoryRecall, buildMemoryPack  } from './context-pack';
 import { consumePendingRecall, looksLikePinRequest, recordRecallUsage, rememberPendingRecall, setChunkPinned } from './memory-rehearsal';
 import { loadLifeBlocks } from './chat-blocks';
 import { buildSystemPromptSplit, type MessageChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, STYLE_REMINDER } from './prompt';
+import { resolvePersona } from './persona';
+import { ticWarning } from './voice';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
 import { attachWeather, getOrCreateDayContext } from './context';
@@ -272,7 +274,8 @@ export async function streamChat(
     wasIgnored: facts.wasIgnored,
     ignoredMessage: facts.ignoredMessage,
     characterName: env.CHARACTER_NAME,
-  });
+  tone: resolvePersona(env).tone,
+});
   const cardTextWithMood = charCard.cardText;
 
   // 2) 落用户消息（D1 只存文本，图片记 R2 路径）
@@ -320,6 +323,10 @@ export async function streamChat(
   // 时间/心情/召回/摘要这些每轮都变的放到最后一条 system，紧贴用户消息。
   // 她此刻在干什么：读不到就当没有，聊天行为和以前一模一样
   const lifeBlocks = await loadLifeBlocks(env, now);
+  const tic = ticWarning(
+    history.filter((m) => m.role === 'assistant').map((m) => m.content),
+    resolvePersona(env).selfCall,
+  );
   // 用户在 App 里点了「问问她」之后，日记是 pending。没人告诉她要开口，
   // 于是点完什么都不会发生。这里补一句，让她在下一句里自己决定给不给看。
   const pendingDates = await pendingDiaryAskDates(env).catch(() => [] as string[]);
@@ -354,7 +361,8 @@ export async function streamChat(
         characterName: env.CHARACTER_NAME,
         userAddress: env.USER_ADDRESS,
         residents: lifeBlocks.residents,
-        life: [lifeBlocks.life, diaryAskNote].filter(Boolean).join('\n\n') || null,
+        persona: resolvePersona(env),
+        life: [lifeBlocks.life, tic, diaryAskNote].filter(Boolean).join('\n\n') || null,
   });
   const volatileBlock = [promptSplit.volatile, historyNote].filter(Boolean).join('\n\n');
   const messages: DeepSeekMessage[] = [

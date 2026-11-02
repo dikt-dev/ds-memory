@@ -265,6 +265,8 @@ export interface CharacterStateInput {
   ignoredMessage?: string | null;
   /** 角色名（缺省为开源默认值，见 identity.ts） */
   characterName?: string;
+  /** 人设语气：peer = 损友式，不受亲密度门槛限制 */
+  tone?: 'auto' | 'peer';
 }
 
 export interface CharacterState {
@@ -303,7 +305,9 @@ export function buildCharacterCard(input: CharacterStateInput): CharacterState {
   const casualRaw = (input.intimacy - 300) / 700;
   const casual = Math.min(1, Math.max(0, casualRaw));
   const casualNote =
-    casual < 0.3
+    input.tone === 'peer'
+      ? '你们是损友/搭子：说话随便、可以互怼，不用客气；亲密感靠默契，不靠黏人'
+      : casual < 0.3
       ? '你们还不太熟，说话礼貌、有分寸，不要太粘人'
       : casual < 0.7
         ? '你们挺熟了，说话放松，可以用语气词'

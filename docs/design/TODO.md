@@ -1,3 +1,10 @@
+## 2026-11-02 重置（已完成）
+- [x] 记忆/索引/消息/日记/日程/情绪/画像 全清，R2 旧归档（chat_logs、images、memory/archive.md）删除
+- [x] 新人设种子写入（鲸鱼娘 / 杭州独居 / 邻居 / 爸 梁圣 / 损友向）
+- [x] 人设开关进 env（PERSONA_SELF_CALL / PERSONA_ROLE / PERSONA_ADDRESS_NOTE / PERSONA_TONE）
+- [x] 口癖硬限 ticWarning；场景加天台、楼下小馆
+- [x] 冒烟：身份正确、承认记忆空白、不叫主人
+
 # 待办
 
 最后更新：2026-11-02（含评审改进清单）

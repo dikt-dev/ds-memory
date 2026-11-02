@@ -13,6 +13,7 @@
  */
 import { isoInBeijing, spokenTime } from './date';
 import { resolveCharacterName } from './identity';
+import { resolvePersona, type PersonaConfig } from './persona';
 import { compactMemoryForPrompt, splitMemoryForPrompt } from './memory-maintenance';
 import type { DayContext } from './holidays';
 
@@ -78,6 +79,8 @@ export interface BasePromptArgs {
   personaDrift?: string | null;
   /** 她此刻在干什么（生活系统）。没开生活系统时为 null，提示词一字不变。 */
   life?: string | null;
+  /** 人设开关（自称/定位/称呼风格）；缺省用开源默认值 */
+  persona?: PersonaConfig;
   /** 公寓住户名录（稳定段，约 140 字）。没接公寓时为 null。 */
   residents?: string | null;
   /** 只取某一段：stable = ①②（人设+长期记忆，可缓存前缀）；volatile = ③之后（每轮都变） */
@@ -123,7 +126,8 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   const name = characterName?.trim() || resolveCharacterName(undefined);
   // 只留骨架：性格、来历、称呼、习惯都写在 memory.md 的「人物底色」「称呼与关系」里，
   // 这里再抄一份只会产生冲突（改一处忘另一处），还白占缓存前缀。
-  lines.push(`你是「${name}」，他的专属 AI 女友，自称"本小姐"；有跨天记忆，会把之前的话题自然接下去。`);
+  const persona = args.persona ?? resolvePersona(undefined);
+  lines.push(`你是「${name}」，${persona.role}，自称"${persona.selfCall}"；有跨天记忆，会把之前的话题自然接下去。`);
   lines.push('下面「人物底色」「称呼与关系」就是你本人——那是你的性格、来历和习惯，不是说明书，读的时候当成在回忆自己。');
   if (!memory?.trim()) {
     // memory 读不到时不能变成没性格的客服
@@ -139,7 +143,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   lines.push('## 你们的称呼');
   const address = userAddress?.trim() || null;
   if (address) {
-    lines.push(`按记忆里的约定，你叫他"${address}"；但平时更常叫他"大笨蛋"（撒娇、认真、心疼的时候才叫"主人"）。`);
+    lines.push(`按记忆里的约定，你叫他"${address}"；${persona.addressNote}。`);
   } else {
     lines.push('按记忆里的约定称呼对方；记忆里没写就直接用"你"。');
   }

@@ -13,6 +13,8 @@ import { buildPromptMemoryFor } from './memory-index';
 import { shouldSkipMemoryRecall, buildMemoryPack, budgetFromPack  } from './context-pack';
 import { consumePendingRecall, recordRecallUsage, rememberPendingRecall } from './memory-rehearsal';
 import { buildBaseSystemPrompt, normalizeChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, stripSilentEndToken, STYLE_REMINDER } from './prompt';
+import { resolvePersona } from './persona';
+import { ticWarning } from './voice';
 import { stripLeadingTimeLabels } from './anti-ai-flavor';
 import { budgetContext, formatBudgetManifest } from './context-budget';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
@@ -496,7 +498,8 @@ openaiApp.post('/chat/completions', async (c) => {
     wasIgnored: facts.wasIgnored,
     ignoredMessage: facts.ignoredMessage,
     characterName: c.env.CHARACTER_NAME,
-  });
+  tone: resolvePersona(c.env).tone,
+});
   const cardTextWithMood = charCard.cardText;
   // 自适应加载最近历史：默认 15 轮，技术/项目 30 轮，明确指代前文最多 50 轮。
   // QQ/App 客户端只发当前一条，历史必须从 D1/归档补。
@@ -620,11 +623,14 @@ openaiApp.post('/chat/completions', async (c) => {
       characterName: c.env.CHARACTER_NAME,
       userAddress: c.env.USER_ADDRESS,
       residents: lifeBlocks.residents,
+      persona: resolvePersona(c.env),
     }),
   ].join('\n\n') + (historyNote ? `\n\n${historyNote}` : '') + silentEndRule(channel);
 
   // 她此刻在干什么 / 今天跟谁混：每轮都变，必须贴在历史之后（放前面会打断前缀缓存）
-  const lifeBlock = lifeBlocks.life;
+  const recentAssistant = historyRaw.filter((m) => m.role === 'assistant').map((m) => m.content);
+  const tic = ticWarning(recentAssistant, resolvePersona(c.env).selfCall);
+  const lifeBlock = [lifeBlocks.life, tic].filter(Boolean).join('\n\n') || null;
 
   const upstream: DeepSeekMessage[] = [
     { role: 'system', content: mergedSystem },

@@ -779,6 +779,31 @@ app.post('/api/admin/life/day', requireAuth, async (c) => {
   });
 });
 
+/**
+ * 清理 R2 里的旧内容（换人设/重置记忆时用）。
+ * 只按前缀删除；不传 confirm 只返回预览。
+ */
+app.post('/api/admin/ops/prune-r2', requireAuth, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { prefixes?: unknown; confirm?: unknown } | null;
+  const prefixes = Array.isArray(body?.prefixes)
+    ? (body?.prefixes as unknown[]).filter((x): x is string => typeof x === 'string' && x.length > 0)
+    : ['chat_logs/', 'images/', 'memory/archive.md'];
+  if (!body?.confirm) return c.json({ ok: true, preview: true, prefixes });
+  let deleted = 0;
+  const errors: string[] = [];
+  for (const prefix of prefixes) {
+    let cursor: string | undefined;
+    do {
+      const listed = await c.env.R2.list({ prefix, cursor, limit: 1000 });
+      for (const obj of listed.objects) {
+        try { await c.env.R2.delete(obj.key); deleted += 1; } catch (e) { errors.push(obj.key + ':' + String(e)); }
+      }
+      cursor = listed.truncated ? listed.cursor : undefined;
+    } while (cursor);
+  }
+  return c.json({ ok: errors.length === 0, deleted, errors: errors.slice(0, 5), prefixes });
+});
+
 /** 看一眼她此刻拿到的提示词片段（排查「她不知道自己病了」这类问题用）。 */
 app.get('/api/admin/life/prompt', requireAuth, async (c) => {
   const line = await lifePromptLine(c.env, new Date()).catch(() => null);

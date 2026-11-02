@@ -58,6 +58,7 @@ import {
   randomTargetMinutes,
   targetMinutesFor,
 } from './proactive';
+import { resolvePersona } from './persona';
 import { buildCharacterCard } from './character-card';
 import { buildVoiceDirective } from './voice';
 import { formatRecentMemoBlock, getRecentMemo } from './recent-memory';
@@ -258,7 +259,8 @@ async function generateProactive(
     dateKey,
     wasIgnored: facts.wasIgnored,
     ignoredMessage: facts.ignoredMessage,
-  });
+  tone: resolvePersona(env).tone,
+});
   const cardText = charCard.cardText;
   const personaDrift = buildPersonaDriftLine(await loadPersonaState(env));
   // 主动消息也带上相关往事：用最近几条对话当检索词

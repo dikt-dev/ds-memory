@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { buildVoiceDirective, casualness, recentOpeners, recentPhrases, signatureFor } from './voice';
+import {
+  buildVoiceDirective,
+  casualness,
+  recentOpeners,
+  recentPhrases,
+  signatureFor,
+  ticWarning,
+} from './voice';
 
 describe('casualness', () => {
   it('亲密度映射到 0~1，并做边界钳制', () => {
@@ -79,5 +86,24 @@ describe('recentOpeners', () => {
   });
   it('空文本被跳过', () => {
     expect(recentOpeners(['', '   ', '好'])).toEqual(['好']);
+  });
+});
+
+
+describe('ticWarning（口癖硬提醒）', () => {
+  it('最近 10 条里超过 3 条带自称就提醒', () => {
+    const recent = ['本小姐知道', '嗯', '本小姐不', '好', '本小姐说的', '本小姐再说'];
+    const w = ticWarning(recent, '本小姐');
+    expect(w).toContain('本小姐');
+    expect(w).toContain('换成「我」');
+  });
+
+  it('没超量就不打扰', () => {
+    expect(ticWarning(['本小姐知道', '嗯', '好'], '本小姐')).toBeNull();
+  });
+
+  it('自称换了就按新的数', () => {
+    expect(ticWarning(['本鲸鱼娘来了'], '本鲸鱼娘')).toBeNull();
+    expect(ticWarning(['本鲸鱼娘来了', '本鲸鱼娘', '本鲸鱼娘', '本鲸鱼娘'], '本鲸鱼娘')).toContain('本鲸鱼娘');
   });
 });

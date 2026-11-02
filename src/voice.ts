@@ -201,3 +201,23 @@ export function recentPhrases(texts: string[], limit = 120, top = 6): string[] {
   }
   return out;
 }
+
+/**
+ * 口癖硬提醒：最近若干条里自称出现太多就直说。
+ *
+ * 为什么需要：人设里写「本小姐每 3–4 句一次」时，实测会变成每条都带；
+ * 模型的「频率」概念不可靠，得由代码数给它看。
+ */
+export function ticWarning(
+  recent: string[],
+  selfCall: string,
+  window = 10,
+  max = 3,
+): string | null {
+  const call = selfCall.trim();
+  if (!call) return null;
+  const slice = recent.slice(-window);
+  const hits = slice.filter((t) => (t ?? '').includes(call)).length;
+  if (hits <= max) return null;
+  return `最近 ${slice.length} 条里你自称「${call}」${hits} 次了。这几条换成「我」，别每句都自报家门。`;
+}

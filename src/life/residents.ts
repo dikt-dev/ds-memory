@@ -191,6 +191,8 @@ export const PUBLIC_SCENES = [
   { id: 'balcony', name: '阳台', note: '晒被子、看雨、一个人待着' },
   { id: 'store', name: '楼下便利店', note: '夜宵、关东煮、碰上刚回来的住户' },
   { id: 'hallway', name: '楼道和电梯', note: '偶遇、搬东西、谁家门口堆了箱子' },
+  { id: 'rooftop', name: '天台', note: '晾被子、看夜景、风大，适合一个人待着' },
+  { id: 'diner', name: '楼下小馆', note: '便宜、吵、上菜慢，邻居凑一桌的地方' },
 ] as const;
 
 /** 写作规则：进提示词的那几条硬约束。 */
@@ -261,14 +263,15 @@ export function withCast(title: string, cast: Resident[]): string {
 export function sceneFor(unitId: string, dateKey: string): string | null {
   switch (unitId) {
     case 'meal_friend':
-      return dayNumber(dateKey) % 2 === 0 ? '厨房' : '客厅';
+      // 邻居来吃饭：要么在家做，要么去楼下小馆
+      return dayNumber(dateKey) % 2 === 0 ? '厨房' : '楼下小馆';
     case 'visit_friend':
       return '客厅';
     case 'call_friend':
     case 'chat_friend':
       return '阳台';
     case 'outing_friend':
-      return '楼下便利店';
+      return dayNumber(dateKey) % 3 === 0 ? '天台' : '楼下便利店';
     default:
       return null;
   }
