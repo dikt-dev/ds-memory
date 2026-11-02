@@ -15,6 +15,7 @@ import { logError, logWarn } from '../error-log';
 import { classifyConsent, decideShare, makeDiaryEntry, parseDiaryOutput, type DiaryDraft } from './diary';
 import { hasRefusal, judgeDiaryConsent, type Turn } from './consent-judge';
 import { generateDiarySummary } from './diary-summary-gen';
+import { diaryPeopleBlock } from './residents';
 import { generateDiaryImage } from './diary-image';
 import { ensureDayPlan, getDayPlan } from './state';
 import { ACTIVITIES } from './pool';
@@ -143,7 +144,11 @@ export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJob
             `地点：${saved.day.location}`,
             `今天的日程：\n${formatDayForDiary(saved.activities)}`,
             chat ? `今天聊到的：\n${chat}` : '今天没怎么聊天。',
-          ].join('\n\n'),
+            // 有住户才有这一段：名字、说话方式、禁忌 + 公寓基调
+            diaryPeopleBlock(saved.day.people),
+          ]
+            .filter(Boolean)
+            .join('\n\n'),
         },
       ],
       new Date(),

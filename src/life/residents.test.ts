@@ -9,6 +9,7 @@ import {
   residentBrief,
   residentCard,
   residentById,
+  diaryPeopleBlock,
   residentRoster,
   socialPartnerFor,
   withPartner,
@@ -67,6 +68,17 @@ describe('住户表', () => {
     for (const s of PUBLIC_SCENES) expect(s.note.length).toBeGreaterThan(0);
   });
 
+
+  it('日记块：有住户就给卡片 + 基调，没有就整段空', () => {
+    const block = diaryPeopleBlock('{"core":"dou-bao"}');
+    expect(block).toContain('豆包');
+    expect(block).toContain('别碰：');
+    expect(block).toContain('穷、懒、围观');
+    expect(block).not.toMatch(/Doubao|ChatGPT|Claude/);
+    expect(diaryPeopleBlock(null)).toBe('');
+    expect(diaryPeopleBlock('{"core":"nope"}')).toBe('');
+    expect(diaryPeopleBlock('坏 json')).toBe('');
+  });
 
   it('排期确定：同一天永远同一个人', () => {
     const a = socialPartnerFor('2026-11-03').id;

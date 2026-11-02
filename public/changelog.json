@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-02T01:36:49.257Z",
+  "generated_at": "2026-11-02T01:39:00.228Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-02",
       "items": [
+        {
+          "hash": "4064f06",
+          "date": "2026-11-02",
+          "type": "other",
+          "area": "",
+          "title": "P2：住户排期与 ai_day.people 落库（大白龙只能电话）",
+          "why": ""
+        },
         {
           "hash": "5c225f3",
           "date": "2026-11-02",
@@ -3240,14 +3248,6 @@
           "type": "feat",
           "area": "admin",
           "title": "重建日归档并逐天重新提炼记忆（跨天回复补全）",
-          "why": ""
-        },
-        {
-          "hash": "48616cd",
-          "date": "2026-10-24",
-          "type": "fix",
-          "area": "archive",
-          "title": "跨天回复补进当天日志，归档以AI收尾且对话完整",
           "why": ""
         }
       ]

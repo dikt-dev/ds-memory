@@ -67,6 +67,8 @@ export interface DayRow {
   temp_c: number;
   plan_json: string;
   generated_at: string;
+  /** 当天出现的住户 JSON（{"core":"dou-bao"}），空着=没有住户 */
+  people?: string | null;
 }
 
 export interface ActivityRow {

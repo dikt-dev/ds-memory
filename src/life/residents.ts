@@ -258,6 +258,30 @@ export function residentCard(r: Resident): string {
   ].join('；');
 }
 
+/**
+ * 日记提示词用：当天一起的人 + 公寓基调。
+ *
+ * 只给 core（会排单元的那个）；没有就返回空——不硬编一个邻居出来。
+ */
+export function diaryPeopleBlock(peopleJson: string | null | undefined): string {
+  if (!peopleJson) return '';
+  let id: string | null = null;
+  try {
+    const p = JSON.parse(peopleJson) as { core?: unknown };
+    id = typeof p.core === 'string' ? p.core : null;
+  } catch {
+    return '';
+  }
+  const resident = id ? residentById(id) : null;
+  if (!resident) return '';
+  return [
+    '今天和她一起的人（写日记时可以自然带一句，不要大段介绍）：',
+    residentCard(resident),
+    '公寓日常的调子：穷、懒、围观——蹭饭、算钱、互相拆台；温情只留在一对一的时候。',
+    '不提参数、上下文、版本号；她们拿「配额又没了」自嘲可以，但不说自己是哪个模型。',
+  ].join('\n');
+}
+
 /** 整栋楼的一行名录（固定开头，便于命中提示词缓存）。 */
 export function residentRoster(): string {
   return `她住在 AI 中继站公寓：${RESIDENTS.map(residentBrief).join('、')}。`;
