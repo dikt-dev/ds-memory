@@ -770,14 +770,23 @@ openaiApp.post('/chat/completions', async (c) => {
   // 文本里已经带了 [GIF:…]/[视频:…] 就不再加 [视频帧]：
   // 那是 App 附给模型的静帧，气泡里已经有动图了，再挂个标记只会多一行噪音。
   const hasMediaMarker = /\[(?:GIF|视频|图片):/.test(lastUserCleaned);
+  // 静帧的说明只进这一轮的提示词，不进记录：气泡里冒出「帧」「截图」这种词很出戏，
+  // 她会照着念。历史消息里露出来的那几行就是这么来的。
+  if (lastUser && transientImages > 0 && !hasMediaMarker) {
+    const hint = '（这几张是这段视频里你慢慢看过的时刻，按左上角的时间排；别说「帧」「截图」「这张图」这种词）';
+    lastUser.content =
+      typeof lastUser.content === 'string'
+        ? lastUser.content
+          ? `${lastUser.content}\n\n${hint}`
+          : hint
+        : [...lastUser.content, { type: 'text' as const, text: hint }];
+  }
   const recordContent = [
     lastUserCleaned,
     ...(imageKeys.length > 0
       ? imageKeys.map((k) => `[图片:${k}]`)
       : transientImages > 0
-        ? hasMediaMarker
-          ? []
-          : ['[视频帧]']
+        ? [] // 静帧不留标记：提示词里有，记录里没有
         : lastUserHasImage
           ? ['[图片]']
           : []),

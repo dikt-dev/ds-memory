@@ -994,6 +994,11 @@ function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
 /* 用户消息渲染：处理 [图片:images/…] 标记与换行；无路径的 [图片] 显示占位提示 */
 function renderUserContent(content) {
   content = stripLeadTime(content);
+  // 老消息里留过内部说明（视频帧提示）——那是给模型看的，气泡里不该露出来。
+  content = content
+    .replace(/[（(][^（）()]{0,40}左上角标着时间[）)]\s*/g, '')
+    .replace(/\[视频帧\]/g, '')
+    .trim();
   // 落库内容里包含文件原文（给 AI 读），历史渲染只显示文件卡片；
   // 否则刷新后整个文件正文会铺满聊天气泡。
   const fileCards = [];

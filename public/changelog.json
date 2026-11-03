@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-03T02:41:41.466Z",
+  "generated_at": "2026-11-03T02:46:47.657Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-03",
       "items": [
+        {
+          "hash": "2686cab",
+          "date": "2026-11-03",
+          "type": "other",
+          "area": "",
+          "title": "提示词里加长相：认出照片里的自己和住户；B站多端点排查接口",
+          "why": ""
+        },
         {
           "hash": "5ecad1c",
           "date": "2026-11-03",
@@ -3245,14 +3253,6 @@
           "type": "fix",
           "area": "media",
           "title": "raw gif upload and r2 reference",
-          "why": ""
-        },
-        {
-          "hash": "8970e87",
-          "date": "2026-10-24",
-          "type": "docs",
-          "area": "p5",
-          "title": "verify periodic watchdog execution",
           "why": ""
         }
       ]
