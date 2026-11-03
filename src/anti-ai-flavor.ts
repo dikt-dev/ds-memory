@@ -121,13 +121,18 @@ function applyRules(raw: string): { text: string; cleaned: boolean } {
 export function stripLeadingTimeLabels(raw: string): string {
   const re =
     /^\s*[\[【［]\s*(?:(?:\d{2,4}[-/])?\d{1,2}[-/]\d{1,2}\s*)?\d{1,2}:\d{2}(?::\d{2})?\s*[\]】］]\s*/;
+  // 回复是按行拆成气泡的，标签常常出现在**第二段**开头：
+  // 「噗，第一张…」换行「[11-03 10:15] 后面那个红果子…」。只剥开头就漏了这一条。
+  // 用 [ 	]* 而不是 s*，否则多行模式下会把上一行的换行吃进去，两段粘成一段。
+  const reLine =
+    /^[ \t]*[\[【［][ \t]*(?:(?:\d{2,4}[-/])?\d{1,2}[-/]\d{1,2}[ \t]*)?\d{1,2}:\d{2}(?::\d{2})?[ \t]*[\]】］][ \t]*/gm;
   let text = raw;
   for (let i = 0; i < 3; i++) {
     const next = text.replace(re, '');
     if (next === text) break;
     text = next;
   }
-  return text;
+  return text.replace(reLine, '');
 }
 
 /**

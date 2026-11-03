@@ -129,6 +129,10 @@ describe('createStreamScrubber —— 流式清洗', () => {
   it('清掉模型模仿的历史时间标签', () => {
     expect(stripLeadingTimeLabels('[10-2808:57]正文')).toBe('正文');
     expect(stripLeadingTimeLabels('[10-28 08:57] 正文')).toBe('正文');
+  // 第二段开头也会带标签（按行拆气泡时，只剥整段开头会漏）
+  expect(stripLeadingTimeLabels('先说一句。\n[11-03 10:15] 再说一句。')).toBe(
+    '先说一句。\n再说一句。',
+  );
     expect(scrubAiFlavor('[10-2808:57]晚安').text).toBe('晚安');
   });
 

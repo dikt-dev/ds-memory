@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-03T02:46:47.657Z",
+  "generated_at": "2026-11-03T03:05:24.414Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-03",
       "items": [
+        {
+          "hash": "c0edf42",
+          "date": "2026-11-03",
+          "type": "other",
+          "area": "",
+          "title": "视频帧提示只进提示词不进记录；网页端清掉老消息里的内部说明",
+          "why": ""
+        },
         {
           "hash": "2686cab",
           "date": "2026-11-03",
@@ -3245,14 +3253,6 @@
           "type": "fix",
           "area": "media",
           "title": "record uploaded image keys",
-          "why": ""
-        },
-        {
-          "hash": "a67cee1",
-          "date": "2026-10-24",
-          "type": "fix",
-          "area": "media",
-          "title": "raw gif upload and r2 reference",
           "why": ""
         }
       ]
