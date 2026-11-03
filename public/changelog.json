@@ -1,7 +1,20 @@
 {
-  "generated_at": "2026-11-03T00:56:05.806Z",
+  "generated_at": "2026-11-03T01:20:16.352Z",
   "count": 400,
   "days": [
+    {
+      "date": "2026-11-03",
+      "items": [
+        {
+          "hash": "13b35fe",
+          "date": "2026-11-03",
+          "type": "other",
+          "area": "",
+          "title": "GIF/图片标记直接作为图像输入；网页渲染动图与视频、清掉内部旁注",
+          "why": ""
+        }
+      ]
+    },
     {
       "date": "2026-11-02",
       "items": [
@@ -3240,14 +3253,6 @@
           "type": "refactor",
           "area": "p5c",
           "title": "production cutover and qq shadow",
-          "why": ""
-        },
-        {
-          "hash": "20d79a7",
-          "date": "2026-10-24",
-          "type": "refactor",
-          "area": "p5b",
-          "title": "engine shadow metrics",
           "why": ""
         }
       ]

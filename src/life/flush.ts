@@ -5,11 +5,19 @@
  * cron 每 5 分钟看一眼，到期的就生成一条回复落库，夜里攒的一并处理。
  *
  * 连发多条合成一轮回一次（§8.4），不是每条各回一次。
+ *
+ * 租约（lease）：认领时把 reply_state 改成 'processing'、hold_until_ms 推后 10 分钟。
+ * 生成成功才置 'answered'；失败退回 'pending' 并延后 10 分钟重试。
+ * 这样进程被杀/模型报错都不会把消息吞掉——上一版是「先标 answered 再生成」，
+ * 生成一失败，这条消息就永远停在 answered，再也不会被补发。
  */
 import type { Env } from '../types';
 import { streamChat } from '../chat';
 import { lifeEnabled } from './gate';
 import { logError } from '../error-log';
+
+/** 认领后的租约时长：超过这个时间还停在 processing，说明那一轮挂了，回收重试。 */
+const LEASE_MS = 10 * 60 * 1000;
 
 export interface FlushResult {
   flushed: number;
@@ -19,35 +27,70 @@ export interface FlushResult {
 export async function flushHeldMessages(env: Env, now = new Date()): Promise<FlushResult> {
   if (!(await lifeEnabled(env))) return { flushed: 0, skipped: 'disabled' };
 
+  const nowMs = now.getTime();
+
+  // 回收过期租约：上一轮认领后没走完（cron 进程被杀、模型报错没回滚到）
+  await env.DB.prepare(
+    `UPDATE messages SET reply_state = 'pending'
+     WHERE role = 'user' AND reply_state = 'processing'
+       AND hold_until_ms IS NOT NULL AND hold_until_ms <= ?`,
+  )
+    .bind(nowMs)
+    .run()
+    .catch(() => {});
+
   const rows = await env.DB.prepare(
     `SELECT id, content FROM messages
      WHERE role = 'user' AND reply_state = 'pending' AND hold_until_ms IS NOT NULL AND hold_until_ms <= ?
      ORDER BY id ASC LIMIT 10`,
   )
-    .bind(now.getTime())
+    .bind(nowMs)
     .all<{ id: number; content: string }>()
     .catch(() => null);
   const pending = rows?.results ?? [];
   if (pending.length === 0) return { flushed: 0, skipped: 'empty' };
 
-  // 先标 answered 再生成：生成慢，期间不该被下一次 cron 重复捞到
+  // 逐条认领：只有把 pending 改成 processing 成功的那一方才生成，
+  // 避免 cron 和 night-wake 同时捞到同一批、各回一次。
+  const claimed: Array<{ id: number; content: string }> = [];
   for (const row of pending) {
+    const res = await env.DB.prepare(
+      `UPDATE messages SET reply_state = 'processing', hold_until_ms = ?
+       WHERE id = ? AND reply_state = 'pending'`,
+    )
+      .bind(nowMs + LEASE_MS, row.id)
+      .run()
+      .catch(() => null);
+    if ((res?.meta?.changes ?? 0) === 1) claimed.push(row);
+  }
+  if (claimed.length === 0) return { flushed: 0, skipped: 'claimed-elsewhere' };
+
+  const merged = claimed.map((r) => r.content).join('\n');
+  try {
+    // 复用最后一条消息的 id：不插新用户消息，回复直接挂在那条上
+    const res = await streamChat(env, merged, now, undefined, 'mobile', 'life-flush', {
+      reuseUserMessageId: claimed[claimed.length - 1].id,
+    });
+    await res.text(); // 消费完流，回复在 onFinish 里落库
+  } catch (e) {
+    logError('[life] 补发失败:', e);
+    // 生成失败：退回 pending，10 分钟后再试；消息不能丢
+    for (const row of claimed) {
+      await env.DB.prepare(
+        "UPDATE messages SET reply_state = 'pending', hold_until_ms = ? WHERE id = ? AND reply_state = 'processing'",
+      )
+        .bind(nowMs + LEASE_MS, row.id)
+        .run()
+        .catch(() => {});
+    }
+    return { flushed: 0, skipped: 'error' };
+  }
+
+  for (const row of claimed) {
     await env.DB.prepare("UPDATE messages SET reply_state = 'answered' WHERE id = ?")
       .bind(row.id)
       .run()
       .catch(() => {});
   }
-
-  const merged = pending.map((r) => r.content).join('\n');
-  try {
-    // 复用最后一条消息的 id：不插新用户消息，回复直接挂在那条上
-    const res = await streamChat(env, merged, now, undefined, 'mobile', 'life-flush', {
-      reuseUserMessageId: pending[pending.length - 1].id,
-    });
-    await res.text(); // 消费完流，回复在 onFinish 里落库
-  } catch (e) {
-    logError('[life] 补发失败:', e);
-    return { flushed: 0, skipped: 'error' };
-  }
-  return { flushed: pending.length };
+  return { flushed: claimed.length };
 }

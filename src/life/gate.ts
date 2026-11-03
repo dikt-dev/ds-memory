@@ -90,8 +90,13 @@ export async function markHeld(
 /** 把「HH:MM」换算成下一次出现的毫秒时间（跨天则算明天）。 */
 export function untilMs(now: Date, hhmmText: string): number {
   const [h, m] = hhmmText.split(':').map(Number);
-  const target = new Date(now);
-  target.setHours(h, m, 0, 0);
-  if (target.getTime() <= now.getTime()) target.setDate(target.getDate() + 1);
-  return target.getTime();
+  // ★ 「08:00」指的是她那边的早上，也就是北京时间。
+  // Worker 跑在 UTC，之前直接 setHours(8) 算出来是 UTC 08:00 = 北京 16:00，
+  // 于是「睡到早上」变成了「睡到下午四点」——这就是早上一直没回的原因。
+  const BJ = 8 * 3600_000;
+  const bjNow = now.getTime() + BJ;
+  const bjMidnight = Math.floor(bjNow / 86_400_000) * 86_400_000;
+  let target = bjMidnight + (h * 60 + m) * 60_000;
+  if (target <= bjNow) target += 86_400_000;
+  return target - BJ;
 }
