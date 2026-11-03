@@ -738,7 +738,11 @@ openaiApp.post('/chat/completions', async (c) => {
       const extraImages: Array<{ type: 'image_url'; image_url: { url: string } }> = [];
       for (const key of markerKeys) {
         const loaded = await loadImageDataUrl(c.env, key).catch(() => null);
-        if (loaded) extraImages.push({ type: 'image_url', image_url: { url: loaded.dataUrl } });
+        // 太大的对象（动辄几 MB 的 GIF）模型会直接忽略，白传一趟：
+        // 只送 1.2MB 以内的；大动图由 App 附一张首帧静图，这里就跳过。
+        if (loaded && loaded.dataUrl.length <= 1_600_000) {
+          extraImages.push({ type: 'image_url', image_url: { url: loaded.dataUrl } });
+        }
       }
       if (extraImages.length > 0) {
         const base =
@@ -762,12 +766,17 @@ openaiApp.post('/chat/completions', async (c) => {
       lastUser.content = kept;
     }
   }
+  // 文本里已经带了 [GIF:…]/[视频:…] 就不再加 [视频帧]：
+  // 那是 App 附给模型的静帧，气泡里已经有动图了，再挂个标记只会多一行噪音。
+  const hasMediaMarker = /\[(?:GIF|视频|图片):/.test(lastUserCleaned);
   const recordContent = [
     lastUserCleaned,
     ...(imageKeys.length > 0
       ? imageKeys.map((k) => `[图片:${k}]`)
       : transientImages > 0
-        ? ['[视频帧]']
+        ? hasMediaMarker
+          ? []
+          : ['[视频帧]']
         : lastUserHasImage
           ? ['[图片]']
           : []),

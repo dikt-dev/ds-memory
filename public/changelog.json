@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-03T01:54:01.428Z",
+  "generated_at": "2026-11-03T02:02:23.913Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-03",
       "items": [
+        {
+          "hash": "2f305b8",
+          "date": "2026-11-03",
+          "type": "other",
+          "area": "",
+          "title": "网页链接卡片加封面：标题两行截断、来源单独一行；渠道兜底按 App 语音头",
+          "why": ""
+        },
         {
           "hash": "b192ab7",
           "date": "2026-11-03",
@@ -3245,14 +3253,6 @@
           "type": "docs",
           "area": "p5",
           "title": "verify phone client self-heal",
-          "why": ""
-        },
-        {
-          "hash": "aaf9a17",
-          "date": "2026-10-24",
-          "type": "docs",
-          "area": "p5",
-          "title": "verify phone watchdog scheduler",
           "why": ""
         }
       ]
