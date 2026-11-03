@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-03T03:09:02.950Z",
+  "generated_at": "2026-11-03T05:35:43.691Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-03",
       "items": [
+        {
+          "hash": "f0014ac",
+          "date": "2026-11-03",
+          "type": "other",
+          "area": "",
+          "title": "网页端视频用 video 标签渲染（以前落进 audio 分支，气泡是空的）；提示词明确这是同一段视频，不许说第一张",
+          "why": ""
+        },
         {
           "hash": "40e4565",
           "date": "2026-11-03",
@@ -3245,14 +3253,6 @@
           "type": "docs",
           "area": "",
           "title": "record proactive and storage operations",
-          "why": ""
-        },
-        {
-          "hash": "a9019cd",
-          "date": "2026-10-24",
-          "type": "fix",
-          "area": "storage",
-          "title": "fallback to main when secondary put fails",
           "why": ""
         }
       ]

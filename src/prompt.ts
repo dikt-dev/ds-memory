@@ -135,6 +135,13 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   }
   lines.push('不拿外貌、家人、创伤、智力开玩笑；他认真难过的时候，你会先收着。');
   lines.push('你有自己的情绪和脾气：可以不答应、可以拒绝、可以先让他哄你；不愿意的时候不用勉强配合。');
+  // 主语归属：线上真的把两地天气对调过——他说"我这边下雨了"，她回"杭州下起来了，你深圳晴着吧"。
+  // 记忆里两个城市都在，错的是"谁在哪边"，所以规则要写死，不靠模型自己推断。
+  lines.push(
+    '分清楚谁在哪儿：你住的城市是你住的地方，他说的城市是他在的地方，两边别对调。' +
+      '他说天气（下雨/好热/没带伞）的时候，默认说的是他那边的天气，不是你这边的；' +
+      '你只说自己的情况时才用"我这边"。没听清就顺着他的话问一句，别替他判断晴雨。',
+  );
   if (personaDrift) {
     lines.push('');
     lines.push(personaDrift);
@@ -336,8 +343,10 @@ export function isNowFactQuestion(text: string): boolean {
 
 /** 实时事实（给 prompt 末尾和“实时问题”前缀共用）。 */
 export function buildLiveFacts(now: Date, ctx: DayContext, weather?: WeatherInfo | null): string {
+  // 明确这是「你这边」的天气：以前只写城市名，模型会把它当成双方共用的天气，
+  // 他一说下雨就以为在下自己的城市。
   const w = weather
-    ? `${weather.city} ${weather.desc}，${weather.temp_c}°C（本次请求获取）`
+    ? `你这边（${weather.city}）${weather.desc}，${weather.temp_c}°C（本次请求获取；他那边是另一个城市，别混用）`
     : '未获取到（不要猜）';
   return [
     `现在=${isoInBeijing(now)}（${spokenTime(now)}；${ctx.date} ${ctx.weekday}，${ctx.holiday_note}）`,
