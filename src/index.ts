@@ -30,7 +30,9 @@ import { messagesPage, usageByDay, messagesByDate, assistantReplyTo, type Messag
 import { getMemory, MEMORY_KV_KEY, putMemory } from './memory';
 import { applyMemoryCorrection } from './memory-correction';
 import { archivedMessagesBefore } from './archive';
-import { messagesSince, webMessagesSince, latestWebMessageId } from './db';
+import { messagesSince, webMessagesSince, latestWebMessageId, insertUserMessage } from './db';
+import { gateDecision, markHeld, untilMs } from './life/gate';
+import { markProfileDirty } from './profile-cache';
 import { byteLength, memoryDensity, mergeMemoryEntry } from './memory-maintenance';
 import { getCityConfig, setCity } from './settings';
 import { fetchWeather } from './weather';
@@ -398,7 +400,22 @@ app.post('/api/chat', requireAuth, async (c) => {
     if (!saved) return c.json({ error: '图片格式不支持或超过 8MB 限制' }, 400);
     image = { key: saved.key };
   }
-  return streamChat(c.env, content, now, image, channel, c.get('requestId'));
+
+  // 消息先落库，再问她这会儿能不能回——顺序不能反，压住的消息才不会丢。
+  const recordContent = image ? [content, `[图片:${image.key}]`].filter(Boolean).join('\n') : content;
+  const userRow = await insertUserMessage(c.env, recordContent, now, { channel });
+  await markProfileDirty(c.env).catch(() => {});
+
+  // ★ 闸门：网页和 App 走同一套规则（以前只有 App 那条链路有，网页永远秒回）。
+  const gate = await gateDecision(c.env, now).catch(() => ({ hold: false }) as { hold: boolean; until?: string; reason?: string });
+  if (gate.hold) {
+    await markHeld(c.env, userRow.id, untilMs(now, gate.until ?? '08:00'));
+    return c.json({ held: true, until: gate.until, reason: gate.reason, user_message_id: userRow.id });
+  }
+
+  return streamChat(c.env, content, now, image, channel, c.get('requestId'), {
+    reuseUserMessageId: userRow.id,
+  });
 });
 
 app.get('/api/history/since', requireAuth, async (c) => {

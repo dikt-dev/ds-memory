@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-03T08:35:56.859Z",
+  "generated_at": "2026-11-03T08:41:46.364Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-03",
       "items": [
+        {
+          "hash": "7e7a3fa",
+          "date": "2026-11-03",
+          "type": "other",
+          "area": "",
+          "title": "在忙由活动表判定：reply_chance 低于 0.2 也算忙，不再只看 interruptible",
+          "why": ""
+        },
         {
           "hash": "9af4a6b",
           "date": "2026-11-03",
@@ -3245,14 +3253,6 @@
           "type": "docs",
           "area": "p5",
           "title": "record free-tier usage",
-          "why": ""
-        },
-        {
-          "hash": "8bc16eb",
-          "date": "2026-10-24",
-          "type": "docs",
-          "area": "p5",
-          "title": "document engines, raw upload, and operations",
           "why": ""
         }
       ]
