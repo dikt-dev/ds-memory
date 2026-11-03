@@ -716,6 +716,34 @@ openaiApp.post('/chat/completions', async (c) => {
       imageKeys.push(saved.key);
     }
 
+    // 文本里带的媒体标记（App 发 GIF、网页发图只带路径）：读出来给模型看，
+    // 否则模型只看到 "[GIF:gifs/...]" 这种字符串，等于没收到图。
+    if (lastUser) {
+      const flatText =
+        typeof lastUser.content === 'string'
+          ? lastUser.content
+          : lastUser.content
+              .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+              .map((p) => p.text)
+              .join('\n');
+      const markerKeys = [...flatText.matchAll(/\[(?:GIF|图片):((?:gifs|images|diary-images)\/[^\]\s]+)\]/g)]
+        .map((m) => m[1])
+        .slice(0, 4);
+      const extraImages: Array<{ type: 'image_url'; image_url: { url: string } }> = [];
+      for (const key of markerKeys) {
+        const loaded = await loadImageDataUrl(c.env, key).catch(() => null);
+        if (loaded) extraImages.push({ type: 'image_url', image_url: { url: loaded.dataUrl } });
+      }
+      if (extraImages.length > 0) {
+        const base =
+          typeof lastUser.content === 'string'
+            ? [{ type: 'text' as const, text: lastUser.content }]
+            : lastUser.content;
+        lastUser.content = [...base, ...extraImages];
+        transientImages += extraImages.length;
+      }
+    }
+
     // 移除只存档的图片，避免把空 URL 发给模型
     const kept = lastUser.content.filter(
       (p) => !(p.type === 'image_url' && !p.image_url.url),

@@ -21,15 +21,17 @@ describe('casualness', () => {
 describe('buildVoiceDirective —— 指向人设，同时给四条机械约束', () => {
   it('先指向「记忆里那个人」，再讲怎么打字', () => {
     const d = buildVoiceDirective(900);
-    expect(d).toContain('记忆里那个人');
+    expect(d).toContain('## 说话');
     expect(d).toContain('像在手机上打字');
   });
 
-  it('长度、括号动作、短回复、反问都有明确约束', () => {
+  it('长度、敷衍、不解释、括号动作都有明确约束', () => {
     const d = buildVoiceDirective(900);
-    expect(d).toContain('不超过 60 字');
+    expect(d).toContain('最多一两句');
     expect(d).toContain('括号动作基本不写');
-    expect(d).toContain('允许只回');
+    expect(d).toContain('不解释');
+    expect(d).toContain('允许敷衍');
+    expect(d).toContain('允许敷衍');
     expect(d).toContain('反问是偶尔的');
   });
 

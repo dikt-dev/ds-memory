@@ -1029,13 +1029,13 @@ function renderUserContent(content) {
       .replace(/\n{3,}/g, '\n\n')
       .trim();
   }
-  const re = /\[(图片|语音):((?:images|audio)\/[^\]\s]+)\]/g;
+  const re = /\[(图片|语音|GIF|视频):((?:images|diary-images|audio|gifs|videos)\/[^\]\s]+)\]/g;
   let html = '';
   let last = 0;
   let m;
   while ((m = re.exec(content))) {
     html += escapeHtml(content.slice(last, m.index));
-    if (m[1] === '图片') {
+    if (m[1] === 'GIF' || m[1] === '图片') {
       html += '<img class="msg-img" src="/api/image/' + m[2] + '" alt="图片" loading="lazy"'
             + ' onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'img-missing\',textContent:\'[图片加载失败]\'}))">';
     } else {
