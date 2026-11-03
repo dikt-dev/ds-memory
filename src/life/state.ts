@@ -318,7 +318,13 @@ export function statusAt(
   const next = activities.find((a) => a.start_min > minute) ?? null;
   if (sleeping && !hit) return { status: 'sleeping', current: null, next, health };
   if (!hit) return { status: 'free', current: null, next, health };
-  return { status: hit.interruptible ? 'free' : 'busy', current: hit, next, health };
+  // 「在忙」= 这段时间她本来就不看手机，由活动类型查表决定（设计原则 5）：
+  //   · interruptible=false 是硬性（洗澡、睡觉这类）
+  //   · reply_chance < 0.2 是软性（逛街、剪头发、健身……本来就不太可能掏手机）
+  // 只看 interruptible 的旧写法，池子里只有洗澡和看电影标了 false，
+  // 于是整天都是「有空」——这就是她永远秒回的根子。
+  const busy = hit.interruptible === 0 || (hit.reply_chance ?? 1) < 0.2;
+  return { status: busy ? 'busy' : 'free', current: hit, next, health };
 }
 
 /**

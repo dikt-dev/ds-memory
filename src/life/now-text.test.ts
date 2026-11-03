@@ -40,9 +40,15 @@ describe('她此刻的状态（喂给提示词）', () => {
   it('正在做的事能不能被打断，要说给她听', async () => {
     const busy = fakeEnv({
       day: { recipe: null, health: 100, weather: 'sunny', temp_c: 22, location: '北京' },
-      acts: [{ unit_id: 'short_trip_movie', kind: 'short_trip', title: '看电影', start_min: 800, end_min: 935, interruptible: 0 }],
+      acts: [{ unit_id: 'short_trip_movie', kind: 'short_trip', title: '看电影', start_min: 800, end_min: 935, interruptible: 0, reply_chance: 0.2 }],
     });
-    expect((await lifePromptLine(busy, NOW))!).toContain('被打断会有点烦');
+    expect((await lifePromptLine(busy, NOW))!).toContain('多半不看手机');
+    // 只靠 reply_chance 也能判定为「忙」——设计原则 5 的查表，不靠模型猜
+    const shopping = fakeEnv({
+      day: { recipe: null, health: 100, weather: 'sunny', temp_c: 22, location: '北京' },
+      acts: [{ unit_id: 'outing_mall', kind: 'outing', title: '逛街', start_min: 800, end_min: 960, interruptible: 1, reply_chance: 0.15 }],
+    });
+    expect((await lifePromptLine(shopping, NOW))!).toContain('多半不看手机');
     const free = fakeEnv({
       day: { recipe: null, health: 100, weather: 'sunny', temp_c: 22, location: '北京' },
       acts: [{ unit_id: 'idle_bed', kind: 'idle', title: '躺着', start_min: 600, end_min: 1200, interruptible: 1 }],

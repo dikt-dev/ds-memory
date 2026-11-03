@@ -64,10 +64,10 @@ export async function lifePromptLine(env: Env, now = new Date()): Promise<string
   if (!day) return null;
 
   const acts = await env.DB.prepare(
-    'SELECT unit_id, kind, title, start_min, end_min, interruptible FROM ai_activity WHERE date_key = ? ORDER BY start_min',
+    'SELECT unit_id, kind, title, start_min, end_min, interruptible, reply_chance FROM ai_activity WHERE date_key = ? ORDER BY start_min',
   )
     .bind(dateKey)
-    .all<{ unit_id: string; kind: string; title: string; start_min: number; end_min: number; interruptible: number }>()
+    .all<{ unit_id: string; kind: string; title: string; start_min: number; end_min: number; interruptible: number; reply_chance: number | null }>()
     .catch(() => null);
   const status = statusAt(
     (acts?.results ?? []).map((a) => ({
@@ -78,6 +78,7 @@ export async function lifePromptLine(env: Env, now = new Date()): Promise<string
       kind: a.kind,
       title: a.title,
       interruptible: a.interruptible,
+      reply_chance: a.reply_chance ?? 1,
     })) as never,
     minute,
     day.health,
@@ -99,9 +100,11 @@ export async function lifePromptLine(env: Env, now = new Date()): Promise<string
     bits.push('这一条是你此刻唯一的位置和活动；不要在同一轮里描述自己在别处做别的事');
     // 能不能被打断：字段一直在库里算，却从没进过提示词——
     // 结果她在电影院也能长篇秒回，像随时待命的客服。
+    const absorbing =
+      status.current.interruptible === 0 || (status.current.reply_chance ?? 1) < 0.2;
     bits.push(
-      status.current.interruptible === 0
-        ? '这件事一开头就收不住，被打断会有点烦；他要是不急，你可以说等会儿再说，或者只回一两句'
+      absorbing
+        ? '这阵子多半不看手机，回消息会拖着；真抽空回也是短短一句，别写长'
         : '这件事随时能停下，他找你你就能腾出手',
     );
   }
