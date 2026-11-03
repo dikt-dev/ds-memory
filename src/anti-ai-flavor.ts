@@ -132,7 +132,11 @@ export function stripLeadingTimeLabels(raw: string): string {
     if (next === text) break;
     text = next;
   }
-  return text.replace(reLine, '');
+  // 也有夹在句子中间的：「…挺得意的。[11-03 10:15] 后面那个红果子…」
+  // App 是按句子/换行拆气泡的，标签一旦落在句中，第二段气泡开头就带着它。
+  const reAfterPunct =
+    /([。！？!?\n])[ \t]*[\[【［][ \t]*(?:(?:\d{2,4}[-/])?\d{1,2}[-/]\d{1,2}[ \t]*)?\d{1,2}:\d{2}(?::\d{2})?[ \t]*[\]】］][ \t]*/g;
+  return text.replace(reLine, '').replace(reAfterPunct, '$1');
 }
 
 /**

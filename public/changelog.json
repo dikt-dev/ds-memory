@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-03T03:05:24.414Z",
+  "generated_at": "2026-11-03T03:06:31.628Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-03",
       "items": [
+        {
+          "hash": "252ff6f",
+          "date": "2026-11-03",
+          "type": "other",
+          "area": "",
+          "title": "时间标签逐行剥离：第二段开头带[MM-DD HH:MM]时也清掉",
+          "why": ""
+        },
         {
           "hash": "c0edf42",
           "date": "2026-11-03",
@@ -3245,14 +3253,6 @@
           "type": "fix",
           "area": "proactive",
           "title": "include window tail tick; probe secondary R2",
-          "why": ""
-        },
-        {
-          "hash": "2a0568e",
-          "date": "2026-10-24",
-          "type": "fix",
-          "area": "media",
-          "title": "record uploaded image keys",
           "why": ""
         }
       ]

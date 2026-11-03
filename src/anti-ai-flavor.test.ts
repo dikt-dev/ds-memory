@@ -133,6 +133,10 @@ describe('createStreamScrubber —— 流式清洗', () => {
   expect(stripLeadingTimeLabels('先说一句。\n[11-03 10:15] 再说一句。')).toBe(
     '先说一句。\n再说一句。',
   );
+  // 也见过夹在句子中间的（拆气泡后第二段开头就带着它）
+  expect(stripLeadingTimeLabels('挺得意的。[11-03 10:15] 后面那个果子')).toBe(
+    '挺得意的。后面那个果子',
+  );
     expect(scrubAiFlavor('[10-2808:57]晚安').text).toBe('晚安');
   });
 
