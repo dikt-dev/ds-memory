@@ -378,3 +378,11 @@ CREATE TABLE IF NOT EXISTS degradation_log (
   last_at INTEGER NOT NULL,
   PRIMARY KEY (day_key, component)
 );
+
+
+-- ---------- 删除墓碑：服务端删过的消息，App 本地也要跟着删 ----------
+CREATE TABLE IF NOT EXISTS message_tombstones (
+  id         INTEGER PRIMARY KEY,
+  deleted_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_message_tombstones_at ON message_tombstones(deleted_at);

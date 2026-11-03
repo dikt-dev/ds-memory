@@ -22,6 +22,7 @@ import { RECIPES } from './life/recipes';
 import { askDiary, diaryList, diaryOne } from './life/diary-api';
 import { nearestCity, refreshUserEnv } from './life/weather';
 import { beijingDateKey } from './life/state';
+import { formatBiliMeta, type BiliMeta } from './bili';
 
 type AppEnv = { Bindings: Env; Variables: { requestId: string } };
 
@@ -141,6 +142,63 @@ app.get('/api/app/diary-image/*', requireApp, async (c) => {
       'cache-control': 'private, max-age=604800',
     },
   });
+});
+
+/**
+ * B 站链接回填：网页端发的链接 Worker 出口拿不到 meta（B 站对机房 IP 直接 412），
+ * 手机能直连。App 同步历史时看到"有链接没资料"的用户消息，就在本地解析，
+ * 再把结果按 message_id 回填到 D1——网页上那张卡片随后变完整。
+ */
+app.post('/api/app/bili-meta', requireApp, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as {
+    message_id?: unknown;
+    url?: unknown;
+    title?: unknown;
+    owner?: unknown;
+    duration?: unknown;
+    cover?: unknown;
+    desc?: unknown;
+  } | null;
+  const messageId = Number(body?.message_id);
+  const url = typeof body?.url === 'string' ? body.url.trim() : '';
+  const title = typeof body?.title === 'string' ? body.title.trim() : '';
+  if (!Number.isFinite(messageId) || messageId <= 0 || !url || !title) {
+    return c.json({ error: 'message_id/url/title 必填' }, 400);
+  }
+
+  const row = await c.env.DB.prepare('SELECT id, role, content FROM messages WHERE id = ?')
+    .bind(messageId)
+    .first<{ id: number; role: string; content: string }>();
+  if (!row) return c.json({ error: 'not found' }, 404);
+  if (row.role !== 'user') return c.json({ error: '只能回填用户消息' }, 400);
+
+  const meta: BiliMeta = {
+    bvid: '',
+    title,
+    owner: typeof body?.owner === 'string' ? body.owner : '',
+    duration: Number(body?.duration) || 0,
+    cover: typeof body?.cover === 'string' ? body.cover : '',
+    desc: typeof body?.desc === 'string' ? body.desc : '',
+  } as BiliMeta;
+  const block = formatBiliMeta(meta, url);
+  // 已经有资料就原地替换（别越堆越长），没有就接在原文后面
+  const content = /\[BILI_META\][\s\S]*?\[\/BILI_META\]/.test(row.content)
+    ? row.content.replace(/\[BILI_META\][\s\S]*?\[\/BILI_META\]/, block)
+    : `${row.content}\n\n${block}`;
+  if (content === row.content) return c.json({ ok: true, unchanged: true });
+
+  await c.env.DB.prepare('UPDATE messages SET content = ? WHERE id = ?').bind(content, row.id).run();
+  return c.json({ ok: true, message_id: row.id, chars: content.length });
+});
+
+/** 删除墓碑：App 每次同步拉一遍，把本地缓存里已删的消息清掉。幂等。 */
+app.get('/api/app/tombstones', requireApp, async (c) => {
+  const rows = await c.env.DB.prepare(
+    'SELECT id FROM message_tombstones ORDER BY id DESC LIMIT 500',
+  )
+    .all<{ id: number }>()
+    .catch(() => null);
+  return c.json({ ok: true, ids: (rows?.results ?? []).map((x) => x.id) });
 });
 
 app.get('/api/app/ai-status', requireApp, async (c) => {

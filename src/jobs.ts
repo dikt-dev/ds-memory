@@ -813,7 +813,18 @@ export async function cleanupOldMessages(
     if (!job || job.status !== 'done') continue;
     if ((job.detail ?? '').includes('提炼错误')) continue;
     if (!(await hasArchivedDate(env, d))) continue;
-    const res = await env.DB.prepare('DELETE FROM messages WHERE date_key = ?').bind(d).run();
+    // 先记墓碑再删：App 本地库靠它把服务端删掉的消息一起删掉
+  const doomed = await env.DB.prepare('SELECT id FROM messages WHERE date_key = ?')
+    .bind(d)
+    .all<{ id: number }>()
+    .catch(() => null);
+  for (const row of doomed?.results ?? []) {
+    await env.DB.prepare('INSERT OR IGNORE INTO message_tombstones (id, deleted_at) VALUES (?, ?)')
+      .bind(row.id, Date.now())
+      .run()
+      .catch(() => {});
+  }
+  const res = await env.DB.prepare('DELETE FROM messages WHERE date_key = ?').bind(d).run();
     deleted += res.meta.changes ?? 0;
     deletedDates.push(d);
   }

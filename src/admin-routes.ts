@@ -779,37 +779,6 @@ app.post('/api/admin/life/day', requireAuth, async (c) => {
   });
 });
 
-/** 排查用：从 Worker 里请求 B 站接口，看看究竟卡在哪一步。 */
-app.get('/api/admin/ops/bili-probe', requireAuth, async (c) => {
-  const url = c.req.query('url') ?? '';
-  const m = /\/video\/(BV[0-9A-Za-z]{10}|av\d+)/i.exec(url);
-  if (!m) return c.json({ ok: false, error: 'url 里没有 BV/av 号' }, 400);
-  const id = m[1];
-  const api = id.toLowerCase().startsWith('av')
-    ? `https://api.bilibili.com/x/web-interface/view?aid=${id.slice(2)}`
-    : `https://api.bilibili.com/x/web-interface/view?bvid=${id}`;
-  const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36';
-  const mobileUa = 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Mobile Safari/537.36';
-  const candidates: Array<[string, string, RequestInit]> = [
-    ['web-api', api, { referrer: 'https://www.bilibili.com/', headers: { 'user-agent': ua } } as unknown as RequestInit],
-    ['web-api-mobile-ua', api, { referrer: 'https://www.bilibili.com/', headers: { 'user-agent': mobileUa } } as unknown as RequestInit],
-    ['detail-api', `https://api.bilibili.com/x/web-interface/view/detail?bvid=${id}`, { referrer: 'https://www.bilibili.com/', headers: { 'user-agent': ua } } as unknown as RequestInit],
-    ['app-api', `https://app.bilibili.com/x/v2/view?bvid=${id}`, { headers: { 'user-agent': 'Mozilla/5.0 BiliDroid/7.0' } } as RequestInit],
-    ['html-page', `https://www.bilibili.com/video/${id}`, { headers: { 'user-agent': ua } } as RequestInit],
-  ];
-  const attempts: Array<Record<string, unknown>> = [];
-  for (const [name, url, init] of candidates) {
-    try {
-      const res = await fetch(url, init);
-      const text = await res.text();
-      attempts.push({ name, status: res.status, len: text.length, head: text.slice(0, 120).replace(/\s+/g, ' ') });
-    } catch (e) {
-      attempts.push({ name, error: String(e).slice(0, 160) });
-    }
-  }
-  return c.json({ ok: true, api, attempts });
-});
-
 /**
  * 清理 R2 里的旧内容（换人设/重置记忆时用）。
  * 只按前缀删除；不传 confirm 只返回预览。
