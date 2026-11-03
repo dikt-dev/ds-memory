@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -10,10 +10,10 @@ import { describe, expect, it } from 'vitest';
  * 这条测试把口子焊死：以后谁再写裸 void 调用会直接红。
  */
 function collect(dir: string, out: string[] = []): string[] {
-  for (const e of readdirSync(dir, { withFileTypes: true })) {
-    const p = join(dir, e.name);
-    if (e.isDirectory()) collect(p, out);
-    else if (e.name.endsWith('.ts') && !e.name.endsWith('.test.ts')) out.push(p);
+  for (const name of readdirSync(dir)) {
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) collect(p, out);
+    else if (name.endsWith('.ts') && !name.endsWith('.test.ts')) out.push(p);
   }
   return out;
 }
@@ -21,7 +21,7 @@ function collect(dir: string, out: string[] = []): string[] {
 describe('代码卫生', () => {
   it('没有未挂 catch 的 void promise', () => {
     const offenders: string[] = [];
-    for (const file of collect(join(__dirname))) {
+    for (const file of collect(join(process.cwd(), 'src'))) {
       readFileSync(file, 'utf8')
         .split('\n')
         .forEach((line, i) => {

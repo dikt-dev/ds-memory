@@ -34,6 +34,27 @@ export function sanitizeStoredMessages<T extends { content: string }>(rows: T[])
   return rows.map((m) => ({ ...m, content: stripAttachmentWrapper(m.content) }));
 }
 
+/**
+ * 配对码限流：不限制的话配对码可以无限暴力试（8 位字母数字几小时就能穷举）。
+ * 固定窗口计数，超上限直接 429，正常用户不会撞上。
+ */
+const PAIR_LIMIT_MAX = 8;
+const PAIR_LIMIT_WINDOW_SEC = 10 * 60;
+
+export async function pairRateLimit(
+  env: Env,
+  ip: string,
+  now = Date.now(),
+): Promise<{ blocked: boolean; retryAfter: number }> {
+  const windowStart = Math.floor(now / (PAIR_LIMIT_WINDOW_SEC * 1000));
+  const key = `pair:rl:${ip}:${windowStart}`;
+  const retryAfter = PAIR_LIMIT_WINDOW_SEC - Math.floor((now % (PAIR_LIMIT_WINDOW_SEC * 1000)) / 1000);
+  const used = Number((await env.KV.get(key).catch(() => null)) ?? '0') || 0;
+  if (used >= PAIR_LIMIT_MAX) return { blocked: true, retryAfter };
+  await env.KV.put(key, String(used + 1), { expirationTtl: PAIR_LIMIT_WINDOW_SEC * 2 }).catch(() => {});
+  return { blocked: false, retryAfter };
+}
+
 export function registerAppRoutes(app: Hono<AppEnv>): void {
 
   const PAIR_CODE_KV_KEY = 'pair:code';
@@ -201,6 +222,15 @@ app.get('/api/app/tombstones', requireApp, async (c) => {
   return c.json({ ok: true, ids: (rows?.results ?? []).map((x) => x.id) });
 });
 
+/** 设备吊销：手机丢了就把它踢掉，删掉这个 token 之后所有接口 401。 */
+app.post('/api/app/unpair', requireApp, async (c) => {
+  const auth = c.req.header('authorization') ?? '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  if (!token) return c.json({ error: 'invalid_token' }, 401);
+  await c.env.KV.delete(`app:device:${token}`).catch(() => {});
+  return c.json({ ok: true, revoked: true });
+});
+
 app.get('/api/app/ai-status', requireApp, async (c) => {
   const status = await lifeNow(c.env);
   return c.json({
@@ -243,6 +273,13 @@ app.post('/api/app/pair', async (c) => {
     const pairCode = body && typeof body.pair_code === 'string' ? body.pair_code : '';
     const expected = await loadPairCode(c.env);
     if (!expected) return c.json({ error: 'pair_not_configured' }, 503);
+
+    // 先限流再比对：不然每次尝试都白送一次机会
+    const ip = c.req.header('cf-connecting-ip') ?? 'unknown';
+    const limit = await pairRateLimit(c.env, ip);
+    if (limit.blocked) {
+      return c.json({ error: 'too_many_attempts', retry_after: limit.retryAfter }, 429);
+    }
     if (!pairCode || pairCode !== expected) return c.json({ error: 'invalid_pair_code' }, 401);
 
     const token = randomHex(32);

@@ -241,14 +241,6 @@
   ],
   [
     "GET",
-    "/api/admin/ops/bili-probe"
-  ],
-  [
-    "GET",
-    "/api/admin/ops/bili-probe"
-  ],
-  [
-    "GET",
     "/api/admin/pair-code"
   ],
   [
@@ -382,6 +374,14 @@
   [
     "GET",
     "/api/app/status"
+  ],
+  [
+    "GET",
+    "/api/app/tombstones"
+  ],
+  [
+    "GET",
+    "/api/app/tombstones"
   ],
   [
     "GET",
@@ -993,6 +993,14 @@
   ],
   [
     "POST",
+    "/api/app/bili-meta"
+  ],
+  [
+    "POST",
+    "/api/app/bili-meta"
+  ],
+  [
+    "POST",
     "/api/app/heartbeat"
   ],
   [
@@ -1034,6 +1042,14 @@
   [
     "POST",
     "/api/app/tts-config"
+  ],
+  [
+    "POST",
+    "/api/app/unpair"
+  ],
+  [
+    "POST",
+    "/api/app/unpair"
   ],
   [
     "POST",

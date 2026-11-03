@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-03T09:12:32.018Z",
+  "generated_at": "2026-11-03T09:19:26.712Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-03",
       "items": [
+        {
+          "hash": "c259d49",
+          "date": "2026-11-03",
+          "type": "other",
+          "area": "",
+          "title": "安全批次：16 处 void promise 全部挂 catch，加一条卫生测试焊死这个口子",
+          "why": ""
+        },
         {
           "hash": "4a92d22",
           "date": "2026-11-03",
@@ -3245,14 +3253,6 @@
           "type": "docs",
           "area": "p5",
           "title": "record first observation snapshot",
-          "why": ""
-        },
-        {
-          "hash": "4c8d233",
-          "date": "2026-10-24",
-          "type": "feat",
-          "area": "p5",
-          "title": "add daily observation snapshot",
           "why": ""
         }
       ]
