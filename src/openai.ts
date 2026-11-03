@@ -12,6 +12,7 @@ import type { Env } from './types';
 import { buildPromptMemoryFor } from './memory-index';
 import { shouldSkipMemoryRecall, buildMemoryPack, budgetFromPack  } from './context-pack';
 import { consumePendingRecall, recordRecallUsage, rememberPendingRecall } from './memory-rehearsal';
+import { fetchBiliMeta, findBiliUrl, formatBiliMeta } from './bili';
 import { buildBaseSystemPrompt, normalizeChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, stripSilentEndToken, STYLE_REMINDER } from './prompt';
 import { resolvePersona } from './persona';
 import { ticWarning } from './voice';
@@ -785,13 +786,40 @@ openaiApp.post('/chat/completions', async (c) => {
     .filter(Boolean)
     .join('\n');
 
+  // 网页端发 B 站链接只会发裸 URL（App 是自己拼好 meta 的），
+  // 这里补齐一份，卡片和模型看到的资料就一致了。已经有 meta 就不重复拉。
+  let contentToStore = recordContent;
+  if (
+    !skipRecording &&
+    contentToStore &&
+    !contentToStore.includes('[BILI_META]') &&
+    /bilibili\.com\/video\//i.test(contentToStore)
+  ) {
+    const biliUrl = findBiliUrl(contentToStore);
+    if (biliUrl) {
+      const meta = await fetchBiliMeta(biliUrl).catch(() => null);
+      if (meta && meta.title) {
+        const block = formatBiliMeta(meta, biliUrl);
+        contentToStore = `${contentToStore}\n\n${block}`;
+        // 模型也要看到标题/简介，不然它只知道有个链接
+        if (lastUser) {
+          if (typeof lastUser.content === 'string') {
+            lastUser.content = `${lastUser.content}\n\n${block}`;
+          } else {
+            lastUser.content = [...lastUser.content, { type: 'text' as const, text: `\n${block}` }];
+          }
+        }
+      }
+    }
+  }
+
   let userMessageId: number | undefined;
   if (!skipRecording && recordContent) {
     const latest = await latestMessage(c.env);
-    if (latest && latest.role === 'user' && latest.content === recordContent) {
+    if (latest && latest.role === 'user' && latest.content === contentToStore) {
       userMessageId = latest.id; // 重试请求：复用已存在的这一轮
     } else {
-      const saved = await insertUserMessage(c.env, recordContent, now, {
+      const saved = await insertUserMessage(c.env, contentToStore, now, {
         channel,
         clientMessageId: clientMessageId || undefined,
       });

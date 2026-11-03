@@ -779,6 +779,37 @@ app.post('/api/admin/life/day', requireAuth, async (c) => {
   });
 });
 
+/** 排查用：从 Worker 里请求 B 站接口，看看究竟卡在哪一步。 */
+app.get('/api/admin/ops/bili-probe', requireAuth, async (c) => {
+  const url = c.req.query('url') ?? '';
+  const m = /\/video\/(BV[0-9A-Za-z]{10}|av\d+)/i.exec(url);
+  if (!m) return c.json({ ok: false, error: 'url 里没有 BV/av 号' }, 400);
+  const id = m[1];
+  const api = id.toLowerCase().startsWith('av')
+    ? `https://api.bilibili.com/x/web-interface/view?aid=${id.slice(2)}`
+    : `https://api.bilibili.com/x/web-interface/view?bvid=${id}`;
+  const attempts: Array<Record<string, unknown>> = [];
+  for (const [name, init] of [
+    [
+      'ua+referrer',
+      {
+        referrer: 'https://www.bilibili.com/',
+        headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120' },
+      } as unknown as RequestInit,
+    ],
+    ['plain', { headers: { 'user-agent': 'Mozilla/5.0' } } as RequestInit],
+  ] as const) {
+    try {
+      const res = await fetch(api, init);
+      const text = await res.text();
+      attempts.push({ name, status: res.status, head: text.slice(0, 200) });
+    } catch (e) {
+      attempts.push({ name, error: String(e).slice(0, 200) });
+    }
+  }
+  return c.json({ ok: true, api, attempts });
+});
+
 /**
  * 清理 R2 里的旧内容（换人设/重置记忆时用）。
  * 只按前缀删除；不传 confirm 只返回预览。

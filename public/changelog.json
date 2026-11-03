@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-03T02:02:23.913Z",
+  "generated_at": "2026-11-03T02:32:12.843Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-03",
       "items": [
+        {
+          "hash": "7734eb9",
+          "date": "2026-11-03",
+          "type": "other",
+          "area": "",
+          "title": "动图太大模型会忽略：只送 1.2MB 以内，其余交给首帧；文本带媒体标记时不再补 [视频帧]",
+          "why": ""
+        },
         {
           "hash": "2f305b8",
           "date": "2026-11-03",
@@ -3245,14 +3253,6 @@
           "type": "docs",
           "area": "p5",
           "title": "verify run-all supervisor recovery",
-          "why": ""
-        },
-        {
-          "hash": "3124adf",
-          "date": "2026-10-24",
-          "type": "docs",
-          "area": "p5",
-          "title": "verify phone client self-heal",
           "why": ""
         }
       ]

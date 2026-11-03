@@ -40,19 +40,19 @@ export async function flushHeldMessages(env: Env, now = new Date()): Promise<Flu
     .catch(() => {});
 
   const rows = await env.DB.prepare(
-    `SELECT id, content FROM messages
+    `SELECT id, content, created_ms FROM messages
      WHERE role = 'user' AND reply_state = 'pending' AND hold_until_ms IS NOT NULL AND hold_until_ms <= ?
      ORDER BY id ASC LIMIT 10`,
   )
     .bind(nowMs)
-    .all<{ id: number; content: string }>()
+    .all<{ id: number; content: string; created_ms: number | null }>()
     .catch(() => null);
   const pending = rows?.results ?? [];
   if (pending.length === 0) return { flushed: 0, skipped: 'empty' };
 
   // 逐条认领：只有把 pending 改成 processing 成功的那一方才生成，
   // 避免 cron 和 night-wake 同时捞到同一批、各回一次。
-  const claimed: Array<{ id: number; content: string }> = [];
+  const claimed: Array<{ id: number; content: string; created_ms: number | null }> = [];
   for (const row of pending) {
     const res = await env.DB.prepare(
       `UPDATE messages SET reply_state = 'processing', hold_until_ms = ?
@@ -65,7 +65,20 @@ export async function flushHeldMessages(env: Env, now = new Date()): Promise<Flu
   }
   if (claimed.length === 0) return { flushed: 0, skipped: 'claimed-elsewhere' };
 
-  const merged = claimed.map((r) => r.content).join('\n');
+  // 压了太久就别硬接了：早上八点回一句「没睡，在揉面团呢」，
+  // 内容是接上了，时间却是错的——听起来像她还没睡醒。
+  // 超过 3 小时就让她先自然地点一句「才看见」，再说正事。
+  const oldest = claimed[0].created_ms ?? nowMs;
+  const waitedHours = (nowMs - oldest) / 3_600_000;
+  const merged = [
+    claimed.map((r) => r.content).join('\n'),
+    waitedHours >= 3
+      ? `（这几条是 ${Math.round(waitedHours)} 小时前发来的，中间隔了很久。` +
+        '先用一句自然的话带过「才看见/刚忙完」，别装作刚才发生，也不要报时间点，然后再说正事。）'
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
   try {
     // 复用最后一条消息的 id：不插新用户消息，回复直接挂在那条上
     const res = await streamChat(env, merged, now, undefined, 'mobile', 'life-flush', {
