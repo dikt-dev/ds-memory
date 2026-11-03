@@ -428,8 +428,14 @@ openaiApp.post('/chat/completions', async (c) => {
   const relation = parseRelationValues(memory);
   const envHour = beijingHour(now);
   const envMonth = beijingMonth(now);
-  // AstrBot 侧默认渠道为 AstrBot；未来其它客户端调用 /v1 可用 X-Client-Channel 声明
-  const channel = normalizeChannel(c.req.header('x-client-channel'), 'astrobot');
+  // 渠道：客户端用 X-Client-Channel 声明。App 两个请求方法都会带上它；
+  // 旧版 App 没带，只有 X-Client-Voice —— 那就按手机端算，别再落到 AstrBot。
+  // 这条兜底很重要：以前默认值直接是 'astrobot'，于是手机发的消息在库里全成了「QQ」。
+  const declaredChannel = c.req.header('x-client-channel');
+  const channel = normalizeChannel(
+    declaredChannel ?? (c.req.header('x-client-voice') === '1' ? 'mobile' : undefined),
+    'astrobot',
+  );
   // 客户端声明了支持语音，才告诉模型可以发 [语音]（没装 TTS 的客户端不会收到这句提示）
   const voiceReply = c.req.header('x-client-voice') === '1';
   // 上一轮提过的往事被确认了吗

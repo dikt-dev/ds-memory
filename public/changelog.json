@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-03T01:46:43.479Z",
+  "generated_at": "2026-11-03T01:54:01.428Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-03",
       "items": [
+        {
+          "hash": "b192ab7",
+          "date": "2026-11-03",
+          "type": "other",
+          "area": "",
+          "title": "App 拉消息带上 reply_to_id，补发的回复才能挂回原位",
+          "why": ""
+        },
         {
           "hash": "1430c98",
           "date": "2026-11-03",
@@ -3245,14 +3253,6 @@
           "type": "docs",
           "area": "p5",
           "title": "verify phone watchdog scheduler",
-          "why": ""
-        },
-        {
-          "hash": "680e71f",
-          "date": "2026-10-24",
-          "type": "docs",
-          "area": "p5",
-          "title": "phone watchdog and status fix",
           "why": ""
         }
       ]
