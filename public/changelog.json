@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-03T09:32:35.788Z",
+  "generated_at": "2026-11-03T09:39:03.196Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-03",
       "items": [
+        {
+          "hash": "42ca94b",
+          "date": "2026-11-03",
+          "type": "other",
+          "area": "",
+          "title": "网页端不再显示「她大概几点会看」：那是系统在说话，不是她",
+          "why": ""
+        },
         {
           "hash": "4390873",
           "date": "2026-11-03",
@@ -3240,14 +3248,6 @@
           "type": "fix",
           "area": "p5",
           "title": "allow provisional archive rerun and proactive metrics",
-          "why": ""
-        },
-        {
-          "hash": "e5a3622",
-          "date": "2026-10-25",
-          "type": "docs",
-          "area": "p5",
-          "title": "record proactive shadow state",
           "why": ""
         }
       ]

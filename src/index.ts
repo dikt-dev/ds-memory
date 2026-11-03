@@ -629,6 +629,20 @@ function logCron(env: Env, ctx: ExecutionContext, cron: string, startedAt: numbe
   );
 }
 
+/**
+ * cron 表达式 → 分支名。抽成纯函数是为了能被测试钉住：
+ * 以前少写一条分支，那个定时任务就静默不跑（只在日志里留一行 unknown）。
+ */
+export type CronBranch = 'daily-archive' | 'daily-life' | 'daytime' | 'night';
+
+export function cronBranch(cron: string): CronBranch | null {
+  if (cron === '0 20 * * *') return 'daily-archive';
+  if (cron === '5 20 * * *') return 'daily-life';
+  if (cron === '* 1-14 * * *') return 'daytime';
+  if (cron === '* 23,0,14,15,16 * * *') return 'night';
+  return null;
+}
+
 export default {
   fetch: app.fetch,
   /**
@@ -642,7 +656,9 @@ export default {
     const cron = controller.cron;
     const startedAt = Date.now();
 
-    if (cron === '0 20 * * *') {
+    const branch = cronBranch(cron);
+
+    if (branch === 'daily-archive') {
       // 每天 04:00 归档前一天；每月 1 日必须等归档完成后再做上月合并，
       // 否则月度任务可能在最后一天 .log 写入前启动，触发重复补归档。
       ctx.waitUntil(
@@ -665,7 +681,7 @@ export default {
       return;
     }
 
-    if (cron === '5 20 * * *') {
+    if (branch === 'daily-life') {
       // 04:05 单独跑日记：实测把「归档 + 写日记」挤在一条 cron 里，
       // 前面一旦补跑或提炼变慢，日记就来不及；而且日记现在开思考更慢。
       ctx.waitUntil(
@@ -694,7 +710,7 @@ export default {
       return;
     }
 
-    if (cron === '* 1-14 * * *') {
+    if (branch === 'daytime') {
       // QQ 通道掉线检查：与主动消息是否暂停无关，每次 tick 都查
       // 白天随机主动消息：打分决策 + 落库 + 推送 QQ（直连或队列）
       ctx.waitUntil(runWebProactiveRandom(env, now));
@@ -708,7 +724,7 @@ export default {
       return;
     }
 
-    if (cron === '* 23,0,14,15,16 * * *') {
+    if (branch === 'night') {
       // QQ 通道掉线检查（同上）
       // 早晚固定档已停用（改为只发白天随机档）
       ctx.waitUntil(flushHeldMessages(env, now));
