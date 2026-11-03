@@ -773,7 +773,11 @@ openaiApp.post('/chat/completions', async (c) => {
   // 静帧的说明只进这一轮的提示词，不进记录：气泡里冒出「帧」「截图」这种词很出戏，
   // 她会照着念。历史消息里露出来的那几行就是这么来的。
   if (lastUser && transientImages > 0 && !hasMediaMarker) {
-    const hint = '（这几张是这段视频里你慢慢看过的时刻，按左上角的时间排；别说「帧」「截图」「这张图」这种词）';
+    // 说「第一张」等于把连续画面说成几张照片——线上真这么说过。
+    // 明确两件事：这是同一段视频、按时间先后排；用「一开始/中间/最后」，不说「第几张」。
+    const hint =
+      '（这是一段视频，你按时间先后看过了其中若干画面，不是几张独立的照片；' +
+      '描述时用「一开始」「中间」「后面」这种说法，不要说「第一张」「第几张」「帧」「截图」）';
     lastUser.content =
       typeof lastUser.content === 'string'
         ? lastUser.content

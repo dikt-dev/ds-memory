@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-03T03:06:31.628Z",
+  "generated_at": "2026-11-03T03:09:02.950Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-03",
       "items": [
+        {
+          "hash": "40e4565",
+          "date": "2026-11-03",
+          "type": "other",
+          "area": "",
+          "title": "时间标签也会夹在句中：句号后面的一并剥掉",
+          "why": ""
+        },
         {
           "hash": "252ff6f",
           "date": "2026-11-03",
@@ -3245,14 +3253,6 @@
           "type": "fix",
           "area": "storage",
           "title": "fallback to main when secondary put fails",
-          "why": ""
-        },
-        {
-          "hash": "aa81c7c",
-          "date": "2026-10-24",
-          "type": "fix",
-          "area": "proactive",
-          "title": "include window tail tick; probe secondary R2",
           "why": ""
         }
       ]

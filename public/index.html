@@ -294,6 +294,7 @@
   .bubble hr { border: none; border-top: 1px solid var(--hairline); margin: .8em 0; }
   .bubble img.msg-img { max-width: 100%; max-height: 320px; border-radius: 12px; margin-top: .55rem; display: block; object-fit: contain; }
   .msg-audio { width: min(100%, 320px); height: 34px; margin-top: .45rem; display: block; }
+  .msg-video { max-width: 100%; max-height: 360px; margin-top: .55rem; display: block; border-radius: 12px; background: #000; }
   .img-missing {
     display: inline-block; font-size: .78rem; color: var(--ink-3);
     background: var(--surface-muted); border: 1px dashed var(--hairline-strong);
@@ -1076,9 +1077,13 @@ function renderUserContent(content) {
   let m;
   while ((m = re.exec(content))) {
     html += escapeHtml(content.slice(last, m.index));
-    if (m[1] === 'GIF' || m[1] === '图片') {
+    if (m[1] === '图片' || m[1] === 'GIF') {
       html += '<img class="msg-img" src="/api/image/' + m[2] + '" alt="图片" loading="lazy"'
             + ' onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'img-missing\',textContent:\'[图片加载失败]\'}))">';
+    } else if (m[1] === '视频') {
+      // 以前视频落进了下面的 audio 分支：src 指向 /api/audio/，加载失败就是个空气泡。
+      html += '<video class="msg-video" controls preload="metadata" playsinline src="/api/image/' + m[2] + '"'
+            + ' onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'img-missing\',textContent:\'[视频加载失败]\'}))"></video>';
     } else {
       html += '<audio class="msg-audio" controls preload="metadata" src="/api/audio/' + m[2] + '"></audio>';
     }
