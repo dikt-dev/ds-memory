@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-03T09:26:14.305Z",
+  "generated_at": "2026-11-03T09:32:35.788Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-03",
       "items": [
+        {
+          "hash": "4390873",
+          "date": "2026-11-03",
+          "type": "other",
+          "area": "",
+          "title": "安全批次收尾：DeepSeek 首字节/总时长超时，health 配置明细挪到 admin",
+          "why": ""
+        },
         {
           "hash": "d3783b0",
           "date": "2026-11-03",
@@ -3240,19 +3248,6 @@
           "type": "docs",
           "area": "p5",
           "title": "record proactive shadow state",
-          "why": ""
-        }
-      ]
-    },
-    {
-      "date": "2026-10-24",
-      "items": [
-        {
-          "hash": "45be3b8",
-          "date": "2026-10-24",
-          "type": "docs",
-          "area": "",
-          "title": "document proactive engine flag",
           "why": ""
         }
       ]

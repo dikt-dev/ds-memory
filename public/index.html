@@ -1768,20 +1768,14 @@ async function send() {
       body: JSON.stringify(image ? { content: sendContent, image } : { content: sendContent }),
     });
     if (res.status === 401) { showLogin(); throw new Error('登录已过期'); }
-    // 她在忙/睡着：消息已经落库，回复由服务端到点补发。这里只留个提示，不要假装她回了。
+        // 她在忙/睡着：消息已经落库，回复由服务端到点补发。
+    // 不显示"大概几点会看"这类提示——那是系统在说话，不是她。
     if ((res.headers.get('content-type') || '').includes('application/json')) {
       const data = await res.json().catch(() => ({}));
       if (data && data.held) {
-        const when = data.until ? '大概 ' + data.until + ' 会看' : '晚点再看';
-        bubble.innerHTML = '<span style="opacity:.55;font-size:13px">她这会儿在忙，' + when + '</span>';
-        bubble.dataset.held = '1';
-        scrollToBottom();
+        bubble.remove();
         return;
       }
-    }
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || '请求失败（' + res.status + '）');
     }
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
