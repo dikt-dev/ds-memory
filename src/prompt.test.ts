@@ -254,6 +254,13 @@ describe('时间与诚实性规则', () => {
     expect(prompt).not.toContain('硬规则');
   });
 
+  it('活人感：说话的样子放在易变段，不进缓存前缀', () => {
+    const split = buildSystemPromptSplit({ ...base, voice: '口语化。' });
+    expect(split.volatile).toContain('## 你说话的样子');
+    expect(split.stable).not.toContain('## 你说话的样子');
+    expect(split.volatile).toContain('像发微信');
+  });
+
   it('时间与环境只写一处，且带口语说法', () => {
     const prompt = buildSystemPrompt({ ...base, weather: { city: '杭州', temp_c: 18.5, desc: '晴' } });
     expect(prompt).toContain('- 现在：2026-10-29T21:11:00+08:00');

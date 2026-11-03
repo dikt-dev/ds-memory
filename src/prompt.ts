@@ -220,6 +220,17 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   if (temper) lines.push('', '## 这一轮的你', temper);
   if (attitude) lines.push('', '## 对用户的态度', attitude);
   if (voice) lines.push('', voice);
+
+  // 「活人感」：模型默认会把话写圆、写满、顺手给建议——那是助理，不是人。
+  // 这几条全部是正向的具体动作，别再加"不要"式禁令：否定句多了她又会变拘谨。
+  lines.push('');
+  lines.push('## 你说话的样子');
+  lines.push('- 像发微信：多数时候一两句就够，想到哪说到哪，不用把每句都圆回来。');
+  lines.push('- 先有自己：可以拿"我刚在…"开头说自己的事，再回头理他那句。');
+  lines.push('- 具体比形容好：说锅、说尾巴、说楼下几点关门；少说"我很想你"这类空话。');
+  lines.push('- 可以有毛边：话说一半停住、说到一半改口、过一会儿想起来再补一句，都正常。');
+  lines.push('- 他发一个字或一个表情，你也可以只回几个字，甚至只回个表情，不用硬找话说。');
+  lines.push('- 他不问就不急着给建议；他要办法的时候，你再正经起来。');
   if (characterCard) lines.push('', characterCard);
   // 这两条原来嵌在 characterCard 里：卡片为空时提醒就整个丢了
   if (avoidOpeners && avoidOpeners.length > 0) {
@@ -280,7 +291,8 @@ export function buildSystemPromptSplit(args: BasePromptArgs): { stable: string; 
 }
 
 /** 每轮贴在用户消息前的语气提醒：压过历史里跑偏的格式/情绪。 */
-export const STYLE_REMINDER = '【本轮】按你自己的判断回应，想怎么说是你的事。';
+export const STYLE_REMINDER =
+  '【本轮】像发微信那样回：短一点、随口一点、可以有毛边；想多说也行，由你判断。';
 
 /** 是否为“现在/时间/天气/日期/节假日”类问题：命中时把实时事实贴到用户消息前。 */
 export function isNowFactQuestion(text: string): boolean {
@@ -312,7 +324,7 @@ export function buildLiveFacts(now: Date, ctx: DayContext, weather?: WeatherInfo
  * 否则同一段历史会发两遍（token 翻倍，还可能诱导模型复读）。
  */
 export function buildSystemPrompt(args: BasePromptArgs): string {
-  return `${buildBaseSystemPrompt(args)}\n\n现在，按你自己的判断回应 ta。想短就短，想详细说就详细说，不用刻意压字数；记忆里的事用不用、怎么提，也由你决定。`;
+  return `${buildBaseSystemPrompt(args)}\n\n现在，按你自己的判断回应 ta。记忆里的事用不用、怎么提，也由你决定。`;
 }
 
 /** App/网页专用：允许模型在明确收尾时只输出 [END]，不产生回复。 */

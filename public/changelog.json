@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-03T07:24:28.103Z",
+  "generated_at": "2026-11-03T08:09:16.267Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-03",
       "items": [
+        {
+          "hash": "f255025",
+          "date": "2026-11-03",
+          "type": "other",
+          "area": "",
+          "title": "提示词重排成 A-F 六块：同一事实只写一处，13条记忆规则压成5条，近期状态合并并给优先级",
+          "why": ""
+        },
         {
           "hash": "bb98514",
           "date": "2026-11-03",
@@ -3245,14 +3253,6 @@
           "type": "docs",
           "area": "p5",
           "title": "record rollback deployment versions",
-          "why": ""
-        },
-        {
-          "hash": "c4aa480",
-          "date": "2026-10-24",
-          "type": "docs",
-          "area": "p5",
-          "title": "record rollback drill and gif fix",
           "why": ""
         }
       ]
