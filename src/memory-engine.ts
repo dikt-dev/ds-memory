@@ -352,7 +352,7 @@ function recentChunks(
 /** 查询向量：失败就当没有，退回纯关键词。 */
 async function embedFor(env: Env, query: string): Promise<number[] | null> {
   const vecs = await embedTexts(env, [query]).catch(() => {
-    void recordDegradation(env, 'embed');
+    void recordDegradation(env, 'embed').catch(() => {});
     return [];
   });
   return vecs[0] ?? null;

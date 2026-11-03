@@ -130,7 +130,7 @@ export async function getObject(env: Env, key: string): Promise<StoredObject | n
   }
 
   const main = await env.R2.get(key).catch((e) => {
-    void recordDegradation(env, 'r2_read');
+    void recordDegradation(env, 'r2_read').catch(() => {});
     logError('[storage] main R2 get failed:', e);
     return null;
   });
@@ -147,7 +147,7 @@ export async function headObject(env: Env, key: string): Promise<{ size: number 
   }
 
   const main = await env.R2.head(key).catch((e) => {
-    void recordDegradation(env, 'r2_read');
+    void recordDegradation(env, 'r2_read').catch(() => {});
     logError('[storage] main R2 head failed:', e);
     return null;
   });

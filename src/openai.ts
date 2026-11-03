@@ -440,7 +440,7 @@ openaiApp.post('/chat/completions', async (c) => {
   // 客户端声明了支持语音，才告诉模型可以发 [语音]（没装 TTS 的客户端不会收到这句提示）
   const voiceReply = c.req.header('x-client-voice') === '1';
   // 上一轮提过的往事被确认了吗
-  void consumePendingRecall(c.env, lastUserCleaned, now.getTime());
+  void consumePendingRecall(c.env, lastUserCleaned, now.getTime()).catch(() => {});
 
   // ★ 情感系统：事件 → 情绪向量 → 5 轴微增量 → 情绪快照（先算，心情由它派生）
   const emotion = await processEmotionTurn({
@@ -573,8 +573,8 @@ openaiApp.post('/chat/completions', async (c) => {
   });
   const recalledRaw = recall.text;
 
-  void recordRecallUsage(c.env, recall.ids, now.getTime());
-  void rememberPendingRecall(c.env, recall.ids, now.getTime());
+  void recordRecallUsage(c.env, recall.ids, now.getTime()).catch(() => {});
+  void rememberPendingRecall(c.env, recall.ids, now.getTime()).catch(() => {});
   const { recalled, budget: contextBudget } = budgetFromPack(
     pack,
     recalledRaw,

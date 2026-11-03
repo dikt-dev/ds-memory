@@ -104,11 +104,11 @@ export interface EvidenceBundle {
 
 export async function collectEvidence(env: Env, now = Date.now()): Promise<EvidenceBundle> {
   const health = await loadHealth(env, 7).catch(() => {
-    void recordDegradation(env, 'self_check');
+    void recordDegradation(env, 'self_check').catch(() => {});
     return null;
   });
   const check = await runSelfCheck(env, now).catch(() => {
-    void recordDegradation(env, 'self_check');
+    void recordDegradation(env, 'self_check').catch(() => {});
     return null;
   });
 

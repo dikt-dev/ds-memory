@@ -37,7 +37,7 @@ export async function getRuntimeState(env: Env, key: string): Promise<string | n
     }
   }
   return env.KV.get(key).catch(() => {
-    void recordDegradation(env, 'kv_read');
+    void recordDegradation(env, 'kv_read').catch(() => {});
     return null;
   });
 }

@@ -82,7 +82,7 @@ export async function streamChat(
   await sleep(replyDelayMs(await lifeNow(env).then((s) => s.status).catch(() => 'free' as const)));
 
   // 0) 上一轮她提过的往事，如果这句是"对/记得"，就算一次确认复习
-  void consumePendingRecall(env, content, now.getTime());
+  void consumePendingRecall(env, content, now.getTime()).catch(() => {});
   // 用户又提了一次日记 → 之前拒过的那篇重新摆上桌，她这次可能改口
   // 日记给不给看由**她的回答**决定，不是由用户的措辞决定。
   // 之前拿用户输入判：用户问「可以给我看一下吗？」带问号 → 反问=拒绝，
@@ -133,8 +133,8 @@ export async function streamChat(
   });
   const recalledRaw = recall.text;
   // 复习计数：这一轮真正注入的条目被想起了一次（遗忘曲线靠它抵抗衰减）。
-  void recordRecallUsage(env, recall.ids, now.getTime());
-  void rememberPendingRecall(env, recall.ids, now.getTime());
+  void recordRecallUsage(env, recall.ids, now.getTime()).catch(() => {});
+  void rememberPendingRecall(env, recall.ids, now.getTime()).catch(() => {});
   // 她来决定铭记什么：用户明确说"记住这件事"时，给命中的那条上锁
   if (recall.ids.length > 0 && looksLikePinRequest(content)) {
     const target = recall.ids[0];

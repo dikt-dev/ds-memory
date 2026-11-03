@@ -42,13 +42,13 @@ export async function recordRecallUsage(
     // 计数写不进去曾经静默失败过：命中 0 行要留痕，否则"背了不少但一次都没被复习"
     if (changed === 0) {
       logWarn('[recall-usage] 0 rows updated', { ids: unique.slice(0, 3) });
-      void recordDegradation(env, 'recall');
+      void recordDegradation(env, 'recall').catch(() => {});
     }
     return changed;
   } catch (e) {
     // 复习计数是锦上添花：写不进去不能影响这一轮回复，但必须留痕
     logWarn('[recall-usage] update failed:', e);
-    void recordDegradation(env, 'recall');
+    void recordDegradation(env, 'recall').catch(() => {});
     return 0;
   }
 }

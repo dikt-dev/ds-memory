@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-03T09:08:46.821Z",
+  "generated_at": "2026-11-03T09:12:32.018Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-03",
       "items": [
+        {
+          "hash": "4a92d22",
+          "date": "2026-11-03",
+          "type": "other",
+          "area": "",
+          "title": "删除墓碑：服务端删过的消息，App 同步时一起删；顺手加 bili-meta 回填接口，删掉 bili-probe",
+          "why": ""
+        },
         {
           "hash": "f053128",
           "date": "2026-11-03",
@@ -3245,14 +3253,6 @@
           "type": "feat",
           "area": "p5",
           "title": "add daily observation snapshot",
-          "why": ""
-        },
-        {
-          "hash": "1d06e84",
-          "date": "2026-10-24",
-          "type": "docs",
-          "area": "p5",
-          "title": "add deferred cleanup manifest",
           "why": ""
         }
       ]

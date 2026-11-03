@@ -281,7 +281,7 @@ async function generateProactive(
     nowMs: now.getTime(),
   });
   // 复习计数：主动消息注入的往事也算"被想起"，否则它们永远等不到加固。
-  void recordRecallUsage(env, recall.ids, now.getTime());
+  void recordRecallUsage(env, recall.ids, now.getTime()).catch(() => {});
   const recalled = stripDuplicateRecall(
     recall.text,
     [...history.map((m) => m.content), recentMemo ?? '', promptMemory.text].filter(Boolean),
