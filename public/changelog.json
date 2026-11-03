@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-03T08:09:16.267Z",
+  "generated_at": "2026-11-03T08:26:16.850Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-03",
       "items": [
+        {
+          "hash": "4da351d",
+          "date": "2026-11-03",
+          "type": "other",
+          "area": "",
+          "title": "加「你说话的样子」：短、随口、先说自己、可以有毛边，放在易变段不吃缓存",
+          "why": ""
+        },
         {
           "hash": "f255025",
           "date": "2026-11-03",
@@ -3245,14 +3253,6 @@
           "type": "docs",
           "area": "",
           "title": "update phase 5 test count",
-          "why": ""
-        },
-        {
-          "hash": "fb38f2e",
-          "date": "2026-10-24",
-          "type": "docs",
-          "area": "p5",
-          "title": "record rollback deployment versions",
           "why": ""
         }
       ]

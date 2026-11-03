@@ -37,6 +37,19 @@ describe('她此刻的状态（喂给提示词）', () => {
     expect(line.split('\n').slice(1).join('\n')).not.toContain('日程');
   });
 
+  it('正在做的事能不能被打断，要说给她听', async () => {
+    const busy = fakeEnv({
+      day: { recipe: null, health: 100, weather: 'sunny', temp_c: 22, location: '北京' },
+      acts: [{ unit_id: 'short_trip_movie', kind: 'short_trip', title: '看电影', start_min: 800, end_min: 935, interruptible: 0 }],
+    });
+    expect((await lifePromptLine(busy, NOW))!).toContain('被打断会有点烦');
+    const free = fakeEnv({
+      day: { recipe: null, health: 100, weather: 'sunny', temp_c: 22, location: '北京' },
+      acts: [{ unit_id: 'idle_bed', kind: 'idle', title: '躺着', start_min: 600, end_min: 1200, interruptible: 1 }],
+    });
+    expect((await lifePromptLine(free, NOW))!).toContain('随时能停下');
+  });
+
   it('生病日会明确说身体不行，且不许反复诉苦', async () => {
     const env = fakeEnv({
       day: { recipe: 'sick', health: 42, weather: 'cloudy', temp_c: 12, location: '北京' },
@@ -54,6 +67,6 @@ describe('她此刻的状态（喂给提示词）', () => {
     });
     const line = (await lifePromptLine(env, NOW))!;
     expect(line).not.toContain('病');
-    expect(line.split('\n').length).toBeLessThanOrEqual(5);
+    expect(line.split('\n').length).toBeLessThanOrEqual(6);
   });
 });

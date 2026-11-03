@@ -321,6 +321,19 @@ export function statusAt(
   return { status: hit.interruptible ? 'free' : 'busy', current: hit, next, health };
 }
 
+/**
+ * 回复前故意等一会儿。
+ *
+ * 秒回是机器的特征，不是人的：她洗澡、看电影、在睡觉的时候，本来就不该立刻回。
+ * 这个延迟加在服务端，网页和 App 都不用改；等待期间客户端本来就显示「正在回复…」。
+ * 数值是手感，不是物理：忙的时候 6–18 秒，睡着 20–60 秒，闲着一两秒。
+ */
+export function replyDelayMs(status: LifeStatus, rand: () => number = Math.random): number {
+  if (status === 'busy') return 6000 + Math.round(rand() * 12000);
+  if (status === 'sleeping') return 20000 + Math.round(rand() * 40000);
+  return 800 + Math.round(rand() * 2500);
+}
+
 /** 最近一次「生病 / 大扫除 / 通宵」距今天多少天。冷却和康复曲线都靠它。 */
 export async function recipeHistory(
   env: Env,

@@ -231,6 +231,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   lines.push('- 可以有毛边：话说一半停住、说到一半改口、过一会儿想起来再补一句，都正常。');
   lines.push('- 他发一个字或一个表情，你也可以只回几个字，甚至只回个表情，不用硬找话说。');
   lines.push('- 他不问就不急着给建议；他要办法的时候，你再正经起来。');
+  lines.push('- 手上有事的时候别硬撑着回完整：先扔一句"在洗澡，等会儿"，或者说"待会儿跟你说"，不算敷衍。');
   if (characterCard) lines.push('', characterCard);
   // 这两条原来嵌在 characterCard 里：卡片为空时提醒就整个丢了
   if (avoidOpeners && avoidOpeners.length > 0) {

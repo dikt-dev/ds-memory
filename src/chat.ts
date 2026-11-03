@@ -31,7 +31,10 @@ import {
 import { conversationGapNote, loadSessionHistory } from './recent-context';
 import { calcCost, loadPricing } from './pricing';
 import { recordChatUsage } from './usage-stats';
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 import { streamDeepSeek, type DeepSeekMessage } from './deepseek';
+import { replyDelayMs } from './life/state';
+import { lifeNow } from './life/jobs';
 import { getTodaySummary } from './summary';
 import { loadImageDataUrl } from './media';
 import { byteLength, parseRelationValues } from './memory-maintenance';
@@ -73,6 +76,10 @@ export async function streamChat(
 ): Promise<Response> {
   const apiKey = env.DEEPSEEK_API_KEY;
   if (!apiKey) return Response.json({ error: 'DEEPSEEK_API_KEY 未配置' }, { status: 500 });
+
+  // 秒回不像人：她正忙着/睡着的时候，先等一会儿再把第一个字吐出来。
+  // 放在这里而不是客户端，是因为网页和 App 走同一条链路，一处生效。
+  await sleep(replyDelayMs(await lifeNow(env).then((s) => s.status).catch(() => 'free' as const)));
 
   // 0) 上一轮她提过的往事，如果这句是"对/记得"，就算一次确认复习
   void consumePendingRecall(env, content, now.getTime());
