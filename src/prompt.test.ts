@@ -244,8 +244,8 @@ describe('时间与诚实性规则', () => {
 
   it('记忆边界写成陈述：没依据就说没印象，感受可以编事实不行', () => {
     const prompt = buildSystemPrompt(base);
-    expect(prompt).toContain('## 记忆的边界');
-    expect(prompt).toContain('## 称呼的方向');
+    expect(prompt).toContain('## 记忆怎么用');
+    expect(prompt).toContain('## 你们的称呼');
     expect(prompt).toContain('你没有依据，就说“不记得/没印象”');
     expect(prompt).toContain('那也是在编');
     expect(prompt).toContain('不要替他复述');
@@ -254,9 +254,13 @@ describe('时间与诚实性规则', () => {
     expect(prompt).not.toContain('硬规则');
   });
 
-  it('实时事实块里也带口语时间', () => {
-    const prompt = buildSystemPrompt(base);
-    expect(prompt).toContain('现在=2026-10-29T21:11:00+08:00（晚上九点；');
+  it('时间与环境只写一处，且带口语说法', () => {
+    const prompt = buildSystemPrompt({ ...base, weather: { city: '杭州', temp_c: 18.5, desc: '晴' } });
+    expect(prompt).toContain('- 现在：2026-10-29T21:11:00+08:00');
+    expect(prompt).toContain('口语说法：晚上九点');
+    // 时间和天气各只出现一次：以前 ⑤ 和 ⑧ 各一套，口径打架
+    expect(prompt.match(/## 当前时间与环境/g)).toHaveLength(1);
+    expect(prompt.match(/天气（你这边）/g)).toHaveLength(1);
   });
 });
 

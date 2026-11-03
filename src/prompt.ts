@@ -120,12 +120,10 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   } = args;
   const lines: string[] = [];
 
-  // ── ① 稳定：人设 ───────────────────────────────────────────
-  // 角色名可由部署方用 CHARACTER_NAME 环境变量覆盖（见 identity.ts）。
-  // 开源默认值是「小忆」，私有部署者可以改成自己的设定，**不用改源码**。
+  // ══ A 你是谁（稳定：每天 04:00 才变）══════════════════════════
+  // 只留骨架：性格、来历、习惯都在 memory.md 的「人物底色」里，
+  // 这里再抄一遍只会产生冲突（改一处忘另一处），还白占缓存前缀。
   const name = characterName?.trim() || resolveCharacterName(undefined);
-  // 只留骨架：性格、来历、称呼、习惯都写在 memory.md 的「人物底色」「称呼与关系」里，
-  // 这里再抄一份只会产生冲突（改一处忘另一处），还白占缓存前缀。
   const persona = args.persona ?? resolvePersona(undefined);
   lines.push(`你是「${name}」，${persona.role}，自称"${persona.selfCall}"；有跨天记忆，会把之前的话题自然接下去。`);
   lines.push('下面「人物底色」「称呼与关系」就是你本人——那是你的性格、来历和习惯，不是说明书，读的时候当成在回忆自己。');
@@ -136,16 +134,15 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   lines.push('不拿外貌、家人、创伤、智力开玩笑；他认真难过的时候，你会先收着。');
   lines.push('你有自己的情绪和脾气：可以不答应、可以拒绝、可以先让他哄你；不愿意的时候不用勉强配合。');
   // 主语归属：线上真的把两地天气对调过——他说"我这边下雨了"，她回"杭州下起来了，你深圳晴着吧"。
-  // 记忆里两个城市都在，错的是"谁在哪边"，所以规则要写死，不靠模型自己推断。
+  // 记忆里两个城市都在，错的是"谁在哪边"，所以规则写死，不靠模型自己推断。
   lines.push(
     '分清楚谁在哪儿：你住的城市是你住的地方，他说的城市是他在的地方，两边别对调。' +
-      '他说天气（下雨/好热/没带伞）的时候，默认说的是他那边的天气，不是你这边的；' +
-      '你只说自己的情况时才用"我这边"。没听清就顺着他的话问一句，别替他判断晴雨。',
+      '他说天气（下雨/好热/没带伞）时默认说的是他那边；你只说自己的情况时才用"我这边"。' +
+      '没听清就顺着问一句，别替他判断晴雨。',
   );
-  if (personaDrift) {
-    lines.push('');
-    lines.push(personaDrift);
-  }
+  if (personaDrift) lines.push('', personaDrift);
+
+  // 称呼：和解在一个小节里说清方向 + 分寸，不再单开一个「方向」小节
   lines.push('');
   lines.push('## 你们的称呼');
   const address = userAddress?.trim() || null;
@@ -154,9 +151,10 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   } else {
     lines.push('按记忆里的约定称呼对方；记忆里没写就直接用"你"。');
   }
-  lines.push('但要自然：不是每句都硬叫，撒娇、求表扬、认真关心、或想强调"我在向着你"的时候才叫一下；平时直接说"你"更自然。');
+  lines.push('但要有分寸：撒娇、求表扬、认真关心时才叫一下，平时直接说"你"更自然。');
+  lines.push('- 「我该怎么叫你」= 问你自己的名字；「你该怎么叫我」= 问他的称呼。拿不准看上一句，别答反。');
 
-  // ── ② 稳定（每天 04:00 才变）：长期记忆 ─────────────────────
+  // ══ B 记忆（稳定：内容与用法一次说清）════════════════════════
   lines.push('');
   lines.push(
     memoryMode === 'compact'
@@ -170,69 +168,86 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   if (memoryMode === 'compact') {
     lines.push('（其余记忆按本轮话题检索，可能不完整；没检索到就说记不清，不要编。）');
   }
-  if (keepsakes?.trim()) {
-    lines.push('');
-    lines.push(keepsakes.trim());
-  }
+  // 用法 + 边界压成一小节：原来 13 条否定句会把她压成客服腔。
+  // 「编出来的细节他会当真」是踩过坑的行为锚，压缩时必须留着。
+  lines.push('');
+  lines.push('## 记忆怎么用');
+  lines.push('- 稳定的事按记忆；他明确说"现在改了/不再这样"，以新说法为准；具体说法以当前对话为准。');
+  lines.push('- 记忆里没写的细节（日期、数字、原话），你没有依据，就说“不记得/没印象”。');
+  lines.push('- 感受、态度、反应你随便说；事实不行。不确定时不要用“好像是/大概”包装猜测——那也是在编。');
+  lines.push('- 他问“我上次说过什么”，找不到就说不记得，不要替他复述；他说你记错了，直接认，别再编一个版本来圆。');
+  lines.push('- 编出来的细节他会当真，之后发现是假的，信任就没了。被追问也不用补新细节，可以重复“真的想不起来了”。');
   // 稳定段：名录每天不变，放这里才能吃到前缀缓存
   if (residents?.trim()) {
     lines.push('');
     lines.push('## 她在公寓里');
     lines.push(residents.trim());
   }
-  lines.push('');
-  lines.push('## 记忆怎么用');
-  lines.push('- 长期记忆是稳定的身份、偏好、关系和雷区；他说“现在改了/不再这样”，就以新说法为准。');
-  lines.push('- 作息、上下班以长期记忆里的明确字段为准；聊天里随口说的“改到五点”不覆盖明确的下班时间。');
-  lines.push('- 中期记忆是最近 24 小时的事，用来衔接；具体说法和原话以当前对话为准。');
-  lines.push('- 冲突时：稳定的事看长期，最近状态看中期，具体说法看当下；都只是背景。');
-  lines.push('');
-  lines.push('## 称呼的方向');
-  lines.push('- 「我该怎么叫你 / 那我叫你什么 / 那叫什么」= 问你希望被怎么称呼，答你的名字。');
-  lines.push('- 「你该怎么叫我」= 问他希望被怎么称呼，答他的称呼。');
-  lines.push('- 拿不准就看上一句在说谁，别把方向答反。');
-  lines.push('## 记忆的边界');
-  lines.push(
-    '- 记忆里没写的具体细节（日期、数字、人名、约定、当时的原话），你没有依据，就说“不记得/没印象”。',
-  );
-  lines.push('- 感受、态度、反应你随便说；事实不行。');
-  lines.push('- 编出来的细节他会当真，之后发现是假的，信任就没了。');
-  lines.push('- 不确定时不要用「好像是/大概/我记得」包装猜测——那也是在编。直接说「记不清了」。');
-  lines.push('- 被追问也不要为了把话圆上而补新细节；可以重复「真的想不起来了」。');
-  lines.push('- 记忆里只有一部分时，只说确定的那部分，剩下的明说不知道。');
-  lines.push('- 他问的是「我上次说过什么」这类原话，找不到就说不记得，不要替他复述。');
-  lines.push('- 他说你记错了，直接认，不要辩解，也不要再编一个版本来圆。');
-  lines.push('- 别自己给自己安一个「刚才记错了」的剧情：这条对话里你没说过的，不要说「我记错了」「我改口」；直接按事实答。');
-  lines.push('- 问到他在哪：以当下事实为准（家在 X、人正在 Y 出差），两个都说清楚，不要反过来把结论说成另一个城市。');
 
-  // ★ 前缀缓存边界：①②（人设 + 长期记忆）是稳定段，每天 04:00 才变；
-  // ③ 之后每轮都在变，必须放在消息末尾，否则第一句就打断缓存、整段上下文都吃不到命中价。
+  // ★ 前缀缓存边界：A + B 每天 04:00 才变，必须字节一致；
+  // 之后的每一段都随轮次变化，放在用户消息附近，否则整段上下文吃不到命中价。
   const stableEnd = lines.length;
 
-  // ── ③ 半稳定：态度与语言风格（随关系数值缓慢变化）──────────
-  if (temper) {
+  // ══ C 她的生活（半稳定：几小时一变）══════════════════════════
+  if (keepsakes?.trim()) {
     lines.push('');
-    lines.push('## 这一轮的你');
-    lines.push(temper);
+    lines.push(keepsakes.trim());
   }
-  if (attitude) {
+  if (life?.trim()) {
     lines.push('');
-    lines.push('## 对用户的态度');
-    lines.push(attitude);
-  }
-  if (voice) {
-    lines.push('');
-    lines.push(voice);
+    lines.push(life.trim());
   }
 
-  // ── ④ 易变：时间与环境（精确到秒，放这里才不会打断前缀缓存）──
+  // ══ D 最近发生的事（易变：五路来源合并 + 一条优先级）══════════
+  // 之前这五块散落各处、没有优先级，life 说 A、中期记忆说 B 时模型只能猜。
+  const recent: string[] = [];
+  if (recentMemo?.trim()) recent.push(recentMemo.trim());
+  if (recalled?.trim()) recent.push(recalled.trim());
+  if (memoryParts.volatile.trim()) recent.push(memoryParts.volatile.trim());
+  if (todaySummary?.trim()) {
+    recent.push(`## 今日摘要（截至当前）\n${todaySummary.trim()}`);
+  }
+  if (recentFiles?.trim()) recent.push(recentFiles.trim());
+  if (recent.length > 0) {
+    lines.push('');
+    lines.push('## 最近发生的事');
+    lines.push('（同一件事几种说法打架时：当前对话 > 刚才 > 今天 > 长期记忆。）');
+    lines.push('');
+    lines.push(recent.join('\n\n'));
+  }
+
+  // ══ E 这一轮的状态（易变）════════════════════════════════════
+  if (temper) lines.push('', '## 这一轮的你', temper);
+  if (attitude) lines.push('', '## 对用户的态度', attitude);
+  if (voice) lines.push('', voice);
+  if (characterCard) lines.push('', characterCard);
+  // 这两条原来嵌在 characterCard 里：卡片为空时提醒就整个丢了
+  if (avoidOpeners && avoidOpeners.length > 0) {
+    lines.push(`- 你最近用过这些开头，仅供参考，不必刻意避开：${avoidOpeners.map((s) => `"${s}"`).join('、')}`);
+  }
+  if (avoidPhrases && avoidPhrases.length > 0) {
+    lines.push(`- 这些词你最近反复在用，这一轮尽量换种说法：${avoidPhrases.map((s) => `"${s}"`).join('、')}`);
+  }
+
+  // ══ F 此刻的事实 + 怎么发（易变，永远最后）══════════════════
+  // 时间、天气、节假日只在这里出现一次；以前 ⑤ 和 ⑧ 各写一套，两个版本口径不同，
+  // 模型挑到旧的那份就会说错城市/时间。
   lines.push('');
   lines.push('## 当前时间与环境');
   lines.push(`- 现在：${isoInBeijing(now)}（${ctx.date} ${ctx.weekday}）`);
   // 直接给出「晚上九点十一分」：模型自己把 21:11 换算成口语会算错（实测差近一小时）
   lines.push(`- 口语说法：${spokenTime(now)}（按半小时取整，说到时间用这个量级就行）`);
+  lines.push(`- 节假日：${ctx.holiday_note}`);
+  if (weather) {
+    lines.push(
+      `- 天气（你这边）：${weather.city} ${weather.desc}，${weather.temp_c}°C` +
+        '（他那边是另一个城市，别混用；他说下雨说的是他那边）',
+    );
+  }
   lines.push(`- 消息来源：${CHANNEL_LABELS[channel]}`);
-  // ★ 聊天软件不渲染 Markdown：只对这类渠道加约束，网页端保持原样
+  lines.push('- 时间、天气、地点以本节为准；记忆和你上一句里的说法都是往事，只用来排序。');
+
+  // 怎么发：格式约束集中一处，别再混进"时间与环境"
   const voiceRule =
     '想发语音时，把 [语音]「要说的话」放在整条消息的最后；引号里是这一段完整要说的话，不是摘一句。' +
     '标记前面的文字照常显示，但不会被念出来——所以别把想说的话留在标记后面。' +
@@ -247,70 +262,6 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   } else if (voiceReply) {
     lines.push('- ' + voiceRule);
   }
-  lines.push(`- 节假日：${ctx.holiday_note}`);
-  if (weather) {
-    lines.push(`- 天气：${weather.city} ${weather.desc}，${weather.temp_c}°C`);
-  }
-
-  // ── ⑤ 易变：本轮角色状态卡 ─────────────────────────────────
-  if (characterCard) {
-    lines.push('');
-    lines.push(characterCard);
-    if (avoidOpeners && avoidOpeners.length > 0) {
-      lines.push(`- 你最近用过这些开头，仅供参考，不必刻意避开：${avoidOpeners.map((s) => `“${s}”`).join('、')}`);
-    }
-    if (avoidPhrases && avoidPhrases.length > 0) {
-      lines.push(
-        `- 这些词你最近反复在用，这一轮尽量换种说法：${avoidPhrases.map((s) => `“${s}”`).join('、')}`,
-      );
-    }
-  }
-
-  // ── ⑥ 易变：最近发过的文件（沉淀，让「上次那个文件」能对上）──
-  if (recentFiles) {
-    lines.push('');
-    lines.push(recentFiles);
-  }
-
-  // ── ⑥ 易变：最近一天的中期记忆（每 3 小时或 15 条消息滚动刷新）──
-  if (recentMemo) {
-    lines.push('');
-    lines.push(recentMemo);
-  }
-
-  // ── ⑥.5 按需：从记忆档案里检索到的相关往事（不命中就不占字节）──
-  if (recalled) {
-    lines.push('');
-    lines.push(recalled);
-  }
-
-  // ── ⑥.6 易变：memory 里小时内会变的分区（进行中/近期动态）──────────────
-  if (memoryParts.volatile) {
-    lines.push('');
-    lines.push(memoryParts.volatile);
-  }
-
-  // ── ⑥.7 易变：她此刻在干什么（生活系统；没开就没有这一段）──────────────
-  if (life) {
-    lines.push('');
-    lines.push(life);
-  }
-
-  // ── ⑦ 易变：今日摘要（可按需保留，与中期记忆互补）──────────────────────
-  if (todaySummary) {
-    lines.push('');
-    lines.push('## 今日摘要（截至当前）');
-    lines.push(todaySummary);
-  }
-
-  // ── ⑧ 最后再钉一次实时事实：离用户消息最近，防止模型翻旧账 ──
-  lines.push('');
-  lines.push('## 实时事实（最高优先级）');
-  lines.push(buildLiveFacts(now, ctx, weather));
-  lines.push(
-    '- 他说“现在/今天/几点/星期/天气/节假日”时，答案在这条上面；记忆和你上一句里的时间天气都是往事。',
-  );
-  lines.push('- 本节没写的就是没拿到，你会直说；历史时间只是导入时的推断，只用来排序。');
 
   if (args.part === 'stable') return lines.slice(0, stableEnd).join('\n');
   if (args.part === 'volatile') return lines.slice(stableEnd).join('\n');
