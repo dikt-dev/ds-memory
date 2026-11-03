@@ -1,46 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { pairRateLimit } from './routes-app';
+import { rateLimitVerdict } from './routes-app';
 
-/** 极简 KV：只实现 get/put，够用来验限流窗口。 */
-function fakeEnv() {
-  const store = new Map<string, string>();
-  return {
-    store,
-    env: {
-      KV: {
-        get: async (k: string) => store.get(k) ?? null,
-        put: async (k: string, v: string) => {
-          store.set(k, v);
-        },
-      },
-    } as never,
-  };
-}
-
-describe('配对码限流', () => {
+/**
+ * 限流的判定是纯函数，单独测它。
+ *
+ * 为什么不是测 pairRateLimit 整体：真正的计数在 D1 里（原子 upsert），
+ * 那部分靠集成测；这里钉住"第 9 次该拦、窗口过了该放"的口径。
+ */
+describe('配对码限流判定', () => {
   const NOW = Date.parse('2026-11-03T10:00:00+08:00');
 
-  it('前 8 次放行，第 9 次拦住', async () => {
-    const { env } = fakeEnv();
-    for (let i = 0; i < 8; i++) {
-      const r = await pairRateLimit(env, '1.1.1.1', NOW);
-      expect(r.blocked).toBe(false);
-    }
-    const blocked = await pairRateLimit(env, '1.1.1.1', NOW);
-    expect(blocked.blocked).toBe(true);
-    expect(blocked.retryAfter).toBeGreaterThan(0);
+  it('前 8 次放行，第 9 次开始拦', () => {
+    for (let c = 1; c <= 8; c++) expect(rateLimitVerdict(c, NOW).blocked).toBe(false);
+    expect(rateLimitVerdict(9, NOW).blocked).toBe(true);
+    expect(rateLimitVerdict(99, NOW).blocked).toBe(true);
   });
 
-  it('不同 IP 各算各的', async () => {
-    const { env } = fakeEnv();
-    for (let i = 0; i < 9; i++) await pairRateLimit(env, '2.2.2.2', NOW);
-    expect((await pairRateLimit(env, '3.3.3.3', NOW)).blocked).toBe(false);
-  });
-
-  it('过了窗口重新开始计数', async () => {
-    const { env } = fakeEnv();
-    for (let i = 0; i < 9; i++) await pairRateLimit(env, '4.4.4.4', NOW);
-    expect((await pairRateLimit(env, '4.4.4.4', NOW)).blocked).toBe(true);
-    expect((await pairRateLimit(env, '4.4.4.4', NOW + 11 * 60 * 1000)).blocked).toBe(false);
+  it('给得出还要等多久', () => {
+    const { retryAfter } = rateLimitVerdict(9, NOW);
+    expect(retryAfter).toBeGreaterThan(0);
+    expect(retryAfter).toBeLessThanOrEqual(600);
   });
 });

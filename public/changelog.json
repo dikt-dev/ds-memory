@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-03T09:19:26.712Z",
+  "generated_at": "2026-11-03T09:21:16.530Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-03",
       "items": [
+        {
+          "hash": "0bbd709",
+          "date": "2026-11-03",
+          "type": "other",
+          "area": "",
+          "title": "安全批次：配对码限流 + 设备吊销接口，路由快照同步",
+          "why": ""
+        },
         {
           "hash": "c259d49",
           "date": "2026-11-03",
@@ -3245,14 +3253,6 @@
           "type": "refactor",
           "area": "p5",
           "title": "add proactive engine flag and new context path",
-          "why": ""
-        },
-        {
-          "hash": "f4fdd65",
-          "date": "2026-10-24",
-          "type": "docs",
-          "area": "p5",
-          "title": "record first observation snapshot",
           "why": ""
         }
       ]

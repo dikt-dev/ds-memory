@@ -386,3 +386,11 @@ CREATE TABLE IF NOT EXISTS message_tombstones (
   deleted_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_message_tombstones_at ON message_tombstones(deleted_at);
+
+
+-- ---------- 配对码限流（KV 最终一致，拦不住暴力试，必须用 D1） ----------
+CREATE TABLE IF NOT EXISTS pair_limits (
+  ip           TEXT PRIMARY KEY,
+  window_start INTEGER NOT NULL,
+  count        INTEGER NOT NULL
+);

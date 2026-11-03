@@ -41,18 +41,38 @@ export function sanitizeStoredMessages<T extends { content: string }>(rows: T[])
 const PAIR_LIMIT_MAX = 8;
 const PAIR_LIMIT_WINDOW_SEC = 10 * 60;
 
+/** 纯判定：给定这一格的计数，该不该拦。 */
+export function rateLimitVerdict(
+  count: number,
+  now = Date.now(),
+): { blocked: boolean; retryAfter: number } {
+  const retryAfter = PAIR_LIMIT_WINDOW_SEC - Math.floor((now % (PAIR_LIMIT_WINDOW_SEC * 1000)) / 1000);
+  return { blocked: count > PAIR_LIMIT_MAX, retryAfter };
+}
+
+/**
+ * 配对码限流：不限制的话配对码可以无限暴力试（8 位字母数字几小时就能穷举）。
+ *
+ * ★ 用 D1 而不是 KV：KV 是最终一致的，连着打十次可能每次都读到旧计数，
+ *   限流形同虚设（实测过，10 次全放行）。D1 的 upsert 是原子的，才拦得住。
+ */
 export async function pairRateLimit(
   env: Env,
   ip: string,
   now = Date.now(),
 ): Promise<{ blocked: boolean; retryAfter: number }> {
   const windowStart = Math.floor(now / (PAIR_LIMIT_WINDOW_SEC * 1000));
-  const key = `pair:rl:${ip}:${windowStart}`;
-  const retryAfter = PAIR_LIMIT_WINDOW_SEC - Math.floor((now % (PAIR_LIMIT_WINDOW_SEC * 1000)) / 1000);
-  const used = Number((await env.KV.get(key).catch(() => null)) ?? '0') || 0;
-  if (used >= PAIR_LIMIT_MAX) return { blocked: true, retryAfter };
-  await env.KV.put(key, String(used + 1), { expirationTtl: PAIR_LIMIT_WINDOW_SEC * 2 }).catch(() => {});
-  return { blocked: false, retryAfter };
+  const row = await env.DB.prepare(
+    `INSERT INTO pair_limits (ip, window_start, count) VALUES (?, ?, 1)
+     ON CONFLICT(ip) DO UPDATE SET
+       count = CASE WHEN window_start = excluded.window_start THEN count + 1 ELSE 1 END,
+       window_start = excluded.window_start
+     RETURNING count`,
+  )
+    .bind(ip, windowStart)
+    .first<{ count: number }>()
+    .catch(() => null);
+  return rateLimitVerdict(row?.count ?? 0, now);
 }
 
 export function registerAppRoutes(app: Hono<AppEnv>): void {
