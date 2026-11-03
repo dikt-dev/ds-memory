@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-03T02:32:12.843Z",
+  "generated_at": "2026-11-03T02:41:41.466Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-03",
       "items": [
+        {
+          "hash": "5ecad1c",
+          "date": "2026-11-03",
+          "type": "other",
+          "area": "",
+          "title": "补发压太久改成自然开场；网页发B站链接补 meta（Worker 出口被 412 挡住时退化成链接卡）；加排查接口",
+          "why": ""
+        },
         {
           "hash": "7734eb9",
           "date": "2026-11-03",
@@ -3245,14 +3253,6 @@
           "type": "docs",
           "area": "p5",
           "title": "verify periodic watchdog execution",
-          "why": ""
-        },
-        {
-          "hash": "e1999d7",
-          "date": "2026-10-24",
-          "type": "docs",
-          "area": "p5",
-          "title": "verify run-all supervisor recovery",
           "why": ""
         }
       ]

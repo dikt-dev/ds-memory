@@ -6,7 +6,8 @@
  */
 import type { Env } from './types';
 import { lifePromptLine, residentNowLine } from './life/now-text';
-import { residentRoster } from './life/residents';
+import { residentLooksRoster, residentRoster } from './life/residents';
+import { resolvePersona } from './persona';
 
 export interface LifeBlocks {
   /** 稳定段：公寓名录（每天不变，能命中前缀缓存） */
@@ -21,7 +22,19 @@ export async function loadLifeBlocks(env: Env, now: Date): Promise<LifeBlocks> {
     residentNowLine(env, now).catch(() => null),
   ]);
   return {
-    residents: residentRoster() || null,
+    // 名录 + 长相：名字解决「谁住这儿」，长相解决「照片里这个是谁」。
+    // 自己的长相放在最前面——先认出「这是我」，再谈别人。
+    residents:
+      [
+        (() => {
+          const look = resolvePersona(env).look;
+          return look ? `你自己：${look}。照片或画面里出现这样的人，那就是你，别当成别人。` : '';
+        })(),
+        residentRoster(),
+        residentLooksRoster(),
+      ]
+        .filter(Boolean)
+        .join('\n\n') || null,
     life: [line, card].filter(Boolean).join('\n\n') || null,
   };
 }

@@ -16,6 +16,8 @@ export interface PersonaConfig {
   addressNote: string;
   /** auto = 按亲密度决定分寸；peer = 损友式，一开始就放松 */
   tone: 'auto' | 'peer';
+  /** 她自己的长相（照片/视频里认出「这是我」用的），没配就空着 */
+  look: string;
 }
 
 export const DEFAULT_SELF_CALL = '本小姐';
@@ -28,5 +30,6 @@ export function resolvePersona(env: Partial<Env> | undefined): PersonaConfig {
   const role = env?.PERSONA_ROLE?.trim() || DEFAULT_ROLE;
   const addressNote = env?.PERSONA_ADDRESS_NOTE?.trim() || DEFAULT_ADDRESS_NOTE;
   const tone = env?.PERSONA_TONE?.trim() === 'peer' ? 'peer' : 'auto';
-  return { selfCall, role, addressNote, tone };
+  const look = env?.PERSONA_LOOK?.trim() || '';
+  return { selfCall, role, addressNote, tone, look };
 }

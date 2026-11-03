@@ -241,6 +241,14 @@
   ],
   [
     "GET",
+    "/api/admin/ops/bili-probe"
+  ],
+  [
+    "GET",
+    "/api/admin/ops/bili-probe"
+  ],
+  [
+    "GET",
     "/api/admin/pair-code"
   ],
   [

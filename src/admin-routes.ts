@@ -788,23 +788,23 @@ app.get('/api/admin/ops/bili-probe', requireAuth, async (c) => {
   const api = id.toLowerCase().startsWith('av')
     ? `https://api.bilibili.com/x/web-interface/view?aid=${id.slice(2)}`
     : `https://api.bilibili.com/x/web-interface/view?bvid=${id}`;
+  const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36';
+  const mobileUa = 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Mobile Safari/537.36';
+  const candidates: Array<[string, string, RequestInit]> = [
+    ['web-api', api, { referrer: 'https://www.bilibili.com/', headers: { 'user-agent': ua } } as unknown as RequestInit],
+    ['web-api-mobile-ua', api, { referrer: 'https://www.bilibili.com/', headers: { 'user-agent': mobileUa } } as unknown as RequestInit],
+    ['detail-api', `https://api.bilibili.com/x/web-interface/view/detail?bvid=${id}`, { referrer: 'https://www.bilibili.com/', headers: { 'user-agent': ua } } as unknown as RequestInit],
+    ['app-api', `https://app.bilibili.com/x/v2/view?bvid=${id}`, { headers: { 'user-agent': 'Mozilla/5.0 BiliDroid/7.0' } } as RequestInit],
+    ['html-page', `https://www.bilibili.com/video/${id}`, { headers: { 'user-agent': ua } } as RequestInit],
+  ];
   const attempts: Array<Record<string, unknown>> = [];
-  for (const [name, init] of [
-    [
-      'ua+referrer',
-      {
-        referrer: 'https://www.bilibili.com/',
-        headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120' },
-      } as unknown as RequestInit,
-    ],
-    ['plain', { headers: { 'user-agent': 'Mozilla/5.0' } } as RequestInit],
-  ] as const) {
+  for (const [name, url, init] of candidates) {
     try {
-      const res = await fetch(api, init);
+      const res = await fetch(url, init);
       const text = await res.text();
-      attempts.push({ name, status: res.status, head: text.slice(0, 200) });
+      attempts.push({ name, status: res.status, len: text.length, head: text.slice(0, 120).replace(/\s+/g, ' ') });
     } catch (e) {
-      attempts.push({ name, error: String(e).slice(0, 200) });
+      attempts.push({ name, error: String(e).slice(0, 160) });
     }
   }
   return c.json({ ok: true, api, attempts });

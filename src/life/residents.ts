@@ -329,6 +329,18 @@ export function diaryPeopleBlock(peopleJson: string | null | undefined): string 
 }
 
 /** 整栋楼的一行名录（固定开头，便于命中提示词缓存）。 */
+/**
+ * 名录里的「长什么样」一行。
+ *
+ * 她收得到照片和视频帧，但只给名字的话，看到橙发拿书的姑娘也不知道那是小克。
+ * 这里把 [Resident.looks] 摆出来，认人靠的就是这一句。
+ */
+export function residentLooksRoster(): string {
+  const lines = RESIDENTS.filter((r) => r.looks.trim()).map((r) => `${r.name}——${r.looks}`);
+  if (lines.length === 0) return '';
+  return `认识的人长这样（看到照片/画面时按这个认，别猜成别人）：${lines.join('；')}`;
+}
+
 export function residentRoster(): string {
   return `她住在杭州的中继站公寓：${RESIDENTS.map(residentBrief).join('、')}。`;
 }
