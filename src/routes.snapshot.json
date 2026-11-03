@@ -33,6 +33,14 @@
   ],
   [
     "GET",
+    "/api/admin/health"
+  ],
+  [
+    "GET",
+    "/api/admin/health"
+  ],
+  [
+    "GET",
     "/api/admin/kv-audit"
   ],
   [

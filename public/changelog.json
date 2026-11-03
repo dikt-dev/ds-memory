@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-03T09:21:16.530Z",
+  "generated_at": "2026-11-03T09:26:14.305Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-03",
       "items": [
+        {
+          "hash": "d3783b0",
+          "date": "2026-11-03",
+          "type": "other",
+          "area": "",
+          "title": "限流改用 D1：KV 最终一致拦不住连打，实测十次全放行",
+          "why": ""
+        },
         {
           "hash": "0bbd709",
           "date": "2026-11-03",
@@ -3245,14 +3253,6 @@
           "type": "docs",
           "area": "",
           "title": "document proactive engine flag",
-          "why": ""
-        },
-        {
-          "hash": "d0004d7",
-          "date": "2026-10-24",
-          "type": "refactor",
-          "area": "p5",
-          "title": "add proactive engine flag and new context path",
           "why": ""
         }
       ]

@@ -212,14 +212,28 @@ app.get('/api/health', async (c) => {
     checks.r2 = 'unavailable';
   }
   checks.ai = 'bound';
-  checks.deepseek_key = c.env.DEEPSEEK_API_KEY ? 'configured' : 'missing';
-  checks.password = c.env.ACCESS_PASSWORD_HASH ? 'configured' : 'missing';
-  checks.astrobot_key = c.env.ASTROBOT_API_KEY ? 'configured' : 'missing';
-  // 节假日表哨兵：未收录当年表时会退化为"仅周末"，春节/国庆会判错
-  checks.holiday_table = hasHolidayTable(dateKeyInBeijing()) ? 'ok' : 'missing-for-current-year';
-  checks.storage_mode = await getStorageMode(c.env);
-  checks.secondary_r2 = secondaryEnabled(c.env) ? 'configured' : 'missing';
+  // ★ 配置明细不对外：哪些 Key 配了、用的是哪个存储、节假日表有没有缺，
+  //   这些是给运维看的，公开等于把家底摊给扫端口的人。见 /api/admin/health。
   return c.json({ status: 'ok', time: isoInBeijing(), checks });
+});
+
+/** 配置体检（仅管理员）：公开的健康检查只报"活着"，细节在这里。 */
+app.get('/api/admin/health', requireAuth, async (c) => {
+  return c.json({
+    status: 'ok',
+    time: isoInBeijing(),
+    config: {
+      deepseek_key: c.env.DEEPSEEK_API_KEY ? 'configured' : 'missing',
+      password: c.env.ACCESS_PASSWORD_HASH ? 'configured' : 'missing',
+      astrobot_key: c.env.ASTROBOT_API_KEY ? 'configured' : 'missing',
+      // 节假日表哨兵：未收录当年表时会退化为"仅周末"，春节/国庆会判错
+      holiday_table: hasHolidayTable(dateKeyInBeijing()) ? 'ok' : 'missing-for-current-year',
+      storage_mode: await getStorageMode(c.env),
+      secondary_r2: secondaryEnabled(c.env) ? 'configured' : 'missing',
+      deepseek_model: c.env.DEEPSEEK_MODEL ?? 'default',
+      life_enabled: (await c.env.KV.get('life:enabled').catch(() => null)) === '1',
+    },
+  });
 });
 
 /** 小号 R2 兜底诊断：只做一次 put/get/delete，不切换存储模式。 */

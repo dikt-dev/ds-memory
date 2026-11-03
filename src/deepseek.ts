@@ -51,6 +51,17 @@ function compactDeepSeekMessages(messages: DeepSeekMessage[]): DeepSeekMessage[]
   return [...system, ...rest.slice(-14)];
 }
 
+/** 首字节超时：模型卡住时，30 秒内连响应头都不给就直接放弃。 */
+const DEEPSEEK_FIRST_BYTE_MS = 30_000;
+/** 总时长上限：正常回复几秒到几十秒，3 分钟还没结束基本是挂住了。 */
+const DEEPSEEK_TOTAL_MS = 180_000;
+
+/**
+ * 调 DeepSeek 的唯一出口。
+ *
+ * 以前裸 fetch：模型侧卡住时没有任何打断手段，请求一直吊着，
+ * 白烧 Worker 时长，前端也只看到「正在输入…」永远不动。
+ */
 async function requestDeepSeek(
   env: Env,
   apiKey: string,
@@ -59,7 +70,23 @@ async function requestDeepSeek(
   maxTokens?: number,
   opts: { thinking?: boolean } = {},
 ): Promise<Response> {
-  return fetch(DEEPSEEK_URL, {
+  const controller = new AbortController();
+  const firstByteTimer = setTimeout(
+    () => controller.abort(new Error('deepseek timeout: no response in 30s')),
+    DEEPSEEK_FIRST_BYTE_MS,
+  );
+  const totalTimer = setTimeout(
+    () => controller.abort(new Error('deepseek timeout: over 180s')),
+    DEEPSEEK_TOTAL_MS,
+  );
+  const clearAll = () => {
+    clearTimeout(firstByteTimer);
+    clearTimeout(totalTimer);
+  };
+  let res: Response;
+  try {
+    res = await fetch(DEEPSEEK_URL, {
+      signal: controller.signal,
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
@@ -73,8 +100,32 @@ async function requestDeepSeek(
       presence_penalty: 0.1,
       // 聊天必须快：思考模式只在日记/记忆这类后台任务里开
       thinking: { type: opts.thinking ? 'enabled' : 'disabled' },
+      }),
+    });
+  } catch (e) {
+    clearAll();
+    throw e;
+  }
+  // 响应头到了就撤掉首字节计时；总时长计时留到流读完，避免长回复被误杀
+  clearTimeout(firstByteTimer);
+  if (!res.body) {
+    clearTimeout(totalTimer);
+    return res;
+  }
+  const wrapped = res.body.pipeThrough(
+    new TransformStream({
+      transform(chunk, ctrl) {
+        ctrl.enqueue(chunk);
+      },
+      flush() {
+        clearTimeout(totalTimer);
+      },
+      cancel() {
+        clearTimeout(totalTimer);
+      },
     }),
-  });
+  );
+  return new Response(wrapped, { status: res.status, headers: res.headers });
 }
 
 export function normalizeUsage(
