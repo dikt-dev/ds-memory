@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-03T01:20:16.352Z",
+  "generated_at": "2026-11-03T01:46:43.479Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-03",
       "items": [
+        {
+          "hash": "1430c98",
+          "date": "2026-11-03",
+          "type": "other",
+          "area": "",
+          "title": "压消息按北京时间算到点时间；补发改成租约，生成失败不吞消息",
+          "why": ""
+        },
         {
           "hash": "13b35fe",
           "date": "2026-11-03",
@@ -3245,14 +3253,6 @@
           "type": "docs",
           "area": "p5",
           "title": "phone watchdog and status fix",
-          "why": ""
-        },
-        {
-          "hash": "435aff5",
-          "date": "2026-10-24",
-          "type": "refactor",
-          "area": "p5c",
-          "title": "production cutover and qq shadow",
           "why": ""
         }
       ]

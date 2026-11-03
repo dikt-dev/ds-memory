@@ -338,6 +338,8 @@ app.post('/api/app/pair', async (c) => {
       channel: m.channel,
       created_at: m.created_at,
       turn_id: m.turn_id,
+      // 回复挂在哪条上：App 靠它把补发的回复排回原位（不然会跑到列表末尾）
+      reply_to_id: m.reply_to_id,
       proactive_kind: m.proactive_kind,
       client_message_id: m.client_message_id,
     }));
@@ -369,6 +371,8 @@ app.post('/api/app/pair', async (c) => {
       channel: m.channel,
       created_at: m.created_at,
       turn_id: m.turn_id,
+      // 回复挂在哪条上：App 靠它把补发的回复排回原位（不然会跑到列表末尾）
+      reply_to_id: m.reply_to_id,
       proactive_kind: m.proactive_kind,
       client_message_id: m.client_message_id,
     }));
