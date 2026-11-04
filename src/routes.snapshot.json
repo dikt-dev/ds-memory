@@ -537,6 +537,14 @@
   ],
   [
     "POST",
+    "/api/admin/kv/clear"
+  ],
+  [
+    "POST",
+    "/api/admin/kv/clear"
+  ],
+  [
+    "POST",
     "/api/admin/life/day"
   ],
   [

@@ -18,6 +18,8 @@ export interface PersonaConfig {
   tone: 'auto' | 'peer';
   /** 她自己的长相（照片/视频里认出「这是我」用的），没配就空着 */
   look: string;
+  /** true = 本轮不要任何人设文本（清空重置时用，见 PERSONA_PROFILE） */
+  blank?: boolean;
 }
 
 export const DEFAULT_SELF_CALL = '本小姐';
@@ -26,6 +28,11 @@ export const DEFAULT_ADDRESS_NOTE =
   '但平时更常叫他"大笨蛋"（撒娇、认真、心疼的时候才叫"主人"）';
 
 export function resolvePersona(env: Partial<Env> | undefined): PersonaConfig {
+  // PERSONA_PROFILE=none：连"没配就用开源默认值"都不要，提示词里一句人设都不留。
+  // 清空重置/换人设的窗口期用它，否则空值会回退到默认的「本小姐/专属 AI 女友」。
+  if ((env?.PERSONA_PROFILE ?? '').trim() === 'none') {
+    return { selfCall: '', role: '', addressNote: '', tone: 'auto', look: '', blank: true };
+  }
   const selfCall = env?.PERSONA_SELF_CALL?.trim() || DEFAULT_SELF_CALL;
   const role = env?.PERSONA_ROLE?.trim() || DEFAULT_ROLE;
   const addressNote = env?.PERSONA_ADDRESS_NOTE?.trim() || DEFAULT_ADDRESS_NOTE;

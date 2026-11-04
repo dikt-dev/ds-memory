@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T01:46:19.566Z",
+  "generated_at": "2026-11-04T01:51:19.009Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "82f62c0",
+          "date": "2026-11-04",
+          "type": "other",
+          "area": "",
+          "title": "运维：新增 /api/admin/kv/clear 批量清 KV；记录 11-04 全量擦除",
+          "why": ""
+        },
         {
           "hash": "ad53b27",
           "date": "2026-11-04",
@@ -3245,14 +3253,6 @@
           "type": "feat",
           "area": "web",
           "title": "add browser tts playback for replies",
-          "why": ""
-        },
-        {
-          "hash": "87ad21b",
-          "date": "2026-10-25",
-          "type": "feat",
-          "area": "persona",
-          "title": "raise tsundere intensity and voice punctuation",
           "why": ""
         }
       ]

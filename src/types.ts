@@ -40,7 +40,9 @@ export interface Env {
   /** 人设语气：auto 按亲密度 / peer 损友式一开始就放松 */
   PERSONA_TONE?: string;
   /** 人设：她自己的长相（照片/视频里认出「这是我」用） */
-  PERSONA_LOOK?: string;  // 期望对方怎么称呼自己：缺省按记忆自然称呼
+  PERSONA_LOOK?: string;
+  /** none = 提示词里一句人设都不下发（清空重置/换人设的窗口期） */
+  PERSONA_PROFILE?: string;  // 期望对方怎么称呼自己：缺省按记忆自然称呼
 
   // secrets（可选：未配置时对应功能降级）
   DEEPSEEK_API_KEY?: string;
