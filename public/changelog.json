@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T06:25:00.596Z",
+  "generated_at": "2026-11-04T06:26:41.077Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "2f50980",
+          "date": "2026-11-04",
+          "type": "feat",
+          "area": "",
+          "title": "peek 也带上她那边的实时天气",
+          "why": ""
+        },
         {
           "hash": "16933cb",
           "date": "2026-11-04",
@@ -3240,14 +3248,6 @@
           "type": "fix",
           "area": "chat",
           "title": "dedupe client messages and randomize proactive time",
-          "why": ""
-        },
-        {
-          "hash": "34cac19",
-          "date": "2026-10-26",
-          "type": "docs",
-          "area": "",
-          "title": "record observation day 1 issues and fixes",
           "why": ""
         }
       ]

@@ -283,7 +283,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   lines.push(`- 现在：${isoInBeijing(now)}（${ctx.date} ${ctx.weekday} · ${restNote}）`);
   // 直接给出「晚上九点十一分」：模型自己把 21:11 换算成口语会算错（实测差近一小时）
   lines.push(`- 口语说法：${spokenTime(now)}（按半小时取整，说到时间用这个量级就行）`);
-  if (weather) {
+  if (weather?.city && weather?.desc && typeof weather?.temp_c === 'number') {
     lines.push(
       `- 天气（你这边）：${weather.city} ${weather.desc}，${weather.temp_c}°C` +
         '（他那边是另一个城市，别混用；他说下雨说的是他那边）',

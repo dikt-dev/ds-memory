@@ -96,7 +96,10 @@ export function registerAdminOpsRoutes(app: Hono<AppEnv>): void {
     ]);
     // 天气：跟她说话时「你这边」的那份，和聊天链路一致
     const homeCity = (await c.env.KV.get('life:home-city').catch(() => null)) ?? c.env.CITY ?? '杭州';
-    const weather = await fetchWeather(homeCity).catch(() => null);
+    const w = await fetchWeather(homeCity).catch(() => null);
+    const descOf = (v?: string) =>
+      v === 'rain' ? '在下雨' : v === 'snow' ? '在下雪' : v === 'sunny' ? '晴' : '阴';
+    const weather = w ? { city: homeCity, desc: descOf(w.weather), temp_c: Math.round(w.tempC) } : null;
     const parts = buildSystemPromptSplit({
       now,
       ctx: ctx as never,
