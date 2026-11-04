@@ -88,7 +88,28 @@ export function renderPersonaDoc(doc: string, userText: string): string {
     return s.when.some((w) => hay.includes(w.toLowerCase()));
   });
   // 一个按需分区都没命中时，也不要只剩标题：至少保留常驻部分
-  return kept.map((s) => s.body).join('\n\n').trim();
+  return stripDocNoise(kept.map((s) => s.body).join('\n\n'));
+}
+
+/**
+ * 去掉文档里的「写作提示」，只留真正要说的话。
+ *
+ * 骨架里那些 <!-- 填什么 --> 和 > 开头的说明，是给人看的；
+ * 原样塞进提示词，她会照着念，或者把"（待填充）"当成事实。
+ */
+function stripDocNoise(text: string): string {
+  return text
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .split('\n')
+    .filter(
+      (line) =>
+        !line.trim().startsWith('>') &&
+        !/（\s*(待填充|按需|常驻)\s*）/.test(line) &&
+        !/(骨架|待填充)/.test(line),
+    )
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 /**
