@@ -126,7 +126,8 @@ export async function diaryList(env: Env, limit = 60, now = new Date()): Promise
       declined: visibility === 'declined',
       cooling: visibility === 'declined' && coolingUntil(r.asked_at, now) !== null,
       retryAt: visibility === 'declined' ? coolingUntil(r.asked_at, now) : null,
-      images: safeImages(r.images),
+      // 锁着就连 key 都不给：给了 key 等于把画提前交出去（App 用 app token 就能取到文件）
+      images: fresh || peekOh ? safeImages(r.images) : [],
       expired: visibility === 'shared' && !fresh,
     };
   });

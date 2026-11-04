@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T09:32:47.265Z",
+  "generated_at": "2026-11-04T09:40:37.661Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "6844a7a",
+          "date": "2026-11-04",
+          "type": "feat",
+          "area": "",
+          "title": "日记——授权判定收口、被问的日记带上摘要、配图形象跟人设联动",
+          "why": ""
+        },
         {
           "hash": "b4aaf64",
           "date": "2026-11-04",
@@ -3230,14 +3238,6 @@
           "type": "fix",
           "area": "chat",
           "title": "only pure END marker is silent",
-          "why": ""
-        },
-        {
-          "hash": "fda66e4",
-          "date": "2026-10-28",
-          "type": "docs",
-          "area": "",
-          "title": "record phase 5 day 3 issues",
           "why": ""
         }
       ]
