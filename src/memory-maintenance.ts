@@ -87,7 +87,6 @@ function splitSections(text: string): {
 export function slimMemoryForPrompt(text: string, now: Date = new Date()): string {
   if (!text.trim()) return '';
   const beijing = new Date(now.getTime() + 8 * 3600_000);
-  const year = String(beijing.getUTCFullYear());
   const todayDay = Math.floor(
     Date.UTC(beijing.getUTCFullYear(), beijing.getUTCMonth(), beijing.getUTCDate()) / 86400_000,
   );
@@ -139,21 +138,21 @@ export function slimMemoryForPrompt(text: string, now: Date = new Date()): strin
       if (sectionHasBody) out.push('');
       continue;
     }
-    // 先补「近期动态」的相对时间（要用完整日期算），再统一缩成 MM-DD
-    let annotated = line;
+    // 日期统一 YY-MM-DD：不省略年份，四处口径一致
+    let rendered = line.replace(
+      /\[(\d{4})-(\d{2})-(\d{2})\]/g,
+      (_all, y: string, m: string, d: string) => `[${y.slice(2)}-${m}-${d}]`,
+    );
+    // 「近期动态」额外补相对时间，方便判断「这事是刚说的还是几天前的」
     if ((pendingSection ?? section) === '近期动态') {
-      annotated = annotated.replace(
-        /- \[(\d{2,4})-(\d{2})-(\d{2})\]/,
+      rendered = rendered.replace(
+        /- \[(\d{2})-(\d{2})-(\d{2})\]/,
         (all: string, y: string, m: string, d: string) => {
           const age = ageOf(y, m, d);
           return age ? `${all}（${age}）` : all;
         },
       );
     }
-    const rendered = annotated.replace(
-      /\[(\d{2,4})-(\d{2})-(\d{2})\]/g,
-      (all, y: string, m: string, d: string) => (y.length === 4 && y !== year ? all : `[${m}-${d}]`),
-    );
     emit(rendered);
   }
   flush();

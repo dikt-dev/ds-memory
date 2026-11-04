@@ -17,10 +17,10 @@ describe('slimMemoryForPrompt', () => {
     expect(slimMemoryForPrompt('# 长期记忆\n## 关于他\n- x', now)).not.toContain('# 长期记忆');
   });
 
-  it('今年的日期省掉年份，往年保留', () => {
+  it('日期统一 YY-MM-DD（四位的压成两位，不省略）', () => {
     const out = slimMemoryForPrompt('## 关于他\n- [2026-11-04] A\n- [2025-03-01] B', now);
-    expect(out).toContain('[11-04] A');
-    expect(out).toContain('[2025-03-01] B');
+    expect(out).toContain('[26-11-04] A');
+    expect(out).toContain('[25-03-01] B');
   });
 
   it('全空返空串，交给调用方写「暂无记忆」', () => {
@@ -32,14 +32,14 @@ describe('近期动态的时间感', () => {
   it('补上「今天 / 昨天 / N 天前」', () => {
     const md = '## 近期动态\n- [26-11-04] 今天的事\n- [26-11-03] 昨天的事\n- [26-11-01] 三天前的事';
     const out = slimMemoryForPrompt(md, now);
-    expect(out).toContain('- [11-04]（今天） 今天的事');
-    expect(out).toContain('- [11-03]（昨天） 昨天的事');
-    expect(out).toContain('- [11-01]（3 天前） 三天前的事');
+    expect(out).toContain('- [26-11-04]（今天） 今天的事');
+    expect(out).toContain('- [26-11-03]（昨天） 昨天的事');
+    expect(out).toContain('- [26-11-01]（3 天前） 三天前的事');
   });
 
   it('别的分区不加年龄，免得每轮都变', () => {
     const out = slimMemoryForPrompt('## 关于他\n- [26-11-01] 城市=深圳', now);
-    expect(out).toContain('- [11-01] 城市=深圳');
+    expect(out).toContain('- [26-11-01] 城市=深圳');
     expect(out).not.toContain('天前');
   });
 });
