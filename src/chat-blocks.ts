@@ -68,10 +68,11 @@ export async function loadLifeBlocks(env: Env, now: Date, userText = ''): Promis
       .replace(/[。；;，,]\s*$/, '')
       .trim();
   const self = flat(personaSectionText(personaDoc, '外貌'));
-  const friends = flat(personaSectionText(personaDoc, '人际'));
+  // 朋友是一份名单，保留原来的换行：压成一行模型反而对不上号
+  const friends = personaSectionText(personaDoc, '人际').trim();
   const people = [
     self ? `你自己：${self}。照片或画面里出现这样的人，那就是你，别当成别人。` : '',
-    friends ? `你认识的人：${friends}。` : '',
+    friends ? `你认识的人：\n${friends}` : '',
     self || friends
       ? '认人只按上面这些长相来认；照片、视频帧、动图都可能糊，拿不准就说"看着像谁"，别一口咬定。'
       : '',

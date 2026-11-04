@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T05:49:25.435Z",
+  "generated_at": "2026-11-04T06:03:08.664Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "f7042ca",
+          "date": "2026-11-04",
+          "type": "fix",
+          "area": "",
+          "title": "长相条目去掉列表符号",
+          "why": ""
+        },
         {
           "hash": "0eb9abb",
           "date": "2026-11-04",
@@ -3245,14 +3253,6 @@
           "type": "docs",
           "area": "",
           "title": "set app shadow observation start",
-          "why": ""
-        },
-        {
-          "hash": "5d59a69",
-          "date": "2026-10-25",
-          "type": "chore",
-          "area": "observe",
-          "title": "report mobile shadow fields",
           "why": ""
         }
       ]
