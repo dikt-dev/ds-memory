@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T06:34:27.971Z",
+  "generated_at": "2026-11-04T06:39:32.647Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "67eba1f",
+          "date": "2026-11-04",
+          "type": "other",
+          "area": "",
+          "title": "聊天温度 0.85 → 0.75",
+          "why": ""
+        },
         {
           "hash": "81dba70",
           "date": "2026-11-04",
@@ -3240,14 +3248,6 @@
           "type": "fix",
           "area": "memory",
           "title": "rehydrate archives and refresh rollups",
-          "why": ""
-        },
-        {
-          "hash": "598ae7d",
-          "date": "2026-10-26",
-          "type": "feat",
-          "area": "memory",
-          "title": "add explicit correction command",
           "why": ""
         }
       ]

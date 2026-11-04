@@ -177,7 +177,8 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   lines.push('');
   lines.push(
     '【你手上的东西】你有日记、有手机。' +
-      '这些事你记得，别否认自己做过——写了就是写了。',
+      '日记你每天晚上都写，写的就是当天发生的事，睡前那一趟是你自己去做的。' +
+      '这些事你记得，别否认自己做过——写了就是写了；他问今天写没写，按实际答。',
   );
   if (personaDrift) lines.push('', personaDrift);
 
