@@ -54,7 +54,6 @@ import {
   RANDOM_WINDOW,
   beijingMinutes,
   currentSlot,
-  deliverProactive,
   randomCountFor,
   randomTargetMinutes,
   targetMinutesFor,
@@ -534,13 +533,11 @@ async function emit(
       completionTokens: generated.completionTokens,
     });
   }
-  // ★ 推送到 QQ：直连 AstrBot 或入队供客户端轮询（携带 message_id 便于追踪）
-  const delivery = await deliverProactive(env, generated.text, now, saved.id);
+  // 只落库：送达由客户端到点拉取（/api/app/events），这里没有推送
   await finishSlot(env, dateKey, slotKey, {
     messageId: saved.id,
-    // ★ 队列模式记 'queued'：入队≠送达，真正的送达要等插件 ack
-    status: delivery.status,
-    detail: `score=${decision.score}; delivery=${delivery.mode}; ${decision.reasons.join('; ')}`,
+    status: 'sent',
+    detail: `score=${decision.score}; ${decision.reasons.join('; ')}`,
   });
   return {
     sent: true,

@@ -4,7 +4,7 @@
  * 说明：主动消息的「决策与生成」统一在 webproactive.ts（打分 + 事由驱动），
  * 本模块只负责：
  * - 时间窗口与随机目标时间（纯函数，供 Web 端决策前判断）；
- * - 投递通道 deliverProactive（直连 AstrBot / 入队供客户端轮询）。
+ * - 送达：只落库，由客户端到点拉取 /api/app/events（没有推送）。
  */
 
 import type { Env } from './types';
@@ -130,40 +130,4 @@ export function randomTargetMinutes(dateKey: string, index: number): number {
   if (earliest >= RANDOM_WINDOW.end) return RANDOM_WINDOW.end; // 放不下：返回窗口末尾（调用方视为当天不再发）
   const latest = RANDOM_WINDOW.end - 1;
   return earliest + Math.floor(rnd * (latest - earliest + 1));
-}
-
-/* ---------- 投递通道 ---------- */
-
-export interface DeliveryResult {
-  ok: boolean;
-  /** 现在只有 events 一种；保留旧值是为了读历史日志。 */
-  mode: 'direct' | 'queue' | 'events';
-  /**
-   * 实际状态：
-   * - `sent`：直连模式，AstrBot 已确认收到 → 确实送达
-   * - `queued`：队列模式，**仅代表已入队**，不代表对方已收到
-   * - `failed`：直连失败或入队失败
-   */
-  status: 'sent' | 'queued' | 'failed';
-}
-
-/**
- * 投递主动消息：单通道 —— events。
- *
- * 消息先落 messages，App 通过 /api/app/events 增量拉取（闹钟唤醒或前台轮询）。
- * 2026-10-31 起废弃 QQ / AstrBot 直连与队列轮询两条老路：
- * 队列要一个常驻消费者，实际没人取，消息在库里躺到过期，
- * proactive_log 永远停在 queued，看起来像发送失败——比不投递更糟。
- */
-export async function deliverProactive(
-  env: Env,
-  text: string,
-  now: Date,
-  messageId?: number,
-): Promise<DeliveryResult> {
-  void env;
-  void text;
-  void now;
-  void messageId;
-  return { ok: true, mode: 'events', status: 'sent' };
 }

@@ -6,7 +6,6 @@ import {
   RANDOM_WINDOW,
   beijingMinutes,
   currentSlot,
-  deliverProactive,
   randomCountFor,
   randomTargetMinutes,
   sanitizeProactiveText,
@@ -151,24 +150,5 @@ describe('纯随机主动聊天', () => {
       times.add(randomTargetMinutes(`2026-12-${String(d).padStart(2, '0')}`, 0));
     }
     expect(times.size).toBeGreaterThan(20); // 30 天里几乎都不重复
-  });
-});
-
-describe('deliverProactive —— 单通道 events', () => {
-  it('消息先落库，投递直接算 sent（不再入队）', async () => {
-    const env = {} as never;
-    const r = await deliverProactive(env, '在吗', new Date(), 1413);
-    expect(r.ok).toBe(true);
-    expect(r.mode).toBe('events');
-    expect(r.status).toBe('sent');
-  });
-
-  it('没有配置也不再走 AstrBot / 队列（QQ 方案已废弃）', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
-    const env = { ASTRBOT_BASE_URL: 'https://bot.example.com' } as never;
-    const r = await deliverProactive(env, '在吗', new Date());
-    expect(r.mode).toBe('events');
-    expect(fetchSpy).not.toHaveBeenCalled();
-    fetchSpy.mockRestore();
   });
 });
