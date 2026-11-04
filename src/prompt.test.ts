@@ -14,7 +14,8 @@ describe('buildSystemPrompt', () => {
       channel: 'web',
     });
     expect(prompt).toContain('用户生活在杭州');
-    expect(prompt).toContain('2026-10-21 星期三');
+    expect(prompt).toContain('26-10-21');
+  expect(prompt).toContain('星期三');
     expect(prompt).toContain('工作日');
     expect(prompt).toContain('杭州 晴，18.5°C');
     expect(prompt).toContain('消息来源：网页');
@@ -237,7 +238,7 @@ describe('时间与诚实性规则', () => {
 
   it('同时给出 ISO 时间和按半小时取整的口语说法', () => {
     const prompt = buildSystemPrompt(base);
-    expect(prompt).toContain('2026-10-29T21:11:00+08:00');
+    expect(prompt).toContain('26-10-29 21:11');
     expect(prompt).toContain('口语说法：晚上九点（按半小时取整');
     expect(prompt).not.toContain('不要拿 HH:mm 自己换算');
   });
@@ -263,7 +264,7 @@ describe('时间与诚实性规则', () => {
 
   it('时间与环境只写一处，且带口语说法', () => {
     const prompt = buildSystemPrompt({ ...base, weather: { city: '杭州', temp_c: 18.5, desc: '晴' } });
-    expect(prompt).toContain('- 现在：2026-10-29T21:11:00+08:00');
+    expect(prompt).toContain('- 现在：26-10-29 21:11');
     expect(prompt).toContain('口语说法：晚上九点');
     // 时间和天气各只出现一次：以前 ⑤ 和 ⑧ 各一套，口径打架
     expect(prompt.match(/## 此刻/g)).toHaveLength(1);

@@ -86,16 +86,41 @@ function splitSections(text: string): {
  */
 export function slimMemoryForPrompt(text: string, now: Date = new Date()): string {
   if (!text.trim()) return '';
-  const year = String(now.getUTCFullYear());
+  const beijing = new Date(now.getTime() + 8 * 3600_000);
+  const year = String(beijing.getUTCFullYear());
+  const todayDay = Math.floor(
+    Date.UTC(beijing.getUTCFullYear(), beijing.getUTCMonth(), beijing.getUTCDate()) / 86400_000,
+  );
+  /** [2026-11-04] / [26-11-04] → 「今天」「昨天」「3 天前」；「近期动态」用得上。 */
+  const ageOf = (y: string, m: string, d: string): string | null => {
+    const full = y.length === 2 ? Number('20' + y) : Number(y);
+    const day = Math.floor(Date.UTC(full, Number(m) - 1, Number(d)) / 86400_000);
+    const diff = todayDay - day;
+    if (!Number.isFinite(diff) || diff < 0) return null;
+    if (diff === 0) return '今天';
+    if (diff === 1) return '昨天';
+    return `${diff} 天前`;
+  };
+
   const lines = text.replace(/\r\n/g, '\n').split('\n');
   const out: string[] = [];
-  let sectionHasBody = false;
+  let section: string | null = null;
   let pendingHeader: string | null = null;
+  let sectionHasBody = false;
 
   const flush = (): void => {
     if (pendingHeader !== null && sectionHasBody) out.push(pendingHeader);
     pendingHeader = null;
     sectionHasBody = false;
+  };
+  const emit = (line: string): void => {
+    if (pendingHeader !== null) {
+      out.push(pendingHeader);
+      section = pendingHeader.replace(/^##\s+/, '').trim();
+      pendingHeader = null;
+    }
+    out.push(line);
+    sectionHasBody = true;
   };
 
   for (const rawLine of lines) {
@@ -105,27 +130,31 @@ export function slimMemoryForPrompt(text: string, now: Date = new Date()): strin
       pendingHeader = line;
       continue;
     }
-    // 一级标题和记忆里的标题重复（提示词前面已经写了「## 长期记忆」）
+    // 一级标题和提示词里的标题重复
     if (/^#\s/.test(line)) continue;
     if (!line.trim()) {
       if (sectionHasBody) out.push('');
       continue;
     }
-    if (pendingHeader !== null) {
-      out.push(pendingHeader);
-      pendingHeader = null;
-    }
-    // [2026-11-04] → [11-04]（跨年的旧事保留年份，避免"去年和今年"混在一起）
-    out.push(
-      line.replace(/\[(\d{4})-(\d{2})-(\d{2})\]/g, (all, y, m, d) => (y === year ? `[${m}-${d}]` : all)),
+    // 日期：存储是 YY-MM-DD；这里把今年的缩成 MM-DD，并给「近期动态」补相对时间
+    let rendered = line.replace(
+      /\[(\d{2,4})-(\d{2})-(\d{2})\]/g,
+      (all, y: string, m: string, d: string) => (y.length === 4 && y !== year ? all : `[${m}-${d}]`),
     );
-    sectionHasBody = true;
+    if (section === '近期动态') {
+      rendered = rendered.replace(
+        /- \[(\d{2,4})-(\d{2})-(\d{2})\]/,
+        (all: string, y: string, m: string, d: string) => {
+          const age = ageOf(y, m, d);
+          return age ? `${all}（${age}）` : all;
+        },
+      );
+    }
+    emit(rendered);
   }
   flush();
   return out.join('\n').trim();
 }
-
-/** 按「变化频率」把 memory.md 拆成稳定段与易变段（不改原文件）。 */
 
 export function splitMemoryForPrompt(
   text: string,
@@ -217,14 +246,15 @@ export const TRANSIENT_KEEP_DAYS = 30;
 
 /** 标准分区顺序（新分类按此顺序插入；未知分类追加在最后）。 */
 export const SECTION_ORDER: string[] = [
+  // 硬约束放最前：模型读长文里中段的注意力会衰减，边界不能排在最后
   '## 人物底色',
+  '## 他的雷区',
   '## 称呼与关系',
   '## 关于他',
   '## 他的偏好',
   '## 进行中的事',
   '## 共同经历',
   '## 你的生活',
-  '## 他的雷区',
   '## 近期动态',
 ];
 

@@ -59,11 +59,17 @@ export async function getMemoryFresh(env: Env): Promise<string> {
  * 于是索引里有一份 R2 里不存在的记忆 —— 比直接报错更难查。
  * 现在：写后读回比对，不一致就不刷新缓存并返回 false，让调用方跳过派生重建。
  */
+/** 存储层统一用 YY-MM-DD（注入提示词时再决定要不要省年份）。 */
+export function normalizeMemoryDates(text: string): string {
+  return text.replace(/\[(\d{4})-(\d{2})-(\d{2})\]/g, (_all, y: string, m: string, d: string) => `[${y.slice(2)}-${m}-${d}]`);
+}
+
 export async function putMemory(
   env: Env,
   text: string,
   actor: Actor = 'job',
 ): Promise<boolean> {
+  text = normalizeMemoryDates(text);
   // 重写长期记忆属于 A 档动作，但必须过闸口：宪法四节的写入在 policy 里是被挡的。
   assertAllowed({ kind: 'memory.write' }, { actor });
   // 1) 先写 R2（唯一真相）。失败时缓存保持旧值：KV 与 R2 仍是**一致**的旧版本。

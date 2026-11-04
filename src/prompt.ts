@@ -281,7 +281,10 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   // 今天是不是节假日：节假日说名字，周末也算，其他一律「工作日」
   const restNote =
     ctx.holiday_note && !/平常工作日|工作日/.test(ctx.holiday_note) ? ctx.holiday_note : '工作日';
-  lines.push(`- 现在：${isoInBeijing(now)}（${ctx.date} ${ctx.weekday} · ${restNote}）`);
+  // 全系统统一 YY-MM-DD（存储、提示词同一口径），时间只保留到分钟
+  const ymd = ctx.date.replace(/^(\d{2})(\d{2})-(\d{2})-(\d{2})$/, '$2-$3-$4');
+  const clock = isoInBeijing(now).slice(11, 16);
+  lines.push(`- 现在：${ymd} ${clock}（${ctx.weekday} · ${restNote}）`);
   // 直接给出「晚上九点十一分」：模型自己把 21:11 换算成口语会算错（实测差近一小时）
   lines.push(`- 口语说法：${spokenTime(now)}（按半小时取整，说到时间用这个量级就行）`);
   if (weather?.city && weather?.desc && typeof weather?.temp_c === 'number') {

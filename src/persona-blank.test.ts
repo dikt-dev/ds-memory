@@ -10,7 +10,7 @@ import type { DayContext } from './holidays';
  * 因为空环境变量会回退到开源默认值。blank 模式把这个回退也关掉了。
  */
 const ctx: DayContext = {
-  date: '2026-11-04',
+  date: '26-11-04',
   weekday: '周三',
   holiday_note: '平常工作日',
 } as unknown as DayContext;
@@ -45,7 +45,7 @@ describe('PERSONA_PROFILE=none', () => {
   it('时间/环境这类事实仍然保留（不然她连现在几点都不知道）', () => {
     const prompt = buildSystemPrompt(base);
     expect(prompt).toContain('## 此刻');
-    expect(prompt).toContain('2026-11-04');
+    expect(prompt).toContain('26-11-04');
   });
 
   it('默认档位行为不变：没配 PERSONA_PROFILE 时仍有人设', () => {

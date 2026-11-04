@@ -38,10 +38,10 @@ function fakeEnv(opts: { failPut?: boolean; truncateOnWrite?: boolean } = {}) {
 describe('putMemory 写后校验', () => {
   it('写入成功时返回 true，并刷新 R2 与 KV', async () => {
     const { env, kv, r2 } = fakeEnv();
-    const ok = await putMemory(env, '# 记忆\n- [2026-10-29] 事实。');
+    const ok = await putMemory(env, '# 记忆\n- [26-10-29] 事实。');
     expect(ok).toBe(true);
-    expect(r2.get(MEMORY_R2_KEY)).toBe('# 记忆\n- [2026-10-29] 事实。');
-    expect(kv.get(MEMORY_KV_KEY)).toBe('# 记忆\n- [2026-10-29] 事实。');
+    expect(r2.get(MEMORY_R2_KEY)).toBe('# 记忆\n- [26-10-29] 事实。');
+    expect(kv.get(MEMORY_KV_KEY)).toBe('# 记忆\n- [26-10-29] 事实。');
   });
 
   it('R2 put 抛错时返回 false，且旧缓存原样保留（不制造新的一致性问题）', async () => {
