@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { applySubjectFixes, entryBody, planSubjectFixes } from './subject-fix';
 
 const doc = [
-  '## 关于用户',
+  '## 关于他',
   '- 职业=嵌入式开发',
-  '## 进行中的事项',
+  '## 进行中的事',
   '- [进行中] 记忆管理优化：已落地第一阶段，下一步待做分层预算',
   '- 回滚方案草稿写完（memory-rollback-plan.md：每日快照+恢复接口、不做版本历史）；不再搁置，待 11-01 解冻实施',
   '- [进行中] 用户已经在写迁移方案',
@@ -54,7 +54,7 @@ describe('applySubjectFixes', () => {
   it('只改命中的行，其它原样保留', () => {
     const { text, changes } = applySubjectFixes(doc);
     expect(changes.length).toBeGreaterThan(0);
-    expect(text).toContain('## 关于用户');
+    expect(text).toContain('## 关于他');
     expect(text).toContain('- 职业=嵌入式开发');
     expect(text).toContain('- [26-10-30] 一起看完了可塑性记忆');
     expect(text).toContain('- [进行中] 用户记忆管理优化');
@@ -64,7 +64,7 @@ describe('applySubjectFixes', () => {
   });
 
   it('没有需要修的时候原样返回', () => {
-    const clean = '## 关于用户\n- 职业=嵌入式开发';
+    const clean = '## 关于他\n- 职业=嵌入式开发';
     expect(applySubjectFixes(clean).changes).toEqual([]);
     expect(applySubjectFixes(clean).text).toBe(clean);
   });

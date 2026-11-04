@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T06:43:45.224Z",
+  "generated_at": "2026-11-04T06:56:54.846Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "f0736a7",
+          "date": "2026-11-04",
+          "type": "feat",
+          "area": "",
+          "title": "脾气带上归因——只说因为什么，不写数值",
+          "why": ""
+        },
         {
           "hash": "29bf462",
           "date": "2026-11-04",
@@ -3240,14 +3248,6 @@
           "type": "fix",
           "area": "memory",
           "title": "keep completed item wording natural",
-          "why": ""
-        },
-        {
-          "hash": "e0874f9",
-          "date": "2026-10-26",
-          "type": "docs",
-          "area": "",
-          "title": "close day one and start day two observation",
           "why": ""
         }
       ]

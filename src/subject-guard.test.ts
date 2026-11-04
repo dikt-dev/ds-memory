@@ -34,7 +34,7 @@ describe('isActionEntry', () => {
 
 describe('auditSubjects', () => {
   const doc = [
-    '## 关于用户',
+    '## 关于他',
     '- 职业=嵌入式开发',
     '- 熬夜调通了 AstrBot',
     '## 共同经历',
@@ -44,7 +44,7 @@ describe('auditSubjects', () => {
     '- 嘴硬心软，不会直说想你',
   ].join('\n');
 
-  it('「关于用户」整节默认主语是用户，不报警', () => {
+  it('「关于他」整节默认主语是用户，不报警', () => {
     const issues = auditSubjects(doc);
     expect(issues.map((i) => i.line)).toEqual(['半夜写了监控脚本']);
   });
@@ -58,7 +58,7 @@ describe('auditSubjects', () => {
   });
 
   it('有主体的条目不报', () => {
-    const clean = '## 进行中的事项\n- 用户写了回滚草稿\n- 她提醒了三次';
+    const clean = '## 进行中的事\n- 用户写了回滚草稿\n- 她提醒了三次';
     expect(auditSubjects(clean)).toEqual([]);
   });
 

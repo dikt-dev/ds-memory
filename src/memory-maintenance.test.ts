@@ -18,14 +18,14 @@ const SAMPLE = `# 长期记忆
 
 > 系统维护
 
-## 关于用户
+## 关于他
 - [2026-10-01] 旧事实A。
 - [2026-10-01] 旧事实B。
 
-## 偏好与习惯
+## 他的偏好
 - [2026-10-10] 偏好C。
 
-## 进行中的事项
+## 进行中的事
 - [2026-10-20] 最新D。
 `;
 
@@ -38,14 +38,14 @@ describe('byteLength', () => {
 
 describe('mergeMemoryEntry', () => {
   it('重复条目不追加', () => {
-    const distilled = `## 关于用户
+    const distilled = `## 关于他
 - [2026-10-01] 旧事实A。`;
     const out = mergeMemoryEntry(SAMPLE, distilled, '2026-10-21');
     expect(out).toBe(SAMPLE); // 无变化
   });
 
   it('新条目合并进已有分类，缺日期时补 fallback 日期', () => {
-    const distilled = `## 偏好与习惯
+    const distilled = `## 他的偏好
 - 喜欢深夜工作。
 ## 全新分类
 - [2026-10-21] 某条信息。`;
@@ -56,7 +56,7 @@ describe('mergeMemoryEntry', () => {
     // 原有内容保留
     expect(out).toContain('- [2026-10-20] 最新D。');
     // 分类顺序：原分类在前，新分类追加在后
-    expect(out.indexOf('## 关于用户')).toBeLessThan(out.indexOf('## 全新分类'));
+    expect(out.indexOf('## 关于他')).toBeLessThan(out.indexOf('## 全新分类'));
   });
 
   it('裸 bullet（没有分区标题）落到近期动态，不静默丢失', () => {
@@ -105,15 +105,15 @@ describe('trimOldestEntries', () => {
     expect(r.text).toContain('2026-10-10');
     expect(r.text).toContain('2026-10-20');
     // 新设计：标准分区即使条目被删空也保留头部（方便 AI 后续填充）
-    expect(r.text).toContain('## 关于用户');
+    expect(r.text).toContain('## 关于他');
     expect(byteLength(r.text)).toBeLessThanOrEqual(byteLength(SAMPLE) - 1);
   });
 
-  it('★ 受保护区块（雷区与禁忌）超容也不被裁剪', () => {
+  it('★ 受保护区块（他的雷区）超容也不被裁剪', () => {
     const text = [
       '# 长期记忆',
       '',
-      '## 雷区与禁忌',
+      '## 他的雷区',
       '',
       '- [2026-01-01] 不要提加班',
       '- [2026-01-02] 不要问体重',
@@ -153,14 +153,14 @@ describe('人物底色（不可变区块）', () => {
 
 - 昵称"小忆"，称用户为"你"。
 
-## 关于用户
+## 关于他
 - [2026-10-01] 旧事实A。
 `;
 
   it('提炼结果不能修改或新增人物底色', () => {
     const distilled = `## 人物底色
 - 新的性格设定（不应写入）。
-## 关于用户
+## 关于他
 - [2026-10-21] 新事实。`;
     const out = mergeMemoryEntry(WITH_IMMUTABLE, distilled, '2026-10-21');
     expect(out).not.toContain('新的性格设定');
@@ -179,15 +179,15 @@ describe('人物底色（不可变区块）', () => {
 
 describe('ensureModuleComments', () => {
   it('为缺失注释的模块补上说明', () => {
-    const text = '# 长期记忆\n\n## 关于用户\n- [2026-10-01] 事实A。';
+    const text = '# 长期记忆\n\n## 关于他\n- [2026-10-01] 事实A。';
     const out = ensureModuleComments(text);
-    expect(out).toContain('## 关于用户');
+    expect(out).toContain('## 关于他');
     expect(out).toContain('<!-- 身份、背景');
     expect(out).toContain('- [2026-10-01] 事实A。');
   });
 
   it('已有注释时不重复添加（幂等）', () => {
-    const once = ensureModuleComments('# 长期记忆\n\n## 关于用户\n- [2026-10-01] 事实A。\n');
+    const once = ensureModuleComments('# 长期记忆\n\n## 关于他\n- [2026-10-01] 事实A。\n');
     expect(ensureModuleComments(once)).toBe(once);
   });
 
@@ -347,21 +347,21 @@ describe('分层 demoteSectionEntries', () => {
   });
 
   it('受保护分区不参与分层', () => {
-    const before = build().replace('## 共同经历', '## 雷区与禁忌');
-    const res = demoteSectionEntries(before, '## 雷区与禁忌', 100, 3);
+    const before = build().replace('## 共同经历', '## 他的雷区');
+    const res = demoteSectionEntries(before, '## 他的雷区', 100, 3);
     expect(res.removed).toEqual([]);
   });
 });
 
 describe('记忆密度整理 compactMemoryEntries', () => {
-  it('关于用户同内容跨日期去重，保留信息更长的正文与最早日期', () => {
+  it('关于他同内容跨日期去重，保留信息更长的正文与最早日期', () => {
     const before = `# 长期记忆
 
-## 关于用户
+## 关于他
 - [26-10-01] 用户是 C 开发者
 - [26-10-20] 用户是 C 开发者，做跨端聊天软件
 
-## 雷区与禁忌
+## 他的雷区
 - 不要提加班
 - 不要提加班
 `;
@@ -373,8 +373,8 @@ describe('记忆密度整理 compactMemoryEntries', () => {
     expect(out.text.match(/不要提加班/g)).toHaveLength(2);
   });
 
-  it('关于用户的键=值取最新值，不被旧的长句覆盖', () => {
-    const before = `# 长期记忆\n\n## 关于用户\n- [26-10-01] 职业=C 开发者，做 epoll/timerfd 很久了\n- [26-10-20] 职业=Go\n`;
+  it('关于他的键=值取最新值，不被旧的长句覆盖', () => {
+    const before = `# 长期记忆\n\n## 关于他\n- [26-10-01] 职业=C 开发者，做 epoll/timerfd 很久了\n- [26-10-20] 职业=Go\n`;
     const out = compactMemoryEntries(before);
     expect(out.text).toContain('职业=Go');
     expect(out.text).not.toContain('职业=C 开发者');
@@ -395,7 +395,7 @@ describe('记忆密度整理 compactMemoryEntries', () => {
   });
 
   it('没有重复时原样返回', () => {
-    const before = '# 长期记忆\n\n## 关于用户\n- [26-10-01] 唯一事实\n';
+    const before = '# 长期记忆\n\n## 关于他\n- [26-10-01] 唯一事实\n';
     const out = compactMemoryEntries(before);
     expect(out.removed).toBe(0);
     expect(out.text).toBe(before);
@@ -413,11 +413,11 @@ describe('键=值 覆盖式更新', () => {
   it('同键的旧条目被原地替换，不会叠加', () => {
     const before = `# 长期记忆
 
-## 偏好与习惯
+## 他的偏好
 - [2026-10-01] 作息=爱熬夜
 - [2026-10-01] 颜色=绿
 `;
-    const distilled = `## 偏好与习惯
+    const distilled = `## 他的偏好
 - [2026-10-22] 作息=恨熬夜但天天熬
 `;
     const after = mergeMemoryEntry(before, distilled);
@@ -431,10 +431,10 @@ describe('键=值 覆盖式更新', () => {
   it('新键直接追加', () => {
     const before = `# 长期记忆
 
-## 偏好与习惯
+## 他的偏好
 - [2026-10-01] 颜色=绿
 `;
-    const after = mergeMemoryEntry(before, `## 偏好与习惯\n- [2026-10-22] 聊天长度=偏好短消息\n`);
+    const after = mergeMemoryEntry(before, `## 他的偏好\n- [2026-10-22] 聊天长度=偏好短消息\n`);
     expect(after).toContain('颜色=绿');
     expect(after).toContain('聊天长度=偏好短消息');
   });
@@ -442,10 +442,10 @@ describe('键=值 覆盖式更新', () => {
   it('散文里的全角冒号不当作键（不会被误覆盖）', () => {
     const before = `# 长期记忆
 
-## 偏好与习惯
+## 他的偏好
 - [2026-10-01] 沟通：喜欢短句
 `;
-    const after = mergeMemoryEntry(before, `## 偏好与习惯\n- [2026-10-22] 沟通：喜欢长文\n`);
+    const after = mergeMemoryEntry(before, `## 他的偏好\n- [2026-10-22] 沟通：喜欢长文\n`);
     expect(after).toContain('沟通：喜欢短句');
     expect(after).toContain('沟通：喜欢长文');
   });
@@ -453,10 +453,10 @@ describe('键=值 覆盖式更新', () => {
   it('兼容短日期 YY-MM-DD，并保留新条目短格式', () => {
     const before = `# 长期记忆
 
-## 关于用户
+## 关于他
 - [26-10-20] 旧事实
 `;
-    const after = mergeMemoryEntry(before, `## 关于用户\n- [26-10-23] 新事实\n`, '2026-10-23');
+    const after = mergeMemoryEntry(before, `## 关于他\n- [26-10-23] 新事实\n`, '2026-10-23');
     expect(after).toContain('- [26-10-20] 旧事实');
     expect(after).toContain('- [26-10-23] 新事实');
   });
@@ -471,29 +471,29 @@ describe('splitMemoryForPrompt（缓存分段）', () => {
 ## 称呼与关系
 - 平时叫用户“大笨蛋”。
 
-## 关于用户
+## 关于他
 - [26-10-20] 城=杭州。
 
-## 偏好与习惯
+## 他的偏好
 - [26-10-20] 喜=喝奶茶。
 
-## 进行中的事项
+## 进行中的事
 - [26-10-30] 正在重构记忆系统。
 
 ## 近期动态
 - [26-10-30] 今天加班到十点。
 
-## 雷区与禁忌
+## 他的雷区
 - 不要提跳槽。`;
 
   it('小时内会变的分区进 volatile，其余进 stable', () => {
     const { stable, volatile } = splitMemoryForPrompt(MEM);
     expect(stable).toContain('## 人物底色');
     expect(stable).toContain('## 称呼与关系');
-    expect(stable).toContain('## 雷区与禁忌');
-    expect(stable).not.toContain('## 进行中的事项');
+    expect(stable).toContain('## 他的雷区');
+    expect(stable).not.toContain('## 进行中的事');
     expect(stable).not.toContain('## 近期动态');
-    expect(volatile).toContain('## 进行中的事项');
+    expect(volatile).toContain('## 进行中的事');
     expect(volatile).toContain('## 近期动态');
     expect(volatile).not.toContain('## 人物底色');
   });
@@ -507,7 +507,7 @@ describe('splitMemoryForPrompt（缓存分段）', () => {
   it('两段拼起来不丢任何分区', () => {
     const { stable, volatile } = splitMemoryForPrompt(MEM);
     const both = stable + '\n' + volatile;
-    for (const h of ['人物底色', '称呼与关系', '关于用户', '偏好与习惯', '进行中的事项', '近期动态', '雷区与禁忌']) {
+    for (const h of ['人物底色', '称呼与关系', '关于他', '他的偏好', '进行中的事', '近期动态', '他的雷区']) {
       expect(both).toContain(`## ${h}`);
     }
   });
@@ -534,7 +534,7 @@ describe('demoteSectionToBudget', () => {
     '- [26-10-02] 第二件事 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
     '- [26-10-03] 第三件事 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
     '- [26-10-04] 第四件事 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
-    '## 雷区与禁忌',
+    '## 他的雷区',
     '- [26-10-01] 别提体重',
   ].join('\n');
 
@@ -552,7 +552,7 @@ describe('demoteSectionToBudget', () => {
   });
 
   it('受保护分区不参与', () => {
-    const r = demoteSectionToBudget(doc, '## 雷区与禁忌', 1);
+    const r = demoteSectionToBudget(doc, '## 他的雷区', 1);
     expect(r.removed).toEqual([]);
   });
 });

@@ -6,8 +6,8 @@ const dayAgo = (days: number) =>
   new Date(NOW - days * 86_400_000).toISOString().slice(0, 10);
 
 describe('recallDecay（遗忘曲线：降权，不删除）', () => {
-  it('核心分区永不衰减：人物底色 / 称呼关系 / 雷区禁忌 / 用户更正', () => {
-    for (const section of ['人物底色', '称呼与关系', '雷区与禁忌', '用户更正（最高优先级）']) {
+  it('核心分区永不衰减：人物底色 / 称呼关系 / 雷区禁忌 / 他的更正', () => {
+    for (const section of ['人物底色', '称呼与关系', '他的雷区', '他的更正（最高优先级）']) {
       expect(recallDecay({ source: 'fact', section, date: dayAgo(3650) }, NOW)).toBe(1);
     }
   });
@@ -23,7 +23,7 @@ describe('recallDecay（遗忘曲线：降权，不删除）', () => {
   });
 
   it('事实半衰期 180 天：比事件淡得慢', () => {
-    const fact = recallDecay({ source: 'fact', section: '偏好与习惯', date: dayAgo(90) }, NOW);
+    const fact = recallDecay({ source: 'fact', section: '他的偏好', date: dayAgo(90) }, NOW);
     const event = recallDecay({ source: 'event', section: '共同经历', date: dayAgo(90) }, NOW);
     expect(fact).toBeGreaterThan(event);
     expect(fact).toBeCloseTo(Math.pow(0.5, 0.5), 2);
@@ -35,8 +35,8 @@ describe('recallDecay（遗忘曲线：降权，不删除）', () => {
   });
 
   it('没有日期 / 日期非法 → 不衰减（信息不足时保守处理）', () => {
-    expect(recallDecay({ source: 'fact', section: '关于用户', date: null }, NOW)).toBe(1);
-    expect(recallDecay({ source: 'fact', section: '关于用户', date: '不是日期' }, NOW)).toBe(1);
+    expect(recallDecay({ source: 'fact', section: '关于他', date: null }, NOW)).toBe(1);
+    expect(recallDecay({ source: 'fact', section: '关于他', date: '不是日期' }, NOW)).toBe(1);
   });
 
   it('未来日期不放大（不会因为时钟漂移变成加成）', () => {

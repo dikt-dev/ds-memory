@@ -34,21 +34,21 @@ const logInfo = (msg: string): void => logTrace('memory.index', { msg });
 
 /** 永远常驻注入、不参与检索的分区（核心层）。 */
 export const CORE_SECTIONS = [
-  '用户更正（最高优先级）',
+  '他的更正（最高优先级）',
   '人物底色',
   '称呼与关系',
-  '雷区与禁忌',
+  '他的雷区',
 ];
 /** 记忆不大时优先全量注入，避免为了省几 KB 引入召回失败风险。 */
 export const MEMORY_INLINE_MAX_BYTES = 16 * 1024;
 /** compact 模式下的稳定画像：这些事实即使没被召回也值得常驻。 */
-export const STABLE_SECTIONS = [...CORE_SECTIONS, '关于用户', '偏好与习惯'];
+export const STABLE_SECTIONS = [...CORE_SECTIONS, '关于他', '他的偏好'];
 
 /** 各分区在召回里的重要度（越高越优先占 top-k 名额）。 */
 export const SECTION_IMPORTANCE: Record<string, number> = {
-  关于用户: 3,
-  偏好与习惯: 3,
-  进行中的事项: 3,
+  关于他: 3,
+  他的偏好: 3,
+  进行中的事: 3,
   共同经历: 2,
   近期动态: 1,
   档案: 2,
@@ -112,7 +112,7 @@ export function extractSections(text: string, headers: string[]): string {
   return out.join('\n').trim();
 }
 
-/** 从 memory.md 里抽出「常驻核心」区块（人物底色/称呼与关系/雷区与禁忌）。 */
+/** 从 memory.md 里抽出「常驻核心」区块（人物底色/称呼与关系/他的雷区）。 */
 export function extractCoreMemory(text: string): string {
   return extractSections(text, CORE_SECTIONS);
 }
@@ -120,7 +120,7 @@ export function extractCoreMemory(text: string): string {
 /**
  * 决定本轮提示词带哪一份记忆：
  * - memory.md ≤ 16KB：全量带上（稳定前缀、命中缓存，质量最好）；
- * - 超过 16KB：带核心 + 关于用户 + 偏好与习惯，其余靠召回。
+ * - 超过 16KB：带核心 + 关于他 + 他的偏好，其余靠召回。
  */
 export function extractPromptMemory(
   text: string,
@@ -133,7 +133,7 @@ export function extractPromptMemory(
 /**
  * S6：按开关决定本轮提示词带哪份记忆。
  *
- * evidence 模式只带宪法四节（人物底色 / 称呼与关系 / 雷区与禁忌 / 用户更正），
+ * evidence 模式只带宪法四节（人物底色 / 称呼与关系 / 他的雷区 / 他的更正），
  * 其余事实交给召回；模型从"读档案"变成"看证据"。
  */
 export function buildPromptMemoryFor(
@@ -730,9 +730,9 @@ async function llmRerank(
   }
 }
 
-/** 保证“进行中的事项”至少有一条进注入（它的重要度是 3，不能被挤掉）。 */
+/** 保证“进行中的事”至少有一条进注入（它的重要度是 3，不能被挤掉）。 */
 function ensureOngoing(selected: Scored[], pool: Scored[], k: number): Scored[] {
-  const ongoing = pool.find((c) => c.r.section === '进行中的事项' && c.score > 0);
+  const ongoing = pool.find((c) => c.r.section === '进行中的事' && c.score > 0);
   if (!ongoing || selected.some((c) => c.r.id === ongoing.r.id)) return selected;
   if (selected.length < k) return [...selected, ongoing];
   let worst = 0;
@@ -858,7 +858,7 @@ export async function recallMemoryForChat(
       }
     }
 
-    // 粗召回 20 条候选 → MMR 去冗余 → 条件 LLM 重排 → 强保“进行中的事项”
+    // 粗召回 20 条候选 → MMR 去冗余 → 条件 LLM 重排 → 强保“进行中的事”
 
     let picked = pool.slice(0, k);
     if (pool.length > k) picked = mmrSelect(pool, k);

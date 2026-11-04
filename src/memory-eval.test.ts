@@ -19,7 +19,7 @@ interface GoldenCase {
 
 const golden = JSON.parse(goldenRaw) as { cases: GoldenCase[] };
 /** 核心区永远走 pinned 注入，不参与 chunk 召回评测。 */
-const CORE = new Set(['人物底色', '称呼与关系', '雷区与禁忌']);
+const CORE = new Set(['人物底色', '称呼与关系', '他的雷区']);
 const cases = golden.cases.filter((c) => !CORE.has(c.section));
 const chunks = buildMemoryChunks(parseMemoryContext(fixture));
 

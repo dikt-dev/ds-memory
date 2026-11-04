@@ -1,8 +1,8 @@
 /**
- * 雷区与禁忌的主动学习。
+ * 他的雷区的主动学习。
  *
  * 思路：从对话中识别「用户表现出明显负面反应」的话题，累计证据后写入
- * memory.md 的「雷区与禁忌」分区，并在提示词里避免再踩。
+ * memory.md 的「他的雷区」分区，并在提示词里避免再踩。
  *
  * 为什么要累计而不是一次就记：
  * 一次情绪低落可能只是当天心情不好，不代表话题本身是雷区。
@@ -213,12 +213,12 @@ export function formatAversionEntry(c: AversionCandidate): string {
 }
 
 /**
- * 把雷区条目并入记忆文本的「雷区与禁忌」分区（去重）。
+ * 把雷区条目并入记忆文本的「他的雷区」分区（去重）。
  */
 export function mergeAversionEntries(memory: string, entries: string[]): string {
   if (entries.length === 0) return memory;
   const lines = memory.split('\n');
-  const headerIdx = lines.findIndex((l) => l.trim() === '## 雷区与禁忌');
+  const headerIdx = lines.findIndex((l) => l.trim() === '## 他的雷区');
   if (headerIdx === -1) return memory; // 没有该分区则不动（由 ensureModuleComments 补齐）
 
   // 找到该分区结束位置

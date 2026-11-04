@@ -22,21 +22,21 @@ const SAMPLE = `# 长期记忆
 - 用户叫AI=阿澈
 - 好感度：620 / 1000
 
-## 关于用户
+## 关于他
 - [26-10-01] 城市=杭州
 - [26-10-01] 职业=后端开发
 - [26-10-02] 猫=团子
 
-## 偏好与习惯
+## 他的偏好
 - [26-10-03] 颜色=蓝
 
-## 进行中的事项
+## 进行中的事
 - [26-10-10] [进行中] 项目=星海（个人记忆系统）
 
 ## 共同经历
 - [26-10-01] 第一次聊天聊到凌晨
 
-## 雷区与禁忌
+## 他的雷区
 - 不要拿它和别的 AI 比较
 
 ## 近期动态
@@ -48,7 +48,7 @@ describe('memory-domain 解析', () => {
     const parsed = parseMemoryContext(SAMPLE);
     expect(parsed.facts.some((f) => f.content.includes('好感度'))).toBe(false);
     expect(parsed.facts.some((f) => f.content.includes('名字=阿澈'))).toBe(false);
-    expect(parsed.facts.length).toBe(5); // 关于用户 3 + 偏好 1 + 事项 1；雷区是核心，跳过
+    expect(parsed.facts.length).toBe(5); // 关于他 3 + 偏好 1 + 事项 1；雷区是核心，跳过
     expect(parsed.events.map((e) => e.summary)).toContain('在整理记忆架构');
   });
 
@@ -60,14 +60,14 @@ describe('memory-domain 解析', () => {
   });
 
   it('id 稳定可复现', () => {
-    expect(factId('关于用户', '2026-10-01', '城市=杭州')).toBe(
-      factId('关于用户', '2026-10-01', '城市=杭州'),
+    expect(factId('关于他', '2026-10-01', '城市=杭州')).toBe(
+      factId('关于他', '2026-10-01', '城市=杭州'),
     );
     expect(stableHash('abc')).toHaveLength(8);
   });
 
   it('无日期条目也进入 facts，不再被 next 静默丢弃', () => {
-    const parsed = parseMemoryContext('## 关于用户\n- 城市=杭州');
+    const parsed = parseMemoryContext('## 关于他\n- 城市=杭州');
     expect(parsed.facts).toHaveLength(1);
     expect(parsed.facts[0].content).toBe('城市=杭州');
     expect(parsed.facts[0].validFrom).toBeNull();
@@ -96,7 +96,7 @@ describe('memory-domain 投影', () => {
     const out = projectMemoryContext(SAMPLE, parsed);
     expect(out).toContain('## 人物底色');
     expect(out).toContain('- 名字=阿澈；自称=我');
-    expect(out).toContain('## 关于用户');
+    expect(out).toContain('## 关于他');
     expect(out).toContain('- [26-10-01] 城市=杭州');
     expect(out).toContain('## 共同经历');
     expect(out).toContain('- [26-10-01] 第一次聊天聊到凌晨');
@@ -104,19 +104,19 @@ describe('memory-domain 投影', () => {
     expect(out).toContain('好感度：620');
   });
 
-  it('用户更正分区进入投影，不被丢弃', () => {
-    const text = `# 长期记忆\n\n## 用户更正（最高优先级）\n- [26-10-28] 我喜欢被叫大人\n\n## 关于用户\n- [26-10-01] 城市=杭州\n`;
+  it('他的更正分区进入投影，不被丢弃', () => {
+    const text = `# 长期记忆\n\n## 他的更正（最高优先级）\n- [26-10-28] 我喜欢被叫大人\n\n## 关于他\n- [26-10-01] 城市=杭州\n`;
     const parsed = parseMemoryContext(text);
     const out = projectMemoryContext(text, parsed);
-    expect(out).toContain('## 用户更正（最高优先级）');
+    expect(out).toContain('## 他的更正（最高优先级）');
     expect(out).toContain('我喜欢被叫大人');
   });
 });
 
 function fact(overrides: Partial<MemoryFact> = {}): MemoryFact {
   return {
-    id: factId('关于用户', '2026-10-01', '城市=杭州'),
-    section: '关于用户',
+    id: factId('关于他', '2026-10-01', '城市=杭州'),
+    section: '关于他',
     content: '城市=杭州',
     subject: '城市',
     predicate: '城市',
@@ -143,7 +143,7 @@ describe('memory-domain 有效期/冲突', () => {
   it('同一 predicate 保留较新事实并合并来源', () => {
     const old = fact({ validFrom: '2026-10-01', sourceMessageIds: [1] });
     const newer = fact({
-      id: factId('关于用户', '2026-10-20', '城市=上海'),
+      id: factId('关于他', '2026-10-20', '城市=上海'),
       content: '城市=上海',
       object: '上海',
       validFrom: '2026-10-20',

@@ -277,7 +277,7 @@ export async function settleDiaryConsent(
   }
 
   await appendMemoryLine(env, {
-    section: '## 偏好与习惯',
+    section: '## 他的偏好',
     line:
       verdict === 'yes'
         ? `- 愿意看她的日记（${pending.date_key} 问过，说可以）`

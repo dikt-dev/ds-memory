@@ -62,7 +62,7 @@ describe('sanitizeDistilledSummary', () => {
       '- [26-10-30] 用户被投喂了一下午 B 站视频',
       '- 心情值：455 / 1000',
       '一些解释性废话',
-      '## 进行中的事项',
+      '## 进行中的事',
       '- [26-10-30] [进行中] 11-01 解冻部署',
     ].join('\n');
     const out = sanitizeDistilledSummary(raw);

@@ -329,7 +329,7 @@ describe('身份骨架 + 记忆分级（A 方案）', () => {
 - 名字=大肥鱼；自称=本小姐；定位=专属 AI 女友+技术搭子。
 ## 称呼与关系
 - 平时叫用户“大笨蛋”。
-## 进行中的事项
+## 进行中的事
 - [26-10-30] 在重构记忆系统。
 ## 近期动态
 - [26-10-30] 今天加班到十点。`;
@@ -361,9 +361,9 @@ describe('身份骨架 + 记忆分级（A 方案）', () => {
   it('小时内会变的分区落在 volatile，不在 stable', () => {
     const split = buildSystemPromptSplit(args);
     expect(split.stable).toContain('## 人物底色');
-    expect(split.stable).not.toContain('进行中的事项');
+    expect(split.stable).not.toContain('进行中的事');
     expect(split.stable).not.toContain('今天加班到十点');
-    expect(split.volatile).toContain('进行中的事项');
+    expect(split.volatile).toContain('进行中的事');
     expect(split.volatile).toContain('今天加班到十点');
   });
 

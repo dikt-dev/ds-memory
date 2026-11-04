@@ -82,37 +82,37 @@ export interface ParsedMemoryContext {
 }
 
 export const CORE_SECTIONS = new Set([
-  '用户更正（最高优先级）',
+  '他的更正（最高优先级）',
   '人物底色',
   '称呼与关系',
-  '雷区与禁忌',
+  '他的雷区',
 ]);
 const EVENT_SECTIONS = new Set(['共同经历', '近期动态']);
 const RELATION_LINE_RE = /^(好感度|亲密度|心情值?|信任|尊重|心动)\s*[:：]/;
 const ENTRY_RE = /^-\s*\[((?:\d{4}|\d{2})-\d{2}-\d{2})\]\s*(.+)$/;
 
 export const MEMORY_SECTION_ORDER = [
-  '用户更正（最高优先级）',
+  '他的更正（最高优先级）',
   '人物底色',
   '称呼与关系',
-  '关于用户',
-  '偏好与习惯',
-  '进行中的事项',
+  '关于他',
+  '他的偏好',
+  '进行中的事',
   '共同经历',
-  '雷区与禁忌',
+  '他的雷区',
   '近期动态',
 ] as const;
 
 const QUERY_STOP_CHARS = new Set('我的你他她它这那有是个了吗呢吧啊什么怎为在就和与及或把被让给对从到又还都也一不没天吃今'.split(''));
 
 const IMPORTANCE: Record<string, number> = {
-  关于用户: 3,
-  偏好与习惯: 3,
-  进行中的事项: 3,
+  关于他: 3,
+  他的偏好: 3,
+  进行中的事: 3,
   共同经历: 2,
   近期动态: 1,
   档案: 1,
-  雷区与禁忌: 3,
+  他的雷区: 3,
 };
 
 /** FNV-1a 稳定短 hash：用于派生 id/content_hash，不用于安全。 */
@@ -352,7 +352,7 @@ function dateOfChunk(chunk: MemoryChunk): string {
 
 /**
  * 由 facts/events 投影回 memory.md。
- * 核心分区（人物底色/称呼与关系/雷区与禁忌）从 pinned 原文保留，
+ * 核心分区（人物底色/称呼与关系/他的雷区）从 pinned 原文保留，
  * 其余分区按日期排序重建；没有条目时保留空标题，便于人工继续添加。
  */
 export function projectMemoryContext(pinnedText: string, parsed: ParsedMemoryContext): string {

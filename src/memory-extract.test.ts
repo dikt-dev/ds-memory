@@ -11,8 +11,8 @@ describe('extractFactsFromMessages', () => {
     expect(facts).toHaveLength(4);
     expect(facts.every((f) => f.sourceMessageIds.length === 1)).toBe(true);
     expect(facts.find((f) => f.content === '城市=杭州')?.sourceMessageIds).toEqual([10]);
-    expect(facts.find((f) => f.content === '宠物=团子')?.section).toBe('关于用户');
-    expect(facts.find((f) => f.content === '讨厌=被比较')?.section).toBe('雷区与禁忌');
+    expect(facts.find((f) => f.content === '宠物=团子')?.section).toBe('关于他');
+    expect(facts.find((f) => f.content === '讨厌=被比较')?.section).toBe('他的雷区');
   });
 
   it('同一条消息的同槽位只保留一条', () => {

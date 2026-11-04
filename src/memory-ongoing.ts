@@ -1,5 +1,5 @@
 /**
- * 「进行中的事项」合并过期状态行。
+ * 「进行中的事」合并过期状态行。
  *
  * 问题：一件事被拖过几轮，记忆里就会留下
  *   [搁置] 回滚方案草稿：用户多次拖延…助手催了多轮
@@ -9,7 +9,7 @@
  *
  * 这里做的是**同主题只留最新一条**：按最长公共子串把行归堆，
  * 每堆留下「日期最新 + 状态最靠后」的那条，其余进 R2 档案层（不直接销毁）。
- * 只动「进行中的事项」这一节，别的不碰。
+ * 只动「进行中的事」这一节，别的不碰。
  */
 
 /** 状态优先级：越靠后越「新」。 */
@@ -92,12 +92,12 @@ export interface CollapseResult {
 }
 
 /**
- * 合并「## 进行中的事项」里同主题的旧行。
+ * 合并「## 进行中的事」里同主题的旧行。
  *
  * 除「已完成」外，同一组最多留 1 条；「已完成」的行保留（它是结论，不该被旧行覆盖）。
  */
 export function collapseOngoing(text: string, opts: { maxRemove?: number } = {}): CollapseResult {
-  const header = '## 进行中的事项';
+  const header = '## 进行中的事';
   const lines = text.split('\n');
   const head = lines.findIndex((l) => l.trim() === header);
   if (head < 0) return { text, removed: [], groups: [] };

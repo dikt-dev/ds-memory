@@ -14,7 +14,7 @@ describe('archiveCompletedItems —— 已完成事项自动归档', () => {
     [
       '# 长期记忆',
       '',
-      '## 进行中的事项',
+      '## 进行中的事',
       '',
       '- [2026-10-20] [进行中] 测试 AstrBot 连通性',
       ...pending,
@@ -76,8 +76,8 @@ describe('archiveCompletedItems —— 已完成事项自动归档', () => {
     expect(r.titles[0]).toContain('上线新版本');
   });
 
-  it('没有「进行中的事项」分区时不报错', () => {
-    const text = '# 长期记忆\n\n## 关于用户\n\n- [2026-10-01] 事实';
+  it('没有「进行中的事」分区时不报错', () => {
+    const text = '# 长期记忆\n\n## 关于他\n\n- [2026-10-01] 事实';
     const r = archiveCompletedItems(text, '2026-10-22');
     expect(r.moved).toBe(0);
   });
@@ -183,12 +183,12 @@ describe('formatAversionEntry / mergeAversionEntries', () => {
   });
 
   it('并入雷区分区', () => {
-    const memory = '# 长期记忆\n\n## 雷区与禁忌\n\n<!-- 注释 -->\n\n## 近期动态\n\n- [2026-10-22] 测试';
+    const memory = '# 长期记忆\n\n## 他的雷区\n\n<!-- 注释 -->\n\n## 近期动态\n\n- [2026-10-22] 测试';
     const entry = formatAversionEntry(candidate);
     const out = mergeAversionEntries(memory, [entry]);
     expect(out).toContain('加班');
     // 应该在雷区分区内，而不是跑到近期动态
-    const rejIdx = out.indexOf('## 雷区与禁忌');
+    const rejIdx = out.indexOf('## 他的雷区');
     const recentIdx = out.indexOf('## 近期动态');
     const entryIdx = out.indexOf('加班');
     expect(entryIdx).toBeGreaterThan(rejIdx);
@@ -196,14 +196,14 @@ describe('formatAversionEntry / mergeAversionEntries', () => {
   });
 
   it('已存在时不重复添加', () => {
-    const memory = '# 长期记忆\n\n## 雷区与禁忌\n\n- [2026-10-20] 避免主动聊「加班」';
+    const memory = '# 长期记忆\n\n## 他的雷区\n\n- [2026-10-20] 避免主动聊「加班」';
     const entry = formatAversionEntry(candidate);
     const out = mergeAversionEntries(memory, [entry]);
     expect((out.match(/加班/g) || []).length).toBe(1);
   });
 
   it('没有雷区分区时不动', () => {
-    const memory = '# 长期记忆\n\n## 关于用户\n\n- [2026-10-01] 事实';
+    const memory = '# 长期记忆\n\n## 关于他\n\n- [2026-10-01] 事实';
     const out = mergeAversionEntries(memory, ['- [2026-10-22] 避免聊加班']);
     expect(out).toBe(memory);
   });

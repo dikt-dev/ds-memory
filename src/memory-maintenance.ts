@@ -23,7 +23,7 @@ export function byteLength(s: string): number {
  * 注入提示词前压缩 memory.md 的“非信息”部分（不改 R2 里的原文件）：
  * - 去掉 <!-- 注释 -->、模板说明的 > 引用行；
  * - 去掉空行与行尾空白；
- * - 超过 maxBytes 时，优先把「共同经历 / 近期动态 / 进行中的事项」里最旧的条目
+ * - 超过 maxBytes 时，优先把「共同经历 / 近期动态 / 进行中的事」里最旧的条目
  *   从本次提示词里拿掉（文件里仍保留，档案层以后还能召回），
  *   最后才按日期裁最旧条目。受保护分区（底色/称呼/雷区）不动。
  *
@@ -49,10 +49,10 @@ function stripMemoryForPrompt(text: string): string {
 
 /**
  * 会「小时内变化」的分区：单独放到易变段，避免它一变就把整段前缀缓存冲掉。
- * 其余分区（人物底色/称呼/关于用户/偏好/共同经历/雷区）都按天级变化，留在稳定段。
+ * 其余分区（人物底色/称呼/关于他/偏好/共同经历/雷区）都按天级变化，留在稳定段。
  * 未识别的分区默认归稳定段——宁可缓存吃亏，也不丢内容。
  */
-export const VOLATILE_MEMORY_HEADERS: string[] = ['进行中的事项', '近期动态'];
+export const VOLATILE_MEMORY_HEADERS: string[] = ['进行中的事', '近期动态'];
 
 function splitSections(text: string): {
   preamble: string[];
@@ -102,8 +102,8 @@ export function compactMemoryForPrompt(
   let out = stripMemoryForPrompt(text);
   if (!maxBytes || byteLength(out) <= maxBytes) return out;
 
-  // 先牺牲“共同经历/近期动态”，再牺牲进行中的事项；稳定事实最后才动
-  for (const header of ['## 共同经历', '## 近期动态', '## 进行中的事项']) {
+  // 先牺牲“共同经历/近期动态”，再牺牲进行中的事；稳定事实最后才动
+  for (const header of ['## 共同经历', '## 近期动态', '## 进行中的事']) {
     if (byteLength(out) <= maxBytes) break;
     out = demoteSectionEntries(out, header, maxBytes).text;
   }
@@ -140,7 +140,7 @@ export const OVERWRITE_KEY_RE = new RegExp(
 );
 
 /** 会随时间变化、应当「原地覆盖」而非叠加的分区。 */
-export const OVERWRITE_HEADERS: string[] = ['## 偏好与习惯', '## 关于用户'];
+export const OVERWRITE_HEADERS: string[] = ['## 他的偏好', '## 关于他'];
 
 /** 取条目的覆盖键（归一化后）；不是键值写法则返回 null。 */
 export function overwriteKeyOf(line: string): string | null {
@@ -152,7 +152,7 @@ export function overwriteKeyOf(line: string): string | null {
 export const IMMUTABLE_HEADER = '## 人物底色';
 
 /** 永不自动删除的区块（即使超容量也保留）。 */
-export const PROTECTED_HEADERS: string[] = ['## 人物底色', '## 称呼与关系', '## 雷区与禁忌'];
+export const PROTECTED_HEADERS: string[] = ['## 人物底色', '## 称呼与关系', '## 他的雷区'];
 
 /** 短期区块：条目按日期自动过期（只保留最近 N 天）。 */
 export const TRANSIENT_HEADERS: string[] = ['## 近期动态'];
@@ -170,12 +170,12 @@ export const TRANSIENT_KEEP_DAYS = 30;
 export const SECTION_ORDER: string[] = [
   '## 人物底色',
   '## 称呼与关系',
-  '## 关于用户',
-  '## 偏好与习惯',
-  '## 进行中的事项',
+  '## 关于他',
+  '## 他的偏好',
+  '## 进行中的事',
   '## 共同经历',
   '## 你的生活',
-  '## 雷区与禁忌',
+  '## 他的雷区',
   '## 近期动态',
 ];
 
@@ -183,12 +183,12 @@ export const SECTION_ORDER: string[] = [
 export const SECTION_COMMENTS: Record<string, string> = {
   '## 人物底色': '<!-- 固定设定，永不删改 -->',
   '## 称呼与关系': '<!-- 称呼/暗号/约定 + 三个关系值（系统算，勿手改） -->',
-  '## 关于用户': '<!-- 身份、背景、重要的人（长期事实） -->',
-  '## 偏好与习惯': '<!-- 喜好、厌恶、作息、沟通方式 -->',
-  '## 进行中的事项': '<!-- 项目/计划/待办：[进行中]/[搁置]/[已完成] -->',
+  '## 关于他': '<!-- 他的身份、背景、重要的人（长期事实） -->',
+  '## 他的偏好': '<!-- 他的喜好、厌恶、作息、沟通方式 -->',
+  '## 进行中的事': '<!-- 他的项目/计划/待办：[进行中]/[搁置]/[已完成] -->',
   '## 共同经历': '<!-- 共同做过的事、里程碑、梗、约定 -->',
-  '## 你的生活': '<!-- 她自己的事：去过哪、在追什么、自己做的决定 -->',
-  '## 雷区与禁忌': '<!-- 忌讳话题与说法，永不自动删除 -->',
+  '## 你的生活': '<!-- 你自己的事：去过哪、在追什么、自己做的决定 -->',
+  '## 他的雷区': '<!-- 他不能碰的话题与说法，永不自动删除 -->',
   '## 近期动态': '<!-- 最近几天，超7天清理 -->',
 };
 
@@ -389,19 +389,19 @@ export function mergeMemoryEntry(
  * 各分区的字节预算（软上限）。
  *
  * 为什么要分区管：全局只有 12KB/15KB 两个阈值，压缩是整篇重写，
- * 很容易出现「共同经历」越长越肥、把「偏好与习惯」挤掉的情况。
+ * 很容易出现「共同经历」越长越肥、把「他的偏好」挤掉的情况。
  * 有了分区预算，超了先在同一分区内合并同类项（不删内容），再交给全局阈值兜底。
- * 受保护分区（人物底色/称呼与关系/雷区与禁忌）不参与自动合并。
+ * 受保护分区（人物底色/称呼与关系/他的雷区）不参与自动合并。
  */
 export const SECTION_BUDGETS: Record<string, number> = {
   '## 人物底色': 2000,
   '## 称呼与关系': 800,
-  '## 关于用户': 2000,
-  '## 偏好与习惯': 1800,
-  '## 进行中的事项': 1500,
+  '## 关于他': 2000,
+  '## 他的偏好': 1800,
+  '## 进行中的事': 1500,
   '## 共同经历': 3000,
   '## 你的生活': 1200,
-  '## 雷区与禁忌': 1200,
+  '## 他的雷区': 1200,
   '## 近期动态': 800,
 };
 
@@ -469,7 +469,7 @@ export function demoteSectionEntries(
  *
  * 与 demoteSectionEntries 的区别：那个比的是全文体积，语义是"整篇太大"；
  * 这里是"这一节太胖"，用来提前拦住 16KB 的分界线——超过它记忆会从全量注入
- * 掉成 compact，共同经历/进行中的事项会整段退出提示词。
+ * 掉成 compact，共同经历/进行中的事会整段退出提示词。
  */
 export function demoteSectionToBudget(
   text: string,
@@ -503,7 +503,7 @@ export function demoteSectionToBudget(
  * 超限裁剪：从最旧日期开始整组删除条目，直到字节数 ≤ maxBytes。
  *
  * 保护规则：
- * - PROTECTED_HEADERS（人物底色 / 称呼与关系 / 雷区与禁忌）里的条目永不被裁剪
+ * - PROTECTED_HEADERS（人物底色 / 称呼与关系 / 他的雷区）里的条目永不被裁剪
  * - 条目全部被删空的分类保留头部（标准分区），非标准分区移除
  */
 export function trimOldestEntries(text: string, maxBytes: number): { text: string; removed: number } {
@@ -619,7 +619,7 @@ function entryDateOf(line: string): string | null {
 
 /**
  * 保守的密度整理（不改事实，只去重）：
- * - 「关于用户」「偏好与习惯」：同键取最新值；同内容取信息量最大的一条（日期取最早）；
+ * - 「关于他」「他的偏好」：同键取最新值；同内容取信息量最大的一条（日期取最早）；
  * - 其它分区：只合并「同一天、同内容」的重复条目，避免把不同日期发生的事误删；
  * - 受保护分区（人物底色/称呼/雷区）一行不动。
  *
@@ -714,7 +714,7 @@ function shiftDate(dateKey: string, deltaDays: number): string {
 
 /* ---------- 已完成事项自动归档 ---------- */
 
-const PENDING_HEADER = '## 进行中的事项';
+const PENDING_HEADER = '## 进行中的事';
 const SHARED_HEADER = '## 共同经历';
 
 /** 「已完成」标记的正则（兼容全角括号与不同写法）。 */
@@ -728,7 +728,7 @@ interface PendingArchiveOptions {
 export const PENDING_ARCHIVE_GRACE_DAYS = 3;
 
 /**
- * 把「进行中的事项」里标了 [已完成] 且超过 graceDays 的条目，
+ * 把「进行中的事」里标了 [已完成] 且超过 graceDays 的条目，
  * 自动搬到「共同经历」里（作为一起做成的事）。
  *
  * 按日期判断宽限期，避免刚标完成就搬走。

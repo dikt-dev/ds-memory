@@ -147,7 +147,7 @@ export async function maybeSummarizeToday(env: Env, dateKey: string): Promise<vo
 }
 
 const SUMMARY_SYSTEM =
-  '你是对话摘要助手。把用户今天的对话提炼成约 100 字的"今日摘要"，突出用户今天提到的事实、偏好、情绪与进行中的事项。输出简洁的中文纯文本，不要列表、标题或解释。';
+  '你是对话摘要助手。把用户今天的对话提炼成约 100 字的"今日摘要"，突出用户今天提到的事实、偏好、情绪与进行中的事。输出简洁的中文纯文本，不要列表、标题或解释。';
 
 /** 生成今日摘要：DeepSeek flash 档优先（成本），失败自动回退 Workers AI。 */
 async function summarizeToday(env: Env, input: string, dateKey: string): Promise<string> {

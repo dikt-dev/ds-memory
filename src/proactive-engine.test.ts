@@ -163,10 +163,10 @@ describe('decideProactive —— 打分', () => {
 describe('extractPendingTopics', () => {
   const memory = `# 长期记忆
 
-## 关于用户
+## 关于他
 - [2026-10-20] 用户喜欢蓝色。
 
-## 进行中的事项
+## 进行中的事
 - [2026-10-21] 正在开发跨端聊天软件，网络层还没修好。
 - [2026-09-01] 远古事项（远超 14 天）。
 - [2026-10-22] 今天要做的事。
@@ -180,13 +180,13 @@ describe('extractPendingTopics', () => {
     expect(topics[0].daysAgo).toBeLessThanOrEqual(topics[1].daysAgo);
   });
 
-  it('不把「关于用户」区块的条目混进来', () => {
+  it('不把「关于他」区块的条目混进来', () => {
     const topics = extractPendingTopics(memory, new Date('2026-10-22T12:00:00+08:00'));
     expect(topics.every((t) => !t.content.includes('喜欢蓝色'))).toBe(true);
   });
 
   it('没有该区块时返回空', () => {
-    expect(extractPendingTopics('# 长期记忆\n\n## 关于用户\n- x', new Date())).toEqual([]);
+    expect(extractPendingTopics('# 长期记忆\n\n## 关于他\n- x', new Date())).toEqual([]);
   });
 
   it('忽略超过 14 天的事项', () => {

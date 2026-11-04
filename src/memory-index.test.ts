@@ -24,11 +24,11 @@ const SAMPLE = `# 长期记忆
 - 用户叫AI=大肥鱼
 - 好感度：680 / 1000
 
-## 关于用户
+## 关于他
 - [26-10-21] 深圳；上班8:15
 - [26-10-21] 职业=C开发
 
-## 偏好与习惯
+## 他的偏好
 - [26-10-21] 颜色=蓝
 
 ## 近期动态
@@ -40,7 +40,7 @@ describe('extractCoreMemory', () => {
     const core = extractCoreMemory(SAMPLE);
     expect(core).toContain('## 人物底色');
     expect(core).toContain('## 称呼与关系');
-    expect(core).not.toContain('## 关于用户');
+    expect(core).not.toContain('## 关于他');
     expect(core).not.toContain('## 近期动态');
   });
 });
@@ -57,16 +57,16 @@ describe('extractPromptMemory（混合注入）', () => {
     expect(big.length).toBeGreaterThan(MEMORY_INLINE_MAX_BYTES);
     const out = extractPromptMemory(big);
     expect(out.mode).toBe('compact');
-    expect(out.text).toContain('## 关于用户');
-    expect(out.text).toContain('## 偏好与习惯');
+    expect(out.text).toContain('## 关于他');
+    expect(out.text).toContain('## 他的偏好');
     expect(out.text).not.toContain('## 共同经历');
   });
 
-  it('compact 模式保留用户更正分区', () => {
-    const big = `## 用户更正（最高优先级）\n- [26-10-28] 我喜欢被叫大人\n\n${SAMPLE}\n## 共同经历\n- [26-10-21] ${'旧事'.repeat(4000)}\n`;
+  it('compact 模式保留他的更正分区', () => {
+    const big = `## 他的更正（最高优先级）\n- [26-10-28] 我喜欢被叫大人\n\n${SAMPLE}\n## 共同经历\n- [26-10-21] ${'旧事'.repeat(4000)}\n`;
     const out = extractPromptMemory(big);
     expect(out.mode).toBe('compact');
-    expect(out.text).toContain('## 用户更正（最高优先级）');
+    expect(out.text).toContain('## 他的更正（最高优先级）');
     expect(out.text).toContain('我喜欢被叫大人');
   });
 });
@@ -111,7 +111,7 @@ describe('向量 int8 量化', () => {
 
 describe('密度视图工具', () => {
   it('分层重要度：稳定事实与进行中优先', () => {
-    expect(sectionImportance('关于用户')).toBe(3);
+    expect(sectionImportance('关于他')).toBe(3);
     expect(sectionImportance('近期动态')).toBe(1);
     expect(sectionImportance('未知分区')).toBe(2);
   });
@@ -164,7 +164,7 @@ describe('候选重排', () => {
   it('MMR 会避开和已选内容重复的候选', () => {
     const a = mk('a', '共同经历', '一起搭了Cloudflare Worker和D1记忆库', 10);
     const a2 = mk('a2', '共同经历', '一起搭了Cloudflare Worker和D1记忆库，还部署了', 9);
-    const b = mk('b', '偏好与习惯', '喜欢蓝色和奶茶', 5);
+    const b = mk('b', '他的偏好', '喜欢蓝色和奶茶', 5);
     const picked = mmrSelect([a, a2, b], 2);
     expect(picked.map((x) => x.r.id)).not.toEqual(['a', 'a2']);
     expect(picked.map((x) => x.r.id)).toContain('b');

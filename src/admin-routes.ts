@@ -861,7 +861,7 @@ app.post('/api/admin/memory/section-line', requireAuth, async (c) => {
 });
 
 
-/** 手动跑一次「进行中的事项」合并（默认 cron 04:00 自动跑）。 */
+/** 手动跑一次「进行中的事」合并（默认 cron 04:00 自动跑）。 */
 app.post('/api/admin/memory/collapse-ongoing', requireAuth, async (c) => {
   const result = await collapseOngoingItems(c.env);
   return c.json({ ok: true, ...result });

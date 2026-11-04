@@ -48,7 +48,7 @@ describe('detectMilestones', () => {
 
 describe('countMemoryEntries', () => {
   it('统计带日期的条目', () => {
-    const mem = `## 关于用户
+    const mem = `## 关于他
 - [2026-10-21] 事实A
 - [2026-10-21] 事实B
 ## 偏好

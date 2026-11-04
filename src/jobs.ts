@@ -491,7 +491,7 @@ export async function archiveOneDay(
       logError('[daily] prune transient failed:', e);
     }
 
-    // 5.5) 已完成事项自动归档：「进行中的事项」里标 [已完成] 且过宽限期的 → 移到「共同经历」
+    // 5.5) 已完成事项自动归档：「进行中的事」里标 [已完成] 且过宽限期的 → 移到「共同经历」
     try {
       const archived = archiveCompletedItems(memory, target);
       if (archived.moved > 0) {
@@ -503,7 +503,7 @@ export async function archiveOneDay(
       logError('[daily] archive completed failed:', e);
     }
 
-    // 5.6) 雷区主动学习：扫描当天反感信号，累计后提升写入「雷区与禁忌」
+    // 5.6) 雷区主动学习：扫描当天反感信号，累计后提升写入「他的雷区」
     try {
       const userTexts = (rows ?? [])
         .filter((m) => m.role === 'user')
@@ -549,7 +549,7 @@ export async function archiveOneDay(
 
     // 6.5) 保守去重：只合并重复条目，不改事实；受保护分区不动。
     //      放在所有 memory 维护之后、写回之前，保证写进 R2 的是紧凑版本。
-    // 6.6) 分区预算：共同经历/进行中的事项等超预算时，最旧条目搬进档案（仍可召回）
+    // 6.6) 分区预算：共同经历/进行中的事等超预算时，最旧条目搬进档案（仍可召回）
     //      不加这一步，memory.md 会线性涨到 16KB 然后静默掉成 compact 模式。
     try {
       let demoted = 0;
@@ -593,7 +593,7 @@ export async function archiveOneDay(
     //      档案也在 D1 索引里，仍可按需召回，只是不再常驻提示词。
     let archivedCount = 0;
     try {
-      for (const header of ['## 共同经历', '## 近期动态', '## 进行中的事项']) {
+      for (const header of ['## 共同经历', '## 近期动态', '## 进行中的事']) {
         if (byteLength(memory) <= CORE_TARGET_BYTES) break;
         const demoted = demoteSectionEntries(memory, header, CORE_TARGET_BYTES, 4);
         if (demoted.removed.length === 0) continue;

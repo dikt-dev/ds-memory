@@ -110,7 +110,7 @@ describe('planIdenticalMerges（同一事实只留一条）', () => {
   });
   const fact = (over = {}) => ({
     id: 'new-1',
-    section: '关于用户',
+    section: '关于他',
     content: '城市=杭州',
     subject: '城市',
     predicate: '城市',

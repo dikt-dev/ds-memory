@@ -3,7 +3,7 @@ import { renderFactsDoc, type FactDocRow } from './memory-doc';
 
 function fact(over: Partial<FactDocRow> = {}): FactDocRow {
   return {
-    section: '关于用户',
+    section: '关于他',
     content: '职业=嵌入式开发',
     confidence: 0.85,
     valid_from: '2026-10-01',
@@ -17,7 +17,7 @@ function fact(over: Partial<FactDocRow> = {}): FactDocRow {
 describe('renderFactsDoc', () => {
   it('按分区输出标题', () => {
     const md = renderFactsDoc([fact(), fact({ section: '共同经历', content: '一起走回滚流程' })]);
-    expect(md).toContain('## 关于用户');
+    expect(md).toContain('## 关于他');
     expect(md).toContain('## 共同经历');
   });
 

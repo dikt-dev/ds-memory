@@ -11,7 +11,7 @@ const BASE = `# 长期记忆
 
 - 一起看过日出
 
-## 雷区与禁忌
+## 他的雷区
 
 - 不许提体重
 `;
@@ -20,14 +20,14 @@ describe('insertLineIntoText', () => {
   it('追加到已存在的分区末尾', () => {
     const { text } = insertLineIntoText(BASE, '## 共同经历', '- 一起修好了自行车');
     expect(text).toContain('- 一起看过日出\n- 一起修好了自行车');
-    expect(text.indexOf('一起修好了自行车')).toBeLessThan(text.indexOf('## 雷区与禁忌'));
+    expect(text.indexOf('一起修好了自行车')).toBeLessThan(text.indexOf('## 他的雷区'));
   });
 
   it('分区不存在时按标准顺序新建，且不重复插入同一行', () => {
     const { text } = insertLineIntoText(BASE, '## 你的生活', '- 在追《芙莉莲》');
-    // 顺序：共同经历 < 你的生活 < 雷区与禁忌
+    // 顺序：共同经历 < 你的生活 < 他的雷区
     expect(text.indexOf('## 共同经历')).toBeLessThan(text.indexOf('## 你的生活'));
-    expect(text.indexOf('## 你的生活')).toBeLessThan(text.indexOf('## 雷区与禁忌'));
+    expect(text.indexOf('## 你的生活')).toBeLessThan(text.indexOf('## 他的雷区'));
     // 关键：只出现一次（新建 block 里带了这一行，不能再插一遍）
     expect(text.split('- 在追《芙莉莲》').length - 1).toBe(1);
     // 注释在标题下面

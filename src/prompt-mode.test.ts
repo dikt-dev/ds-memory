@@ -11,10 +11,10 @@ const MEMORY = [
   '## 称呼与关系',
   '- 叫大人，或者叫小蓝。',
   '',
-  '## 雷区与禁忌',
+  '## 他的雷区',
   '- 不许提前任。',
   '',
-  '## 用户更正（最高优先级）',
+  '## 他的更正（最高优先级）',
   '- [26-10-22] 不喜欢被叫大肥鱼。',
   '',
   '## 长期偏好',
@@ -47,8 +47,8 @@ describe('buildPromptMemoryFor', () => {
     expect(out.evidence).toBe(true);
     expect(out.text).toContain('人物底色');
     expect(out.text).toContain('称呼与关系');
-    expect(out.text).toContain('雷区与禁忌');
-    expect(out.text).toContain('用户更正');
+    expect(out.text).toContain('他的雷区');
+    expect(out.text).toContain('他的更正');
     expect(out.text).not.toContain('椰果脆啵啵');
     expect(out.text).not.toContain('回滚流程');
   });

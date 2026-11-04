@@ -42,7 +42,7 @@ export interface EnvironmentSignal {
   isSpecialDay: boolean;
 }
 
-/** 待跟进事项（从 memory.md「进行中的事项」提取）。 */
+/** 待跟进事项（从 memory.md「进行中的事」提取）。 */
 export interface PendingTopic {
   content: string;
   /** 距今多少天 */
@@ -270,11 +270,11 @@ export function decideProactive(input: DecisionInput): Decision {
   return { shouldSend, score, reasons, topics };
 }
 
-/** 从 memory.md 的「进行中的事项」提取待跟进话题（纯函数）。 */
+/** 从 memory.md 的「进行中的事」提取待跟进话题（纯函数）。 */
 export function extractPendingTopics(memory: string, today: Date): PendingTopic[] {
-  // 按 ## 标题切块，找到"进行中的事项"这一块（到下一个 ## 为止）
+  // 按 ## 标题切块，找到"进行中的事"这一块（到下一个 ## 为止）
   const lines = memory.split('\n');
-  const startIdx = lines.findIndex((l) => /^##\s+进行中的事项\s*$/.test(l.trim()));
+  const startIdx = lines.findIndex((l) => /^##\s+进行中的事\s*$/.test(l.trim()));
   if (startIdx === -1) return [];
 
   let endIdx = lines.length;

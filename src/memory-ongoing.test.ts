@@ -3,7 +3,7 @@ import { collapseOngoing, sameTopic } from './memory-ongoing';
 
 const DOC = `# 长期记忆
 
-## 进行中的事项
+## 进行中的事
 
 - [26-10-27] [进行中] 桌宠（给AI开电脑权限）：先做小权限
 - [26-10-28] [搁置] 回滚方案草稿：用户多次拖延，助手催了多轮仍未动笔
@@ -12,7 +12,7 @@ const DOC = `# 长期记忆
 - [26-11-01] [已完成] 回滚方案落地了，用户跑过一遍没问题
 - [26-10-31] 用户要回上海（预计下月 20 号）：要交代住处/网络/电源
 
-## 雷区与禁忌
+## 他的雷区
 
 - [26-10-28] 回滚方案草稿别催了
 `;
@@ -38,7 +38,7 @@ describe('合并过期状态行', () => {
 
   it('不碰别的分区', () => {
     const { text } = collapseOngoing(DOC);
-    expect(text).toContain('## 雷区与禁忌');
+    expect(text).toContain('## 他的雷区');
     expect(text).toContain('回滚方案草稿别催了');
   });
 

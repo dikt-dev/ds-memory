@@ -4,7 +4,7 @@
  * 设计目标：
  * - 只接受用户主动发送的纠正，不做“猜测式改写”；
  * - 带 key 的纠正（职业=...、名字=...）直接替换旧行，避免新旧事实并存；
- * - 无法识别 key 时写入独立的「用户更正」区，优先级高于旧摘要；
+ * - 无法识别 key 时写入独立的「他的更正」区，优先级高于旧摘要；
  * - 写入 R2 memory.md 后同步刷新 KV、facts/chunks 和检索索引。
  */
 import type { Env } from './types';
@@ -17,7 +17,7 @@ import { auditHash, recordMemoryAudit } from './memory-audit';
 import { penalizeCorrectedFact } from './fact-correction';
 import { logError, logWarn } from './error-log';
 
-const CORRECTION_HEADER = '## 用户更正（最高优先级）';
+const CORRECTION_HEADER = '## 他的更正（最高优先级）';
 const MAX_LEN = 500;
 
 function escapeRegExp(value: string): string {
@@ -26,7 +26,7 @@ function escapeRegExp(value: string): string {
 
 function insertCorrectionSection(memory: string, line: string): string {
   const existing = memory.match(
-    /(## 用户更正（最高优先级）\n)([\s\S]*?)(?=\n## |$)/,
+    /(## 他的更正（最高优先级）\n)([\s\S]*?)(?=\n## |$)/,
   );
   if (existing) {
     if (existing[2].includes(line)) return memory;

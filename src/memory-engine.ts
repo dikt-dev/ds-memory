@@ -276,11 +276,11 @@ async function runNextEngine(
   }
   stages.rank += performance.now() - t;
 
-  // 保底：候选里若有「进行中的事项」且已选中至少一条，就保证它进上下文。
+  // 保底：候选里若有「进行中的事」且已选中至少一条，就保证它进上下文。
   // 她答应过的事被忘了，是用户最不能接受的一类遗忘。
   if (picked.length > 0) {
-    const hasOngoing = picked.some((chunk) => chunk.section === '进行中的事项');
-    const ongoing = pool.find((chunk) => chunk.section === '进行中的事项');
+    const hasOngoing = picked.some((chunk) => chunk.section === '进行中的事');
+    const ongoing = pool.find((chunk) => chunk.section === '进行中的事');
     if (!hasOngoing && ongoing) {
       picked = [...picked.slice(0, Math.max(0, RECALL_MAX_ITEMS - 1)), ongoing];
     }

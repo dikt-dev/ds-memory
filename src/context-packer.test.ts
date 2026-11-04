@@ -7,7 +7,7 @@ function chunk(content: string, hash = content): MemoryChunk {
     id: `c-${hash}`,
     source: 'fact',
     sourceId: `f-${hash}`,
-    section: '关于用户',
+    section: '关于他',
     content,
     date: '2026-10-01',
     keywords: [],

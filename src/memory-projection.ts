@@ -22,7 +22,7 @@ import { putObject } from './storage';
  * 它只是只读白皮书，不进提示词，给足空间。
  */
 export const PROJECTION_MAX_BYTES = 256 * 1024;
-const CORE_HEADERS = ['## 人物底色', '## 称呼与关系', '## 雷区与禁忌'];
+const CORE_HEADERS = ['## 人物底色', '## 称呼与关系', '## 他的雷区'];
 
 export interface ProjectionResult {
   beforeBytes: number;

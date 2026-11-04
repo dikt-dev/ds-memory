@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { suspendStaleOngoing } from './memory-ongoing';
 
 const text = [
-  '## 进行中的事项',
+  '## 进行中的事',
   '- [26-10-20] [进行中] 早就该挂起了',
   '- [26-10-30] [进行中] 还新鲜',
   '- [26-10-01] [进行中] 用户要回上海（下月 20 号左右）',
