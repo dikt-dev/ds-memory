@@ -75,6 +75,32 @@ import { logError, logWarn } from './error-log';
  * 搬动是纯机械的：路由清单快照（routes.snapshot.json）保证一条不多一条不少。
  */
 export function registerAdminOpsRoutes(app: Hono<AppEnv>): void {
+  /**
+   * 批量清空 KV（需 confirm=yes）。
+   *
+   * 擦除数据时，D1 和 R2 都有现成的 wipe-data，唯独 KV 只能一条条删——
+   * 手机端每条消息都会写一个 `app:cmid:*` 去重键，几百条要删十几分钟。
+   * 这里用 KV 自己的 list + delete 在服务端一次跑完，既是运维工具，也是测试清理手段。
+   */
+  app.post('/api/admin/kv/clear', requireAuth, async (c) => {
+    if (c.req.query('confirm') !== 'yes') {
+      return c.json({ error: '需要 confirm=yes' }, 400);
+    }
+    const prefix = c.req.query('prefix') ?? undefined;
+    let cursor: string | undefined;
+    let deleted = 0;
+    for (let page = 0; page < 200; page++) {
+      const listed = await c.env.KV.list({ prefix, cursor, limit: 1000 });
+      for (const key of listed.keys) {
+        await c.env.KV.delete(key.name);
+        deleted += 1;
+      }
+      if (listed.list_complete) break;
+      cursor = listed.cursor;
+    }
+    return c.json({ ok: true, deleted });
+  });
+
 /** 危险操作：清空 D1 全部业务表 + R2 全部对象（主/小号）+ 记忆相关 KV，仅测试期使用。 */
 app.post('/api/admin/wipe-data', requireAuth, async (c) => {
   const tables = [

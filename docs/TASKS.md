@@ -401,3 +401,18 @@
 | 后台保活盘点 | 📄 已记录 | [background-keepalive.md](design/background-keepalive.md)。两层：前台服务（默认关，5 秒轮询）+ 闹钟（默认开，≤30 分钟补看） |
 | 保活代码小问题 6 条 | ✅ 已修（f7d2be0） | 死代码 `notifyProactive`、过期类注释、`MIN_LEAD_MS` 注释与实现不符、去重集合整体清空会重复弹、每次轮询 new ApiClient、「服务被杀」无可见反馈 |
 | 轮询间隔自适应 | ✅ 已做（af9d5ff） | 突发 5 s / 前台 30 s / 后台 45 s±15%；实测后台 42–48 s，注入消息后立刻切 5 s 并弹通知；日请求 1.7 万 → 约 1,900 |
+
+### 22.12 11-04 全量擦除（为下一轮测试留干净起点）
+
+| 层 | 处理 | 校验 |
+| --- | --- | --- |
+| D1 | 全部业务表 TRUNCATE（memory_facts/events/entries/chunks/links/keepsakes/actions、messages、ai_diary、affect_events、recall_samples、engine_metrics…） | 仅剩 `message_tombstones`（183 条，给手机清本地缓存用）与运行时日志 |
+| R2 | 25 个对象全删（memory.md、archive/*.log、日记配图、B站音频等） | `/api/admin/memory/raw` 返回 `bytes:0` |
+| KV | 395 个键全删（含 `app:cmid:*` 去重键、memory 缓存、proactive:heartbeat、life flags） | `kv key list` 剩 0 |
+| 提示词注入 | 本轮 prompt 记忆区为空（memoryBytes 0 / sectionsInMemory []） | `/api/admin/memory/prompt-preview` |
+| 备份 | `D:/WorkSpace/ds/backups/wipe-2026-11-04T01-25-14.json`（33 表 537 行） | — |
+
+新增运维接口 `POST /api/admin/kv/clear?confirm=yes[&prefix=]`：一次跑完 KV 批量删除
+（之前只能逐条删，手机端每发一条消息就写一个 `app:cmid:*`，几百条要删十几分钟）。
+
+> 生活日程（`ai_day`/`ai_activity`）是按需生成的运行时状态，删掉后下一次请求会重建，不属于记忆残留。

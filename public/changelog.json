@@ -1,10 +1,55 @@
 {
-  "generated_at": "2026-11-03T09:39:03.196Z",
+  "generated_at": "2026-11-04T01:46:19.566Z",
   "count": 400,
   "days": [
     {
+      "date": "2026-11-04",
+      "items": [
+        {
+          "hash": "ad53b27",
+          "date": "2026-11-04",
+          "type": "other",
+          "area": "",
+          "title": "文档：保活六条已修 + 轮询自适应实测数据",
+          "why": ""
+        },
+        {
+          "hash": "32df7f0",
+          "date": "2026-11-04",
+          "type": "other",
+          "area": "",
+          "title": "文档：后台保活 6 条小问题标记已修（ds-mobile f7d2be0）",
+          "why": ""
+        },
+        {
+          "hash": "9fff63b",
+          "date": "2026-11-04",
+          "type": "other",
+          "area": "",
+          "title": "文档：视频感知方案与后台保活盘点入 TASKS；新增 background-keepalive 盘点",
+          "why": ""
+        }
+      ]
+    },
+    {
       "date": "2026-11-03",
       "items": [
+        {
+          "hash": "300f4e5",
+          "date": "2026-11-03",
+          "type": "other",
+          "area": "",
+          "title": "设计稿：视频感知方案（本地视频接入 B 站那条流水线：ASR + 自适应帧 + 二段式回复）",
+          "why": ""
+        },
+        {
+          "hash": "7f9ddc5",
+          "date": "2026-11-03",
+          "type": "other",
+          "area": "",
+          "title": "工程债：运维路由拆出 admin-ops-routes（1436→997 行）、cron 分派抽成纯函数并加守护测试、交接文档更新",
+          "why": ""
+        },
         {
           "hash": "42ca94b",
           "date": "2026-11-03",
@@ -3208,46 +3253,6 @@
           "type": "feat",
           "area": "persona",
           "title": "raise tsundere intensity and voice punctuation",
-          "why": ""
-        },
-        {
-          "hash": "1e7e5b2",
-          "date": "2026-10-25",
-          "type": "docs",
-          "area": "",
-          "title": "update persona test count",
-          "why": ""
-        },
-        {
-          "hash": "37159d7",
-          "date": "2026-10-25",
-          "type": "feat",
-          "area": "persona",
-          "title": "strengthen tsundere and sharp-tongued style",
-          "why": ""
-        },
-        {
-          "hash": "5471a3b",
-          "date": "2026-10-25",
-          "type": "docs",
-          "area": "p5",
-          "title": "document archive catch-up and metrics migration",
-          "why": ""
-        },
-        {
-          "hash": "4fad157",
-          "date": "2026-10-25",
-          "type": "docs",
-          "area": "p5",
-          "title": "record archive catch-up and metrics migration",
-          "why": ""
-        },
-        {
-          "hash": "43d8ddc",
-          "date": "2026-10-25",
-          "type": "fix",
-          "area": "p5",
-          "title": "allow provisional archive rerun and proactive metrics",
           "why": ""
         }
       ]
