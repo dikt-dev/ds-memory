@@ -387,3 +387,16 @@
 | --- | --- | --- |
 | LICENSE | ✅ Apache-2.0 | 完整 Apache License 2.0 全文已在仓库根目录 |
 | README | ✅ | 已有 `## License` 段指向 LICENSE |
+
+### 22.11 11-03 增量：视频感知方案 · 后台保活盘点
+
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| 视频感知方案设计稿 | 📄 已记录 | [video-perception.md](design/video-perception.md)。核心：本地视频接进 B 站那条流水线（`[VIDEO_META]` 与 `[BILI_META]` 同构），用 ASR 补台词、自适应帧补时间、二段式回复补人味 |
+| ├ P0 本地视频输出观察卡 | ⬜ 待做 | 0.5 天，App 侧，复用 B 站措辞纪律 |
+| ├ P1 音频 + ASR | ⬜ 待做 | 2 天，`POST /api/app/video-asr` + whisper + `video_observations` 缓存 |
+| ├ P2 自适应关键帧 | ⬜ 待做 | 1 天，按帧差取点，替代均匀中点 |
+| ├ P3 二段式回复 | ⬜ 待做 | 1 天，复用「压消息 → 补发」链路 |
+| └ P4 原生视频模型 | ⏸ 不做 | 需引入外部 Key，等 P1–P3 稳定再评估 |
+| 后台保活盘点 | 📄 已记录 | [background-keepalive.md](design/background-keepalive.md)。两层：前台服务（默认关，5 秒轮询）+ 闹钟（默认开，≤30 分钟补看） |
+| 保活代码小问题 6 条 | ⬜ 待修 | 死代码 `notifyProactive`、过期类注释、`MIN_LEAD_MS` 注释与实现不符、去重集合整体清空会重复弹、每次轮询 new ApiClient、「服务被杀」无可见反馈 |
