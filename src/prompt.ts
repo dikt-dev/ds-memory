@@ -15,7 +15,7 @@ import { renderPersonaDoc } from './persona-doc';
 import { isoInBeijing, spokenTime } from './date';
 import { resolveCharacterName } from './identity';
 import { resolvePersona, type PersonaConfig } from './persona';
-import { compactMemoryForPrompt, splitMemoryForPrompt } from './memory-maintenance';
+import { compactMemoryForPrompt, splitMemoryForPrompt, slimMemoryForPrompt } from './memory-maintenance';
 import type { DayContext } from './holidays';
 
 export interface WeatherInfo {
@@ -204,7 +204,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   const memoryParts = memory?.trim()
     ? splitMemoryForPrompt(memory)
     : { stable: '', volatile: '' };
-  lines.push(memoryParts.stable || '（暂无记忆）');
+  lines.push(slimMemoryForPrompt(memoryParts.stable, now) || '（暂无记忆）');
   if (memoryMode === 'compact') {
     lines.push('（其余记忆按本轮话题检索，可能不完整；没检索到就说记不清，不要编。）');
   }

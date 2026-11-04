@@ -182,7 +182,7 @@ describe('ensureModuleComments', () => {
     const text = '# 长期记忆\n\n## 关于他\n- [2026-10-01] 事实A。';
     const out = ensureModuleComments(text);
     expect(out).toContain('## 关于他');
-    expect(out).toContain('<!-- 身份、背景');
+    expect(out).toContain('<!-- 他的身份、背景');
     expect(out).toContain('- [2026-10-01] 事实A。');
   });
 

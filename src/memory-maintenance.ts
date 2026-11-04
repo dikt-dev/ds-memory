@@ -77,7 +77,56 @@ function splitSections(text: string): {
   return { preamble, sections };
 }
 
+/**
+ * 进提示词前瘦身：空分区不输出、去掉重复的 H1、今年的日期省掉年份。
+ *
+ * 为什么：记忆为空时，模型会收到一排只有标题、下面是空白的 `## 分区`——
+ * 既费 token，又容易被读成"这件事她一点都不记得"。日记/记忆这类长文档里，
+ * 空白标题比它占的字数更误导。
+ */
+export function slimMemoryForPrompt(text: string, now: Date = new Date()): string {
+  if (!text.trim()) return '';
+  const year = String(now.getUTCFullYear());
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  const out: string[] = [];
+  let sectionHasBody = false;
+  let pendingHeader: string | null = null;
+
+  const flush = (): void => {
+    if (pendingHeader !== null && sectionHasBody) out.push(pendingHeader);
+    pendingHeader = null;
+    sectionHasBody = false;
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/[ \t]+$/g, '');
+    if (/^##\s/.test(line)) {
+      flush();
+      pendingHeader = line;
+      continue;
+    }
+    // 一级标题和记忆里的标题重复（提示词前面已经写了「## 长期记忆」）
+    if (/^#\s/.test(line)) continue;
+    if (!line.trim()) {
+      if (sectionHasBody) out.push('');
+      continue;
+    }
+    if (pendingHeader !== null) {
+      out.push(pendingHeader);
+      pendingHeader = null;
+    }
+    // [2026-11-04] → [11-04]（跨年的旧事保留年份，避免"去年和今年"混在一起）
+    out.push(
+      line.replace(/\[(\d{4})-(\d{2})-(\d{2})\]/g, (all, y, m, d) => (y === year ? `[${m}-${d}]` : all)),
+    );
+    sectionHasBody = true;
+  }
+  flush();
+  return out.join('\n').trim();
+}
+
 /** 按「变化频率」把 memory.md 拆成稳定段与易变段（不改原文件）。 */
+
 export function splitMemoryForPrompt(
   text: string,
   maxBytes = MEMORY_PROMPT_MAX_BYTES,
