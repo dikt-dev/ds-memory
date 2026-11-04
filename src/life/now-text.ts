@@ -110,7 +110,9 @@ export async function lifePromptLine(env: Env, now = new Date()): Promise<string
   }
   // 位置只管「他在哪个城市」，不查他那边的天气：
   // 她需要的是分清两地，不是替他预报。以前混着查，她会说"你那边下着雨吧"。
-  const homeCity = (await env.KV?.get('life:home-city').catch(() => null)) ?? env.CITY ?? '上海';
+  // 她的城市跟着日程走：当天 location（旅行日就是目的地）优先，其次常住城市
+  const homeCity =
+    day.location || (await env.KV?.get('life:home-city').catch(() => null)) || env.CITY || '上海';
   const hisCity = (await env.KV?.get('life:user-city').catch(() => null)) ?? null;
   if (hisCity) {
     bits.push(

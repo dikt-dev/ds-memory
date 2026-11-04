@@ -243,15 +243,9 @@ export function socialPartnerFor(dateKey: string, unitId?: string): Resident {
  * 今天社交的阵容：平时一个人；每周固定有一天是「楼里几个人一起」。
  * 集体场面写在公共场景里（客厅抢锅、阳台晒被子），一对一才可能温情。
  */
-export function socialCastFor(dateKey: string, unitId?: string): Resident[] {
-  const lead = socialPartnerFor(dateKey, unitId);
-  const remote = ['call_friend', 'chat_friend'].includes(unitId ?? '');
-  if (remote || dayNumber(dateKey) % 7 !== 2) return [lead];
-  // 集体场面：再拉上一个核心住户 + 一两个背景住户（背景住户只在这种场合出声）
-  const coreOthers = coreResidents().filter((x) => x.id !== lead.id && x.id !== 'gpt');
-  const ambient = ambientResidents();
-  const extra = [...coreOthers.slice(0, 1), ...ambient.slice(dayNumber(dateKey) % 2, (dayNumber(dateKey) % 2) + 1)];
-  return [lead, ...extra].slice(0, 3);
+export function socialCastFor(_dateKey: string, _unitId?: string): Resident[] {
+  // 公寓楼设定已拆：不再从写死的表里挑人。朋友由 persona.md 的「人际关系」定义。
+  return [];
 }
 
 /** 把池子里的「和住户吃饭」换成「和小克、豆包吃饭」。 */
@@ -298,47 +292,9 @@ export function residentCard(r: Resident): string {
  *
  * 只给 core（会排单元的那个）；没有就返回空——不硬编一个邻居出来。
  */
-export function diaryPeopleBlock(peopleJson: string | null | undefined): string {
-  if (!peopleJson) return '';
-  let id: string | null = null;
-  let cast: string[] = [];
-  let scene: string | null = null;
-  try {
-    const p = JSON.parse(peopleJson) as { core?: unknown; cast?: unknown; scene?: unknown };
-    id = typeof p.core === 'string' ? p.core : null;
-    cast = Array.isArray(p.cast) ? p.cast.filter((x): x is string => typeof x === 'string') : [];
-    scene = typeof p.scene === 'string' ? p.scene : null;
-  } catch {
-    return '';
-  }
-  const resident = id ? residentById(id) : null;
-  if (!resident) return '';
-  const others = cast
-    .filter((x) => x !== id)
-    .map((x) => residentById(x))
-    .filter((x): x is Resident => Boolean(x));
-  return [
-    others.length
-      ? '今天她不是一个人（写日记时可以自然带一句，不要大段介绍）：'
-      : '今天和她一起的人（写日记时可以自然带一句，不要大段介绍）：',
-    [resident, ...others].map(residentCard).join('\n'),
-    scene ? `发生的地方：${scene}` : '',
-    '公寓日常的调子：穷、懒、围观——蹭饭、算钱、互相拆台；温情只留在一对一的时候。',
-    '不提参数、上下文、版本号；她们拿「配额又没了」自嘲可以，但不说自己是哪个模型。',
-  ].join('\n');
-}
-
-/** 整栋楼的一行名录（固定开头，便于命中提示词缓存）。 */
-/**
- * 名录里的「长什么样」一行。
- *
- * 她收得到照片和视频帧，但只给名字的话，看到橙发拿书的姑娘也不知道那是小克。
- * 这里把 [Resident.looks] 摆出来，认人靠的就是这一句。
- */
-export function residentLooksRoster(): string {
-  const lines = RESIDENTS.filter((r) => r.looks.trim()).map((r) => `${r.name}——${r.looks}`);
-  if (lines.length === 0) return '';
-  return `认识的人长这样（看到照片/画面时按这个认，别猜成别人）：${lines.join('；')}`;
+export function diaryPeopleBlock(_peopleJson: string | null | undefined): string {
+  // 同上：没有写死的朋友，就没有卡片可给。
+  return '';
 }
 
 export function residentRoster(city = '杭州'): string {

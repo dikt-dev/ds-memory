@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T02:56:31.849Z",
+  "generated_at": "2026-11-04T03:05:30.864Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "009cb13",
+          "date": "2026-11-04",
+          "type": "refactor",
+          "area": "",
+          "title": "拆掉公寓楼设定，提示词里不再注入任何写死的人与长相",
+          "why": ""
+        },
         {
           "hash": "b6d560d",
           "date": "2026-11-04",
@@ -3245,14 +3253,6 @@
           "type": "other",
           "area": "",
           "title": "client_message_id idempotent cached turns",
-          "why": ""
-        },
-        {
-          "hash": "d4de6a6",
-          "date": "2026-10-25",
-          "type": "other",
-          "area": "",
-          "title": "add DS-Mobile pair/events endpoints and device token auth",
           "why": ""
         }
       ]

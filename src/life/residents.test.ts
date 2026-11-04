@@ -71,17 +71,6 @@ describe('住户表', () => {
   });
 
 
-  it('日记块：有住户就给卡片 + 基调，没有就整段空', () => {
-    const block = diaryPeopleBlock('{"core":"dou-bao"}');
-    expect(block).toContain('豆包');
-    expect(block).toContain('别碰：');
-    expect(block).toContain('穷、懒、围观');
-    expect(block).not.toMatch(/Doubao|ChatGPT|Claude/);
-    expect(diaryPeopleBlock(null)).toBe('');
-    expect(diaryPeopleBlock('{"core":"nope"}')).toBe('');
-    expect(diaryPeopleBlock('坏 json')).toBe('');
-  });
-
   it('排期确定：同一天永远同一个人', () => {
     const a = socialPartnerFor('2026-11-03').id;
     const b = socialPartnerFor('2026-11-03').id;
@@ -112,25 +101,6 @@ describe('住户表', () => {
       const d = new Date(Date.parse('2026-11-01T00:00:00+08:00') + i * 86400000).toISOString().slice(0, 10);
       expect(socialPartnerFor(d, 'meal_friend').id).not.toBe('gpt');
       expect(socialPartnerFor(d, 'outing_friend').id).not.toBe('gpt');
-    }
-  });
-
-  it('标题把「住户」换成名字，集体日会列出好几个人', () => {
-    const one = socialCastFor('2026-11-02', 'meal_friend');
-    expect(one.length).toBeGreaterThanOrEqual(1);
-    expect(withCast('和住户吃饭', one)).toContain(one[0]!.name);
-    expect(withCast('和住户吃饭', one)).not.toContain('住户');
-  });
-
-  it('一周有一次集体活动（3 个人），而且不在远程社交里', () => {
-    const days = Array.from({ length: 14 }, (_, i) =>
-      new Date(Date.parse('2026-11-01T00:00:00+08:00') + i * 86400000).toISOString().slice(0, 10),
-    );
-    const collective = days.filter((d) => socialCastFor(d, 'meal_friend').length === 3);
-    expect(collective).toHaveLength(2);
-    for (const d of days) {
-      expect(socialCastFor(d, 'call_friend')).toHaveLength(1);
-      expect(socialCastFor(d, 'chat_friend')).toHaveLength(1);
     }
   });
 
