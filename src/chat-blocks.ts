@@ -60,7 +60,13 @@ export async function loadLifeBlocks(env: Env, now: Date, userText = ''): Promis
   // 来源只有人设文档——代码里不再有任何写死的人。
   // 段落内的换行直接接上，别用「；」拼——原文里已经有句号了，会变成「。。」
   const flat = (t: string) =>
-    t.replace(/\s*\n\s*/g, '').replace(/[。；;，,]\s*$/, '').trim();
+    t
+      .split('\n')
+      .map((l) => l.trim().replace(/^[-*]\s*/, ''))
+      .filter(Boolean)
+      .join('')
+      .replace(/[。；;，,]\s*$/, '')
+      .trim();
   const self = flat(personaSectionText(personaDoc, '外貌'));
   const friends = flat(personaSectionText(personaDoc, '人际'));
   const people = [

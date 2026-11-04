@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T05:42:01.322Z",
+  "generated_at": "2026-11-04T05:49:25.435Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "0eb9abb",
+          "date": "2026-11-04",
+          "type": "fix",
+          "area": "",
+          "title": "长相拼接不再出现两个句号",
+          "why": ""
+        },
         {
           "hash": "d148a0d",
           "date": "2026-11-04",
@@ -3245,14 +3253,6 @@
           "type": "chore",
           "area": "observe",
           "title": "report mobile shadow fields",
-          "why": ""
-        },
-        {
-          "hash": "aa5b187",
-          "date": "2026-10-25",
-          "type": "fix",
-          "area": "security",
-          "title": "scope app token to proactive queue; start app shadow observation",
           "why": ""
         }
       ]
