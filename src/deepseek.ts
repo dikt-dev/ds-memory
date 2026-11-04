@@ -95,7 +95,7 @@ async function requestDeepSeek(
       ...(stream
         ? { stream: true, stream_options: { include_usage: true } }
         : { max_tokens: maxTokens ?? 4096 }),
-      temperature: 0.85,
+      temperature: 0.75,
       frequency_penalty: 0.15,
       presence_penalty: 0.1,
       // 聊天必须快：思考模式只在日记/记忆这类后台任务里开
