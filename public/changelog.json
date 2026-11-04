@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T07:25:01.021Z",
+  "generated_at": "2026-11-04T07:43:34.213Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "8768230",
+          "date": "2026-11-04",
+          "type": "feat",
+          "area": "",
+          "title": "提示词里的日期一律 YY-MM-DD，不再省年份",
+          "why": ""
+        },
         {
           "hash": "715009a",
           "date": "2026-11-04",
@@ -3235,14 +3243,6 @@
           "type": "docs",
           "area": "",
           "title": "record release build",
-          "why": ""
-        },
-        {
-          "hash": "6566b75",
-          "date": "2026-10-27",
-          "type": "feat",
-          "area": "app",
-          "title": "add location memory update endpoint",
           "why": ""
         }
       ]
