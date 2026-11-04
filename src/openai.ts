@@ -13,6 +13,7 @@ import { buildPromptMemoryFor } from './memory-index';
 import { shouldSkipMemoryRecall, buildMemoryPack, budgetFromPack  } from './context-pack';
 import { consumePendingRecall, recordRecallUsage, rememberPendingRecall } from './memory-rehearsal';
 import { fetchBiliMeta, findBiliUrl, formatBiliMeta } from './bili';
+import { loadPersonaDoc } from './persona-doc';
 import { buildBaseSystemPrompt, normalizeChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, stripSilentEndToken, STYLE_REMINDER } from './prompt';
 import { resolvePersona } from './persona';
 import { ticWarning } from './voice';
@@ -607,10 +608,13 @@ openaiApp.post('/chat/completions', async (c) => {
   ]);
   const personaDrift = buildPersonaDriftLine(personaState);
   const lifeBlocks = await loadLifeBlocks(c.env, now);
+  const personaDoc = await loadPersonaDoc(c.env);
   const mergedSystem = [
     ...astrbotSystems,
     buildBaseSystemPrompt({
       now,
+      personaDoc,
+      userText: lastUserCleaned,
       ctx,
       memory: contextBudget.core,
       memoryMode: promptMemory.mode,

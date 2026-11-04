@@ -18,6 +18,7 @@ import { resolveRecall } from './memory-engine';
 import type { Env } from './types';
 import { dateKeyInBeijing, isoInBeijing } from './date';
 import { buildBaseSystemPrompt } from './prompt';
+import { loadPersonaDoc } from './persona-doc';
 import { budgetContext } from './context-budget';
 import { getMemory } from './memory';
 import { detectFarewell } from './proactive-context';
@@ -306,8 +307,10 @@ async function generateProactive(
   const proactiveRecall = useNextProactive && recall.nextText ? recall.nextText : recall.text;
   const { budget: contextBudget } = budgetFromPack(pack, proactiveRecall, history.map((m) => m.content));
 
+  const personaDoc = await loadPersonaDoc(env);
   const systemPrompt = buildBaseSystemPrompt({
     now,
+    personaDoc,
     ctx,
     memory: contextBudget.core,
     memoryMode: promptMemory.mode,

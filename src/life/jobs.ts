@@ -30,7 +30,9 @@ export interface LifeInput {
 
 /** 没有天气数据时的兜底：地点取她的常住城市，别写死成北京。 */
 async function defaultInput(env: Env): Promise<LifeInput> {
-  const home = (await env.KV.get('life:home-city').catch(() => null)) ?? '上海';
+  // 城市只有一个来源：搬家写 KV；没设过才回退配置，最后才是默认值。
+  // 以前三处对不上（配置深圳 / 代码默认上海 / 记忆杭州），她说的是上海、查的是深圳。
+  const home = (await env.KV.get('life:home-city').catch(() => null)) ?? env.CITY ?? '上海';
   return { location: home, atHome: true, weather: 'cloudy', tempC: 20 };
 }
 

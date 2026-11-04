@@ -257,6 +257,14 @@
   ],
   [
     "GET",
+    "/api/admin/persona"
+  ],
+  [
+    "GET",
+    "/api/admin/persona"
+  ],
+  [
+    "GET",
     "/api/admin/readiness"
   ],
   [
@@ -929,6 +937,14 @@
   ],
   [
     "POST",
+    "/api/admin/persona/preview"
+  ],
+  [
+    "POST",
+    "/api/admin/persona/preview"
+  ],
+  [
+    "POST",
     "/api/admin/proactive-diagnose"
   ],
   [
@@ -1142,5 +1158,13 @@
   [
     "POST",
     "/v1/chat/completions"
+  ],
+  [
+    "PUT",
+    "/api/admin/persona"
+  ],
+  [
+    "PUT",
+    "/api/admin/persona"
   ]
 ]

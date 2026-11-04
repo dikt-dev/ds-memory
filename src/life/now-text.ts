@@ -12,6 +12,7 @@
 import type { Env } from '../types';
 import { beijingDateKey, lifeClock, statusAt } from './state';
 import { diaryPeopleBlock } from './residents';
+import { refreshUserEnv } from './weather';
 
 function hhmm(minute: number): string {
   const m = minute % 1440;
@@ -114,6 +115,15 @@ export async function lifePromptLine(env: Env, now = new Date()): Promise<string
     userRaw = (await env.KV?.get(`life:user-env:${dateKey}`)) ?? null;
   } catch {
     userRaw = null;
+  }
+  // 没有今天的记录（手机没上报定位）就用已知的用户城市补一次：
+  // 只在 KV 里没有时做，一天最多一次，不会每轮都查天气。
+  if (!userRaw) {
+    const city = await env.KV?.get('life:user-city').catch(() => null);
+    if (city) {
+      await refreshUserEnv(env, dateKey, city).catch(() => null);
+      userRaw = (await env.KV?.get(`life:user-env:${dateKey}`).catch(() => null)) ?? null;
+    }
   }
   if (userRaw) {
     try {

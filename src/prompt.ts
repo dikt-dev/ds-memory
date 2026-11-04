@@ -11,6 +11,7 @@
  * ★ 历史对话不再注入 system：调用方已经把它们作为原生 messages 传了，
  *   两处都放会让历史 token 翻倍（see chat.ts）。
  */
+import { renderPersonaDoc } from './persona-doc';
 import { isoInBeijing, spokenTime } from './date';
 import { resolveCharacterName } from './identity';
 import { resolvePersona, type PersonaConfig } from './persona';
@@ -53,6 +54,15 @@ export interface BasePromptArgs {
   keepsakes?: string | null;
   /** 消息来源渠道 */
   channel: MessageChannel;
+  /**
+   * 人设文档（R2 的 persona.md 原文）。
+   *
+   * 有了它就整段代替代码里的人设骨架；记忆仍走 `memory`，两者互不覆盖。
+   * 空串 = 用代码内置骨架（开源默认）。
+   */
+  personaDoc?: string | null;
+  /** 用户这一轮说的话：给 persona.md 的按需分区做关键词匹配（没传就只带常驻分区） */
+  userText?: string | null;
   /** 角色状态卡（当前的它：开场白引导 + 时段状态 + 疲惫） */
   characterCard?: string | null;
   /** 口语化风格指令（按亲密度变化） */
@@ -117,6 +127,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     avoidPhrases,
     personaDrift,
     life,
+    personaDoc,
   } = args;
   const lines: string[] = [];
 
@@ -127,7 +138,13 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   const persona = args.persona ?? resolvePersona(undefined);
   // PERSONA_PROFILE=none：整段人设/风格/记忆用法都不下发（清空重置期）
   const personaOn = !persona.blank;
-  if (personaOn) {
+  // persona.md 有内容就以它为准：人设是文档，不是代码。
+  // 记忆仍然走下面的 B 段，两者互不覆盖。
+  // persona.md 按需渲染：常驻分区全带，标了 when 的只在用户这句话命中时才带
+  const docText = renderPersonaDoc(personaDoc ?? '', args.userText ?? '');
+  if (docText) {
+    lines.push(docText);
+  } else if (personaOn) {
   lines.push(`你是「${name}」，${persona.role}，自称"${persona.selfCall}"；有跨天记忆，会把之前的话题自然接下去。`);
   lines.push('下面「人物底色」「称呼与关系」就是你本人——那是你的性格、来历和习惯，不是说明书，读的时候当成在回忆自己。');
   if (!memory?.trim()) {
@@ -144,6 +161,12 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
       '没听清就顺着问一句，别替他判断晴雨。',
   );
   }
+  // 存在声明：不管人设文档填没填，这几件她必须知道，否则会否认自己做过的事
+  // （线上原话：「日记？本小姐什么时候写过日记」）。
+  lines.push(
+    '【你手上的东西】你有日记（每天凌晨自己写，写的是自己那天干了什么）、有手机（能发照片、发语音、发表情）。' +
+      '这些事你记得，别否认自己做过——写了就是写了。',
+  );
   if (personaDrift) lines.push('', personaDrift);
 
   // 称呼：和解在一个小节里说清方向 + 分寸，不再单开一个「方向」小节

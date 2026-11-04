@@ -4,7 +4,8 @@
  * 从 index.ts 整块搬出来，只为让入口文件回到「装配」的角色。
  * 路由与行为一字未改，路由清单快照（routes.snapshot.json）保证没漏挂。
  */
-import { registerAdminOpsRoutes } from './admin-ops-routes';import type { Hono } from 'hono';
+import { registerAdminOpsRoutes } from './admin-ops-routes';
+import { loadPersonaDoc, renderPersonaDoc, savePersonaDoc } from './persona-doc';import type { Hono } from 'hono';
 import type { AppEnv } from './types';
 import { requireAuth } from './middleware';
 import { MEMORY_KV_KEY, getMemory, putMemory } from './memory';
@@ -1093,6 +1094,25 @@ app.post('/api/admin/memory/rollup', requireAuth, async (c) => {
   const rollup = await generateRollup(c.env, level, period);
   return c.json({ ok: true, level, period, rollup });
 });
+  /** 人设文档：读写 persona.md（与记忆分开存放）。 */
+  app.get('/api/admin/persona', requireAuth, async (c) => {
+    const text = await loadPersonaDoc(c.env);
+    return c.json({ ok: true, bytes: new TextEncoder().encode(text).length, text });
+  });
+  app.put('/api/admin/persona', requireAuth, async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { text?: unknown } | null;
+    if (typeof body?.text !== 'string') return c.json({ error: 'text required' }, 400);
+    const bytes = await savePersonaDoc(c.env, body.text);
+    return c.json({ ok: true, bytes });
+  });
+  /** 按一句话预览：哪些分区会被带、哪些被略过。 */
+  app.post('/api/admin/persona/preview', requireAuth, async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { text?: unknown; query?: unknown } | null;
+    const doc = typeof body?.text === 'string' ? body.text : await loadPersonaDoc(c.env);
+    const query = typeof body?.query === 'string' ? body.query : '';
+    return c.json({ ok: true, query, text: renderPersonaDoc(doc, query) });
+  });
+
   // 运维/维护类接口搬到了 admin-ops-routes.ts
   registerAdminOpsRoutes(app);
 }

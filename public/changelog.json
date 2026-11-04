@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T01:51:19.009Z",
+  "generated_at": "2026-11-04T02:42:24.782Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "ebda7a8",
+          "date": "2026-11-04",
+          "type": "other",
+          "area": "",
+          "title": "人设清空：PERSONA_PROFILE=none 模式下提示词不下发任何人设/风格/记忆用法；清空六个 PERSONA 变量",
+          "why": ""
+        },
         {
           "hash": "82f62c0",
           "date": "2026-11-04",
@@ -3245,14 +3253,6 @@
           "type": "feat",
           "area": "web",
           "title": "read-aloud and voice segment playback",
-          "why": ""
-        },
-        {
-          "hash": "3aa0145",
-          "date": "2026-10-25",
-          "type": "feat",
-          "area": "web",
-          "title": "add browser tts playback for replies",
           "why": ""
         }
       ]

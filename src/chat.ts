@@ -10,6 +10,7 @@ import { buildPromptMemoryFor } from './memory-index';
 import { shouldSkipMemoryRecall, buildMemoryPack  } from './context-pack';
 import { consumePendingRecall, looksLikePinRequest, recordRecallUsage, rememberPendingRecall, setChunkPinned } from './memory-rehearsal';
 import { loadLifeBlocks } from './chat-blocks';
+import { loadPersonaDoc } from './persona-doc';
 import { buildSystemPromptSplit, type MessageChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, STYLE_REMINDER } from './prompt';
 import { resolvePersona } from './persona';
 import { ticWarning } from './voice';
@@ -345,8 +346,11 @@ export async function streamChat(
     ? `【日记】用户在问能不能看：${pendingDates.slice(0, 5).join('、')}。` +
       '你可以答应看全部、只给看一眼、或者拒绝。日记是存在的，别否认自己写过。说一两句就够了。'
     : null;
+  const personaDoc = await loadPersonaDoc(env);
   const promptSplit = buildSystemPromptSplit({
         now,
+        userText: content,
+        personaDoc,
         ctx,
         memory: contextBudget.core,
         memoryMode: promptMemory.mode,

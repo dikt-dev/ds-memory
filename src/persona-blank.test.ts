@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildSystemPrompt } from './prompt';
 import { resolvePersona } from './persona';
-import type { DayContext } from './context';
+import type { DayContext } from './holidays';
 
 /**
  * 清空重置期：PERSONA_PROFILE=none 时提示词里不能残留任何一句人设。

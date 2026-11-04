@@ -8,6 +8,7 @@ import type { Env } from './types';
 import { lifePromptLine, residentNowLine } from './life/now-text';
 import { residentLooksRoster, residentRoster } from './life/residents';
 import { resolvePersona } from './persona';
+import { loadPersonaDoc, personaSectionText } from './persona-doc';
 
 export interface LifeBlocks {
   /** 稳定段：公寓名录（每天不变，能命中前缀缓存） */
@@ -16,25 +17,52 @@ export interface LifeBlocks {
   life: string | null;
 }
 
+/**
+ * 日记现状：写过几篇、最近一篇是哪天、大概写了什么。
+ *
+ * 只有「存在」的话她会说"我写过日记"，被问到内容还是编；
+ * 带上现状才能"记得大概、不记得细节"——真人就是这样。
+ */
+async function diaryAwareness(env: Env): Promise<string | null> {
+  const rows = await env.DB.prepare(
+    `SELECT date_key, summary FROM ai_diary ORDER BY date_key DESC LIMIT 3`,
+  ).all<{ date_key: string; summary: string | null }>();
+  const list = rows.results ?? [];
+  if (list.length === 0) return null;
+  const dates = list.map((r) => r.date_key.slice(5)).join('、');
+  const latest = (list[0].summary ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  return [
+    '【你的日记】',
+    `- 至今写过 ${list.length} 篇（最近的：${dates}）。`,
+    latest ? `- 最近一篇大概写的是：${latest}` : '- 最近一篇的内容你想不太清了。',
+    '- 他问起可以说个大概；没带全文的时候别复述细节，说"想不起具体写了啥，要看吗"。',
+  ].join('\n');
+}
+
 export async function loadLifeBlocks(env: Env, now: Date): Promise<LifeBlocks> {
-  const [line, card] = await Promise.all([
+  const [line, card, personaDoc, diary] = await Promise.all([
     lifePromptLine(env, now).catch(() => null),
     residentNowLine(env, now).catch(() => null),
+    loadPersonaDoc(env).catch(() => ''),
+    diaryAwareness(env).catch(() => null),
   ]);
+  // 长相：优先 persona.md 的「外貌」卡，没填才回退到环境变量。
+  // 以前只读环境变量，清空人设后她谁也认不出（连自己都不认）。
+  const look = personaSectionText(personaDoc, '外貌') || resolvePersona(env).look;
   return {
     // 名录 + 长相：名字解决「谁住这儿」，长相解决「照片里这个是谁」。
     // 自己的长相放在最前面——先认出「这是我」，再谈别人。
     residents:
       [
         (() => {
-          const look = resolvePersona(env).look;
-          return look ? `你自己：${look}。照片或画面里出现这样的人，那就是你，别当成别人。` : '';
+          const flat = look.replace(/\s*\n\s*/g, '；').trim();
+          return flat ? `你自己：${flat}。照片或画面里出现这样的人，那就是你，别当成别人。` : '';
         })(),
         residentRoster(),
         residentLooksRoster(),
       ]
         .filter(Boolean)
         .join('\n\n') || null,
-    life: [line, card].filter(Boolean).join('\n\n') || null,
+    life: [line, card, diary].filter(Boolean).join('\n\n') || null,
   };
 }

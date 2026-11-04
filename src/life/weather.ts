@@ -102,7 +102,8 @@ export async function refreshLifeEnv(
   } catch {
     tripCity = null;
   }
-  const city = opts.city ?? tripCity ?? (await env.KV.get('life:home-city').catch(() => null)) ?? '上海';
+  const city =
+    opts.city ?? tripCity ?? (await env.KV.get('life:home-city').catch(() => null)) ?? env.CITY ?? '上海';
   const now = await fetchWeather(city);
   const record: LifeEnvRecord = {
     location: city,
