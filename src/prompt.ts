@@ -157,7 +157,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   // 长相和熟人紧跟人设：谁能认出谁，也是"她是谁"的一部分
   if (residents?.trim()) {
     lines.push('');
-    lines.push('## 她认识的人');
+    lines.push('## 你认识的人');
     lines.push(residents.trim());
   }
 

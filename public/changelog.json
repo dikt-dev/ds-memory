@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T06:10:06.200Z",
+  "generated_at": "2026-11-04T06:16:31.311Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "9d1b7f1",
+          "date": "2026-11-04",
+          "type": "refactor",
+          "area": "",
+          "title": "长相与熟人紧跟人设；位置规则单独成节",
+          "why": ""
+        },
         {
           "hash": "8600651",
           "date": "2026-11-04",
@@ -3245,14 +3253,6 @@
           "type": "feat",
           "area": "persona",
           "title": "boundaries and options instead of reply requirements",
-          "why": ""
-        },
-        {
-          "hash": "4d5f61a",
-          "date": "2026-10-25",
-          "type": "docs",
-          "area": "",
-          "title": "start seven-day app shadow observation",
           "why": ""
         }
       ]

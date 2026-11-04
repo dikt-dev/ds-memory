@@ -13,7 +13,7 @@ import { loadPersonaDoc, personaSectionText } from './persona-doc';
 const DIARY_WORDS = /日记|日志|写的东西|写完|那篇|写了吗|写了什么/;
 
 export interface LifeBlocks {
-  /** 稳定段：人设文档里写了「人际关系」才带，否则为空 */
+  /** 稳定段：人设文档里写了「人际关系」才带，否则为空（提示词里叫「你认识的人」） */
   residents: string | null;
   /** 易变段：此刻在干什么 + 今天跟谁混 + 日记现状（每轮都变） */
   life: string | null;
