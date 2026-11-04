@@ -276,13 +276,12 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   // 模型挑到旧的那份就会说错城市/时间。
   lines.push('');
   lines.push('## 此刻');
-  lines.push(`- 现在：${isoInBeijing(now)}（${ctx.date} ${ctx.weekday}）`);
+  // 今天是不是节假日：节假日说名字，周末也算，其他一律「工作日」
+  const restNote =
+    ctx.holiday_note && !/平常工作日|工作日/.test(ctx.holiday_note) ? ctx.holiday_note : '工作日';
+  lines.push(`- 现在：${isoInBeijing(now)}（${ctx.date} ${ctx.weekday} · ${restNote}）`);
   // 直接给出「晚上九点十一分」：模型自己把 21:11 换算成口语会算错（实测差近一小时）
   lines.push(`- 口语说法：${spokenTime(now)}（按半小时取整，说到时间用这个量级就行）`);
-  // 普通工作日不啰嗦；真的是节假日才单独说一句
-  if (ctx.holiday_note && !/平常工作日|工作日/.test(ctx.holiday_note)) {
-    lines.push(`- 节假日：${ctx.holiday_note}`);
-  }
   if (weather) {
     lines.push(
       `- 天气（你这边）：${weather.city} ${weather.desc}，${weather.temp_c}°C` +

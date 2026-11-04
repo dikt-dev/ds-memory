@@ -52,7 +52,7 @@ describe('buildSystemPrompt', () => {
       channel: 'web',
     });
     const memoryAt = prompt.indexOf('用户生活在杭州');
-    const timeAt = prompt.indexOf('## 当前时间与环境');
+    const timeAt = prompt.indexOf('## 此刻');
     expect(memoryAt).toBeGreaterThan(-1);
     expect(timeAt).toBeGreaterThan(-1);
     expect(memoryAt).toBeLessThan(timeAt);
@@ -266,7 +266,7 @@ describe('时间与诚实性规则', () => {
     expect(prompt).toContain('- 现在：2026-10-29T21:11:00+08:00');
     expect(prompt).toContain('口语说法：晚上九点');
     // 时间和天气各只出现一次：以前 ⑤ 和 ⑧ 各一套，口径打架
-    expect(prompt.match(/## 当前时间与环境/g)).toHaveLength(1);
+    expect(prompt.match(/## 此刻/g)).toHaveLength(1);
     expect(prompt.match(/天气（你这边）/g)).toHaveLength(1);
   });
 });

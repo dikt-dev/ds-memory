@@ -40,7 +40,7 @@ describe('PERSONA_PROFILE=none', () => {
 
   it('时间/环境这类事实仍然保留（不然她连现在几点都不知道）', () => {
     const prompt = buildSystemPrompt(base);
-    expect(prompt).toContain('当前时间与环境');
+    expect(prompt).toContain('## 此刻');
     expect(prompt).toContain('2026-11-04');
   });
 
