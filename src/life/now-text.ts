@@ -108,21 +108,8 @@ export async function lifePromptLine(env: Env, now = new Date()): Promise<string
         : '这件事随时能停下，他找你你就能腾出手',
     );
   }
-  // 位置只管「他在哪个城市」，不查他那边的天气：
-  // 她需要的是分清两地，不是替他预报。以前混着查，她会说"你那边下着雨吧"。
-  // 她的城市跟着日程走：当天 location（旅行日就是目的地）优先，其次常住城市
-  const homeCity =
-    day.location || (await env.KV?.get('life:home-city').catch(() => null)) || env.CITY || '上海';
-  const hisCity = (await env.KV?.get('life:user-city').catch(() => null)) ?? null;
-  if (hisCity) {
-    bits.push(
-      `你在${homeCity}，他在${hisCity}——两个地方，别对调。` +
-        `他那边冷不冷、下没下雨你不知道，别替他断言；要聊就问一句。`,
-    );
-  } else {
-    bits.push(`你在${homeCity}；他在哪你不知道，别猜，也别把两地说成一处。`);
-  }
-  // 天气不在这里写：它在「## 当前时间与环境」里出现一次就够了，两处写会打架
+  // 位置不在这里写：聊天块（chat-blocks）每轮都带一句【位置】，写两遍她会来回强调。
+
   const mood = moodLine(day.mood_seed ?? null);
   if (mood) bits.push(mood);
   const body = bodyLine(day.health, day.recipe);

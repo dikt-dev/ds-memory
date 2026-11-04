@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T03:20:49.973Z",
+  "generated_at": "2026-11-04T03:21:59.925Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "9a313b9",
+          "date": "2026-11-04",
+          "type": "feat",
+          "area": "",
+          "title": "后台可以看一眼这一轮真正发出去的提示词",
+          "why": ""
+        },
         {
           "hash": "0054223",
           "date": "2026-11-04",
@@ -3245,14 +3253,6 @@
           "type": "feat",
           "area": "",
           "title": "add web/douyin preview endpoint",
-          "why": ""
-        },
-        {
-          "hash": "05016d4",
-          "date": "2026-10-25",
-          "type": "feat",
-          "area": "",
-          "title": "Bilibili cookie preview and video/gif upload/playback routes",
           "why": ""
         }
       ]
