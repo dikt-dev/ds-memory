@@ -63,9 +63,13 @@ import { currentArchetype, effectiveFacets, facetsOf, listOpenGrievances, loadEm
 import { buildEmotionSnapshot, describeEmotionState } from './emotion-snapshot';
 import { explainAttitude } from './attitude-policy';
 import { listAffectTimeline, recordAttitudeSnapshot } from './affect-store';
-import { getOrCreateDayContext } from './context';
 import { readPathStats, readRecentRequests } from './request-log';
 import { logError, logWarn } from './error-log';
+import { loadPersonaDoc } from './persona-doc';
+import { loadLifeBlocks } from './chat-blocks';
+import { buildSystemPromptSplit } from './prompt';
+import { resolvePersona } from './persona';
+import { getOrCreateDayContext } from './context';
 
 /**
  * 运维/维护类后台接口：清库、重跑任务、KV 审计、请求统计……
@@ -75,6 +79,41 @@ import { logError, logWarn } from './error-log';
  * 搬动是纯机械的：路由清单快照（routes.snapshot.json）保证一条不多一条不少。
  */
 export function registerAdminOpsRoutes(app: Hono<AppEnv>): void {
+
+  /**
+   * 看一眼这一轮真正会发出去的东西：人设、名录、记忆、时间。
+   * 只在后台用；text 模拟用户那句话。
+   */
+  app.get('/api/admin/prompt/peek', requireAuth, async (c) => {
+    const text = c.req.query('text') || '在吗';
+    const now = new Date();
+    const [personaDoc, lifeBlocks, memory, ctx] = await Promise.all([
+      loadPersonaDoc(c.env),
+      loadLifeBlocks(c.env, now, text),
+      getMemory(c.env).catch(() => null),
+      getOrCreateDayContext(c.env, beijingDateKey()).catch(() => null),
+    ]);
+    const parts = buildSystemPromptSplit({
+      now,
+      ctx: ctx as never,
+      memory: memory ?? null,
+      channel: 'web',
+      personaDoc,
+      userText: text,
+      persona: resolvePersona(c.env),
+      residents: lifeBlocks.residents,
+      life: lifeBlocks.life,
+    } as never);
+    const enc = new TextEncoder();
+    return c.json({
+      ok: true,
+      text,
+      stableBytes: enc.encode(parts.stable).length,
+      volatileBytes: enc.encode(parts.volatile).length,
+      stable: parts.stable,
+      volatile: parts.volatile,
+    });
+  });
   /**
    * 批量清空 KV（需 confirm=yes）。
    *

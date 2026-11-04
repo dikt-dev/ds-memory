@@ -265,6 +265,14 @@
   ],
   [
     "GET",
+    "/api/admin/prompt/peek"
+  ],
+  [
+    "GET",
+    "/api/admin/prompt/peek"
+  ],
+  [
+    "GET",
     "/api/admin/readiness"
   ],
   [
