@@ -106,6 +106,7 @@ export function slimMemoryForPrompt(text: string, now: Date = new Date()): strin
   const out: string[] = [];
   let section: string | null = null;
   let pendingHeader: string | null = null;
+  let pendingSection: string | null = null;
   let sectionHasBody = false;
 
   const flush = (): void => {
@@ -116,8 +117,9 @@ export function slimMemoryForPrompt(text: string, now: Date = new Date()): strin
   const emit = (line: string): void => {
     if (pendingHeader !== null) {
       out.push(pendingHeader);
-      section = pendingHeader.replace(/^##\s+/, '').trim();
+      section = pendingSection;
       pendingHeader = null;
+      pendingSection = null;
     }
     out.push(line);
     sectionHasBody = true;
@@ -128,6 +130,7 @@ export function slimMemoryForPrompt(text: string, now: Date = new Date()): strin
     if (/^##\s/.test(line)) {
       flush();
       pendingHeader = line;
+      pendingSection = line.replace(/^##\s+/, '').trim();
       continue;
     }
     // 一级标题和提示词里的标题重复
@@ -136,13 +139,10 @@ export function slimMemoryForPrompt(text: string, now: Date = new Date()): strin
       if (sectionHasBody) out.push('');
       continue;
     }
-    // 日期：存储是 YY-MM-DD；这里把今年的缩成 MM-DD，并给「近期动态」补相对时间
-    let rendered = line.replace(
-      /\[(\d{2,4})-(\d{2})-(\d{2})\]/g,
-      (all, y: string, m: string, d: string) => (y.length === 4 && y !== year ? all : `[${m}-${d}]`),
-    );
-    if (section === '近期动态') {
-      rendered = rendered.replace(
+    // 先补「近期动态」的相对时间（要用完整日期算），再统一缩成 MM-DD
+    let annotated = line;
+    if ((pendingSection ?? section) === '近期动态') {
+      annotated = annotated.replace(
         /- \[(\d{2,4})-(\d{2})-(\d{2})\]/,
         (all: string, y: string, m: string, d: string) => {
           const age = ageOf(y, m, d);
@@ -150,6 +150,10 @@ export function slimMemoryForPrompt(text: string, now: Date = new Date()): strin
         },
       );
     }
+    const rendered = annotated.replace(
+      /\[(\d{2,4})-(\d{2})-(\d{2})\]/g,
+      (all, y: string, m: string, d: string) => (y.length === 4 && y !== year ? all : `[${m}-${d}]`),
+    );
     emit(rendered);
   }
   flush();

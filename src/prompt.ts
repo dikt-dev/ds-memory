@@ -246,7 +246,11 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   const recent: string[] = [];
   if (recentMemo?.trim()) recent.push(recentMemo.trim());
   if (recalled?.trim()) recent.push(recalled.trim());
-  if (memoryParts.volatile.trim()) recent.push(memoryParts.volatile.trim());
+  // 易变段也要瘦身：空分区不输出、日期同口径（近期动态还会补「几天前」）
+  if (memoryParts.volatile.trim()) {
+    const slimVolatile = slimMemoryForPrompt(memoryParts.volatile, now).trim();
+    if (slimVolatile) recent.push(slimVolatile);
+  }
   if (todaySummary?.trim()) {
     recent.push(`## 今日摘要（截至当前）\n${todaySummary.trim()}`);
   }
