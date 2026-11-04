@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T06:03:08.664Z",
+  "generated_at": "2026-11-04T06:10:06.200Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "8600651",
+          "date": "2026-11-04",
+          "type": "fix",
+          "area": "",
+          "title": "朋友名单保留换行，不再压成一行",
+          "why": ""
+        },
         {
           "hash": "f7042ca",
           "date": "2026-11-04",
@@ -3245,14 +3253,6 @@
           "type": "docs",
           "area": "",
           "title": "start seven-day app shadow observation",
-          "why": ""
-        },
-        {
-          "hash": "a28c97a",
-          "date": "2026-10-25",
-          "type": "docs",
-          "area": "",
-          "title": "set app shadow observation start",
           "why": ""
         }
       ]
