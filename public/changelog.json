@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T07:20:49.795Z",
+  "generated_at": "2026-11-04T07:23:08.195Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "b267ebf",
+          "date": "2026-11-04",
+          "type": "feat",
+          "area": "",
+          "title": "近期动态带相对时间（今天/昨天/N 天前）；易变段记忆同样瘦身",
+          "why": ""
+        },
         {
           "hash": "f8f8951",
           "date": "2026-11-04",
@@ -3235,14 +3243,6 @@
           "type": "docs",
           "area": "",
           "title": "record day two location and smoothness progress",
-          "why": ""
-        },
-        {
-          "hash": "4ca2222",
-          "date": "2026-10-27",
-          "type": "docs",
-          "area": "",
-          "title": "record day two progress",
           "why": ""
         }
       ]
