@@ -233,6 +233,8 @@ export async function streamChat(
     vector: emotion.state.vector,
     facets: emotion.facets,
     wasIgnored: facts.wasIgnored,
+    events: emotion.state.events,
+    now: now.getTime(),
   });
 
   // Phase 3：态度策略影子/新引擎。默认 legacy，不改变回复。

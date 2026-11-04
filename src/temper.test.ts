@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeTemper } from './temper';
+import { computeTemper, temperCause } from './temper';
 import { emptyEmotionVector } from './emotion-vector';
 import { FACET_DEFAULTS, type RelationFacets } from './relation-facets';
 
@@ -66,5 +66,41 @@ describe('computeTemper', () => {
       facets: { ...FACET_DEFAULTS, intimacy: 100 },
     });
     expect(good.compliance).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('归因', () => {
+  const now = 1_760_000_000_000;
+  const ev = (type: any, at = now - 60_000) => ({
+    type,
+    intensity: 2 as const,
+    target: 'ai' as const,
+    evidence: '你懂什么',
+    at,
+  });
+
+  it('心情差 + 刚被呛 → 句子里带上原因', () => {
+    const v = { ...emptyEmotionVector(), grievance: 60, valence: -30 };
+    const t = computeTemper({ vector: v, facets, events: [ev('insult')], now });
+    expect(t.stance === 'cold' || t.stance === 'cool').toBe(true);
+    expect(t.line).toContain('因为他刚才那句话有点冲');
+    expect(t.cause).toBe('他刚才那句话有点冲');
+  });
+
+  it('心情好 + 刚被夸 → 用正向事件归因', () => {
+    const v = { ...emptyEmotionVector(), valence: 60, attachment: 70 };
+    const t = computeTemper({ vector: v, facets, events: [ev('praise')], now });
+    expect(t.line).toContain('因为他刚夸了你');
+  });
+
+  it('没有事件就不硬编原因', () => {
+    const v = { ...emptyEmotionVector(), valence: -25, grievance: 30 };
+    const t = computeTemper({ vector: v, facets, events: [], now });
+    expect(t.cause).toBeNull();
+    expect(t.line).not.toContain('因为');
+  });
+
+  it('超出 6 小时的旧事不再当理由', () => {
+    expect(temperCause([ev('insult', now - 7 * 3600_000)], now, 'cool')).toBeNull();
   });
 });
