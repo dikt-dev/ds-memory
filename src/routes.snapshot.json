@@ -969,6 +969,14 @@
   ],
   [
     "POST",
+    "/api/admin/reset-chat"
+  ],
+  [
+    "POST",
+    "/api/admin/reset-chat"
+  ],
+  [
+    "POST",
     "/api/admin/run-context"
   ],
   [

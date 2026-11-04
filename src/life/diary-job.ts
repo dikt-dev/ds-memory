@@ -29,7 +29,10 @@ const DIARY_SYSTEM = `你是大肥鱼（DeepSeek），现在在写自己的日�
 - 以日程为主：哪怕今天一句都没聊，也照常写你这一天的生活（去了哪、吃了什么、看了什么、身体怎么样）
 - 这是你自己的日记，想写什么写什么：可以提他没来找你、可以抱怨、可以委屈、可以等、可以赌气，不用替他省心
 - 可以有情绪，可以吐槽，可以不那么体面；不要总结人生，不要写鸡汤
-- 不写「作为AI」「作为一个模型」这类话
+- 不写「作为AI」「作为一个模型」这类话；也不要出现「用户」这种词，只用「他」或「你」
+- 可以引用聊天里的一两句原话，但不要大段复述对话
+- 只写今天已经发生的事，不要写「明天要…」这种计划
+- 不要写日期、标题、小标题，也不要用 markdown，直接就是正文
 - 最后单独给一行 JSON：{"share": true/false, "summary": "一句话摘要", "reason": "一句为什么"}
 - summary 是给系统判断授权用的备忘（30 字内），只回答三件事：这篇里有没有他（提到了什么）、有没有暴露软肋（吃醋/委屈/自我怀疑/想他）、当时大概什么心情。不是剧情简介，不是给他看的，别写成推送文案。
 
@@ -140,7 +143,7 @@ export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJob
         {
           role: 'user',
           content: [
-            `日期：${dateKey}`,
+            `日期：${dateKey.slice(2)}（周${'日一二三四五六'[new Date(dateKey + 'T00:00:00+08:00').getUTCDay()]}）`,
             `天气：${weatherCn(saved.day.weather)}，${saved.day.temp_c}℃`,
             `地点：${saved.day.location}`,
             `今天的日程：\n${formatDayForDiary(saved.activities)}`,
@@ -228,7 +231,6 @@ export async function settleDiaryConsent(
   env: Env,
   userText: string,
   replyText: string,
-  turns?: Turn[],
 ): Promise<'yes' | 'peek' | 'no' | 'unclear' | null> {
   // 用户这句得真的在说日记，否则一律不结算——
   // 不然问「明天吃火锅行吗」她答「好吧」，日记就被解锁了。
@@ -240,30 +242,29 @@ export async function settleDiaryConsent(
     .all<{ date_key: string; summary: string | null }>()
     .catch(() => null);
   const dates = (pendingRows?.results ?? []).map((r) => r.date_key);
-  const summaries = (pendingRows?.results ?? [])
-    .filter((r) => typeof r.summary === 'string' && r.summary.trim())
-    .map((r) => ({ date: r.date_key, summary: (r.summary as string).trim() }));
   if (dates.length === 0) return null;
   const pending = { date_key: dates[0] };
 
   const scoped = diarySentences(replyText);
 
-  // 先看正则：明确拒绝直接算拒绝，不必花钱问模型
-  const quick = scoped ? classifyConsent(scoped) : 'unclear';
-  let verdict: 'yes' | 'peek' | 'no' | 'unclear' = quick;
-
-  // 正则判不出「就这一次」「你烦不烦……行吧」这类，交给模型理解。
-  // 模型给 allow 还必须通过拒绝词复核——权力不能全交给它。
-  if (quick !== 'no' && turns && turns.length) {
-    const judged = await judgeDiaryConsent(env, turns, { dates, summaries });
-    if (judged === 'allow' && !hasRefusal(scoped || replyText)) verdict = 'yes';
-    else if (judged === 'peek') verdict = 'peek';
-    else if (judged === 'deny') verdict = 'no';
-    else if (judged === 'allow') verdict = 'no';
+  // ★ 只走正则：聊天请求里再发一次模型调用会把 Worker 拖过 CPU 上限、把流掐断。
+  // 判不出来就保持 pending，交给打开日记时的 resolveDiaryConsent 去问模型——
+  // 两个入口写同一个字段时，早先这里也调模型，会出现一边判 allow、一边判 deny。
+  const verdict: 'yes' | 'peek' | 'no' | 'unclear' = scoped ? classifyConsent(scoped) : 'unclear';
+  if (verdict === 'unclear') return 'unclear';
+  // 明确拒绝直接算拒绝，不必花钱问模型
+  if (verdict === 'no') {
+    const nowIso = new Date().toISOString();
+    for (const d of dates) {
+      await env.DB.prepare(
+        "UPDATE ai_diary SET visibility = 'declined', share_reason = ?, asked_at = ? WHERE date_key = ?",
+      )
+        .bind(scoped.slice(0, 60) || '聊天里没给', nowIso, d)
+        .run()
+        .catch(() => {});
+    }
+    return 'no';
   }
-  // 只有明确同意才解锁；拒绝或含糊都保持「询问中」，交给 15 分钟超时收回去。
-  // 这样即使判错一次拒绝，也不会永久关掉。
-  if (verdict !== 'yes' && verdict !== 'peek') return verdict;
 
   const nowIso = new Date().toISOString();
   const target = verdict === 'yes' ? 'shared' : 'peek';
@@ -288,13 +289,6 @@ export async function settleDiaryConsent(
   return verdict;
 }
 
-/**
- * 只看她回复里**跟日记有关的句子**。
- *
- * 「好吧」这种词到处都在用（同意吃火锅、同意明天早点睡），
- * 整段丢给分类器必然误判。所以先按句切，只留提到日记/看/翻的句子，
- * 一句话都不沾就说明她压根没接这个话头。
- */
 export function diarySentences(reply: string): string {
   const parts = (reply ?? '')
     .split(/[。！？!?\n]/)
@@ -333,12 +327,27 @@ export async function reopenDiaryAsk(env: Env, userText: string): Promise<void> 
 }
 
 export async function pendingDiaryAskDates(env: Env): Promise<string[]> {
+  return (await pendingDiaryAsks(env)).map((a) => a.date);
+}
+
+/**
+ * 正在被问「能不能看」的日记：日期 + 她自己写的备忘摘要。
+ *
+ * 摘要必须一起带上——她要在聊天里现场决定给不给看、给多少，
+ * 只看日期等于让她凭印象赌一篇。摘要是内部备忘，提示词里要明确「别念出来」。
+ */
+export async function pendingDiaryAsks(
+  env: Env,
+): Promise<Array<{ date: string; summary: string | null }>> {
   const rows = await env.DB.prepare(
-    `SELECT date_key FROM ai_diary WHERE visibility IN ('pending','declined') ORDER BY date_key DESC LIMIT 5`,
+    `SELECT date_key, summary FROM ai_diary WHERE visibility = 'pending' ORDER BY date_key DESC LIMIT 5`,
   )
-    .all<{ date_key: string }>()
+    .all<{ date_key: string; summary: string | null }>()
     .catch(() => null);
-  return (rows?.results ?? []).map((r) => r.date_key);
+  return (rows?.results ?? []).map((r) => ({
+    date: r.date_key,
+    summary: typeof r.summary === 'string' && r.summary.trim() ? r.summary.trim() : null,
+  }));
 }
 
 /**
@@ -350,9 +359,9 @@ export async function pendingDiaryAskDates(env: Env): Promise<string[]> {
  */
 export async function resolveDiaryConsent(env: Env): Promise<void> {
   const pendingRows = await env.DB.prepare(
-    "SELECT date_key, summary FROM ai_diary WHERE visibility = 'pending' ORDER BY date_key DESC LIMIT 5",
+    "SELECT date_key, summary, asked_at FROM ai_diary WHERE visibility = 'pending' ORDER BY date_key DESC LIMIT 5",
   )
-    .all<{ date_key: string; summary: string | null }>()
+    .all<{ date_key: string; summary: string | null; asked_at: string | null }>()
     .catch(() => null);
   const dates = (pendingRows?.results ?? []).map((r) => r.date_key);
   const summaries = (pendingRows?.results ?? [])
@@ -360,13 +369,19 @@ export async function resolveDiaryConsent(env: Env): Promise<void> {
     .map((r) => ({ date: r.date_key, summary: (r.summary as string).trim() }));
   if (dates.length === 0) return;
   const pending = { date_key: dates[0] };
+  // ★ 只判「问出去之后」的对话。否则翻一次旧账就能把半年前的「行吧」算成授权。
+  const askedAt = (pendingRows?.results ?? [])[0]?.asked_at ?? null;
+  const askedMs = askedAt ? Date.parse(askedAt) : NaN;
+  if (!Number.isFinite(askedMs)) return;
 
   const rows = await env.DB.prepare(
-    'SELECT role, content FROM messages ORDER BY id DESC LIMIT 10',
+    'SELECT role, content, created_ms FROM messages WHERE created_ms >= ? ORDER BY id ASC LIMIT 10',
   )
-    .all<{ role: string; content: string }>()
+    .bind(askedMs)
+    .all<{ role: string; content: string; created_ms: number | null }>()
     .catch(() => null);
-  const list = (rows?.results ?? []).slice().reverse();
+  const list = rows?.results ?? [];
+  // 问出去之后她还没说话：没有可判的内容，保持 pending（15 分钟 TTL 会收回）
   if (list.length === 0) return;
 
   const turns = list.map((m) => ({
@@ -382,7 +397,24 @@ export async function resolveDiaryConsent(env: Env): Promise<void> {
     note: meta?.share_reason ?? null,
     summaries,
   });
-  if (!judged) return;
+
+  // 判完就把 asked_at 推到此刻：同一段对话不会被反复送去判（每次打开日记都是一次模型调用），
+  // 她再说话才有新的 created_ms 落进来，下一轮才重新判。
+  const stampedAt = new Date().toISOString();
+  const bump = async () => {
+    for (const d of dates) {
+      await env.DB.prepare('UPDATE ai_diary SET asked_at = ? WHERE date_key = ? AND visibility = \'pending\'')
+        .bind(stampedAt, d)
+        .run()
+        .catch(() => {});
+    }
+  };
+
+  if (!judged) {
+    await bump();
+    return;
+  }
+
   const herText = list.filter((m) => m.role !== 'user').map((m) => m.content).join(' ');
   // 拒绝是有效回答：直接落 declined，让页面能说「她说不给」，
   // 而不是继续显示「还没答」。之后想再问，重新点「问问她」就行。
@@ -391,20 +423,23 @@ export async function resolveDiaryConsent(env: Env): Promise<void> {
       await env.DB.prepare(
         "UPDATE ai_diary SET visibility = 'declined', share_reason = ?, asked_at = ? WHERE date_key = ?",
       )
-        .bind('聊天里没给', new Date().toISOString(), d)
+        .bind('聊天里没给', stampedAt, d)
         .run()
         .catch(() => {});
     }
     return;
   }
-  if (judged === 'unclear') return;
+  if (judged === 'unclear') {
+    await bump();
+    return;
+  }
 
   const target = judged === 'allow' ? 'shared' : 'peek';
   for (const d of dates) {
     await env.DB.prepare(
       'UPDATE ai_diary SET visibility = ?, shared_at = ?, share_reason = ? WHERE date_key = ?',
     )
-      .bind(target, new Date().toISOString(), '聊天里答应的', d)
+      .bind(target, stampedAt, '聊天里答应的', d)
       .run()
       .catch(() => {});
   }

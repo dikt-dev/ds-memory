@@ -13,6 +13,7 @@ import { generateDiaryImage, lastImageError, IMAGE_MODELS } from './life/diary-i
 import { completeDeepSeek } from './deepseek';
 import { SUMMARY_SYSTEM } from './life/diary-summary-gen';
 import { askDiary, diaryList, diaryOne } from './life/diary-api';
+import { pendingDiaryAsks } from './life/diary-job';
 import { collapseOngoingItems } from './memory-ongoing-job';
 import { ensureLifeDay, lifeNow } from './life/jobs';
 import { maybeNightWake } from './life/night';
@@ -110,7 +111,9 @@ export function registerAdminOpsRoutes(app: Hono<AppEnv>): void {
       persona: resolvePersona(c.env),
       weather: weather ?? undefined,
       residents: lifeBlocks.residents,
-      life: lifeBlocks.life,
+      // 和 chat.ts 一致：被问的日记要带上日期 + 她自己写的备忘摘要，否则这个调试页看不到真实提示词
+      life:
+        [lifeBlocks.life, await diaryAskPreview(c.env)].filter(Boolean).join('\n\n') || null,
     } as never);
     const enc = new TextEncoder();
     // 和 chat.ts 一模一样的拼法：稳定段 + [提要] + 历史 + 易变段 + 用户消息
@@ -203,6 +206,114 @@ app.post('/api/admin/wipe-data', requireAuth, async (c) => {
   for (const k of kvKeys) await c.env.KV.delete(k).catch(() => {});
   return c.json({ ok: true, d1, r2_deleted: r2, kv_cleared: kvKeys.length });
 });
+/**
+ * 彻底重置（只留人设与配对）：清空所有业务表、聊天派生的 R2 对象、派生缓存 KV，
+ * 并把 emotion 状态一起抹掉（emotion:state 在 runtime_state 里，整表删除即可）。
+ *
+ * 保留：persona.md（她是谁）、memory.md 的「人物底色 / 他的雷区 / 称呼与关系」三块、
+ * KV 里的配对令牌 app:device:*、以及 pair:code。
+ */
+app.post('/api/admin/reset-chat', requireAuth, async (c) => {
+  if (c.req.query('confirm') !== 'yes') return c.json({ error: '需要 confirm=yes' }, 400);
+
+  // 1) D1：按 sqlite_master 真实表名删，避免漏掉后来新增的表（上次就是这么漏的）
+  const listed = await c.env.DB.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('_cf_KV','sqlite_sequence')",
+  ).all<{ name: string }>();
+  let rows = 0;
+  const cleared: string[] = [];
+  for (const { name } of listed.results ?? []) {
+    try {
+      const r = await c.env.DB.prepare(`DELETE FROM "${name}"`).run();
+      rows += r.meta.changes ?? 0;
+      cleared.push(name);
+    } catch {
+      // 视图/虚拟表删不动就跳过，不影响其它表
+    }
+  }
+
+  // 2) R2：只删聊天派生对象，persona.md / memory.md 保留
+  const keep = new Set(['persona.md', 'memory.md']);
+  const prefixes = [
+    'chat_logs/',
+    'context/',
+    'memory/emotion-history/',
+    'memory/backups/',
+    'images/',
+    'media/',
+    'files/',
+    'sessions/',
+    'memo/',
+    'summary/',
+    'diary/',
+    'recall/',
+  ];
+  const keys = await listKeys(c.env, '');
+  let r2 = 0;
+  for (const k of keys) {
+    if (keep.has(k)) continue;
+    if (!prefixes.some((p) => k.startsWith(p))) continue;
+    await deleteObject(c.env, k).catch(() => {});
+    r2 += 1;
+  }
+
+  // 3) KV：派生缓存全清，配对的设备令牌保留（清了手机就要重新配对）
+  let kv = 0;
+  const kvPrefixes = ['memo:', 'proactive:', 'profile:', 'files:', 'summary:', 'archive:', 'memory:', 'cost:'];
+  for (const p of kvPrefixes) {
+    let cursor: string | undefined;
+    for (let page = 0; page < 50; page++) {
+      const res = await c.env.KV.list({ prefix: p, cursor, limit: 500 });
+      for (const k of res.keys) {
+        await c.env.KV.delete(k.name);
+        kv += 1;
+      }
+      if (res.list_complete) break;
+      cursor = res.cursor;
+    }
+  }
+
+  // 4) memory.md：保三块身份信息，其余清空，关系值回默认
+  const text = (await getMemory(c.env).catch(() => '')) || '';
+  const keepHeaders = ['## 人物底色', '## 他的雷区', '## 称呼与关系'];
+  const sections = text.split(/^(?=## )/m);
+  const kept = sections
+    .filter((sec) => keepHeaders.some((h) => sec.startsWith(h)))
+    .map((sec) => sec.trimEnd())
+    .join('\n\n');
+  const order = ['## 人物底色', '## 他的雷区', '## 称呼与关系', '## 关于他', '## 他的偏好', '## 进行中的事', '## 共同经历', '## 你的生活', '## 近期动态'];
+  const comments: Record<string, string> = {
+    '## 人物底色': '<!-- 固定设定，永不删改 -->',
+    '## 他的雷区': '<!-- 他不能碰的话题与说法，永不自动删除 -->',
+    '## 称呼与关系': '<!-- 称呼/暗号/约定 + 三个关系值（系统算，勿手改） -->',
+    '## 关于他': '<!-- 他的身份、背景、重要的人（长期事实） -->',
+    '## 他的偏好': '<!-- 他的喜好、厌恶、作息、沟通方式 -->',
+    '## 进行中的事': '<!-- 他的项目/计划/待办：[进行中]/[搁置]/[已完成] -->',
+    '## 共同经历': '<!-- 共同做过的事、里程碑、梗、约定 -->',
+    '## 你的生活': '<!-- 你自己的事：去过哪、在追什么、自己做的决定 -->',
+    '## 近期动态': '<!-- 最近几天，超7天清理 -->',
+  };
+  const present = new Map<string, string>();
+  for (const sec of sections) {
+    const h = (sec.match(/^## [^\n]+/) ?? [''])[0].trim();
+    if (h) present.set(h, sec.trimEnd());
+  }
+  const rebuilt = order
+    .map((h) => (keepHeaders.includes(h) && present.get(h) ? present.get(h)! : `${h}\n${comments[h] ?? ''}`.trimEnd()))
+    .join('\n\n');
+  const withValues = setRelationValues(rebuilt, {
+    affinity: 500,
+    intimacy: 300,
+    mood: 500,
+    trust: 600,
+    respect: 650,
+    attraction: 300,
+  });
+  await putMemory(c.env, withValues + '\n');
+
+  return c.json({ ok: true, d1: { tables: cleared.length, rows }, r2_deleted: r2, kv_cleared: kv });
+});
+
 app.post('/api/admin/run-daily', requireAuth, async (c) => {
   const result = await runDailyArchive(c.env, new Date());
   return c.json({ ok: true, ...result });
@@ -498,4 +609,16 @@ app.get('/api/admin/requests', requireAuth, async (c) => {
   return c.json({ ok: true, hours, limit, stats, recent });
 });
 
+}
+
+/** 调试页用：复刻 chat.ts 里那段「被问的日记」提示词。 */
+async function diaryAskPreview(env: AppEnv['Bindings']): Promise<string | null> {
+  const asks = await pendingDiaryAsks(env).catch(() => []);
+  if (asks.length === 0) return null;
+  return [
+    `【日记】用户在问能不能看：${asks.map((a) => a.date.slice(2)).join('、')}。`,
+    ...asks.filter((a) => a.summary).map((a) => `- ${a.date.slice(2)} 那篇，你当时给自己留的备忘：${a.summary}`),
+    '这些是你写的时候给自己留的备忘，不是给他看的文案——别念出来，也别逐条复述。',
+    '你可以答应看全部、只给看一眼、或者拒绝。日记是存在的，别否认自己写过。说一两句就够了。',
+  ].join('\n');
 }

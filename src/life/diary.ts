@@ -11,7 +11,15 @@
  */
 import type { Rng } from './seed';
 
-export type DiaryVisibility = 'private' | 'shared' | 'pending';
+/**
+ * 可见性有五个值，不是三个：
+ * - private   默认私密
+ * - shared    她答应看整篇（授权只算当天，见 consentFresh）
+ * - pending   用户点了「问问她」，等她在聊天里表态（15 分钟不收就自动收回）
+ * - declined  她当面拒了（30 分钟冷却后可再问）
+ * - peek      只肯给看一眼（正文只出前 80 字）
+ */
+export type DiaryVisibility = 'private' | 'shared' | 'pending' | 'declined' | 'peek';
 
 export interface DiaryEntry {
   dateKey: string;

@@ -61,7 +61,7 @@ import { affectEngineFor, memoryEngineFor } from './engine-flags';
 import { recordEngineMetric } from './engine-metrics';
 import { logTrace } from './trace';
 import { recordRequest } from './request-log';
-import { pendingDiaryAskDates, settleDiaryConsent } from './life/diary-job';
+import { pendingDiaryAsks, settleDiaryConsent } from './life/diary-job';
 
 export interface ChatImage {
   key: string; // R2 对象键（images/日期/时间戳.jpg）
@@ -342,14 +342,21 @@ export async function streamChat(
   );
   // 用户在 App 里点了「问问她」之后，日记是 pending。没人告诉她要开口，
   // 于是点完什么都不会发生。这里补一句，让她在下一句里自己决定给不给看。
-  const pendingDates = await pendingDiaryAskDates(env).catch(() => [] as string[]);
-  const pendingDiary = pendingDates[0] ?? null;
+  const asks = await pendingDiaryAsks(env).catch(() => []);
   // 她在 App 里点「问问她」之后需要她开口。但只给一句「你想不想给看」不够——
   // 人设里没有「她会写日记」这件事，模型会直接否认日记存在（实测："本小姐哪来的日记啊"）。
   // 所以这里给的是**事实**加约束，不是提问。
-  const diaryAskNote = pendingDiary
-    ? `【日记】用户在问能不能看：${pendingDates.slice(0, 5).join('、')}。` +
-      '你可以答应看全部、只给看一眼、或者拒绝。日记是存在的，别否认自己写过。说一两句就够了。'
+  // ★ 被问的每一篇都要带上她自己写的备忘摘要：没有内容依据，
+  //   她只能凭印象赌一篇，「答应看」和「其实写了什么」就对不上。
+  const diaryAskNote = asks.length
+    ? [
+        `【日记】用户在问能不能看：${asks.map((a) => a.date.slice(2)).join('、')}。`,
+        ...asks
+          .filter((a) => a.summary)
+          .map((a) => `- ${a.date.slice(2)} 那篇，你当时给自己留的备忘：${a.summary}`),
+        '这些是你写的时候给自己留的备忘，不是给他看的文案——别念出来，也别逐条复述。',
+        '你可以答应看全部、只给看一眼、或者拒绝。日记是存在的，别否认自己写过。说一两句就够了。',
+      ].join('\n')
     : null;
   const personaDoc = await loadPersonaDoc(env);
   const promptSplit = buildSystemPromptSplit({

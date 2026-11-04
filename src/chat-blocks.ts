@@ -31,13 +31,15 @@ async function diaryAwareness(env: Env): Promise<string | null> {
   ).all<{ date_key: string; summary: string | null }>();
   const list = rows.results ?? [];
   if (list.length === 0) return null;
-  const dates = list.map((r) => r.date_key.slice(5)).join('、');
-  const latest = (list[0].summary ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  // 日期统一 YY-MM-DD（26-11-03），不剥年份
+  const dates = list.map((r) => r.date_key.slice(2)).join('、');
+  // ★ 这里不带摘要：摘要只在他点了「问问她」时进提示词（chat.ts 的 diaryAskNote）。
+  // 没被问就把内容摘要摊在提示词里，等于她已经"看过"自己的日记了，回答时会顺嘴说出细节。
   return [
     '【你的日记】',
     `- 至今写过 ${list.length} 篇（最近的：${dates}）。`,
-    latest ? `- 最近一篇大概写的是：${latest}` : '- 最近一篇的内容你想不太清了。',
-    '- 他问起可以说个大概；没带全文的时候别复述细节，说"想不起具体写了啥，要看吗"。',
+    '- 具体写了什么你想不太清了——没被问起别主动复述细节。',
+    '- 他问起可以说个大概；被追问就说"想不起具体写了啥，要看吗"。',
   ].join('\n');
 }
 
