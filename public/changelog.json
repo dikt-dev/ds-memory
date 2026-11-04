@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T05:36:13.035Z",
+  "generated_at": "2026-11-04T05:42:01.322Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "d148a0d",
+          "date": "2026-11-04",
+          "type": "refactor",
+          "area": "",
+          "title": "说话的样子是常量，搬进稳定段吃缓存",
+          "why": ""
+        },
         {
           "hash": "f18aa30",
           "date": "2026-11-04",
@@ -3245,14 +3253,6 @@
           "type": "fix",
           "area": "security",
           "title": "scope app token to proactive queue; start app shadow observation",
-          "why": ""
-        },
-        {
-          "hash": "67713a1",
-          "date": "2026-10-25",
-          "type": "feat",
-          "area": "app",
-          "title": "support before_id history backfill",
           "why": ""
         }
       ]

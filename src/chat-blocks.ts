@@ -58,11 +58,14 @@ export async function loadLifeBlocks(env: Env, now: Date, userText = ''): Promis
   ].join('');
   // 认人要用的长相：每轮都带，不等关键词。
   // 来源只有人设文档——代码里不再有任何写死的人。
-  const self = personaSectionText(personaDoc, '外貌').replace(/\s*\n\s*/g, '；').trim();
-  const friends = personaSectionText(personaDoc, '人际').replace(/\s*\n\s*/g, '；').trim();
+  // 段落内的换行直接接上，别用「；」拼——原文里已经有句号了，会变成「。。」
+  const flat = (t: string) =>
+    t.replace(/\s*\n\s*/g, '').replace(/[。；;，,]\s*$/, '').trim();
+  const self = flat(personaSectionText(personaDoc, '外貌'));
+  const friends = flat(personaSectionText(personaDoc, '人际'));
   const people = [
     self ? `你自己：${self}。照片或画面里出现这样的人，那就是你，别当成别人。` : '',
-    friends ? `你认识的人：${friends}` : '',
+    friends ? `你认识的人：${friends}。` : '',
     self || friends
       ? '认人只按上面这些长相来认；照片、视频帧、动图都可能糊，拿不准就说"看着像谁"，别一口咬定。'
       : '',
