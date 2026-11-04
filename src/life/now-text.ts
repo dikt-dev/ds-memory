@@ -122,10 +122,7 @@ export async function lifePromptLine(env: Env, now = new Date()): Promise<string
   } else {
     bits.push(`你在${homeCity}；他在哪你不知道，别猜，也别把两地说成一处。`);
   }
-  if (day.weather) {
-    const t = typeof day.temp_c === 'number' ? `${Math.round(day.temp_c)}℃` : '';
-    bits.push(`外面${day.weather === 'rain' ? '在下雨' : day.weather === 'snow' ? '在下雪' : day.weather === 'sunny' ? '是晴天' : '阴着'} ${t}`.trim());
-  }
+  // 天气不在这里写：它在「## 当前时间与环境」里出现一次就够了，两处写会打架
   const mood = moodLine(day.mood_seed ?? null);
   if (mood) bits.push(mood);
   const body = bodyLine(day.health, day.recipe);

@@ -32,7 +32,7 @@ describe('她此刻的状态（喂给提示词）', () => {
     const line = (await lifePromptLine(env, NOW))!;
     expect(line).toContain('看电影');
     expect(line).toContain('北京');
-    expect(line).toContain('下雨');
+    // 天气只在「当前时间与环境」出现一次，状态块不再重复
     // 只有那句禁令里会出现「日程」二字，正文不能有
     expect(line.split('\n').slice(1).join('\n')).not.toContain('日程');
   });

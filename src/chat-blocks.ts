@@ -65,22 +65,8 @@ export async function loadLifeBlocks(env: Env, now: Date): Promise<LifeBlocks> {
   ]
     .filter(Boolean)
     .join('\n');
-  // 当天还没有日程（凌晨/刚清库）时，天气从 KV 兜底，别让她不知道今天什么天
-  let weatherLine: string | null = null;
-  if (!line) {
-    const raw = await env.KV?.get(`life:env:${new Date(now.getTime() + 8 * 3600_000).toISOString().slice(0, 10)}`).catch(() => null);
-    if (raw) {
-      try {
-        const e = JSON.parse(raw) as { location?: string; weather?: string; tempC?: number };
-        const w = e.weather === 'rain' ? '在下雨' : e.weather === 'snow' ? '在下雪' : e.weather === 'sunny' ? '晴天' : '阴天';
-        weatherLine = `你那边${e.location ?? ''}今天${w}${typeof e.tempC === 'number' ? `，${Math.round(e.tempC)}℃` : ''}。`;
-      } catch {
-        weatherLine = null;
-      }
-    }
-  }
   return {
     residents: people.trim() || null,
-    life: [where, weatherLine, line, card, diary].filter(Boolean).join('\n\n') || null,
+    life: [where, line, card, diary].filter(Boolean).join('\n\n') || null,
   };
 }

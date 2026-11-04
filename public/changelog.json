@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T03:12:24.328Z",
+  "generated_at": "2026-11-04T03:14:30.494Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "547695d",
+          "date": "2026-11-04",
+          "type": "feat",
+          "area": "",
+          "title": "位置、她的天气、自己与朋友的长相每轮都带",
+          "why": ""
+        },
         {
           "hash": "50c696e",
           "date": "2026-11-04",
@@ -3245,14 +3253,6 @@
           "type": "perf",
           "area": "",
           "title": "add app TTS proxy with Azure secret",
-          "why": ""
-        },
-        {
-          "hash": "993ba60",
-          "date": "2026-10-25",
-          "type": "other",
-          "area": "",
-          "title": "allow [语音] directive for mobile channel",
           "why": ""
         }
       ]
