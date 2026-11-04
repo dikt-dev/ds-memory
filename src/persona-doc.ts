@@ -77,6 +77,9 @@ export function parsePersonaSections(doc: string): PersonaSection[] {
  * @param doc      persona.md 原文
  * @param userText 用户这一轮说的话（空串表示没有可匹配的上下文，只带常驻分区）
  */
+/** 每轮都带的分区：认人靠这些，不能等关键词命中。 */
+const ALWAYS_PEOPLE_SECTIONS = ['外貌', '人际'];
+
 export function renderPersonaDoc(doc: string, userText: string): string {
   const text = doc.trim();
   if (!text) return '';
@@ -84,6 +87,8 @@ export function renderPersonaDoc(doc: string, userText: string): string {
   if (sections.length === 0) return text;
   const hay = (userText || '').toLowerCase();
   const kept = sections.filter((s) => {
+    // 外貌/人际关系改成每轮都带（认人要用），从常驻段里排除，免得同一段出现两次
+    if (ALWAYS_PEOPLE_SECTIONS.some((k) => s.title.includes(k))) return false;
     if (!s.when || s.when.length === 0) return true;
     return s.when.some((w) => hay.includes(w.toLowerCase()));
   });

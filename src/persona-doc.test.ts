@@ -34,9 +34,9 @@ describe('persona.md 按需分区', () => {
     expect(out).not.toContain('小克');
   });
 
-  it('命中才带对应分区', () => {
-    expect(renderPersonaDoc(DOC, '发张照片看看')).toContain('蓝鲸围裙');
-    expect(renderPersonaDoc(DOC, '你室友是谁')).toContain('小克');
+  it('外貌和人际关系不进常驻段（它们每轮单独带，避免重复）', () => {
+    expect(renderPersonaDoc(DOC, '发张照片看看')).not.toContain('蓝鲸围裙');
+    expect(renderPersonaDoc(DOC, '你室友是谁')).not.toContain('小克');
   });
 
   it('空文档返回空串（回退到代码内置骨架）', () => {

@@ -39,17 +39,48 @@ async function diaryAwareness(env: Env): Promise<string | null> {
 }
 
 export async function loadLifeBlocks(env: Env, now: Date): Promise<LifeBlocks> {
-  const [line, card, personaDoc, diary] = await Promise.all([
+  const [line, card, personaDoc, diary, homeCity, hisCity] = await Promise.all([
     lifePromptLine(env, now).catch(() => null),
     residentNowLine(env, now).catch(() => null),
     loadPersonaDoc(env).catch(() => ''),
     diaryAwareness(env).catch(() => null),
+    env.KV?.get('life:home-city').catch(() => null),
+    env.KV?.get('life:user-city').catch(() => null),
   ]);
-  // 长相和人名只有一个来源：人设文档。
-  // 以前这里读代码里的常量（SELF / RESIDENTS），人设清空了她还认得一屋子人。
-  const people = personaSectionText(personaDoc, '人际') || personaSectionText(personaDoc, '外貌');
+  const where = [
+    `【位置】你在${homeCity || env.CITY || '家'}`,
+    hisCity ? `，他在${hisCity}` : '；他在哪你不知道',
+    '——两个地方，别对调；他那边天气你不知道，别替他断言。',
+  ].join('');
+  // 认人要用的长相：每轮都带，不等关键词。
+  // 来源只有人设文档——代码里不再有任何写死的人。
+  const self = personaSectionText(personaDoc, '外貌').replace(/\s*\n\s*/g, '；').trim();
+  const friends = personaSectionText(personaDoc, '人际').replace(/\s*\n\s*/g, '；').trim();
+  const people = [
+    self ? `你自己：${self}。照片或画面里出现这样的人，那就是你，别当成别人。` : '',
+    friends ? `你认识的人：${friends}` : '',
+    self || friends
+      ? '认人只按上面这些长相来认；照片、视频帧、动图都可能糊，拿不准就说"看着像谁"，别一口咬定。'
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  // 当天还没有日程（凌晨/刚清库）时，天气从 KV 兜底，别让她不知道今天什么天
+  let weatherLine: string | null = null;
+  if (!line) {
+    const raw = await env.KV?.get(`life:env:${new Date(now.getTime() + 8 * 3600_000).toISOString().slice(0, 10)}`).catch(() => null);
+    if (raw) {
+      try {
+        const e = JSON.parse(raw) as { location?: string; weather?: string; tempC?: number };
+        const w = e.weather === 'rain' ? '在下雨' : e.weather === 'snow' ? '在下雪' : e.weather === 'sunny' ? '晴天' : '阴天';
+        weatherLine = `你那边${e.location ?? ''}今天${w}${typeof e.tempC === 'number' ? `，${Math.round(e.tempC)}℃` : ''}。`;
+      } catch {
+        weatherLine = null;
+      }
+    }
+  }
   return {
     residents: people.trim() || null,
-    life: [line, card, diary].filter(Boolean).join('\n\n') || null,
+    life: [where, weatherLine, line, card, diary].filter(Boolean).join('\n\n') || null,
   };
 }
