@@ -145,7 +145,7 @@ export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJob
             `地点：${saved.day.location}`,
             `今天的日程：\n${formatDayForDiary(saved.activities)}`,
             chat ? `今天聊到的：\n${chat}` : '今天没怎么聊天。',
-            // 有住户才有这一段：名字、说话方式、禁忌 + 公寓基调
+            // 有社交对象才有这一段：名字、说话方式、禁忌
             diaryPeopleBlock(saved.day.people),
           ]
             .filter(Boolean)

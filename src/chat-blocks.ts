@@ -1,19 +1,18 @@
 /**
- * 聊天提示词里「她自己的生活」这一块：名录 + 此刻状态 + 当天住户卡片。
+ * 聊天提示词里「她自己的生活」这一块：此刻状态 + 当天的社交卡片 + 日记现状。
  *
- * 以前这段在 chat.ts 和 openai.ts 各写一遍，住户上线时只改了 chat.ts，
- * 结果线上（走 openai.ts）完全没生效。现在只有这一个来源。
+ * 注意：这里只放**数据**（库里有什么就说什么）。
+ * 她认识谁、长什么样、她自己长什么样——那些属于人设，放 persona.md；
+ * 代码里不再偷偷注入任何设定，否则人设清空以后她仍然"记得"一堆东西。
  */
 import type { Env } from './types';
 import { lifePromptLine, residentNowLine } from './life/now-text';
-import { SELF, residentLooksRoster, residentRoster } from './life/residents';
-import { resolvePersona } from './persona';
 import { loadPersonaDoc, personaSectionText } from './persona-doc';
 
 export interface LifeBlocks {
-  /** 稳定段：公寓名录（每天不变，能命中前缀缓存） */
+  /** 稳定段：人设文档里写了「人际关系」才带，否则为空 */
   residents: string | null;
-  /** 易变段：此刻在干什么 + 今天跟谁混（每轮都变） */
+  /** 易变段：此刻在干什么 + 今天跟谁混 + 日记现状（每轮都变） */
   life: string | null;
 }
 
@@ -40,32 +39,17 @@ async function diaryAwareness(env: Env): Promise<string | null> {
 }
 
 export async function loadLifeBlocks(env: Env, now: Date): Promise<LifeBlocks> {
-  const [line, card, personaDoc, diary, homeCity] = await Promise.all([
+  const [line, card, personaDoc, diary] = await Promise.all([
     lifePromptLine(env, now).catch(() => null),
     residentNowLine(env, now).catch(() => null),
     loadPersonaDoc(env).catch(() => ''),
     diaryAwareness(env).catch(() => null),
-    env.KV?.get('life:home-city').catch(() => null),
   ]);
-  const city = homeCity || env.CITY || '杭州';
-  // 长相：persona.md 的「外貌」卡 → 代码里的她的档案 → 环境变量。
-  // SELF.looks 一直存在，却从没进过提示词——所以照片里她从来认不出自己。
-  const look = personaSectionText(personaDoc, '外貌') || SELF.looks || resolvePersona(env).look;
+  // 长相和人名只有一个来源：人设文档。
+  // 以前这里读代码里的常量（SELF / RESIDENTS），人设清空了她还认得一屋子人。
+  const people = personaSectionText(personaDoc, '人际') || personaSectionText(personaDoc, '外貌');
   return {
-    // 名录 + 长相：名字解决「谁住这儿」，长相解决「照片里这个是谁」。
-    // 自己的长相放在最前面——先认出「这是我」，再谈别人。
-    residents:
-      [
-        (() => {
-          const flat = look.replace(/\s*\n\s*/g, '；').trim();
-          return flat ? `你自己：${flat}。照片或画面里出现这样的人，那就是你，别当成别人。` : '';
-        })(),
-        '认人只按上面这些长相描述来认；照片、视频帧、动图都可能糊，拿不准就说"看着像谁"，别一口咬定。',
-        residentRoster(city),
-        residentLooksRoster(),
-      ]
-        .filter(Boolean)
-        .join('\n\n') || null,
+    residents: people.trim() || null,
     life: [line, card, diary].filter(Boolean).join('\n\n') || null,
   };
 }

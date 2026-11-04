@@ -41,10 +41,10 @@ export function lifeClock(now = new Date()): { dateKey: string; minute: number }
 }
 
 /**
- * 当天出现了哪些住户：只记 core（会排单元的那个）。
+ * 当天和谁在一起：只记 core（会排单元的那个）。
  * ambient 只做背景音，不进库——不然每天都能「发生」一场偶遇，很假。
  */
-/** 当天的住户记录：核心人 + 一起的人 + 场景。没有社交就是 null。 */
+/** 当天的社交记录：核心人 + 一起的人 + 场景。没有社交就是 null。 */
 export function peopleFor(activities: { unitId: string }[], dateKey: string): string | null {
   const social = activities.find((a) => ACTIVITIES.find((x) => x.id === a.unitId)?.kind === 'social');
   if (!social) return null;
@@ -67,7 +67,7 @@ export interface DayRow {
   temp_c: number;
   plan_json: string;
   generated_at: string;
-  /** 当天出现的住户 JSON（{"core":"dou-bao"}），空着=没有住户 */
+  /** 当天出现的社交对象 JSON（{"core":"dou-bao"}），空着=没有住户 */
   people?: string | null;
 }
 

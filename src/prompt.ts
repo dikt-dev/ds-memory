@@ -91,7 +91,7 @@ export interface BasePromptArgs {
   life?: string | null;
   /** 人设开关（自称/定位/称呼风格）；缺省用开源默认值 */
   persona?: PersonaConfig;
-  /** 公寓住户名录（稳定段，约 140 字）。没接公寓时为 null。 */
+  /** 她认识的人（稳定段）。人设文档里写了才带。 */
   residents?: string | null;
   /** 只取某一段：stable = ①②（人设+长期记忆，可缓存前缀）；volatile = ③之后（每轮都变） */
   part?: 'all' | 'stable' | 'volatile';
@@ -211,7 +211,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   // 稳定段：名录每天不变，放这里才能吃到前缀缓存
   if (residents?.trim()) {
     lines.push('');
-    lines.push('## 她在公寓里');
+    lines.push('## 她认识的人');
     lines.push(residents.trim());
   }
 

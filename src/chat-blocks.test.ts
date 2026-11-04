@@ -4,9 +4,9 @@ import { loadLifeBlocks } from './chat-blocks';
 const bare = {} as never;
 
 describe('聊天提示词的生活块', () => {
-  it('读不到日程时：名录照给，生活块为空', async () => {
+  it('人设文档没写「人际关系」时：不塞任何名字和长相', async () => {
     const b = await loadLifeBlocks(bare, new Date('2026-11-02T09:00:00+08:00'));
-    expect(b.residents).toContain('中继站公寓');
+    expect(b.residents).toBeNull();
     expect(b.life).toBeNull();
   });
 

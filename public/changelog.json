@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T02:53:25.949Z",
+  "generated_at": "2026-11-04T02:56:31.849Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "b6d560d",
+          "date": "2026-11-04",
+          "type": "fix",
+          "area": "",
+          "title": "名录里的城市跟着 KV 走，搬完家不再自相矛盾",
+          "why": ""
+        },
         {
           "hash": "7a81c8c",
           "date": "2026-11-04",
@@ -3245,14 +3253,6 @@
           "type": "other",
           "area": "",
           "title": "add DS-Mobile pair/events endpoints and device token auth",
-          "why": ""
-        },
-        {
-          "hash": "1dd5c9a",
-          "date": "2026-10-25",
-          "type": "fix",
-          "area": "voice",
-          "title": "parse full-width voice markers and enforce readable speech",
           "why": ""
         }
       ]
