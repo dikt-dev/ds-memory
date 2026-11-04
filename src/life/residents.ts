@@ -341,6 +341,7 @@ export function residentLooksRoster(): string {
   return `认识的人长这样（看到照片/画面时按这个认，别猜成别人）：${lines.join('；')}`;
 }
 
-export function residentRoster(): string {
-  return `她住在杭州的中继站公寓：${RESIDENTS.map(residentBrief).join('、')}。`;
+export function residentRoster(city = '杭州'): string {
+  // 城市不能写死：搬家用的是 KV，这里再写死杭州，搬完她会说"我住上海"又说"我住杭州"。
+  return `她住在${city}的中继站公寓：${RESIDENTS.map(residentBrief).join('、')}。`;
 }

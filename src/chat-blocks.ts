@@ -40,12 +40,14 @@ async function diaryAwareness(env: Env): Promise<string | null> {
 }
 
 export async function loadLifeBlocks(env: Env, now: Date): Promise<LifeBlocks> {
-  const [line, card, personaDoc, diary] = await Promise.all([
+  const [line, card, personaDoc, diary, homeCity] = await Promise.all([
     lifePromptLine(env, now).catch(() => null),
     residentNowLine(env, now).catch(() => null),
     loadPersonaDoc(env).catch(() => ''),
     diaryAwareness(env).catch(() => null),
+    env.KV?.get('life:home-city').catch(() => null),
   ]);
+  const city = homeCity || env.CITY || '杭州';
   // 长相：persona.md 的「外貌」卡 → 代码里的她的档案 → 环境变量。
   // SELF.looks 一直存在，却从没进过提示词——所以照片里她从来认不出自己。
   const look = personaSectionText(personaDoc, '外貌') || SELF.looks || resolvePersona(env).look;
@@ -59,7 +61,7 @@ export async function loadLifeBlocks(env: Env, now: Date): Promise<LifeBlocks> {
           return flat ? `你自己：${flat}。照片或画面里出现这样的人，那就是你，别当成别人。` : '';
         })(),
         '认人只按上面这些长相描述来认；照片、视频帧、动图都可能糊，拿不准就说"看着像谁"，别一口咬定。',
-        residentRoster(),
+        residentRoster(city),
         residentLooksRoster(),
       ]
         .filter(Boolean)

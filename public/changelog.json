@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T02:50:38.174Z",
+  "generated_at": "2026-11-04T02:53:25.949Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "7a81c8c",
+          "date": "2026-11-04",
+          "type": "fix",
+          "area": "",
+          "title": "她的长相一直躺在代码里没进提示词，照片里认不出自己",
+          "why": ""
+        },
         {
           "hash": "137976e",
           "date": "2026-11-04",
@@ -3245,14 +3253,6 @@
           "type": "fix",
           "area": "voice",
           "title": "parse full-width voice markers and enforce readable speech",
-          "why": ""
-        },
-        {
-          "hash": "374d5e2",
-          "date": "2026-10-25",
-          "type": "docs",
-          "area": "",
-          "title": "document phone-first tts and audio playback",
           "why": ""
         }
       ]
