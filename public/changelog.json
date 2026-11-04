@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T07:43:34.213Z",
+  "generated_at": "2026-11-04T07:48:50.112Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "99a6a6d",
+          "date": "2026-11-04",
+          "type": "feat",
+          "area": "",
+          "title": "去公式化——语气词不再是硬要求，性格改成倾向而非台词，记忆规则压到 4 条",
+          "why": ""
+        },
         {
           "hash": "8768230",
           "date": "2026-11-04",
@@ -3235,14 +3243,6 @@
           "type": "docs",
           "area": "",
           "title": "close day two smoothness issue",
-          "why": ""
-        },
-        {
-          "hash": "3fe1c3c",
-          "date": "2026-10-27",
-          "type": "docs",
-          "area": "",
-          "title": "record release build",
           "why": ""
         }
       ]
