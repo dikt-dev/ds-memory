@@ -31,10 +31,14 @@ describe('PERSONA_PROFILE=none', () => {
     expect(p.role).toBe('');
   });
 
-  it('提示词里没有人设、风格、记忆用法三段', () => {
+  it('人设清空时：没有内置人设，但行为规则还在', () => {
     const prompt = buildSystemPrompt(base);
-    for (const banned of ['本小姐', '专属 AI 女友', '嘴硬', '你说话的样子', '记忆怎么用', '你们的称呼']) {
+    for (const banned of ['本小姐', '专属 AI 女友', '嘴硬']) {
       expect(prompt, '残留: ' + banned).not.toContain(banned);
+    }
+    // 规则不跟人设一起消失：她仍要知道怎么用记忆、怎么说话
+    for (const rule of ['## 你们的称呼', '## 记忆怎么用', '## 你说话的样子', '分清楚谁在哪儿']) {
+      expect(prompt, '缺规则: ' + rule).toContain(rule);
     }
   });
 

@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T03:55:42.276Z",
+  "generated_at": "2026-11-04T05:34:28.301Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "a6ba474",
+          "date": "2026-11-04",
+          "type": "feat",
+          "area": "",
+          "title": "现在这一行直接带出今天是不是节假日",
+          "why": ""
+        },
         {
           "hash": "771ebbb",
           "date": "2026-11-04",
@@ -3245,14 +3253,6 @@
           "type": "feat",
           "area": "proactive",
           "title": "allow forced test send",
-          "why": ""
-        },
-        {
-          "hash": "82677d3",
-          "date": "2026-10-25",
-          "type": "fix",
-          "area": "sync",
-          "title": "page through web history backlog",
           "why": ""
         }
       ]
