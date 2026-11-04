@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T07:58:56.748Z",
+  "generated_at": "2026-11-04T08:06:03.812Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "6a86110",
+          "date": "2026-11-04",
+          "type": "feat",
+          "area": "",
+          "title": "压着补发/迟回时告诉她等了多久、当时在忙什么",
+          "why": ""
+        },
         {
           "hash": "35418db",
           "date": "2026-11-04",
@@ -3235,14 +3243,6 @@
           "type": "fix",
           "area": "archive",
           "title": "support monthly rehydration and stale rollup guard",
-          "why": ""
-        },
-        {
-          "hash": "9de13da",
-          "date": "2026-10-27",
-          "type": "docs",
-          "area": "",
-          "title": "mark voice completed",
           "why": ""
         }
       ]

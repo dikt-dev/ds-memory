@@ -324,8 +324,9 @@ export async function streamChat(
 
   // 他被压着的那批消息：现在这条可能就是到点补发的，告诉她等了多久
   const lastRow = history[history.length - 1];
+  // 补发链路（flush）已经在正文里写了等待时长，这里不重复说第二遍
   const pendingWait =
-    lastRow && lastRow.role === 'user' && lastRow.created_ms
+    lastRow && lastRow.role === 'user' && lastRow.created_ms && !content.includes('现在才看到')
       ? `\n\n【他等的时间】他上一条发出到现在已经 ${formatWait(now.getTime() - lastRow.created_ms)}，你一直没回（在忙或睡着了）。回的时候先用一句带过「才看见/刚忙完」，别装作刚才发生，也不要报时间点。`
       : '';
   const historyNote = [historyRangeNote(history, now), conversationGapNote(history, now)]
