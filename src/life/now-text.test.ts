@@ -76,3 +76,32 @@ describe('她此刻的状态（喂给提示词）', () => {
     expect(line.split('\n').length).toBeLessThanOrEqual(6);
   });
 });
+
+describe('迟回的依据', () => {
+  it('在忙的时候来消息：告诉她刚看到，而且别写长', async () => {
+    const env = fakeEnv({
+      day: { recipe: null, health: 100, weather: 'sunny', temp_c: 22, location: '上海' },
+      acts: [{ unit_id: 'bath', kind: 'chore', title: '洗澡', start_min: 800, end_min: 900, interruptible: 0, reply_chance: 0 }],
+    });
+    const line = (await lifePromptLine(env, NOW))!;
+    expect(line).toContain('洗澡的时候发来的');
+    expect(line).toContain('别写长');
+  });
+
+  it('半夜来的消息：说刚醒，不许装作守着手机', async () => {
+    const night = new Date('2026-11-02T03:10:00+08:00');
+    const env = fakeEnv({ day: { recipe: null, health: 100, weather: null, temp_c: null, location: '上海' }, acts: [] });
+    const line = (await lifePromptLine(env, night))!;
+    expect(line).toContain('睡觉的时候发来的');
+    expect(line).toContain('刚醒');
+  });
+
+  it('闲着的时候不加这句（不然每轮都在解释自己）', async () => {
+    const env = fakeEnv({
+      day: { recipe: null, health: 100, weather: 'sunny', temp_c: 22, location: '上海' },
+      acts: [{ unit_id: 'x', kind: 'chore', title: '看书', start_min: 800, end_min: 900, interruptible: 1, reply_chance: 1 }],
+    });
+    const line = (await lifePromptLine(env, NOW))!;
+    expect(line).not.toContain('发来的');
+  });
+});

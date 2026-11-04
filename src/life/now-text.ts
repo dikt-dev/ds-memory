@@ -54,6 +54,18 @@ export async function residentNowLine(env: Env, now = new Date()): Promise<strin
   return block.split('\n')[0] === '' ? null : block;
 }
 
+
+/** 他这条消息发来时她在忙/在睡，现在才回：给一句依据，让她自己决定怎么交代。 */
+function lateReplyLine(status: ReturnType<typeof statusAt>, minute: number): string | null {
+  if (status.status === 'sleeping') {
+    return '他这条是你在睡觉的时候发来的——你是被消息吵醒、翻了个身才看到的。回的时候可以带一句「刚醒」，别装作一直守着手机。';
+  }
+  if (status.status !== 'busy' || !status.current) return null;
+  const title = status.current.title;
+  const ends = status.current.end_min > minute ? `${Math.round((status.current.end_min - minute) / 60 * 10) / 10} 小时后` : '快结束了';
+  return `他这条是你在${title}的时候发来的，那阵子没看手机；现在趁空瞟一眼，回一句就放下（${ends}才真正空下来）。别写长，也别装作一直在。`;
+}
+
 export async function lifePromptLine(env: Env, now = new Date()): Promise<string | null> {
   const { dateKey, minute } = lifeClock(now);
   const day = await env.DB.prepare(
@@ -119,6 +131,11 @@ export async function lifePromptLine(env: Env, now = new Date()): Promise<string
     bits.push('今天剩下的时间没什么安排，都是自己的');
   }
   // 位置不在这里写：聊天块（chat-blocks）每轮都带一句【位置】，写两遍她会来回强调。
+
+  // 迟回：她忙/睡的时候他发来的消息，现在才看到——不交代一句就成了"随叫随到"的机器。
+  // 只给事实和一句许可，不给台词：怎么说是她的事。
+  const late = lateReplyLine(status, minute);
+  if (late) bits.push(late);
 
   const mood = moodLine(day.mood_seed ?? null);
   if (mood) bits.push(mood);
