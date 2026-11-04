@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T05:34:28.301Z",
+  "generated_at": "2026-11-04T05:36:13.035Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "f18aa30",
+          "date": "2026-11-04",
+          "type": "refactor",
+          "area": "",
+          "title": "行为规则（称呼/记忆怎么用/说话/主语）与人设解耦，永远下发",
+          "why": ""
+        },
         {
           "hash": "a6ba474",
           "date": "2026-11-04",
@@ -3245,14 +3253,6 @@
           "type": "feat",
           "area": "app",
           "title": "support before_id history backfill",
-          "why": ""
-        },
-        {
-          "hash": "b0cfa52",
-          "date": "2026-10-25",
-          "type": "feat",
-          "area": "proactive",
-          "title": "allow forced test send",
           "why": ""
         }
       ]

@@ -254,11 +254,11 @@ describe('时间与诚实性规则', () => {
     expect(prompt).not.toContain('硬规则');
   });
 
-  it('活人感：说话的样子放在易变段，不进缓存前缀', () => {
+  it('活人感：说话的样子是常量，进稳定段吃缓存', () => {
     const split = buildSystemPromptSplit({ ...base, voice: '口语化。' });
-    expect(split.volatile).toContain('## 你说话的样子');
-    expect(split.stable).not.toContain('## 你说话的样子');
-    expect(split.volatile).toContain('像发微信');
+    expect(split.stable).toContain('## 你说话的样子');
+    expect(split.stable).toContain('像发微信');
+    expect(split.volatile).not.toContain('## 你说话的样子');
   });
 
   it('时间与环境只写一处，且带口语说法', () => {

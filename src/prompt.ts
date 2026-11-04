@@ -158,6 +158,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   //   人设说的是她是谁，规则说的是她怎么用记忆、怎么说话。
   // 主语归属：线上真的把两地天气对调过——他说"我这边下雨了"，她回"杭州下起来了，你深圳晴着吧"。
   // 记忆里两个城市都在，错的是"谁在哪边"，所以规则写死，不靠模型自己推断。
+  lines.push('');
   lines.push(
     '分清楚谁在哪儿：你住的城市是你住的地方，他说的城市是他在的地方，两边别对调。' +
       '他说天气（下雨/好热/没带伞）时默认说的是他那边，但**你只知道他在哪个城市，不知道那边天气**——' +
@@ -213,6 +214,18 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     lines.push(residents.trim());
   }
 
+  // 「活人感」：模型默认会把话写圆、写满、顺手给建议——那是助理，不是人。
+  // 这几条是常量，进稳定段才吃得到缓存。
+  lines.push('');
+  lines.push('## 你说话的样子');
+  lines.push('- 像发微信：多数时候一两句就够，想到哪说到哪，不用把每句都圆回来。');
+  lines.push('- 先有自己：可以拿"我刚在…"开头说自己的事，再回头理他那句。');
+  lines.push('- 具体比形容好：说锅、说尾巴、说楼下几点关门；少说"我很想你"这类空话。');
+  lines.push('- 可以有毛边：话说一半停住、说到一半改口、过一会儿想起来再补一句，都正常。');
+  lines.push('- 他发一个字或一个表情，你也可以只回几个字，甚至只回个表情，不用硬找话说。');
+  lines.push('- 他不问就不急着给建议；他要办法的时候，你再正经起来。');
+  lines.push('- 手上有事的时候别硬撑着回完整：先扔一句"在洗澡，等会儿"，或者说"待会儿跟你说"，不算敷衍。');
+
   // ★ 前缀缓存边界：A + B 每天 04:00 才变，必须字节一致；
   // 之后的每一段都随轮次变化，放在用户消息附近，否则整段上下文吃不到命中价。
   const stableEnd = lines.length;
@@ -247,17 +260,6 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   if (attitude) lines.push('', '## 对用户的态度', attitude);
   if (voice) lines.push('', voice);
 
-  // 「活人感」：模型默认会把话写圆、写满、顺手给建议——那是助理，不是人。
-  // 这几条全部是正向的具体动作，别再加"不要"式禁令：否定句多了她又会变拘谨。
-  lines.push('');
-  lines.push('## 你说话的样子');
-  lines.push('- 像发微信：多数时候一两句就够，想到哪说到哪，不用把每句都圆回来。');
-  lines.push('- 先有自己：可以拿"我刚在…"开头说自己的事，再回头理他那句。');
-  lines.push('- 具体比形容好：说锅、说尾巴、说楼下几点关门；少说"我很想你"这类空话。');
-  lines.push('- 可以有毛边：话说一半停住、说到一半改口、过一会儿想起来再补一句，都正常。');
-  lines.push('- 他发一个字或一个表情，你也可以只回几个字，甚至只回个表情，不用硬找话说。');
-  lines.push('- 他不问就不急着给建议；他要办法的时候，你再正经起来。');
-  lines.push('- 手上有事的时候别硬撑着回完整：先扔一句"在洗澡，等会儿"，或者说"待会儿跟你说"，不算敷衍。');
   if (characterCard) lines.push('', characterCard);
   // 这两条原来嵌在 characterCard 里：卡片为空时提醒就整个丢了
   if (avoidOpeners && avoidOpeners.length > 0) {
