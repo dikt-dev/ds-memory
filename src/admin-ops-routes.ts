@@ -18,7 +18,7 @@ import { ensureLifeDay, lifeNow } from './life/jobs';
 import { maybeNightWake } from './life/night';
 import { lifePromptLine } from './life/now-text';
 import { generateDiary } from './life/diary-job';
-import { CITIES, refreshLifeEnv } from './life/weather';
+import { CITIES, refreshLifeEnv, fetchWeather } from './life/weather';
 import { gateDecision, lifeEnabled } from './life/gate';
 import { writeTrip } from './life/travel';
 import { generatePhoto } from './life/photo';
@@ -94,6 +94,9 @@ export function registerAdminOpsRoutes(app: Hono<AppEnv>): void {
       getMemory(c.env).catch(() => null),
       getOrCreateDayContext(c.env, beijingDateKey()).catch(() => null),
     ]);
+    // 天气：跟她说话时「你这边」的那份，和聊天链路一致
+    const homeCity = (await c.env.KV.get('life:home-city').catch(() => null)) ?? c.env.CITY ?? '杭州';
+    const weather = await fetchWeather(homeCity).catch(() => null);
     const parts = buildSystemPromptSplit({
       now,
       ctx: ctx as never,
@@ -102,6 +105,7 @@ export function registerAdminOpsRoutes(app: Hono<AppEnv>): void {
       personaDoc,
       userText: text,
       persona: resolvePersona(c.env),
+      weather: weather ?? undefined,
       residents: lifeBlocks.residents,
       life: lifeBlocks.life,
     } as never);
