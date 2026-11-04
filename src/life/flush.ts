@@ -14,10 +14,33 @@
 import type { Env } from '../types';
 import { streamChat } from '../chat';
 import { lifeEnabled } from './gate';
+import { lifeNow } from './jobs';
 import { logError } from '../error-log';
 
 /** 认领后的租约时长：超过这个时间还停在 processing，说明那一轮挂了，回收重试。 */
 const LEASE_MS = 10 * 60 * 1000;
+
+/** 等待时长说成人话：47 分钟 / 3 小时 20 分钟。 */
+export function formatWait(ms: number): string {
+  const minutes = Math.max(1, Math.round(ms / 60_000));
+  if (minutes < 60) return `${minutes} 分钟`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m === 0 ? `${h} 小时` : `${h} 小时 ${m} 分钟`;
+}
+
+/**
+ * 压着的那批消息，回之前先交代：他等了多久、她当时在忙什么。
+ * 纯函数，便于单测；措辞只给事实和一句许可，不给台词。
+ */
+export function heldWaitNote(waitedMs: number, where: string | null): string {
+  const waited = formatWait(waitedMs);
+  const what = where ? `你当时${where}` : '你当时没顾上看手机';
+  return (
+    `（他这几条是 ${waited}前发来的，${what}，现在才看到。` +
+    '先用一句自然的话带过「才看见/刚忙完」，别装作刚才发生，也不要报时间点，然后再说正事。）'
+  );
+}
 
 export interface FlushResult {
   flushed: number;
@@ -65,20 +88,21 @@ export async function flushHeldMessages(env: Env, now = new Date()): Promise<Flu
   }
   if (claimed.length === 0) return { flushed: 0, skipped: 'claimed-elsewhere' };
 
-  // 压了太久就别硬接了：早上八点回一句「没睡，在揉面团呢」，
-  // 内容是接上了，时间却是错的——听起来像她还没睡醒。
-  // 超过 3 小时就让她先自然地点一句「才看见」，再说正事。
+  // 每一批都告诉她：他等了多久、她当时在干什么。
+  // 不写清楚，她会把两小时前的消息当成刚刚发生的（实测：早上八点回「没睡，在揉面团呢」）。
   const oldest = claimed[0].created_ms ?? nowMs;
-  const waitedHours = (nowMs - oldest) / 3_600_000;
+  const atArrival = await lifeNow(env, new Date(oldest)).catch(() => null);
+  const where = !atArrival
+    ? null
+    : atArrival.status === 'sleeping'
+      ? '在睡觉'
+      : atArrival.status === 'busy' && atArrival.current
+        ? `在${atArrival.current.title}`
+        : null;
   const merged = [
     claimed.map((r) => r.content).join('\n'),
-    waitedHours >= 3
-      ? `（这几条是 ${Math.round(waitedHours)} 小时前发来的，中间隔了很久。` +
-        '先用一句自然的话带过「才看见/刚忙完」，别装作刚才发生，也不要报时间点，然后再说正事。）'
-      : '',
-  ]
-    .filter(Boolean)
-    .join('\n\n');
+    heldWaitNote(nowMs - oldest, where),
+  ].join('\n\n');
   try {
     // 复用最后一条消息的 id：不插新用户消息，回复直接挂在那条上
     const res = await streamChat(env, merged, now, undefined, 'mobile', 'life-flush', {

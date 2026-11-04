@@ -35,6 +35,7 @@ import { recordChatUsage } from './usage-stats';
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 import { streamDeepSeek, type DeepSeekMessage } from './deepseek';
 import { replyDelayMs } from './life/state';
+import { formatWait } from './life/flush';
 import { lifeNow } from './life/jobs';
 import { getTodaySummary } from './summary';
 import { loadImageDataUrl } from './media';
@@ -321,6 +322,12 @@ export async function streamChat(
         : [{ type: 'text', text: prefix }, ...userContent];
   }
 
+  // 他被压着的那批消息：现在这条可能就是到点补发的，告诉她等了多久
+  const lastRow = history[history.length - 1];
+  const pendingWait =
+    lastRow && lastRow.role === 'user' && lastRow.created_ms
+      ? `\n\n【他等的时间】他上一条发出到现在已经 ${formatWait(now.getTime() - lastRow.created_ms)}，你一直没回（在忙或睡着了）。回的时候先用一句带过「才看见/刚忙完」，别装作刚才发生，也不要报时间点。`
+      : '';
   const historyNote = [historyRangeNote(history, now), conversationGapNote(history, now)]
     .filter(Boolean)
     .join('\n');
@@ -372,7 +379,7 @@ export async function streamChat(
         persona: resolvePersona(env),
         life: [lifeBlocks.life, tic, diaryAskNote].filter(Boolean).join('\n\n') || null,
   });
-  const volatileBlock = [promptSplit.volatile, historyNote].filter(Boolean).join('\n\n');
+  const volatileBlock = [promptSplit.volatile, historyNote + pendingWait].filter(Boolean).join('\n\n');
   const messages: DeepSeekMessage[] = [
     {
       role: 'system',
