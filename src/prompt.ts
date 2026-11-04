@@ -233,7 +233,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   // 之后的每一段都随轮次变化，放在用户消息附近，否则整段上下文吃不到命中价。
   const stableEnd = lines.length;
 
-  // ══ C 她的生活（半稳定：几小时一变）══════════════════════════
+  // ══ C 你的生活（半稳定：几小时一变）══════════════════════════
   if (keepsakes?.trim()) {
     lines.push('');
     lines.push(keepsakes.trim());

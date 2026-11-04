@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T06:18:24.982Z",
+  "generated_at": "2026-11-04T06:20:57.766Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "4453a6f",
+          "date": "2026-11-04",
+          "type": "feat",
+          "area": "",
+          "title": "日程只给两件——现在在做的和接下来要做的",
+          "why": ""
+        },
         {
           "hash": "51a14b0",
           "date": "2026-11-04",
@@ -3245,14 +3253,6 @@
           "type": "refactor",
           "area": "persona",
           "title": "keep boundaries only",
-          "why": ""
-        },
-        {
-          "hash": "31ddb87",
-          "date": "2026-10-25",
-          "type": "feat",
-          "area": "persona",
-          "title": "prefer 大人 and accept praise",
           "why": ""
         }
       ]

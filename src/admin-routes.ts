@@ -724,7 +724,7 @@ app.post('/api/admin/life/move', requireAuth, async (c) => {
   await refreshLifeEnv(c.env, today).catch(() => null);
   await ensureLifeDay(c.env, today).catch(() => null);
   await appendMemoryLine(c.env, {
-    section: '## 她的生活',
+    section: '## 你的生活',
     line: `- [${today.slice(2)}] 从${from}搬到了${city}。`,
     keyword: `搬到了${city}`,
     actor: 'human',

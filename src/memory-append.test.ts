@@ -24,14 +24,14 @@ describe('insertLineIntoText', () => {
   });
 
   it('分区不存在时按标准顺序新建，且不重复插入同一行', () => {
-    const { text } = insertLineIntoText(BASE, '## 她的生活', '- 在追《芙莉莲》');
+    const { text } = insertLineIntoText(BASE, '## 你的生活', '- 在追《芙莉莲》');
     // 顺序：共同经历 < 她的生活 < 雷区与禁忌
-    expect(text.indexOf('## 共同经历')).toBeLessThan(text.indexOf('## 她的生活'));
-    expect(text.indexOf('## 她的生活')).toBeLessThan(text.indexOf('## 雷区与禁忌'));
+    expect(text.indexOf('## 共同经历')).toBeLessThan(text.indexOf('## 你的生活'));
+    expect(text.indexOf('## 你的生活')).toBeLessThan(text.indexOf('## 雷区与禁忌'));
     // 关键：只出现一次（新建 block 里带了这一行，不能再插一遍）
     expect(text.split('- 在追《芙莉莲》').length - 1).toBe(1);
     // 注释在标题下面
-    expect(text.indexOf('## 她的生活')).toBeLessThan(text.indexOf('她自己的事'));
+    expect(text.indexOf('## 你的生活')).toBeLessThan(text.indexOf('她自己的事'));
   });
 
   it('整行已存在时返回 exists，不改文本', () => {
