@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T03:48:20.381Z",
+  "generated_at": "2026-11-04T03:49:18.216Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "ac26dd4",
+          "date": "2026-11-04",
+          "type": "refactor",
+          "area": "",
+          "title": "日程并进此刻；普通工作日不再说她今天是不是工作日",
+          "why": ""
+        },
         {
           "hash": "12356b7",
           "date": "2026-11-04",
@@ -3245,14 +3253,6 @@
           "type": "fix",
           "area": "sync",
           "title": "poll web history every 5 seconds",
-          "why": ""
-        },
-        {
-          "hash": "1e9cebe",
-          "date": "2026-10-25",
-          "type": "feat",
-          "area": "mobile",
-          "title": "mobile engine flags, app heartbeat and proactive push queue",
           "why": ""
         }
       ]

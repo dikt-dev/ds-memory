@@ -110,7 +110,11 @@ export async function lifePromptLine(env: Env, now = new Date()): Promise<string
 
   // 之后还要做什么：只给今天剩下的两三件，别把整张表念出来
   {
-    const rest = actRows.filter((a) => a.start_min > minute).slice(0, 3);
+    const rest = actRows
+      .filter((a) => a.start_min > minute)
+      // 没在做事的空档，下一件事上面那句已经说过了，别重复
+      .filter((a) => !(status.next && a.start_min === status.next.start_min))
+      .slice(0, 3);
     if (rest.length > 0) {
       bits.push(
         '接下来：' + rest.map((a) => `${hhmm(a.start_min)} ${a.title}`).join('、'),
