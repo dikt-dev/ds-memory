@@ -9,6 +9,9 @@ import type { Env } from './types';
 import { lifePromptLine, residentNowLine } from './life/now-text';
 import { loadPersonaDoc, personaSectionText } from './persona-doc';
 
+/** 什么话会触发「她的日记现状」这块。只有存在声明是常驻的。 */
+const DIARY_WORDS = /日记|日志|写的东西|写完|那篇|写了吗|写了什么/;
+
 export interface LifeBlocks {
   /** 稳定段：人设文档里写了「人际关系」才带，否则为空 */
   residents: string | null;
@@ -38,12 +41,13 @@ async function diaryAwareness(env: Env): Promise<string | null> {
   ].join('\n');
 }
 
-export async function loadLifeBlocks(env: Env, now: Date): Promise<LifeBlocks> {
+export async function loadLifeBlocks(env: Env, now: Date, userText = ''): Promise<LifeBlocks> {
   const [line, card, personaDoc, diary, homeCity, hisCity] = await Promise.all([
     lifePromptLine(env, now).catch(() => null),
     residentNowLine(env, now).catch(() => null),
     loadPersonaDoc(env).catch(() => ''),
-    diaryAwareness(env).catch(() => null),
+    // 日记现状只在他说到日记时带；平时带"你有日记"那句就够了
+    DIARY_WORDS.test(userText) ? diaryAwareness(env).catch(() => null) : Promise.resolve(null),
     env.KV?.get('life:home-city').catch(() => null),
     env.KV?.get('life:user-city').catch(() => null),
   ]);

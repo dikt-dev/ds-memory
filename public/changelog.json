@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T03:14:30.494Z",
+  "generated_at": "2026-11-04T03:17:31.229Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "5b1e46c",
+          "date": "2026-11-04",
+          "type": "fix",
+          "area": "",
+          "title": "天气只出现一处；位置、长相、朋友每轮都带",
+          "why": ""
+        },
         {
           "hash": "547695d",
           "date": "2026-11-04",
@@ -3245,14 +3253,6 @@
           "type": "feat",
           "area": "",
           "title": "add Bilibili link preview endpoint",
-          "why": ""
-        },
-        {
-          "hash": "5013e0d",
-          "date": "2026-10-25",
-          "type": "perf",
-          "area": "",
-          "title": "add app TTS proxy with Azure secret",
           "why": ""
         }
       ]
