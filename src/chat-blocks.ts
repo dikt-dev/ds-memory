@@ -6,7 +6,7 @@
  */
 import type { Env } from './types';
 import { lifePromptLine, residentNowLine } from './life/now-text';
-import { residentLooksRoster, residentRoster } from './life/residents';
+import { SELF, residentLooksRoster, residentRoster } from './life/residents';
 import { resolvePersona } from './persona';
 import { loadPersonaDoc, personaSectionText } from './persona-doc';
 
@@ -46,9 +46,9 @@ export async function loadLifeBlocks(env: Env, now: Date): Promise<LifeBlocks> {
     loadPersonaDoc(env).catch(() => ''),
     diaryAwareness(env).catch(() => null),
   ]);
-  // 长相：优先 persona.md 的「外貌」卡，没填才回退到环境变量。
-  // 以前只读环境变量，清空人设后她谁也认不出（连自己都不认）。
-  const look = personaSectionText(personaDoc, '外貌') || resolvePersona(env).look;
+  // 长相：persona.md 的「外貌」卡 → 代码里的她的档案 → 环境变量。
+  // SELF.looks 一直存在，却从没进过提示词——所以照片里她从来认不出自己。
+  const look = personaSectionText(personaDoc, '外貌') || SELF.looks || resolvePersona(env).look;
   return {
     // 名录 + 长相：名字解决「谁住这儿」，长相解决「照片里这个是谁」。
     // 自己的长相放在最前面——先认出「这是我」，再谈别人。
@@ -58,6 +58,7 @@ export async function loadLifeBlocks(env: Env, now: Date): Promise<LifeBlocks> {
           const flat = look.replace(/\s*\n\s*/g, '；').trim();
           return flat ? `你自己：${flat}。照片或画面里出现这样的人，那就是你，别当成别人。` : '';
         })(),
+        '认人只按上面这些长相描述来认；照片、视频帧、动图都可能糊，拿不准就说"看着像谁"，别一口咬定。',
         residentRoster(),
         residentLooksRoster(),
       ]

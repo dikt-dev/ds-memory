@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T02:45:38.158Z",
+  "generated_at": "2026-11-04T02:50:38.174Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "137976e",
+          "date": "2026-11-04",
+          "type": "fix",
+          "area": "",
+          "title": "她只知道他在哪个城市，不再替他查天气",
+          "why": ""
+        },
         {
           "hash": "1d9096f",
           "date": "2026-11-04",
@@ -3245,14 +3253,6 @@
           "type": "docs",
           "area": "",
           "title": "document phone-first tts and audio playback",
-          "why": ""
-        },
-        {
-          "hash": "12d9c5e",
-          "date": "2026-10-25",
-          "type": "feat",
-          "area": "tts",
-          "title": "phone-first queue with melotts fallback and web audio",
           "why": ""
         }
       ]
