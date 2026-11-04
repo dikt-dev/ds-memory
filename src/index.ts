@@ -423,8 +423,16 @@ app.post('/api/chat', requireAuth, async (c) => {
   // ★ 闸门：网页和 App 走同一套规则（以前只有 App 那条链路有，网页永远秒回）。
   const gate = await gateDecision(c.env, now).catch(() => ({ hold: false }) as { hold: boolean; until?: string; reason?: string });
   if (gate.hold) {
-    await markHeld(c.env, userRow.id, untilMs(now, gate.until ?? '08:00'));
-    return c.json({ held: true, until: gate.until, reason: gate.reason, user_message_id: userRow.id });
+    const heldUntil = untilMs(now, gate.until ?? '08:00');
+    await markHeld(c.env, userRow.id, heldUntil);
+    // until_ms 是给客户端挂闹钟用的：她那边到点，客户端来拉一次
+    return c.json({
+      held: true,
+      until: gate.until,
+      until_ms: heldUntil,
+      reason: gate.reason,
+      user_message_id: userRow.id,
+    });
   }
 
   return streamChat(c.env, content, now, image, channel, c.get('requestId'), {

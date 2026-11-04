@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T08:06:03.812Z",
+  "generated_at": "2026-11-04T08:19:37.832Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "23a7075",
+          "date": "2026-11-04",
+          "type": "fix",
+          "area": "",
+          "title": "补发链路不重复交代等待时长",
+          "why": ""
+        },
         {
           "hash": "6a86110",
           "date": "2026-11-04",
@@ -3235,14 +3243,6 @@
           "type": "feat",
           "area": "chat",
           "title": "adaptive short-term memory and history budget",
-          "why": ""
-        },
-        {
-          "hash": "9196e25",
-          "date": "2026-10-27",
-          "type": "fix",
-          "area": "archive",
-          "title": "support monthly rehydration and stale rollup guard",
           "why": ""
         }
       ]

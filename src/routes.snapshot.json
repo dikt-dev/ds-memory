@@ -1041,6 +1041,14 @@
   ],
   [
     "POST",
+    "/api/app/flush"
+  ],
+  [
+    "POST",
+    "/api/app/flush"
+  ],
+  [
+    "POST",
     "/api/app/heartbeat"
   ],
   [

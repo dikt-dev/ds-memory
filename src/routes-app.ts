@@ -12,6 +12,7 @@ import { messagesPage, messagesSince, type MessageRow } from './db';
 import { isoInBeijing } from './date';
 import { archivedMessagesBefore } from './archive';
 import { resolveDiaryConsent } from './life/diary-job';
+import { flushHeldMessages } from './life/flush';
 import { applyMemoryCorrection } from './memory-correction';
 import { parseRelationValues } from './memory-maintenance';
 import { stripAttachmentWrapper } from './openai';
@@ -405,6 +406,15 @@ app.post('/api/app/pair', async (c) => {
   });
 
   /** App 增量消息：所有渠道，按 id 升序；客户端自己按 id 去重。 */
+  /**
+   * 到点拉取：客户端按 until 挂闹钟，醒来调这个接口，把压着的消息现场生成出来。
+   * 不做全文轮询——生成完再走 /api/app/events 拉增量即可。
+   */
+  app.post('/api/app/flush', requireApp, async (c) => {
+    const result = await flushHeldMessages(c.env, new Date()).catch((e) => ({ flushed: 0, skipped: 'error:' + String(e) }));
+    return c.json({ ok: true, ...result, at: new Date().toISOString() });
+  });
+
   app.get('/api/app/events', requireApp, async (c) => {
     const rawAfter = Number(c.req.query('after_id') ?? '');
     const afterId = Number.isFinite(rawAfter) && rawAfter >= 0 ? Math.floor(rawAfter) : 0;
