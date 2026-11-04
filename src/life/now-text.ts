@@ -107,11 +107,7 @@ export async function lifePromptLine(env: Env, now = new Date()): Promise<string
     );
   }
   // 今天是不是节假日：她得知道"今天不用上班"和"今天周三"的区别
-  {
-    const dc = buildDayContext(dateKey);
-    const note = dc.holiday_note && dc.holiday_note !== '平常工作日' ? dc.holiday_note : '工作日';
-    bits.push(`今天是${dc.date} ${dc.weekday}，${note}`);
-  }
+
   // 之后还要做什么：只给今天剩下的两三件，别把整张表念出来
   {
     const rest = actRows.filter((a) => a.start_min > minute).slice(0, 3);
@@ -131,7 +127,7 @@ export async function lifePromptLine(env: Env, now = new Date()): Promise<string
   if (body) bits.push(body);
 
   return [
-    '【你此刻的状态】（事实参考，别逐字复述，也别用「日程」「安排」这类词）',
+    '【日程】（事实参考，别逐字复述，也别用「日程」「安排」这类词）',
     ...bits.map((b) => '- ' + b),
   ].join('\n');
 }

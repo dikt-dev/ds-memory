@@ -224,10 +224,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     lines.push('');
     lines.push(keepsakes.trim());
   }
-  if (life?.trim()) {
-    lines.push('');
-    lines.push(life.trim());
-  }
+
 
   // ══ D 最近发生的事（易变：五路来源合并 + 一条优先级）══════════
   // 之前这五块散落各处、没有优先级，life 说 A、中期记忆说 B 时模型只能猜。
@@ -278,11 +275,14 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   // 时间、天气、节假日只在这里出现一次；以前 ⑤ 和 ⑧ 各写一套，两个版本口径不同，
   // 模型挑到旧的那份就会说错城市/时间。
   lines.push('');
-  lines.push('## 当前时间与环境');
+  lines.push('## 此刻');
   lines.push(`- 现在：${isoInBeijing(now)}（${ctx.date} ${ctx.weekday}）`);
   // 直接给出「晚上九点十一分」：模型自己把 21:11 换算成口语会算错（实测差近一小时）
   lines.push(`- 口语说法：${spokenTime(now)}（按半小时取整，说到时间用这个量级就行）`);
-  lines.push(`- 节假日：${ctx.holiday_note}`);
+  // 普通工作日不啰嗦；真的是节假日才单独说一句
+  if (ctx.holiday_note && !/平常工作日|工作日/.test(ctx.holiday_note)) {
+    lines.push(`- 节假日：${ctx.holiday_note}`);
+  }
   if (weather) {
     lines.push(
       `- 天气（你这边）：${weather.city} ${weather.desc}，${weather.temp_c}°C` +
@@ -290,6 +290,11 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     );
   }
   lines.push(`- 消息来源：${CHANNEL_LABELS[channel]}`);
+  // 日程贴着时间放：她说"现在在干嘛"和"现在几点"是同一件事
+  if (life?.trim()) {
+    lines.push('');
+    lines.push(life.trim());
+  }
   lines.push('- 时间、天气、地点以本节为准；记忆和你上一句里的说法都是往事，只用来排序。');
 
   // 怎么发：格式约束集中一处，别再混进"时间与环境"
