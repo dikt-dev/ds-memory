@@ -12,7 +12,6 @@
 import type { Env } from '../types';
 import { beijingDateKey, lifeClock, statusAt } from './state';
 import { diaryPeopleBlock } from './residents';
-import { refreshUserEnv } from './weather';
 
 function hhmm(minute: number): string {
   const m = minute % 1440;
@@ -109,32 +108,17 @@ export async function lifePromptLine(env: Env, now = new Date()): Promise<string
         : '这件事随时能停下，他找你你就能腾出手',
     );
   }
-  // 他那边的天气单独一条：她所在城市 ≠ 他所在城市，混在一起她会说错
-  let userRaw: string | null = null;
-  try {
-    userRaw = (await env.KV?.get(`life:user-env:${dateKey}`)) ?? null;
-  } catch {
-    userRaw = null;
-  }
-  // 没有今天的记录（手机没上报定位）就用已知的用户城市补一次：
-  // 只在 KV 里没有时做，一天最多一次，不会每轮都查天气。
-  if (!userRaw) {
-    const city = await env.KV?.get('life:user-city').catch(() => null);
-    if (city) {
-      await refreshUserEnv(env, dateKey, city).catch(() => null);
-      userRaw = (await env.KV?.get(`life:user-env:${dateKey}`).catch(() => null)) ?? null;
-    }
-  }
-  if (userRaw) {
-    try {
-      const u = JSON.parse(userRaw) as { location?: string; weather?: string; tempC?: number };
-      if (u.location) {
-        const wt = u.weather === 'rain' ? '在下雨' : u.weather === 'snow' ? '在下雪' : u.weather === 'sunny' ? '晴天' : '阴天';
-        bits.push(`他在${u.location}，那边${wt} ${typeof u.tempC === 'number' ? Math.round(u.tempC) + '℃' : ''}`.trim());
-      }
-    } catch {
-      // 坏数据当没有
-    }
+  // 位置只管「他在哪个城市」，不查他那边的天气：
+  // 她需要的是分清两地，不是替他预报。以前混着查，她会说"你那边下着雨吧"。
+  const homeCity = (await env.KV?.get('life:home-city').catch(() => null)) ?? env.CITY ?? '上海';
+  const hisCity = (await env.KV?.get('life:user-city').catch(() => null)) ?? null;
+  if (hisCity) {
+    bits.push(
+      `你在${homeCity}，他在${hisCity}——两个地方，别对调。` +
+        `他那边冷不冷、下没下雨你不知道，别替他断言；要聊就问一句。`,
+    );
+  } else {
+    bits.push(`你在${homeCity}；他在哪你不知道，别猜，也别把两地说成一处。`);
   }
   if (day.weather) {
     const t = typeof day.temp_c === 'number' ? `${Math.round(day.temp_c)}℃` : '';

@@ -65,21 +65,6 @@ export function nearestCity(lat: number, lng: number): string {
   return best;
 }
 
-/** 刷新「他那边」的天气并写进 KV，供提示词分开引用。 */
-export async function refreshUserEnv(
-  env: Env,
-  dateKey: string,
-  city: string,
-): Promise<{ location: string; weather: string; tempC: number } | null> {
-  const now = await fetchWeather(city);
-  if (!now) return null;
-  const rec = { location: city, weather: now.weather, tempC: now.tempC, updatedAt: new Date().toISOString() };
-  await env.KV.put(`life:user-env:${dateKey}`, JSON.stringify(rec), {
-    expirationTtl: 60 * 60 * 36,
-  }).catch(() => {});
-  return rec;
-}
-
 export interface LifeEnvRecord {
   location: string;
   atHome: boolean;
@@ -116,8 +101,5 @@ export async function refreshLifeEnv(
   await env.KV.put(`life:env:${dateKey}`, JSON.stringify(record), {
     expirationTtl: 60 * 60 * 36,
   }).catch(() => {});
-  // 他那边单独一份：她的天气按她所在城市，他的按他所在城市，别混成一条
-  const userCity = await env.KV.get('life:user-city').catch(() => null);
-  if (userCity) await refreshUserEnv(env, dateKey, userCity).catch(() => null);
   return now ? record : null;
 }

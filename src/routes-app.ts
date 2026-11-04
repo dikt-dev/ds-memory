@@ -20,7 +20,7 @@ import { getObject } from './storage';
 import { lifeNow } from './life/jobs';
 import { RECIPES } from './life/recipes';
 import { askDiary, diaryList, diaryOne } from './life/diary-api';
-import { nearestCity, refreshUserEnv } from './life/weather';
+import { nearestCity } from './life/weather';
 import { beijingDateKey } from './life/state';
 import { formatBiliMeta, type BiliMeta } from './bili';
 
@@ -398,7 +398,6 @@ app.post('/api/app/pair', async (c) => {
       // 定位说的是「他在哪」：反推最近城市写进 user-city，她的城市不动
       const city = nearestCity(lat, lng);
       await c.env.KV.put('life:user-city', city).catch(() => {});
-      await refreshUserEnv(c.env, beijingDateKey(), city).catch(() => null);
       return c.json({ ...result, user_city: city });
     } catch (e) {
       return c.json({ error: String(e) }, 500);

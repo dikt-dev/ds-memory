@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T02:42:24.782Z",
+  "generated_at": "2026-11-04T02:45:38.158Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "1d9096f",
+          "date": "2026-11-04",
+          "type": "fix",
+          "area": "",
+          "title": "认得出自己、知道有日记、城市与两地天气归一到同一来源",
+          "why": ""
+        },
         {
           "hash": "ebda7a8",
           "date": "2026-11-04",
@@ -3245,14 +3253,6 @@
           "type": "feat",
           "area": "tts",
           "title": "phone-first queue with melotts fallback and web audio",
-          "why": ""
-        },
-        {
-          "hash": "13b75bf",
-          "date": "2026-10-25",
-          "type": "feat",
-          "area": "web",
-          "title": "read-aloud and voice segment playback",
           "why": ""
         }
       ]
