@@ -424,7 +424,7 @@ PROACTIVE_DELIVERY=queue
 
 1. 读取 R2 `memory.md`；
 2. 如果带 `key=value`，替换同一个 key 的旧事实行；
-3. 否则写入 `## 用户更正（最高优先级）`；
+3. 否则写入 `## 他的更正（最高优先级）`；
 4. 刷新 KV、facts/chunks 和检索索引。
 
 入口：

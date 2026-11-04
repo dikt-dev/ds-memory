@@ -486,7 +486,7 @@ source_message_ids=[1]
 ```text
 GET  /api/admin/memory/projection
 → bytes=783, facts=6, events=2
-→ 核心区保留，关于用户/偏好/事项/共同经历/近期动态重建
+→ 核心区保留，关于他/偏好/事项/共同经历/近期动态重建
 → 对话抽取的 [26-10-24] 城市=杭州 已进入投影
 
 POST /api/admin/memory/project {"confirm":true}

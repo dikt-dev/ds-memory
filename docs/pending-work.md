@@ -292,7 +292,7 @@ GET /api/admin/memory/links?type=fact&id=fact_xxx
 ## 本轮已修复（2026-10-28）
 
 - P0-1：`context-budget` core 独立上限，不再吃非核心预算；
-- P0-2：`用户更正（最高优先级）` 进入正式分区、投影和 compact 白名单；
+- P0-2：`他的更正（最高优先级）` 进入正式分区、投影和 compact 白名单；
 - P0-3：月度合并允许跨天合法重复，同 id 不同正文仍视为冲突；
 - P1-1：无日期条目进入 facts，next 不再静默丢弃；
 - P1-4：`webproactive` 接入 `context-budget`；
@@ -421,8 +421,8 @@ GET /api/admin/memory/links?type=fact&id=fact_xxx
   性格、来历、称呼、习惯全部以 memory.md 的「人物底色」「称呼与关系」为准。
   memory 读不到时有一句兜底性格，避免变成客服。
 - `memory-maintenance.ts` 新增 `splitMemoryForPrompt()`：
-  - stable = 人物底色/称呼与关系/关于用户/偏好与习惯/共同经历/雷区与禁忌
-  - volatile = 进行中的事项 + 近期动态（小时级变化，挪到缓存边界之后）
+  - stable = 人物底色/称呼与关系/关于他/他的偏好/共同经历/他的雷区
+  - volatile = 进行中的事 + 近期动态（小时级变化，挪到缓存边界之后）
   - 未识别分区默认归 stable（宁可缓存吃亏，不丢内容）
 - 实测生产 memory.md（11,855 B）：stable 9,344 B / volatile 2,092 B，分区完全对上。
 - 测试 783 通过（新增 10 个），`tsc` 干净。**未部署**（等 11-01 12:00 窗口）。

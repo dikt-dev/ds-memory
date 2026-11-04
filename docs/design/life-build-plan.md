@@ -54,7 +54,7 @@
 - [x] **P1-5** 04:00 cron 给前一天写日记（日程 + 当天对话 + 天气），幂等
 - [x] **P1-6** 两个接口 + `POST /api/app/ai-diary/ask`（「问问她」）
 - [x] **P1-7** 服务端已通（pending → 聊天消息判定 → shared/private），App 端已接（日记列表/详情/「问问她」）
-- [x] **P1-8** 同意/拒绝写进记忆（settleDiaryConsent → 「偏好与习惯」）
+- [x] **P1-8** 同意/拒绝写进记忆（settleDiaryConsent → 「他的偏好」）
 - [x] **P1-9** 不可见时接口不返回 text 字段（代码层保证，非前端隐藏）
 
 ---
