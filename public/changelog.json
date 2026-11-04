@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T03:21:59.925Z",
+  "generated_at": "2026-11-04T03:26:40.991Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "3cd9782",
+          "date": "2026-11-04",
+          "type": "fix",
+          "area": "",
+          "title": "位置只说一遍",
+          "why": ""
+        },
         {
           "hash": "9a313b9",
           "date": "2026-11-04",
@@ -3245,14 +3253,6 @@
           "type": "feat",
           "area": "",
           "title": "Bilibili official summary/subtitle in preview",
-          "why": ""
-        },
-        {
-          "hash": "74b712b",
-          "date": "2026-10-25",
-          "type": "feat",
-          "area": "",
-          "title": "add web/douyin preview endpoint",
           "why": ""
         }
       ]

@@ -67,7 +67,8 @@ import { readPathStats, readRecentRequests } from './request-log';
 import { logError, logWarn } from './error-log';
 import { loadPersonaDoc } from './persona-doc';
 import { loadLifeBlocks } from './chat-blocks';
-import { buildSystemPromptSplit } from './prompt';
+import { buildSystemPromptSplit, silentEndRule, STYLE_REMINDER } from './prompt';
+import { loadSessionHistory } from './recent-context';
 import { resolvePersona } from './persona';
 import { getOrCreateDayContext } from './context';
 
@@ -105,11 +106,22 @@ export function registerAdminOpsRoutes(app: Hono<AppEnv>): void {
       life: lifeBlocks.life,
     } as never);
     const enc = new TextEncoder();
+    // 和 chat.ts 一模一样的拼法：稳定段 + [提要] + 历史 + 易变段 + 用户消息
+    const messages: { role: string; content: string }[] = [
+      { role: 'system', content: parts.stable + silentEndRule('web') },
+    ];
+    const hist = await loadSessionHistory(c.env, now).catch(() => ({ rows: [], brief: '', rounds: 0 }));
+    if (hist.brief) messages.push({ role: 'system', content: hist.brief });
+    for (const m of hist.rows) messages.push({ role: m.role, content: m.content });
+    if (parts.volatile) messages.push({ role: 'system', content: parts.volatile });
+    messages.push({ role: 'user', content: `${STYLE_REMINDER}\n\n${text}` });
     return c.json({
       ok: true,
       text,
       stableBytes: enc.encode(parts.stable).length,
       volatileBytes: enc.encode(parts.volatile).length,
+      historyCount: hist.rows.length,
+      messages,
       stable: parts.stable,
       volatile: parts.volatile,
     });
