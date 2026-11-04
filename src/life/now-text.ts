@@ -89,7 +89,7 @@ export async function lifePromptLine(env: Env, now = new Date()): Promise<string
       `现在是 ${hhmm(minute)}，${where}，${status.current.title}（${hhmm(status.current.start_min)}–${hhmm(status.current.end_min)}）`,
     );
   } else if (status.next) {
-    bits.push(`现在是 ${hhmm(minute)}，${where}，暂时没事做，${hhmm(status.next.start_min)} 打算${status.next.title}`);
+    bits.push(`现在是 ${hhmm(minute)}，${where}，暂时没事做`);
   } else {
     bits.push(`现在是 ${hhmm(minute)}，${where}`);
   }
@@ -108,20 +108,15 @@ export async function lifePromptLine(env: Env, now = new Date()): Promise<string
   }
   // 今天是不是节假日：她得知道"今天不用上班"和"今天周三"的区别
 
-  // 之后还要做什么：只给今天剩下的两三件，别把整张表念出来
-  {
-    const rest = actRows
-      .filter((a) => a.start_min > minute)
-      // 没在做事的空档，下一件事上面那句已经说过了，别重复
-      .filter((a) => !(status.next && a.start_min === status.next.start_min))
-      .slice(0, 3);
-    if (rest.length > 0) {
-      bits.push(
-        '接下来：' + rest.map((a) => `${hhmm(a.start_min)} ${a.title}`).join('、'),
-      );
-    } else if (status.current) {
-      bits.push('今天剩下的时间没什么安排，都是自己的');
-    }
+  // 日程只给两件：现在在做的 + 接下来要做的。整张表念出来她像在播报
+  const upcoming =
+    status.next ?? actRows.find((a) => a.start_min > minute) ?? null;
+  if (upcoming) {
+    bits.push(
+      `接下来：${hhmm(upcoming.start_min)}–${hhmm(upcoming.end_min)} ${upcoming.title}`,
+    );
+  } else {
+    bits.push('今天剩下的时间没什么安排，都是自己的');
   }
   // 位置不在这里写：聊天块（chat-blocks）每轮都带一句【位置】，写两遍她会来回强调。
 
