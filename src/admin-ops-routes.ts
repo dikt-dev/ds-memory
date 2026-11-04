@@ -67,7 +67,7 @@ import { readPathStats, readRecentRequests } from './request-log';
 import { logError, logWarn } from './error-log';
 import { loadPersonaDoc } from './persona-doc';
 import { loadLifeBlocks } from './chat-blocks';
-import { buildSystemPromptSplit, silentEndRule, STYLE_REMINDER } from './prompt';
+import { buildSystemPromptSplit, silentEndRule } from './prompt';
 import { loadSessionHistory } from './recent-context';
 import { resolvePersona } from './persona';
 import { getOrCreateDayContext } from './context';
@@ -114,7 +114,7 @@ export function registerAdminOpsRoutes(app: Hono<AppEnv>): void {
     if (hist.brief) messages.push({ role: 'system', content: hist.brief });
     for (const m of hist.rows) messages.push({ role: m.role, content: m.content });
     if (parts.volatile) messages.push({ role: 'system', content: parts.volatile });
-    messages.push({ role: 'user', content: `${STYLE_REMINDER}\n\n${text}` });
+    messages.push({ role: 'user', content: text });
     return c.json({
       ok: true,
       text,

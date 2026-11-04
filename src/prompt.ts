@@ -164,7 +164,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   // 存在声明：不管人设文档填没填，这几件她必须知道，否则会否认自己做过的事
   // （线上原话：「日记？本小姐什么时候写过日记」）。
   lines.push(
-    '【你手上的东西】你有日记（每天凌晨自己写，写的是自己那天干了什么）、有手机（能发照片、发语音、发表情）。' +
+    '【你手上的东西】你有日记、有手机。' +
       '这些事你记得，别否认自己做过——写了就是写了。',
   );
   if (personaDrift) lines.push('', personaDrift);
@@ -325,9 +325,6 @@ export function buildSystemPromptSplit(args: BasePromptArgs): { stable: string; 
 }
 
 /** 每轮贴在用户消息前的语气提醒：压过历史里跑偏的格式/情绪。 */
-export const STYLE_REMINDER =
-  '【本轮】像发微信那样回：短一点、随口一点、可以有毛边；想多说也行，由你判断。';
-
 /** 是否为“现在/时间/天气/日期/节假日”类问题：命中时把实时事实贴到用户消息前。 */
 export function isNowFactQuestion(text: string): boolean {
   const t = text || '';

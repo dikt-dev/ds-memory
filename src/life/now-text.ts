@@ -12,6 +12,7 @@
 import type { Env } from '../types';
 import { beijingDateKey, lifeClock, statusAt } from './state';
 import { diaryPeopleBlock } from './residents';
+import { buildDayContext } from '../holidays';
 
 function hhmm(minute: number): string {
   const m = minute % 1440;
@@ -69,8 +70,7 @@ export async function lifePromptLine(env: Env, now = new Date()): Promise<string
     .bind(dateKey)
     .all<{ unit_id: string; kind: string; title: string; start_min: number; end_min: number; interruptible: number; reply_chance: number | null }>()
     .catch(() => null);
-  const status = statusAt(
-    (acts?.results ?? []).map((a) => ({
+  const actRows = (acts?.results ?? []).map((a) => ({
       date_key: dateKey,
       start_min: a.start_min,
       end_min: a.end_min,
@@ -79,10 +79,8 @@ export async function lifePromptLine(env: Env, now = new Date()): Promise<string
       title: a.title,
       interruptible: a.interruptible,
       reply_chance: a.reply_chance ?? 1,
-    })) as never,
-    minute,
-    day.health,
-  );
+  }));
+  const status = statusAt(actRows as never, minute, day.health);
 
   const bits: string[] = [];
   const where = day.location ? `你在${day.location}` : '';
@@ -107,6 +105,23 @@ export async function lifePromptLine(env: Env, now = new Date()): Promise<string
         ? '这阵子多半不看手机，回消息会拖着；真抽空回也是短短一句，别写长'
         : '这件事随时能停下，他找你你就能腾出手',
     );
+  }
+  // 今天是不是节假日：她得知道"今天不用上班"和"今天周三"的区别
+  {
+    const dc = buildDayContext(dateKey);
+    const note = dc.holiday_note && dc.holiday_note !== '平常工作日' ? dc.holiday_note : '工作日';
+    bits.push(`今天是${dc.date} ${dc.weekday}，${note}`);
+  }
+  // 之后还要做什么：只给今天剩下的两三件，别把整张表念出来
+  {
+    const rest = actRows.filter((a) => a.start_min > minute).slice(0, 3);
+    if (rest.length > 0) {
+      bits.push(
+        '接下来：' + rest.map((a) => `${hhmm(a.start_min)} ${a.title}`).join('、'),
+      );
+    } else if (status.current) {
+      bits.push('今天剩下的时间没什么安排，都是自己的');
+    }
   }
   // 位置不在这里写：聊天块（chat-blocks）每轮都带一句【位置】，写两遍她会来回强调。
 

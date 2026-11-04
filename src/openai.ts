@@ -14,7 +14,7 @@ import { shouldSkipMemoryRecall, buildMemoryPack, budgetFromPack  } from './cont
 import { consumePendingRecall, recordRecallUsage, rememberPendingRecall } from './memory-rehearsal';
 import { fetchBiliMeta, findBiliUrl, formatBiliMeta } from './bili';
 import { loadPersonaDoc } from './persona-doc';
-import { buildBaseSystemPrompt, normalizeChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, stripSilentEndToken, STYLE_REMINDER } from './prompt';
+import { buildBaseSystemPrompt, normalizeChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, stripSilentEndToken } from './prompt';
 import { resolvePersona } from './persona';
 import { ticWarning } from './voice';
 import { stripLeadingTimeLabels } from './anti-ai-flavor';
@@ -652,7 +652,7 @@ openaiApp.post('/chat/completions', async (c) => {
 
   // 每轮把语气提醒贴到用户消息最前面；实时类问题再叠加准确事实（只改发给模型的内容，不写 D1）
   if (lastUser) {
-    const parts = [STYLE_REMINDER];
+    const parts: string[] = [];
     // ★ 格式要求放在这里：这是模型看到的最后一段指令（紧跟用户这句话），
     //   比系统提示词里靠前的位置有效得多。网页端不需要 QQ 表情/语音标记。
     if (channel === 'astrobot' || channel === 'mobile') {

@@ -11,7 +11,7 @@ import { shouldSkipMemoryRecall, buildMemoryPack  } from './context-pack';
 import { consumePendingRecall, looksLikePinRequest, recordRecallUsage, rememberPendingRecall, setChunkPinned } from './memory-rehearsal';
 import { loadLifeBlocks } from './chat-blocks';
 import { loadPersonaDoc } from './persona-doc';
-import { buildSystemPromptSplit, type MessageChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, STYLE_REMINDER } from './prompt';
+import { buildSystemPromptSplit, type MessageChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule } from './prompt';
 import { resolvePersona } from './persona';
 import { ticWarning } from './voice';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
@@ -309,15 +309,10 @@ export async function streamChat(
     ];
   }
 
-  // 每轮把语气提醒贴到用户消息最前面；实时类问题再叠加准确事实（不写入 D1）
-  {
-    const parts = [STYLE_REMINDER];
-    if (isNowFactQuestion(content)) {
-      parts.push(
-        `【系统实时事实（最高优先级，不要复述这段格式）】${buildLiveFacts(now, ctx, weather)}。回答时间/天气/节假日时只以此为准，不要用历史或记忆里的旧值。`,
-      );
-    }
-    const prefix = `${parts.join('\n\n')}\n\n`;
+  // 实时类问题才贴准确事实（不写入 D1）；语气不再每轮提醒
+  if (isNowFactQuestion(content)) {
+    const prefix =
+      `【系统实时事实（最高优先级，不要复述这段格式）】${buildLiveFacts(now, ctx, weather)}。回答时间/天气/节假日时只以此为准，不要用历史或记忆里的旧值。\n\n`;
     userContent =
       typeof userContent === 'string'
         ? prefix + userContent

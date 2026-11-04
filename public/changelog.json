@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T03:26:40.991Z",
+  "generated_at": "2026-11-04T03:43:10.926Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "c51daea",
+          "date": "2026-11-04",
+          "type": "feat",
+          "area": "",
+          "title": "peek 返回真实会发出去的 messages 数组",
+          "why": ""
+        },
         {
           "hash": "3cd9782",
           "date": "2026-11-04",
@@ -3245,14 +3253,6 @@
           "type": "feat",
           "area": "",
           "title": "expose Bilibili cover in preview",
-          "why": ""
-        },
-        {
-          "hash": "9523fa6",
-          "date": "2026-10-25",
-          "type": "feat",
-          "area": "",
-          "title": "Bilibili official summary/subtitle in preview",
           "why": ""
         }
       ]
