@@ -8,7 +8,7 @@
 import type { Env } from './types';
 import { lifePromptLine, residentNowLine } from './life/now-text';
 import { loadPersonaDoc, personaSectionText } from './persona-doc';
-import { findReplayKey, replayVideo } from './media/video-replay';
+import { findReplayKey, hasRecentBili, replayBili, replayVideo, wantsReplay } from './media/video-replay';
 
 /** 什么话会触发「她的日记现状」这块。只有存在声明是常驻的。 */
 const DIARY_WORDS = /日记|日志|写的东西|写完|那篇|写了吗|写了什么/;
@@ -178,7 +178,12 @@ export async function loadLifeBlocks(
     ? await replayVideo(env, replayKey, userText)
         .then((t) => (t ? `你又把刚才那段视频翻出来看了一遍，专门看他问的那处：\n${t}` : null))
         .catch(() => null)
-    : null;
+    : // 不是本地视频，再试 B 站：直链存在 KV 里，两小时内都能重看
+      wantsReplay(userText) && hasRecentBili(recent)
+      ? await replayBili(env, userText)
+          .then((t) => (t ? `你又把刚才那条 B 站视频翻出来看了一遍，专门看他问的那处：\n${t}` : null))
+          .catch(() => null)
+      : null;
 
   const where = [
     `【位置】你在${homeCity || env.CITY || '家'}`,

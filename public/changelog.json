@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-05T07:15:29.289Z",
+  "generated_at": "2026-11-05T07:26:20.837Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-05",
       "items": [
+        {
+          "hash": "4cdb322",
+          "date": "2026-11-05",
+          "type": "fix",
+          "area": "life",
+          "title": "社交阵容为空时 peopleFor 抛错，导致日程与日记整天生成失败",
+          "why": ""
+        },
         {
           "hash": "77a492d",
           "date": "2026-11-05",
@@ -3235,14 +3243,6 @@
           "type": "fix",
           "area": "memory",
           "title": "correct budget, correction section, monthly merge",
-          "why": ""
-        },
-        {
-          "hash": "edaa9d1",
-          "date": "2026-10-28",
-          "type": "docs",
-          "area": "",
-          "title": "review memory code assessment and prioritize fixes",
           "why": ""
         }
       ]

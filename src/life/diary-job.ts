@@ -111,6 +111,32 @@ async function readDayEnv(env: Env, dateKey: string): Promise<{ location: string
   }
 }
 
+/**
+ * 写日记的模型调用，带重试。
+ *
+ * 以前一次失败就 return，那天的日记就永远空着——04:00 那个 cron 一天只跑一次。
+ * 现在同一次任务内最多试 3 遍（2 秒、5 秒退避），只对「网络/5xx/空回复」这类瞬时故障重试；
+ * 400 这种请求本身有问题的不重试，重试也没用。
+ */
+async function callModelWithRetry(
+  env: Env,
+  messages: Parameters<typeof completeDeepSeek>[1],
+  now: Date,
+): Promise<Awaited<ReturnType<typeof completeDeepSeek>>> {
+  let lastError = '';
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const res = await completeDeepSeek(env, messages, now, 8192, { thinking: true, kind: 'diary' }).catch(
+      (e: unknown) => ({ error: String((e as Error)?.message ?? e), status: 502 }) as const,
+    );
+    if (!('error' in res) && res.text.trim()) return res;
+    lastError = 'error' in res ? res.error : '模型返回空内容';
+    // 400/401 这类是配置或请求问题，等多久都一样
+    if ('status' in res && res.status < 500 && res.status !== 429) break;
+    if (attempt < 2) await new Promise((r) => setTimeout(r, attempt === 0 ? 2000 : 5000));
+  }
+  throw new Error(lastError || '日记生成失败');
+}
+
 export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJobResult> {
   const existing = await env.DB.prepare('SELECT date_key FROM ai_diary WHERE date_key = ?')
     .bind(dateKey)
@@ -136,7 +162,7 @@ export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJob
   let raw = '';
   let finishReason: string | null = null;
   try {
-    const res = await completeDeepSeek(
+    const res = await callModelWithRetry(
       env,
       [
         { role: 'system', content: DIARY_SYSTEM },
@@ -156,8 +182,6 @@ export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJob
         },
       ],
       new Date(),
-      8192,
-      { thinking: true, kind: 'diary' },
     );
     if ('error' in res) {
       logError('[life] 日记生成失败:', res.error);

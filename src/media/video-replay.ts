@@ -32,6 +32,54 @@ export function findReplayKey(
   return null;
 }
 
+/** 这句话像不像在追问一条已经看过的视频（不区分本地/B 站）。 */
+export function wantsReplay(userText: string): boolean {
+  return Boolean(userText) && ASK_AGAIN_RE.test(userText) && !VIDEO_KEY_RE.test(userText);
+}
+
+const BILI_META_RE = /\[BILI_META\]/;
+
+/** 最近几轮里有没有发过 B 站视频。 */
+export function hasRecentBili(recent: { role: string; content: string }[]): boolean {
+  for (let i = recent.length - 1; i >= Math.max(0, recent.length - 8); i -= 1) {
+    if (BILI_META_RE.test(recent[i]?.content ?? '')) return true;
+  }
+  return false;
+}
+
+/**
+ * B 站视频的「再看一眼」。
+ *
+ * 和本地视频的区别只有一个：地址从 KV 里取。B 站直链是两千多字符的签名地址，
+ * 塞进消息里既难看又会被当成资料喂给模型，所以 App 传上来时顺手存一份。
+ * 直链约两小时过期，超过就不重看——重新解析要回手机端，服务端拿不到。
+ */
+export async function replayBili(
+  env: { DASHSCOPE_API_KEY?: string; KV: KVNamespace },
+  question: string,
+): Promise<string | null> {
+  if (!env.DASHSCOPE_API_KEY) return null;
+  const raw = await env.KV.get('bili:last').catch(() => null);
+  if (!raw) return null;
+  let rec: { direct?: string; title?: string; cacheKey?: string; at?: number };
+  try {
+    rec = JSON.parse(raw) as typeof rec;
+  } catch {
+    return null;
+  }
+  if (!rec.direct || !rec.at) return null;
+  // 直链只有两小时有效期，过期就别拿它去碰壁
+  if (Date.now() - rec.at > 2.5 * 3600 * 1000) return null;
+  const probe = await lookAtVideo(env, rec.direct, {
+    cacheKey: `biliq:${rec.cacheKey ?? 'x'}#q:${Math.abs(hash32(question))}`,
+    prompt: questionPrompt(question, rec.title),
+    maxTokens: 400,
+    timeoutMs: 90_000,
+  }).catch(() => null);
+  const text = probe?.text?.trim();
+  return text || null;
+}
+
 /** 重看一遍并把答案写成一段文字；任何一步不满足就返回 null（不影响正常回复）。 */
 export async function replayVideo(
   env: {
@@ -46,21 +94,29 @@ export async function replayVideo(
   const base = (env.PUBLIC_BASE_URL ?? '').trim().replace(/\/$/, '');
   if (!base || !env.AUTH_SECRET || !env.DASHSCOPE_API_KEY) return null;
   const url = base + (await signMediaPath(env.AUTH_SECRET, key, 900));
-  const prompt = [
-    '你又在看这段视频，这次是带着问题看的。',
-    `他问：「${question.slice(0, 120)}」`,
-    '',
-    '只回答他问的那一点，按时间点写清楚看到了什么、上面写了什么字。',
-    '问的东西视频里确实没有，就写「没看到」——不要编。',
-    '不要总结整段视频，不要评价，不要用「视频展示了」这类套话。',
-    '输出纯文本，两三句话。',
-  ].join('\n');
+  const prompt = questionPrompt(question);
   const obs = await lookAtVideo(env, url, {
     cacheKey: `${key}#q:${Math.abs(hash32(question))}`,
     prompt,
     maxTokens: 400,
   });
   return obs.text.trim() || null;
+}
+
+/** 「带着问题重看一遍」的提示词，本地视频和 B 站共用。 */
+function questionPrompt(question: string, title?: string): string {
+  return [
+    '你又在看这段视频，这次是带着问题看的。',
+    title ? `【视频标题】${title}` : '',
+    `他问：「${question.slice(0, 120)}」`,
+    '',
+    '只回答他问的那一点，按时间点写清楚看到了什么、上面写了什么字。',
+    '问的东西视频里确实没有，就写「没看到」——不要编。',
+    '不要总结整段视频，不要评价，不要用「视频展示了」这类套话。',
+    '输出纯文本，两三句话。',
+  ]
+    .filter((line, i) => line || i === 3)
+    .join('\n');
 }
 
 function hash32(s: string): number {

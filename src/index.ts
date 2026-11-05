@@ -643,6 +643,34 @@ function logCron(env: Env, ctx: ExecutionContext, cron: string, startedAt: numbe
  */
 export type CronBranch = 'daily-archive' | 'daily-life' | 'daytime' | 'night';
 
+/**
+ * 日记补写。
+ *
+ * 04:00 那个 cron 一天只跑一次，失败就当天空着。这里在早上 8 点补一次：
+ * 昨天没写成就重来，写了就跳过。claimJob 保证同一天不会被并发跑两遍。
+ */
+async function catchUpDiary(env: Env, now: Date): Promise<void> {
+  const beijingHour = Number(
+    new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', hour: '2-digit', hour12: false }).format(now),
+  );
+  if (beijingHour !== 8) return;
+  const yesterday = addDays(dateKeyInBeijing(now), -1);
+  const written = await env.DB.prepare('SELECT date_key FROM ai_diary WHERE date_key = ?')
+    .bind(yesterday)
+    .first<{ date_key: string }>()
+    .catch(() => null);
+  if (written) return;
+  const claimed = await claimJob(env, 'daily_diary_catchup', yesterday).catch(() => false);
+  if (!claimed) return;
+  const r = await runLifeDiary(env, now).catch((e: unknown) => {
+    logError('[life] 日记补写失败:', e);
+    return { ok: false, skipped: 'exception' };
+  });
+  await finishJob(env, 'daily_diary_catchup', yesterday, r.skipped ? `跳过：${r.skipped}` : '已补写', r.ok && !r.skipped).catch(
+    () => {},
+  );
+}
+
 export function cronBranch(cron: string): CronBranch | null {
   if (cron === '0 20 * * *') return 'daily-archive';
   if (cron === '5 20 * * *') return 'daily-life';
@@ -738,6 +766,9 @@ export default {
       ctx.waitUntil(flushHeldMessages(env, now));
       // 这条 cron 覆盖 UTC 0 / 16 点 → 北京 08:00 / 24:00 的 context 刷新
       ctx.waitUntil(maybeRefreshContext(env, now));
+      // 日记补写：04:00 那次失败（模型抖动 / 当天日程没生成）就在这里补一次。
+      // 只在早上 8 点试，避免一天里反复打模型。
+      ctx.waitUntil(catchUpDiary(env, now));
       logCron(env, ctx, cron, startedAt);
       return;
     }

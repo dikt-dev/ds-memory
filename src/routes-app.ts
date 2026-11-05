@@ -493,6 +493,12 @@ app.post('/api/app/pair', async (c) => {
         cacheKey: (body?.cacheKey ?? '').slice(0, 120),
       });
       if (!v) return c.json({ ok: false, error: '拿不到直链或模型失败' }, 502);
+      // 留一份直链：他之后说「再看一眼」时，服务端要靠它重看（直链约两小时有效）
+      await c.env.KV.put(
+        'bili:last',
+        JSON.stringify({ direct, title: v.title, cacheKey: body?.cacheKey ?? '', at: Date.now() }),
+        { expirationTtl: 6 * 3600 },
+      ).catch(() => {});
       return c.json({ ok: true, title: v.title, duration: v.duration, text: v.text, ms: v.ms, cached: v.cached });
     } catch (e) {
       return c.json({ ok: false, error: String(e).slice(0, 200) }, 502);
