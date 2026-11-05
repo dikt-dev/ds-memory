@@ -1,7 +1,20 @@
 {
-  "generated_at": "2026-11-05T00:53:17.652Z",
+  "generated_at": "2026-11-05T01:06:06.317Z",
   "count": 400,
   "days": [
+    {
+      "date": "2026-11-05",
+      "items": [
+        {
+          "hash": "fafa1a3",
+          "date": "2026-11-05",
+          "type": "feat",
+          "area": "",
+          "title": "朋友改成唤醒式——平时只留名单，提到名字/收到画面才带长相",
+          "why": ""
+        }
+      ]
+    },
     {
       "date": "2026-11-04",
       "items": [
@@ -3230,14 +3243,6 @@
           "type": "feat",
           "area": "memory",
           "title": "add explicit links and lightweight audit",
-          "why": ""
-        },
-        {
-          "hash": "5f614ea",
-          "date": "2026-10-28",
-          "type": "docs",
-          "area": "",
-          "title": "resolve day three issues and compare memory projects",
           "why": ""
         }
       ]

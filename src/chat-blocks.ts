@@ -102,11 +102,12 @@ function friendLine(c: FriendCard): string {
  */
 export function wakeFriends(cards: FriendCard[], text: string): FriendCard[] {
   if (!cards.length || !text) return [];
-  const lower = text.toLowerCase();
+  // NFKC 把全角英文/数字转成半角：ＧＰＴ → GPT，不然全角打的名字认不出来
+  const lower = text.normalize('NFKC').toLowerCase();
   const hits: { card: FriendCard; start: number; end: number }[] = [];
   for (const card of cards) {
     for (const alias of card.aliases) {
-      const needle = alias.toLowerCase();
+      const needle = alias.normalize('NFKC').toLowerCase();
       if (!needle) continue;
       let from = 0;
       for (;;) {
@@ -136,7 +137,26 @@ export function wakeFriends(cards: FriendCard[], text: string): FriendCard[] {
 /** 这条消息里带没带图片 / 视频 / 动图（带了就要把所有人的长相都带上，认人用）。 */
 export const MEDIA_RE = /\[(图片|视频|GIF)[:：]/i;
 
-export async function loadLifeBlocks(env: Env, now: Date, userText = ''): Promise<LifeBlocks> {
+/**
+ * 唤醒用的上下文：当前这句 + 最近几条。
+ *
+ * 只扫当前句会漏掉「先说小克，下一句问『她还好吗』」这种——
+ * 所以最近 6 条（他和她的都算）一起当唤醒语料。
+ */
+export function wakeText(userText: string, recent: { role: string; content: string }[] = []): string {
+  const tail = recent
+    .slice(-6)
+    .map((m) => (m.content || '').replace(/\[(BILI|VIDEO)_META\][\s\S]*?\[\/\1_META\]/gi, ' '))
+    .join('\n');
+  return [userText, tail].filter(Boolean).join('\n');
+}
+
+export async function loadLifeBlocks(
+  env: Env,
+  now: Date,
+  userText = '',
+  recent: { role: string; content: string }[] = [],
+): Promise<LifeBlocks> {
   const [line, card, personaDoc, diary, homeCity, hisCity] = await Promise.all([
     lifePromptLine(env, now).catch(() => null),
     residentNowLine(env, now).catch(() => null),
@@ -167,7 +187,7 @@ export async function loadLifeBlocks(env: Env, now: Date, userText = ''): Promis
   // 平时只带「名单 + 一句话」：知道他们存在，但不占长相那几百字。
   // 他点了名才把长相带上；收到图片/视频/动图时全带上——画面里的人得认。
   const media = MEDIA_RE.test(userText);
-  const woke = media ? [] : wakeFriends(friends, userText);
+  const woke = media ? [] : wakeFriends(friends, wakeText(userText, recent));
   const roster = friends.length
     ? '你认识的人（没被提到就别主动聊他们）：\n' +
       friends.map((c) => `- ${c.name}：${c.brief}`).join('\n')

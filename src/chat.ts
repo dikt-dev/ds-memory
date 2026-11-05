@@ -335,7 +335,7 @@ export async function streamChat(
   // ★ 稳定段（人设+长期记忆）单独作为第一条 system，每轮字节一致才能吃到缓存命中价；
   // 时间/心情/召回/摘要这些每轮都变的放到最后一条 system，紧贴用户消息。
   // 她此刻在干什么：读不到就当没有，聊天行为和以前一模一样
-  const lifeBlocks = await loadLifeBlocks(env, now, content);
+  const lifeBlocks = await loadLifeBlocks(env, now, content, history.slice(-6));
   const tic = ticWarning(
     history.filter((m) => m.role === 'assistant').map((m) => m.content),
     resolvePersona(env).selfCall,

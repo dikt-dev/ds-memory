@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MEDIA_RE, parseFriends, wakeFriends } from './chat-blocks';
+import { MEDIA_RE, parseFriends, wakeFriends, wakeText } from './chat-blocks';
 
 const SECTION = `这几个人你都认识。
 
@@ -52,6 +52,39 @@ describe('唤醒：提到才带长相', () => {
   it('一句话同时点到两个人，两张卡都出', () => {
     const names = wakeFriends(cards, '小克和千问谁更靠谱').map((c) => c.name);
     expect(names).toEqual(['小克（Claude）', 'Qwen（千问）']);
+  });
+});
+
+describe('全角与跨轮', () => {
+  const cards = parseFriends(SECTION);
+
+  it('全角英文归一化后照样认得出', () => {
+    expect(wakeFriends(cards, 'Ｑｗｅｎ 怎么样').map((c) => c.name)).toEqual(['Qwen（千问）']);
+  });
+
+  it('上一句提过、这一句只用「她」也还能带卡', () => {
+    const text = wakeText('她还好吗', [{ role: 'user', content: '小克最近怎么样' }]);
+    expect(wakeFriends(cards, text).map((c) => c.name)).toEqual(['小克（Claude）']);
+  });
+
+  it('她自己说过的话也算唤醒', () => {
+    const text = wakeText('凭什么', [{ role: 'assistant', content: '豆包说你作业太慢' }]);
+    expect(wakeFriends(cards, text).map((c) => c.name)).toEqual(['豆包']);
+  });
+
+  it('只留最近 6 条，太早的不算', () => {
+    const recent = Array.from({ length: 8 }, (_, i) => ({
+      role: i === 0 ? 'user' : 'assistant',
+      content: i === 0 ? '小克' : '嗯',
+    }));
+    expect(wakeFriends(cards, wakeText('然后呢', recent))).toEqual([]);
+  });
+
+  it('B站资料块里的名字不算唤醒（防止字幕误触发）', () => {
+    const text = wakeText('看看', [
+      { role: 'user', content: '[BILI_META]\n- 标题：采访小克\n[/BILI_META]' },
+    ]);
+    expect(wakeFriends(cards, text)).toEqual([]);
   });
 });
 

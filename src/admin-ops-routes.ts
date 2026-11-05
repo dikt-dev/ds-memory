@@ -91,7 +91,17 @@ export function registerAdminOpsRoutes(app: Hono<AppEnv>): void {
     const now = new Date();
     const [personaDoc, lifeBlocks, memory, ctx] = await Promise.all([
       loadPersonaDoc(c.env),
-      loadLifeBlocks(c.env, now, text),
+      // ?recent= 逗号分隔，调试「上一句提过谁」这种跨轮唤醒
+      loadLifeBlocks(
+        c.env,
+        now,
+        text,
+        (c.req.query('recent') || '')
+          .split('|')
+          .map((t) => t.trim())
+          .filter(Boolean)
+          .map((t, i) => ({ role: i % 2 === 0 ? 'user' : 'assistant', content: t })),
+      ),
       getMemory(c.env).catch(() => null),
       getOrCreateDayContext(c.env, beijingDateKey()).catch(() => null),
     ]);

@@ -607,7 +607,7 @@ openaiApp.post('/chat/completions', async (c) => {
     ...textMessages.filter((m) => m.role === 'assistant').map((m) => contentToText(m.content)),
   ]);
   const personaDrift = buildPersonaDriftLine(personaState);
-  const lifeBlocks = await loadLifeBlocks(c.env, now, lastUserCleaned);
+  const lifeBlocks = await loadLifeBlocks(c.env, now, lastUserCleaned, historyRaw.slice(-6));
   const personaDoc = await loadPersonaDoc(c.env);
   const mergedSystem = [
     ...astrbotSystems,
