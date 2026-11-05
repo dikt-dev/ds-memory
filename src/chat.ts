@@ -80,9 +80,14 @@ export async function streamChat(
     return Response.json({ error: '没有配置模型 key（DEEPSEEK_API_KEY / DASHSCOPE_API_KEY）' }, { status: 500 });
   }
 
+  // 分段计时：只记数字不记内容，用来回答「这 10 秒到底花在哪」
+  const tStart = Date.now();
+  const timing: Record<string, number> = {};
+
   // 秒回不像人：她正忙着/睡着的时候，先等一会儿再把第一个字吐出来。
   // 放在这里而不是客户端，是因为网页和 App 走同一条链路，一处生效。
   await sleep(replyDelayMs(await lifeNow(env).then((s) => s.status).catch(() => 'free' as const)));
+  timing.delayMs = Date.now() - tStart;
 
   // 0) 上一轮她提过的往事，如果这句是"对/记得"，就算一次确认复习
   void consumePendingRecall(env, content, now.getTime()).catch(() => {});
@@ -99,6 +104,7 @@ export async function streamChat(
     loadSessionHistory(env, now),
     buildMemoryPack(env, now, { channel }),
   ]);
+  timing.packMs = Date.now() - tStart;
   // 短期记忆 = 本次会话全部（只追加不滑窗，缓存才命得中）；超出上限才有提要
   const history = session.rows;
   const { memory, dayCtxFile, weather, ctx, promptMemory, personaState, personaDrift } = pack;
@@ -134,6 +140,7 @@ export async function streamChat(
     skipMemorySource: shouldSkipMemoryRecall(pack),
     nowMs: now.getTime(),
   });
+  timing.recallMs = Date.now() - tStart;
   const recalledRaw = recall.text;
   // 复习计数：这一轮真正注入的条目被想起了一次（遗忘曲线靠它抵抗衰减）。
   void recordRecallUsage(env, recall.ids, now.getTime()).catch(() => {});
@@ -414,11 +421,23 @@ export async function streamChat(
   ];
 
   // 4) 流式转发；流结束落库 + 计费
+  timing.buildMs = Date.now() - tStart;
   return streamDeepSeek(env, messages, {
     appendUsageEvent: true,
+    timing,
     // ★ 不限制回复长度（8192 = 模型输出上限）
     maxTokens: 8192,
     onFinish: async (text, usage) => {
+      // 计时落库：只写数字，事后能回答「这 10 秒花在哪一段」
+      void recordRequest(env, {
+        requestId: requestId ?? 'none',
+        kind: 'chat',
+        path: '/api/chat#timing',
+        ms: Date.now() - tStart,
+        channel,
+        ok: true,
+        detail: JSON.stringify({ ...timing, totalMs: Date.now() - tStart }),
+      }).catch(() => {});
       let cost = 0;
       let assistantId: number | undefined;
       const silent = isSilentEnd(text) && (channel === 'mobile' || channel === 'web');

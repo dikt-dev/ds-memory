@@ -69,7 +69,7 @@ async function requestDeepSeek(
   messages: DeepSeekMessage[],
   stream: boolean,
   maxTokens?: number,
-  opts: { thinking?: boolean } = {},
+  opts: { thinking?: boolean; timing?: Record<string, number> } = {},
   kind: LlmKind = 'chat',
 ): Promise<Response> {
   // 主供应商挂了（超时/5xx/429）自动切兜底，聊天不至于整个断掉
@@ -93,6 +93,7 @@ async function requestDeepSeek(
     };
 
     let res: Response;
+    const tFetch = Date.now();
     try {
       res = await fetch(target.url, {
         signal: controller.signal,
@@ -118,6 +119,7 @@ async function requestDeepSeek(
       throw e;
     }
 
+    if (opts.timing) opts.timing.upstreamMs = Date.now() - tFetch;
     if (!res.ok && i < targets.length - 1 && shouldFallbackStatus(res.status)) {
       clearAll();
       lastError = new Error(`${target.vendor} HTTP ${res.status}`);
@@ -178,6 +180,8 @@ export async function streamDeepSeek(
     /** 回复预算（max_tokens）；不传则用上游默认 */
     maxTokens?: number;
     onFinish: (text: string, usage: TokenUsage | null) => Promise<FinishResult>;
+    /** 分段耗时埋点：传入对象会被填上 upstreamMs（发请求 → 收到响应头） */
+    timing?: Record<string, number>;
   },
 ): Promise<Response> {
   const apiKey = env.DEEPSEEK_API_KEY ?? '';
@@ -187,7 +191,7 @@ export async function streamDeepSeek(
 
   let upstream: Response;
   try {
-    upstream = await requestDeepSeek(env, apiKey, messages, true, opts.maxTokens);
+    upstream = await requestDeepSeek(env, apiKey, messages, true, opts.maxTokens, { timing: opts.timing });
     if (upstream.status === 400) {
       const detail = await upstream.clone().text().catch(() => '');
       logError('[deepseek] upstream 400, retry compact:', detail.slice(0, 300));

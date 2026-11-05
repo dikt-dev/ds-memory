@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-05T07:30:25.365Z",
+  "generated_at": "2026-11-05T07:41:17.535Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-05",
       "items": [
+        {
+          "hash": "6a268ac",
+          "date": "2026-11-05",
+          "type": "chore",
+          "area": "",
+          "title": "B站重看限长 5 分钟、超时 45 秒",
+          "why": ""
+        },
         {
           "hash": "adbe5cd",
           "date": "2026-11-05",
@@ -3235,14 +3243,6 @@
           "type": "fix",
           "area": "memory",
           "title": "merge headerless distill summaries and replay missed days",
-          "why": ""
-        },
-        {
-          "hash": "ae3278c",
-          "date": "2026-10-28",
-          "type": "fix",
-          "area": "memory",
-          "title": "cleanup, incremental links, bounded MMR",
           "why": ""
         }
       ]
