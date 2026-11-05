@@ -38,7 +38,8 @@ export function heldWaitNote(waitedMs: number, where: string | null): string {
   const what = where ? `你当时${where}` : '你当时没顾上看手机';
   return (
     `（他这几条是 ${waited}前发来的，${what}，现在才看到。` +
-    '先用一句自然的话带过「才看见/刚忙完」，别装作刚才发生，也不要报时间点，然后再说正事。）'
+    '先随口带一句，别装作刚才发生，也不要报时间点，然后再说正事。' +
+    '（别每次都用同一个说法——"才看见""刚忙完"用两次就腻了，换个方式讲。）'
   );
 }
 

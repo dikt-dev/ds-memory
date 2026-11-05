@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-05T09:35:03.071Z",
+  "generated_at": "2026-11-05T09:52:24.483Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-05",
       "items": [
+        {
+          "hash": "c022e13",
+          "date": "2026-11-05",
+          "type": "other",
+          "area": "",
+          "title": "余额 label 还原：千问改由客户端单独渲染",
+          "why": ""
+        },
         {
           "hash": "531c3d7",
           "date": "2026-11-05",
@@ -3235,14 +3243,6 @@
           "type": "fix",
           "area": "web",
           "title": "strip timestamps from streamed replies",
-          "why": ""
-        },
-        {
-          "hash": "789aebd",
-          "date": "2026-10-28",
-          "type": "docs",
-          "area": "",
-          "title": "record memory reorganization",
           "why": ""
         }
       ]

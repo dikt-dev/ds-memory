@@ -63,6 +63,13 @@ const DEEPSEEK_TOTAL_MS = 180_000;
  * 以前裸 fetch：模型侧卡住时没有任何打断手段，请求一直吊着，
  * 白烧 Worker 时长，前端也只看到「正在输入…」永远不动。
  */
+/** 聊天温度：env 可覆盖，夹在 0.3~1.2，防止手滑填个 2 */
+function chatTemperature(env: Env): number {
+  const raw = Number((env as { CHAT_TEMPERATURE?: string }).CHAT_TEMPERATURE ?? '');
+  if (!Number.isFinite(raw) || raw <= 0) return 0.8;
+  return Math.min(1.2, Math.max(0.3, raw));
+}
+
 async function requestDeepSeek(
   env: Env,
   apiKey: string,
@@ -105,9 +112,12 @@ async function requestDeepSeek(
           ...(stream
             ? { stream: true, stream_options: { include_usage: true } }
             : { max_tokens: maxTokens ?? 4096 }),
-          temperature: 0.75,
-          frequency_penalty: 0.15,
-          presence_penalty: 0.1,
+          // 聊天温度默认 0.8（想要更野就调 CHAT_TEMPERATURE）；
+          // 两个 penalty 是治"平"的主力：她之前每轮都用"才看见……"开头，
+          // 靠加大 presence 才压得住那种口头禅循环。
+          temperature: chatTemperature(env),
+          frequency_penalty: 0.3,
+          presence_penalty: 0.35,
           // 聊天必须快：思考模式只在日记/记忆这类后台任务里开
           ...thinkingParams(target.vendor, opts.thinking),
         }),

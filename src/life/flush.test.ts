@@ -13,7 +13,7 @@ describe('压着的消息：告诉 AI 他等了多久', () => {
     const note = heldWaitNote(47 * 60_000, '在洗澡');
     expect(note).toContain('47 分钟前发来的');
     expect(note).toContain('你当时在洗澡');
-    expect(note).toContain('才看见');
+    expect(note).toContain('随口带一句');
     expect(note).toContain('别装作刚才发生');
   });
 
