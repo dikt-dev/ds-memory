@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-05T07:00:37.484Z",
+  "generated_at": "2026-11-05T07:08:21.537Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-05",
       "items": [
+        {
+          "hash": "0d230d6",
+          "date": "2026-11-05",
+          "type": "feat",
+          "area": "",
+          "title": "模型按任务独立路由 + 千问主/官方兜底，默认全千问",
+          "why": ""
+        },
         {
           "hash": "c792a74",
           "date": "2026-11-05",
@@ -3235,14 +3243,6 @@
           "type": "docs",
           "area": "",
           "title": "consolidate pending work with start windows",
-          "why": ""
-        },
-        {
-          "hash": "6cc03be",
-          "date": "2026-10-28",
-          "type": "docs",
-          "area": "",
-          "title": "add Companion memory design comparison",
           "why": ""
         }
       ]
