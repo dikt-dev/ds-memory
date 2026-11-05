@@ -76,8 +76,9 @@ export async function streamChat(
   requestId?: string,
   opts: { reuseUserMessageId?: number } = {},
 ): Promise<Response> {
-  const apiKey = env.DEEPSEEK_API_KEY;
-  if (!apiKey) return Response.json({ error: 'DEEPSEEK_API_KEY 未配置' }, { status: 500 });
+  if (!env.DEEPSEEK_API_KEY && !env.DASHSCOPE_API_KEY) {
+    return Response.json({ error: '没有配置模型 key（DEEPSEEK_API_KEY / DASHSCOPE_API_KEY）' }, { status: 500 });
+  }
 
   // 秒回不像人：她正忙着/睡着的时候，先等一会儿再把第一个字吐出来。
   // 放在这里而不是客户端，是因为网页和 App 走同一条链路，一处生效。

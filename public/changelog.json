@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-05T06:43:47.512Z",
+  "generated_at": "2026-11-05T07:00:37.484Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-05",
       "items": [
+        {
+          "hash": "c792a74",
+          "date": "2026-11-05",
+          "type": "refactor",
+          "area": "",
+          "title": "模型调用收敛到 llm.ts（可切千问），记忆日期加年份兜底",
+          "why": ""
+        },
         {
           "hash": "0cfe8c9",
           "date": "2026-11-05",
@@ -3235,14 +3243,6 @@
           "type": "docs",
           "area": "",
           "title": "add Companion memory design comparison",
-          "why": ""
-        },
-        {
-          "hash": "8460a8f",
-          "date": "2026-10-28",
-          "type": "fix",
-          "area": "archive",
-          "title": "backfill chunk embeddings after daily rebuild",
           "why": ""
         }
       ]

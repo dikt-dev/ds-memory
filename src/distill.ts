@@ -5,7 +5,7 @@
 import type { Env } from './types';
 import { calcCost, pricingForModel, type TokenUsage } from './pricing';
 import { logError, logWarn } from './error-log';
-import { buildBody, resolveLlm } from './llm';
+import { buildBody, llmTargets, shouldFallbackStatus } from './llm';
 import { dateKeyInBeijing } from './date';
 
 export type DistillBackend = 'deepseek' | 'workers-ai';
@@ -101,23 +101,39 @@ async function deepseekDistill(
   maxTokens: number,
   opts: { thinking?: boolean } = {},
 ): Promise<{ text: string; cost: number; usage: TokenUsage }> {
-  const target = resolveLlm(env, 'distill', model);
-  if (!target.apiKey) throw new Error('没有可用的模型 key（DEEPSEEK_API_KEY / DASHSCOPE_API_KEY）');
-  const res = await fetch(target.url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${target.apiKey}` },
-    body: JSON.stringify(
-      buildBody(
-        target,
-        [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
-        ],
-        // 每日归档要对照全文记忆做取舍，思考模式明显提升质量；其余提炼保持关闭以控成本
-        { maxTokens, thinking: opts.thinking === true },
+  const targets = llmTargets(env, 'distill', model);
+  const primary = targets[0];
+  if (!primary.apiKey) throw new Error('没有可用的模型 key（DEEPSEEK_API_KEY / DASHSCOPE_API_KEY）');
+
+  let res: Response | null = null;
+  for (let i = 0; i < targets.length; i += 1) {
+    const target = targets[i];
+    if (!target.apiKey) continue;
+    const r = await fetch(target.url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${target.apiKey}` },
+      body: JSON.stringify(
+        buildBody(
+          target,
+          [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
+          // 每日归档要对照全文记忆做取舍，思考模式明显提升质量；其余提炼保持关闭以控成本
+          { maxTokens, thinking: opts.thinking === true },
+        ),
       ),
-    ),
-  });
+    });
+    // 这家挂了（5xx/429/鉴权）就换兜底再试一次
+    if (!r.ok && i < targets.length - 1 && shouldFallbackStatus(r.status)) {
+      await r.body?.cancel().catch(() => {});
+      continue;
+    }
+    res = r;
+    break;
+  }
+  if (!res) throw new Error('提炼失败：没有可用的模型供应商');
+
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
     throw new Error(`DeepSeek HTTP ${res.status}: ${detail.slice(0, 200)}`);

@@ -3,7 +3,7 @@
  * 流式透传（OpenAI 格式 SSE）+ 用量采集 + 落库/计费回调；非流式完成。
  */
 import type { Env } from './types';
-import { resolveLlm, thinkingParams } from './llm';
+import { llmTargets, shouldFallbackStatus, thinkingParams, type LlmKind } from './llm';
 import { calcCost, loadPricing, type TokenUsage } from './pricing';
 import { scrubAiFlavor } from './anti-ai-flavor';
 import { createSseRewriter } from './sse-scrub';
@@ -70,44 +70,61 @@ async function requestDeepSeek(
   stream: boolean,
   maxTokens?: number,
   opts: { thinking?: boolean } = {},
+  kind: LlmKind = 'chat',
 ): Promise<Response> {
-  const controller = new AbortController();
-  const firstByteTimer = setTimeout(
-    () => controller.abort(new Error('deepseek timeout: no response in 30s')),
-    DEEPSEEK_FIRST_BYTE_MS,
-  );
-  const totalTimer = setTimeout(
-    () => controller.abort(new Error('deepseek timeout: over 180s')),
-    DEEPSEEK_TOTAL_MS,
-  );
-  const clearAll = () => {
-    clearTimeout(firstByteTimer);
-    clearTimeout(totalTimer);
-  };
-  const target = resolveLlm(env, 'chat');
-  let res: Response;
-  try {
-    res = await fetch(target.url, {
-      signal: controller.signal,
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: target.model,
-      messages: sanitizeDeepSeekMessages(messages),
-      ...(stream
-        ? { stream: true, stream_options: { include_usage: true } }
-        : { max_tokens: maxTokens ?? 4096 }),
-      temperature: 0.75,
-      frequency_penalty: 0.15,
-      presence_penalty: 0.1,
-      // 聊天必须快：思考模式只在日记/记忆这类后台任务里开
-      ...thinkingParams(target.vendor, opts.thinking),
-      }),
-    });
-  } catch (e) {
-    clearAll();
-    throw e;
-  }
+  // 主供应商挂了（超时/5xx/429）自动切兜底，聊天不至于整个断掉
+  const targets = llmTargets(env, kind);
+  let lastError: unknown = null;
+
+  for (let i = 0; i < targets.length; i += 1) {
+    const target = targets[i];
+    const controller = new AbortController();
+    const firstByteTimer = setTimeout(
+      () => controller.abort(new Error('llm timeout: no response in 30s')),
+      DEEPSEEK_FIRST_BYTE_MS,
+    );
+    const totalTimer = setTimeout(
+      () => controller.abort(new Error('llm timeout: over 180s')),
+      DEEPSEEK_TOTAL_MS,
+    );
+    const clearAll = () => {
+      clearTimeout(firstByteTimer);
+      clearTimeout(totalTimer);
+    };
+
+    let res: Response;
+    try {
+      res = await fetch(target.url, {
+        signal: controller.signal,
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${target.apiKey || apiKey}` },
+        body: JSON.stringify({
+          model: target.model,
+          messages: sanitizeDeepSeekMessages(messages),
+          ...(stream
+            ? { stream: true, stream_options: { include_usage: true } }
+            : { max_tokens: maxTokens ?? 4096 }),
+          temperature: 0.75,
+          frequency_penalty: 0.15,
+          presence_penalty: 0.1,
+          // 聊天必须快：思考模式只在日记/记忆这类后台任务里开
+          ...thinkingParams(target.vendor, opts.thinking),
+        }),
+      });
+    } catch (e) {
+      clearAll();
+      lastError = e;
+      if (i < targets.length - 1) continue;
+      throw e;
+    }
+
+    if (!res.ok && i < targets.length - 1 && shouldFallbackStatus(res.status)) {
+      clearAll();
+      lastError = new Error(`${target.vendor} HTTP ${res.status}`);
+      await res.body?.cancel().catch(() => {});
+      continue;
+    }
+
   // 响应头到了就撤掉首字节计时；总时长计时留到流读完，避免长回复被误杀
   clearTimeout(firstByteTimer);
   if (!res.body) {
@@ -127,7 +144,10 @@ async function requestDeepSeek(
       },
     }),
   );
-  return new Response(wrapped, { status: res.status, headers: res.headers });
+    return new Response(wrapped, { status: res.status, headers: res.headers });
+  }
+
+  throw lastError ?? new Error('llm: 没有可用的供应商');
 }
 
 export function normalizeUsage(
@@ -160,7 +180,7 @@ export async function streamDeepSeek(
     onFinish: (text: string, usage: TokenUsage | null) => Promise<FinishResult>;
   },
 ): Promise<Response> {
-  const apiKey = env.DEEPSEEK_API_KEY;
+  const apiKey = env.DEEPSEEK_API_KEY ?? '';
   if (!apiKey) {
     return Response.json({ error: { message: 'DEEPSEEK_API_KEY 未配置', type: 'server_error' } }, { status: 500 });
   }
@@ -273,13 +293,16 @@ export async function completeDeepSeek(
   messages: DeepSeekMessage[],
   now: Date,
   maxTokens = 4096,
-  opts: { thinking?: boolean } = {},
+  opts: { thinking?: boolean; kind?: LlmKind } = {},
 ): Promise<DeepSeekCompletionResult> {
-  const apiKey = env.DEEPSEEK_API_KEY;
-  if (!apiKey) return { error: 'DEEPSEEK_API_KEY 未配置', status: 500 };
+  const apiKey = env.DEEPSEEK_API_KEY ?? '';
+  const kind = opts.kind ?? 'chat';
+  if (!apiKey && !env.DASHSCOPE_API_KEY) {
+    return { error: '没有配置模型 key（DEEPSEEK_API_KEY / DASHSCOPE_API_KEY）', status: 500 };
+  }
   let res: Response;
   try {
-    res = await requestDeepSeek(env, apiKey, messages, false, maxTokens, opts);
+    res = await requestDeepSeek(env, apiKey, messages, false, maxTokens, opts, kind);
     if (res.status === 400) {
       const detail = await res.clone().text().catch(() => '');
       logError('[deepseek] upstream 400, retry compact:', detail.slice(0, 300));
@@ -290,6 +313,7 @@ export async function completeDeepSeek(
         false,
         maxTokens,
         opts,
+        kind,
       );
     }
   } catch (e) {

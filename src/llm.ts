@@ -3,10 +3,14 @@
  *
  * 以前每个文件各自写死 https://api.deepseek.com/chat/completions，想换供应商要改好几处，
  * 而且不同家的参数还不一样（DeepSeek 用 thinking:{type}，千问用 enable_thinking）。
- * 这里把「哪家、哪个模型、参数怎么拼」收在一处：
- *   LLM_PROVIDER=deepseek（默认）| dashscope
- *   各自可以再覆盖 LLM_BASE_URL / LLM_API_KEY / LLM_MODEL
- * 没配就退回原来的行为，一行环境变量都不用加。
+ *
+ * 现在按任务独立配置，互不影响：
+ *   LLM_PROVIDER / LLM_MODEL                       全局默认
+ *   LLM_<KIND>_PROVIDER / _BASE_URL / _API_KEY / _MODEL
+ *     KIND = CHAT | DISTILL | SUMMARY | DIARY
+ *   LLM_FALLBACK_PROVIDER / _MODEL / _API_KEY      主供应商挂了自动切
+ *
+ * 什么都不配时退回原来的行为（官方 DeepSeek），一行环境变量都不用加。
  */
 
 export type LlmVendor = 'deepseek' | 'dashscope';
@@ -17,6 +21,8 @@ export interface LlmTarget {
   url: string;
   apiKey: string;
   model: string;
+  /** 兜底链路里的第二家，日志里要区分 */
+  fallback?: boolean;
 }
 
 const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
@@ -27,9 +33,26 @@ interface LlmEnv {
   LLM_BASE_URL?: string;
   LLM_API_KEY?: string;
   LLM_MODEL?: string;
+  LLM_CHAT_PROVIDER?: string;
+  LLM_CHAT_BASE_URL?: string;
+  LLM_CHAT_API_KEY?: string;
+  LLM_CHAT_MODEL?: string;
+  LLM_DISTILL_PROVIDER?: string;
+  LLM_DISTILL_BASE_URL?: string;
+  LLM_DISTILL_API_KEY?: string;
   LLM_DISTILL_MODEL?: string;
+  LLM_SUMMARY_PROVIDER?: string;
+  LLM_SUMMARY_BASE_URL?: string;
+  LLM_SUMMARY_API_KEY?: string;
   LLM_SUMMARY_MODEL?: string;
+  LLM_DIARY_PROVIDER?: string;
+  LLM_DIARY_BASE_URL?: string;
+  LLM_DIARY_API_KEY?: string;
   LLM_DIARY_MODEL?: string;
+  LLM_FALLBACK_PROVIDER?: string;
+  LLM_FALLBACK_BASE_URL?: string;
+  LLM_FALLBACK_API_KEY?: string;
+  LLM_FALLBACK_MODEL?: string;
   DEEPSEEK_API_KEY?: string;
   DASHSCOPE_API_KEY?: string;
   DEEPSEEK_MODEL: string;
@@ -37,36 +60,83 @@ interface LlmEnv {
   SUMMARY_DEEPSEEK_MODEL?: string;
 }
 
+const KIND_KEY: Record<LlmKind, string> = {
+  chat: 'CHAT',
+  distill: 'DISTILL',
+  summary: 'SUMMARY',
+  diary: 'DIARY',
+};
+
+function str(v: unknown): string | undefined {
+  return typeof v === 'string' && v.trim() ? v.trim() : undefined;
+}
+
+/** 按 kind 取环境变量，取不到再退全局。 */
+function pick(env: LlmEnv, kind: LlmKind, suffix: 'PROVIDER' | 'BASE_URL' | 'API_KEY' | 'MODEL'): string | undefined {
+  const perKind = (env as unknown as Record<string, unknown>)[`LLM_${KIND_KEY[kind]}_${suffix}`];
+  return str(perKind) ?? str((env as unknown as Record<string, unknown>)[`LLM_${suffix}`]);
+}
+
 /** 各任务在没显式指定模型时用的默认；和以前的 DEEPSEEK_*_MODEL 保持一致。 */
 function defaultModel(env: LlmEnv, kind: LlmKind): string {
   switch (kind) {
     case 'distill':
-      return env.LLM_DISTILL_MODEL || env.DISTILL_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL;
+      return str(env.LLM_DISTILL_MODEL) || env.DISTILL_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL;
     case 'summary':
-      return env.LLM_SUMMARY_MODEL || env.SUMMARY_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL;
-    case 'diary':
-      return env.LLM_DIARY_MODEL || env.DEEPSEEK_MODEL;
+      return str(env.LLM_SUMMARY_MODEL) || env.SUMMARY_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL;
     default:
       return env.DEEPSEEK_MODEL;
   }
 }
 
+function toVendor(v?: string): LlmVendor {
+  return v?.trim().toLowerCase() === 'dashscope' ? 'dashscope' : 'deepseek';
+}
+
+function keyFor(vendor: LlmVendor, env: LlmEnv): string {
+  return (vendor === 'dashscope' ? str(env.DASHSCOPE_API_KEY) : str(env.DEEPSEEK_API_KEY)) || '';
+}
+
 /** 解析出这次调用该打到哪个地址、用哪个 key、哪个模型。 */
 export function resolveLlm(env: LlmEnv, kind: LlmKind = 'chat', model?: string): LlmTarget {
-  const vendor: LlmVendor = env.LLM_PROVIDER?.trim().toLowerCase() === 'dashscope' ? 'dashscope' : 'deepseek';
-  const url =
-    env.LLM_BASE_URL?.trim() ||
-    (vendor === 'dashscope' ? DASHSCOPE_URL : DEEPSEEK_URL);
-  const apiKey =
-    env.LLM_API_KEY?.trim() ||
-    (vendor === 'dashscope' ? env.DASHSCOPE_API_KEY?.trim() : env.DEEPSEEK_API_KEY?.trim()) ||
-    '';
+  const vendor = toVendor(pick(env, kind, 'PROVIDER'));
+  const url = pick(env, kind, 'BASE_URL') ?? (vendor === 'dashscope' ? DASHSCOPE_URL : DEEPSEEK_URL);
+  const apiKey = pick(env, kind, 'API_KEY') ?? keyFor(vendor, env);
   return {
     vendor,
     url,
     apiKey,
-    model: model?.trim() || env.LLM_MODEL?.trim() || defaultModel(env, kind),
+    model: str(model) || pick(env, kind, 'MODEL') || defaultModel(env, kind),
   };
+}
+
+/**
+ * 兜底目标：只配了 LLM_FALLBACK_PROVIDER 才启用。
+ * 和主目标撞成同一个地址+模型时返回 null，免得白重试一次。
+ */
+export function fallbackLlm(env: LlmEnv, kind: LlmKind): LlmTarget | null {
+  const vendorRaw = str(env.LLM_FALLBACK_PROVIDER);
+  if (!vendorRaw) return null;
+  const vendor = toVendor(vendorRaw);
+  const url = str(env.LLM_FALLBACK_BASE_URL) ?? (vendor === 'dashscope' ? DASHSCOPE_URL : DEEPSEEK_URL);
+  const apiKey = str(env.LLM_FALLBACK_API_KEY) ?? keyFor(vendor, env);
+  const model = str(env.LLM_FALLBACK_MODEL) ?? defaultModel(env, kind);
+  if (!apiKey || !model) return null;
+  const primary = resolveLlm(env, kind);
+  if (primary.url === url && primary.model === model) return null;
+  return { vendor, url, apiKey, model, fallback: true };
+}
+
+/** 主 + 备，按顺序尝试。 */
+export function llmTargets(env: LlmEnv, kind: LlmKind, model?: string): LlmTarget[] {
+  const primary = resolveLlm(env, kind, model);
+  const fb = fallbackLlm(env, kind);
+  return fb ? [primary, fb] : [primary];
+}
+
+/** 这些状态码说明这家暂时不可用，值得用兜底再试一次。 */
+export function shouldFallbackStatus(status: number): boolean {
+  return status === 401 || status === 403 || status === 408 || status === 429 || status >= 500;
 }
 
 /** 思考开关在各家的写法不一样，混用会直接 400。 */

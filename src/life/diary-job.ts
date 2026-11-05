@@ -157,7 +157,7 @@ export async function generateDiary(env: Env, dateKey: string): Promise<DiaryJob
       ],
       new Date(),
       8192,
-      { thinking: true },
+      { thinking: true, kind: 'diary' },
     );
     if ('error' in res) {
       logError('[life] 日记生成失败:', res.error);
