@@ -124,10 +124,8 @@ export async function getStatusSnapshot(env: Env, now = Date.now()): Promise<Sta
     relation: relationOf(facets.intimacy),
     memory: memoryOf(memory.length),
     today: todayOf(todayCount),
-    // App 状态页只认 label/hint：把千问那句接在 hint 后面，不重新打包 APK 也能看到
-    balance: balance
-      ? { ...balance, hint: qwen ? `${balance.hint}｜${qwen.label}` : balance.hint }
-      : balance,
+    // App 已经单独渲染 qwen 那一块，label 保持原样（"还够用一阵"）
+    balance,
     qwen,
     updated_at: new Date(now).toISOString(),
   };

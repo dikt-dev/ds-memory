@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-05T08:59:48.632Z",
+  "generated_at": "2026-11-05T09:35:03.071Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-05",
       "items": [
+        {
+          "hash": "531c3d7",
+          "date": "2026-11-05",
+          "type": "feat",
+          "area": "",
+          "title": "显示千问（百炼）余额与本月花费，支持阿里云 AccessKey",
+          "why": ""
+        },
         {
           "hash": "41ca38d",
           "date": "2026-11-05",
@@ -3235,14 +3243,6 @@
           "type": "docs",
           "area": "",
           "title": "record memory reorganization",
-          "why": ""
-        },
-        {
-          "hash": "3840f9f",
-          "date": "2026-10-28",
-          "type": "fix",
-          "area": "memory",
-          "title": "drop stale dated mood snapshots",
           "why": ""
         }
       ]
