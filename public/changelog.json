@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-04T09:40:37.661Z",
+  "generated_at": "2026-11-05T00:53:17.652Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-04",
       "items": [
+        {
+          "hash": "b52280f",
+          "date": "2026-11-04",
+          "type": "fix",
+          "area": "",
+          "title": "日记锁着时连配图 key 也不下发",
+          "why": ""
+        },
         {
           "hash": "6844a7a",
           "date": "2026-11-04",
@@ -3230,14 +3238,6 @@
           "type": "docs",
           "area": "",
           "title": "resolve day three issues and compare memory projects",
-          "why": ""
-        },
-        {
-          "hash": "1f73fe7",
-          "date": "2026-10-28",
-          "type": "fix",
-          "area": "chat",
-          "title": "only pure END marker is silent",
           "why": ""
         }
       ]

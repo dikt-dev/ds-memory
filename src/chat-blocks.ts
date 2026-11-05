@@ -43,6 +43,99 @@ async function diaryAwareness(env: Env): Promise<string | null> {
   ].join('\n');
 }
 
+/** 人设「人际」段里的一条朋友设定。 */
+export interface FriendCard {
+  /** 显示名（人设里写在最前面的那个） */
+  name: string;
+  /** 唤醒词：他说到任意一个，才把这张卡带进提示词 */
+  aliases: string[];
+  /** 一句话：他是谁、跟你什么关系（常驻，不占多少字） */
+  brief: string;
+  /** 长相与细节（只在被唤醒、或收到图片视频时带） */
+  detail: string;
+}
+
+/**
+ * 解析人设「人际」段。
+ *
+ * 每条形如：
+ *   - 小克（Claude）｜唤醒：小克、克劳德、claude｜话少，冷面吐槽役
+ *     长橙发、花朵发饰、黑白层叠长裙，手里总拿着一本书。
+ *
+ * 缩进的那几行是长相，不缩进的是「一句话」。这样平时只带一句话，被叫到才带长相。
+ */
+export function parseFriends(section: string): FriendCard[] {
+  const cards: FriendCard[] = [];
+  for (const raw of section.split('\n')) {
+    const line = raw.replace(/\s+$/, '');
+    const head = /^-\s*([^｜]+?)｜\s*唤醒[:：]\s*([^｜]+?)｜\s*(.+)$/.exec(line);
+    if (head) {
+      cards.push({
+        name: head[1].trim(),
+        aliases: head[2]
+          .split(/[、,，/]/)
+          .map((a) => a.trim())
+          .filter(Boolean),
+        brief: head[3].trim(),
+        detail: '',
+      });
+      continue;
+    }
+    // 缩进行 = 上一个人的长相，接着往下拼
+    if (cards.length > 0 && /^\s+\S/.test(line)) {
+      const last = cards[cards.length - 1];
+      last.detail = (last.detail + line.trim()).trim();
+    }
+  }
+  return cards;
+}
+
+/** 一条朋友卡压成一行：长相在前、一句话在后。 */
+function friendLine(c: FriendCard): string {
+  return [c.detail, c.brief].filter(Boolean).join('');
+}
+
+/**
+ * 找出他这句话里点到了谁。
+ *
+ * 最长匹配优先：「美国豆包」只算 Gemini，不能再顺带把豆包也叫出来。
+ */
+export function wakeFriends(cards: FriendCard[], text: string): FriendCard[] {
+  if (!cards.length || !text) return [];
+  const lower = text.toLowerCase();
+  const hits: { card: FriendCard; start: number; end: number }[] = [];
+  for (const card of cards) {
+    for (const alias of card.aliases) {
+      const needle = alias.toLowerCase();
+      if (!needle) continue;
+      let from = 0;
+      for (;;) {
+        const i = lower.indexOf(needle, from);
+        if (i < 0) break;
+        hits.push({ card, start: i, end: i + needle.length });
+        from = i + 1;
+      }
+    }
+  }
+  const kept = hits.filter(
+    (h) =>
+      !hits.some(
+        (o) =>
+          o !== h &&
+          o.start <= h.start &&
+          o.end >= h.end &&
+          o.end - o.start > h.end - h.start,
+      ),
+  );
+  const seen = new Set<string>();
+  return kept
+    .map((h) => h.card)
+    .filter((c) => (seen.has(c.name) ? false : (seen.add(c.name), true)));
+}
+
+/** 这条消息里带没带图片 / 视频 / 动图（带了就要把所有人的长相都带上，认人用）。 */
+export const MEDIA_RE = /\[(图片|视频|GIF)[:：]/i;
+
 export async function loadLifeBlocks(env: Env, now: Date, userText = ''): Promise<LifeBlocks> {
   const [line, card, personaDoc, diary, homeCity, hisCity] = await Promise.all([
     lifePromptLine(env, now).catch(() => null),
@@ -70,12 +163,22 @@ export async function loadLifeBlocks(env: Env, now: Date, userText = ''): Promis
       .replace(/[。；;，,]\s*$/, '')
       .trim();
   const self = flat(personaSectionText(personaDoc, '外貌'));
-  // 朋友是一份名单，保留原来的换行：压成一行模型反而对不上号
-  const friends = personaSectionText(personaDoc, '人际').trim();
+  const friends = parseFriends(personaSectionText(personaDoc, '人际'));
+  // 平时只带「名单 + 一句话」：知道他们存在，但不占长相那几百字。
+  // 他点了名才把长相带上；收到图片/视频/动图时全带上——画面里的人得认。
+  const media = MEDIA_RE.test(userText);
+  const woke = media ? [] : wakeFriends(friends, userText);
+  const roster = friends.length
+    ? '你认识的人（没被提到就别主动聊他们）：\n' +
+      friends.map((c) => `- ${c.name}：${c.brief}`).join('\n')
+    : '';
+  const cards = (list: FriendCard[]) => list.map((c) => `- ${c.name}：${friendLine(c)}`).join('\n');
   const people = [
     self ? `你自己：${self}。照片或画面里出现这样的人，那就是你，别当成别人。` : '',
-    friends ? `你认识的人：\n${friends}` : '',
-    self || friends
+    roster,
+    woke.length ? `他这次说到了：\n${cards(woke)}` : '',
+    media && friends.length ? `这条消息里有画面，里面的人可能是：\n${cards(friends)}` : '',
+    self || friends.length
       ? '认人只按上面这些长相来认；照片、视频帧、动图都可能糊，拿不准就说"看着像谁"，别一口咬定。'
       : '',
   ]
