@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-05T02:20:56.425Z",
+  "generated_at": "2026-11-05T03:58:21.156Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-05",
       "items": [
+        {
+          "hash": "4473e13",
+          "date": "2026-11-05",
+          "type": "feat",
+          "area": "",
+          "title": "ASR 结果清洗（丢空耳复读与无汉字行）+ 历史压缩把 VIDEO_META 当附件",
+          "why": ""
+        },
         {
           "hash": "6e7a45a",
           "date": "2026-11-05",
@@ -3235,14 +3243,6 @@
           "type": "feat",
           "area": "memory",
           "title": "expose link provenance and add regression plan",
-          "why": ""
-        },
-        {
-          "hash": "8dd5d0d",
-          "date": "2026-10-28",
-          "type": "fix",
-          "area": "chat",
-          "title": "strip leaked history timestamps",
           "why": ""
         }
       ]

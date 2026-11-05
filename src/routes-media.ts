@@ -9,6 +9,7 @@ import type { Hono } from 'hono';
 import type { Env } from './types';
 import { checkQueueAuth } from './queue-auth';
 import { requireApp, requireAuth } from './middleware';
+import { verifyMediaToken } from './media/signed-url';
 import SparkMD5 from 'spark-md5';
 import { dateKeyInBeijing } from './date';
 import { buildAudioKey, buildImageKey, parseByteRange } from './media';
@@ -610,6 +611,28 @@ export function registerMediaRoutes(app: Hono<AppEnv>): void {
       headers: {
         'content-type': 'audio/mpeg',
         'cache-control': 'no-store',
+      },
+    });
+  });
+
+  /**
+   * 短期签名 URL：外部多模态模型（千问 omni）靠这条链下载视频。
+   *
+   * 只认 /m/<payload>.<sig>，10 分钟过期，前缀限 videos/、gifs/。
+   * 这里不加 requireApp——模型那边带不了设备 Token。
+   */
+  app.get('/m/:token', async (c) => {
+    const secret = c.env.AUTH_SECRET;
+    if (!secret) return c.json({ error: 'not configured' }, 500);
+    const key = await verifyMediaToken(secret, c.req.param('token'));
+    if (!key) return c.json({ error: 'expired or invalid' }, 403);
+    const obj = await c.env.R2.get(key);
+    if (!obj) return c.json({ error: 'not found' }, 404);
+    return new Response(obj.body, {
+      headers: {
+        'content-type': obj.httpMetadata?.contentType ?? 'video/mp4',
+        'content-length': String(obj.size),
+        'cache-control': 'private, max-age=600',
       },
     });
   });

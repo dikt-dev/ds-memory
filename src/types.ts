@@ -14,6 +14,9 @@ export interface Env {
   LATITUDE: string;
   LONGITUDE: string;
   DEEPSEEK_MODEL: string;
+  DASHSCOPE_API_KEY?: string; // 千问（视频理解）；缺失则视频理解整条链路降级
+  DASHSCOPE_VL_MODEL?: string; // 默认 qwen3.8-omni-flash
+  DASHSCOPE_BASE_URL?: string; // 默认 https://dashscope.aliyuncs.com/compatible-mode/v1
   DISTILL_MODEL: string;
   DISTILL_DEEPSEEK_MODEL: string; // 每日提炼使用的 DeepSeek 模型（默认 v4-pro，质量优先）
   SUMMARY_DEEPSEEK_MODEL: string; // 滚动摘要使用的 DeepSeek 模型（默认 flash，成本优先）

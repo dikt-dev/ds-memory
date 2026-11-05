@@ -25,6 +25,8 @@ import { nearestCity } from './life/weather';
 import { beijingDateKey } from './life/state';
 import { formatBiliMeta, type BiliMeta } from './bili';
 import { ASR_MAX_BYTES, transcribe } from './media/asr';
+import { signMediaPath } from './media/signed-url';
+import { lookAtVideo } from './media/video-vision';
 
 type AppEnv = { Bindings: Env; Variables: { requestId: string } };
 
@@ -439,6 +441,33 @@ app.post('/api/app/pair', async (c) => {
       return c.json({ ok: true, lines, cached, bytes: audio.byteLength });
     } catch (e) {
       return c.json({ ok: false, error: '识别失败：' + String(e) }, 502);
+    }
+  });
+
+  /**
+   * 视频理解：手机传完视频后调这里，拿回「带时间点的观察笔记」。
+   *
+   * 视频本体留在 R2，只把 10 分钟有效的签名 URL 交给千问 omni，
+   * 由它看完写出文字；DeepSeek 拿到的是这段文字，不是视频。
+   */
+  app.post('/api/app/video-vision', requireApp, async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { key?: string } | null;
+    const key = (body?.key ?? '').trim();
+    if (!/^videos\/[0-9A-Za-z/_.-]+\.(mp4|mov|m4v|webm|3gp)$/.test(key)) {
+      return c.json({ ok: false, error: '视频 key 不合法' }, 400);
+    }
+    if (!c.env.DASHSCOPE_API_KEY) {
+      return c.json({ ok: false, error: '未配置视频理解模型' }, 503);
+    }
+    const secret = c.env.AUTH_SECRET;
+    if (!secret) return c.json({ ok: false, error: '未配置签名密钥' }, 503);
+    const origin = new URL(c.req.url).origin;
+    const path = await signMediaPath(secret, key);
+    try {
+      const obs = await lookAtVideo(c.env, origin + path, { cacheKey: key });
+      return c.json({ ok: true, text: obs.text, ms: obs.ms, cached: obs.cached, model: obs.model });
+    } catch (e) {
+      return c.json({ ok: false, error: String(e).slice(0, 200) }, 502);
     }
   });
 
