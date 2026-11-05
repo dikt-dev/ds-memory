@@ -14,6 +14,14 @@ export interface Env {
   LATITUDE: string;
   LONGITUDE: string;
   DEEPSEEK_MODEL: string;
+  /** 模型供应商：默认 deepseek；设成 dashscope 时改用千问平台，见 src/llm.ts */
+  LLM_PROVIDER?: string;
+  LLM_BASE_URL?: string;
+  LLM_API_KEY?: string;
+  LLM_MODEL?: string;
+  LLM_DISTILL_MODEL?: string;
+  LLM_SUMMARY_MODEL?: string;
+  LLM_DIARY_MODEL?: string;
   PUBLIC_BASE_URL?: string; // 本服务对外地址（签名 URL 前缀），如 https://fae.us.ci
   DASHSCOPE_API_KEY?: string; // 千问（视频理解）；缺失则视频理解整条链路降级
   DASHSCOPE_VL_MODEL?: string; // 默认 qwen3.8-omni-flash

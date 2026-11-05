@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-05T05:47:42.193Z",
+  "generated_at": "2026-11-05T06:43:47.512Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-05",
       "items": [
+        {
+          "hash": "0cfe8c9",
+          "date": "2026-11-05",
+          "type": "feat",
+          "area": "",
+          "title": "B 站视频也交给千问 omni 看（手机取直链，服务端不碰 B 站接口）",
+          "why": ""
+        },
         {
           "hash": "6070515",
           "date": "2026-11-05",
@@ -3235,14 +3243,6 @@
           "type": "fix",
           "area": "archive",
           "title": "backfill chunk embeddings after daily rebuild",
-          "why": ""
-        },
-        {
-          "hash": "6d5f931",
-          "date": "2026-10-28",
-          "type": "feat",
-          "area": "memory",
-          "title": "add context budget and regression skeleton",
           "why": ""
         }
       ]

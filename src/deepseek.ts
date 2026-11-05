@@ -3,6 +3,7 @@
  * 流式透传（OpenAI 格式 SSE）+ 用量采集 + 落库/计费回调；非流式完成。
  */
 import type { Env } from './types';
+import { resolveLlm, thinkingParams } from './llm';
 import { calcCost, loadPricing, type TokenUsage } from './pricing';
 import { scrubAiFlavor } from './anti-ai-flavor';
 import { createSseRewriter } from './sse-scrub';
@@ -83,14 +84,15 @@ async function requestDeepSeek(
     clearTimeout(firstByteTimer);
     clearTimeout(totalTimer);
   };
+  const target = resolveLlm(env, 'chat');
   let res: Response;
   try {
-    res = await fetch(DEEPSEEK_URL, {
+    res = await fetch(target.url, {
       signal: controller.signal,
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
-      model: env.DEEPSEEK_MODEL,
+      model: target.model,
       messages: sanitizeDeepSeekMessages(messages),
       ...(stream
         ? { stream: true, stream_options: { include_usage: true } }
@@ -99,7 +101,7 @@ async function requestDeepSeek(
       frequency_penalty: 0.15,
       presence_penalty: 0.1,
       // 聊天必须快：思考模式只在日记/记忆这类后台任务里开
-      thinking: { type: opts.thinking ? 'enabled' : 'disabled' },
+      ...thinkingParams(target.vendor, opts.thinking),
       }),
     });
   } catch (e) {

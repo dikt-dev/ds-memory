@@ -1053,6 +1053,14 @@
   ],
   [
     "POST",
+    "/api/app/bili-vision"
+  ],
+  [
+    "POST",
+    "/api/app/bili-vision"
+  ],
+  [
+    "POST",
     "/api/app/flush"
   ],
   [

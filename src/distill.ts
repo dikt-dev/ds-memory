@@ -5,6 +5,8 @@
 import type { Env } from './types';
 import { calcCost, pricingForModel, type TokenUsage } from './pricing';
 import { logError, logWarn } from './error-log';
+import { buildBody, resolveLlm } from './llm';
+import { dateKeyInBeijing } from './date';
 
 export type DistillBackend = 'deepseek' | 'workers-ai';
 
@@ -74,6 +76,22 @@ const DAY_DISTILL_SYSTEM = `你是用户的长期记忆整理助手。你会收�
 
 type AiTextOut = { response?: string };
 
+/**
+ * 修正记忆条目的日期年份。
+ *
+ * 实测官方和千问的 flash 都会偶尔把 26 写成 25；记忆是长期沉淀的，
+ * 错一次就一直留着。只修「月日等于今天、年份却不是今年」这种明显笔误，
+ * 历史条目的旧年份不动。
+ */
+export function normalizeMemoryDates(text: string, dateKey: string = dateKeyInBeijing(new Date())): string {
+  // 用北京时间的日期：Worker 跑在 UTC，凌晨提炼时本地日期会差一天
+  const yy = dateKey.slice(2, 4);
+  const mmdd = dateKey.slice(4);
+  return text.replace(/^(\s*[-*]\s*\[)(\d{2})(-\d{2}-\d{2}\])/gm, (whole, pre, year, post) =>
+    post === mmdd + ']' && year !== yy ? pre + yy + post : whole,
+  );
+}
+
 /** 调用 DeepSeek 完成一次提炼/压缩；任何失败（含欠费等 HTTP 错误）都抛出。 */
 async function deepseekDistill(
   env: Env,
@@ -83,21 +101,22 @@ async function deepseekDistill(
   maxTokens: number,
   opts: { thinking?: boolean } = {},
 ): Promise<{ text: string; cost: number; usage: TokenUsage }> {
-  const apiKey = env.DEEPSEEK_API_KEY;
-  if (!apiKey) throw new Error('DEEPSEEK_API_KEY 未配置');
-  const res = await fetch('https://api.deepseek.com/chat/completions', {
+  const target = resolveLlm(env, 'distill', model);
+  if (!target.apiKey) throw new Error('没有可用的模型 key（DEEPSEEK_API_KEY / DASHSCOPE_API_KEY）');
+  const res = await fetch(target.url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-      max_tokens: maxTokens,
-      // 每日归档要对照全文记忆做取舍，思考模式明显提升质量；其余提炼保持关闭以控成本
-      thinking: { type: opts.thinking ? 'enabled' : 'disabled' },
-    }),
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${target.apiKey}` },
+    body: JSON.stringify(
+      buildBody(
+        target,
+        [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+        // 每日归档要对照全文记忆做取舍，思考模式明显提升质量；其余提炼保持关闭以控成本
+        { maxTokens, thinking: opts.thinking === true },
+      ),
+    ),
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
@@ -157,7 +176,7 @@ export async function distillText(
       maxTokens,
       opts,
     );
-    return { text, cost, backend: 'deepseek', usage };
+    return { text: normalizeMemoryDates(text), cost, backend: 'deepseek', usage };
   } catch (e) {
     logWarn('[distill] DeepSeek 失败，回退 Workers AI：', e);
   }
