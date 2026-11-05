@@ -38,7 +38,7 @@ const ASR_ATTEMPTS: { model: string; extra: Record<string, unknown> }[] = [
   { model: '@cf/openai/whisper-large-v3-turbo', extra: {} },
   { model: '@cf/openai/whisper', extra: {} },
 ];
-const CACHE_PREFIX = 'asr:';
+const CACHE_PREFIX = 'asr2:';
 const CACHE_TTL_S = 60 * 60 * 24 * 14;
 /**
  * 单次上限 8 MB。
@@ -115,12 +115,48 @@ function toLines(out: WhisperOut): AsrLine[] {
   return [{ t: 0, text }];
 }
 
+/**
+ * 清洗识别结果。
+ *
+ * whisper 在没有人声的片段上会疯狂复读（实测一个仪器运转的视频识别出
+ * 几十行「-4-4-4-4…」），这些东西进了提示词只会让她编台词。三类都丢掉：
+ *   1. 没有一个汉字的（纯数字、符号、英文乱码）
+ *   2. 单字符重复占比过高的（-4-4-4、啊啊啊啊）
+ *   3. 空耳常见的片尾话术（求订阅、字幕由某某提供）
+ */
+const BOILERPLATE = /(字幕由|字幕组|订阅|点赞|转发|打赏|感谢观看)/;
+
+function isJunk(text: string): boolean {
+  const cjk = (text.match(/[\u4e00-\u9fa5]/g) ?? []).length;
+  if (cjk === 0) return true;
+  const chars = [...text.replace(/\s/g, '')];
+  if (chars.length >= 6) {
+    const uniq = new Set(chars).size;
+    if (uniq / chars.length < 0.25) return true;
+  }
+  if (BOILERPLATE.test(text) && cjk < 10) return true;
+  return false;
+}
+
+/** 去掉人声之外的噪声行、去掉连续重复，再限制总行数。 */
+export function cleanLines(lines: AsrLine[]): AsrLine[] {
+  const out: AsrLine[] = [];
+  for (const line of lines) {
+    const text = line.text.trim();
+    if (!text || isJunk(text)) continue;
+    const prev = out[out.length - 1];
+    if (prev && prev.text === text) continue;
+    out.push({ t: line.t, text });
+  }
+  return out.slice(0, 120);
+}
+
 /** 识别一段音频。失败抛错，由调用方决定降级。 */
 export async function transcribe(env: Env, audio: ArrayBuffer): Promise<AsrResult> {
   if (audio.byteLength === 0) return { lines: [], cached: false };
   const key = CACHE_PREFIX + (await fingerprint(audio));
   const hit = await env.KV.get(key, 'json').catch(() => null);
-  if (Array.isArray(hit)) return { lines: hit as AsrLine[], cached: true };
+  if (Array.isArray(hit)) return { lines: cleanLines(hit as AsrLine[]), cached: true };
 
   const bytes = toByteArray(audio);
   let out: WhisperOut | null = null;
@@ -134,7 +170,7 @@ export async function transcribe(env: Env, audio: ArrayBuffer): Promise<AsrResul
     }
   }
   if (!out) throw lastError instanceof Error ? lastError : new Error(String(lastError));
-  const lines = toLines(out);
+  const lines = cleanLines(toLines(out));
   if (lines.length > 0) {
     await env.KV.put(key, JSON.stringify(lines), { expirationTtl: CACHE_TTL_S }).catch(() => {});
   }

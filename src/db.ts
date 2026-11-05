@@ -240,6 +240,7 @@ export function sanitizeMessagePlaceholders(content: string): string {
     .replace(/\[END\]/g, '')
     // 完整字幕/网页资料只保留标记，避免把上下文撑爆。
     .replace(/\[BILI_META\][\s\S]*?\[\/BILI_META\]/gi, '[B站资料]')
+    .replace(/\[VIDEO_META\][\s\S]*?\[\/VIDEO_META\]/gi, '[视频资料]')
     .replace(/\[WEB_META\][\s\S]*?\[\/WEB_META\]/gi, '[网页资料]')
     .replace(/\[图片:images\/[^\]]+\]/g, '[图片]')
     .replace(/\[视频:videos\/[^\]]+\]/g, '[视频]')

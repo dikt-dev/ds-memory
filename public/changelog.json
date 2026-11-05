@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-05T01:45:25.847Z",
+  "generated_at": "2026-11-05T02:20:56.425Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-05",
       "items": [
+        {
+          "hash": "6e7a45a",
+          "date": "2026-11-05",
+          "type": "feat",
+          "area": "",
+          "title": "视频语音识别接口 /api/app/video-asr（whisper + 内容缓存）",
+          "why": ""
+        },
         {
           "hash": "3ad98e0",
           "date": "2026-11-05",
@@ -3235,14 +3243,6 @@
           "type": "fix",
           "area": "chat",
           "title": "strip leaked history timestamps",
-          "why": ""
-        },
-        {
-          "hash": "c26ba0a",
-          "date": "2026-10-28",
-          "type": "docs",
-          "area": "",
-          "title": "record memory link rollout",
           "why": ""
         }
       ]
