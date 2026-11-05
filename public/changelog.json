@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-05T10:19:15.304Z",
+  "generated_at": "2026-11-05T10:28:56.045Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-05",
       "items": [
+        {
+          "hash": "45095dc",
+          "date": "2026-11-05",
+          "type": "other",
+          "area": "",
+          "title": "治平：情感不再被规则堵死，情绪反应分三层，连着几条不提自己就推一把",
+          "why": ""
+        },
         {
           "hash": "e709156",
           "date": "2026-11-05",
@@ -3230,19 +3238,6 @@
           "type": "fix",
           "area": "chat",
           "title": "reconcile pending messages and retry DeepSeek 400",
-          "why": ""
-        }
-      ]
-    },
-    {
-      "date": "2026-10-28",
-      "items": [
-        {
-          "hash": "22a9b87",
-          "date": "2026-10-28",
-          "type": "fix",
-          "area": "web",
-          "title": "render file cards without escaping HTML",
           "why": ""
         }
       ]

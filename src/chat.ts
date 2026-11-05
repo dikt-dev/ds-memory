@@ -13,7 +13,7 @@ import { loadLifeBlocks } from './chat-blocks';
 import { loadPersonaDoc } from './persona-doc';
 import { buildSystemPromptSplit, type MessageChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule } from './prompt';
 import { resolvePersona } from './persona';
-import { selfMentionNote, ticWarning } from './voice';
+import { comfortNote, selfMentionNote, ticWarning } from './voice';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
 import { attachWeather, getOrCreateDayContext } from './context';
@@ -360,6 +360,11 @@ export async function streamChat(
   const tic = ticWarning(recentReplies, resolvePersona(env).selfCall);
   // 连着几条都在顺着他说话，就推一句把话头拉回她自己身上
   const selfNote = selfMentionNote(recentReplies);
+  // 他在说难受的事：站队优先，别评价、别给建议
+  const comfort = comfortNote(content);
+  // 两条提醒会打架：一个要她"把话头拉回自己"，一个要她"第一句先站队"。
+  // 他难受的时候以站队为准，自己那点事先放一放。
+  const selfNoteFinal = comfort ? null : selfNote;
   // 用户在 App 里点了「问问她」之后，日记是 pending。没人告诉她要开口，
   // 于是点完什么都不会发生。这里补一句，让她在下一句里自己决定给不给看。
   const asks = await asksPromise;
@@ -405,9 +410,13 @@ export async function streamChat(
         userAddress: env.USER_ADDRESS,
         residents: lifeBlocks.residents,
         persona: resolvePersona(env),
-        life: [lifeBlocks.life, tic, selfNote, diaryAskNote].filter(Boolean).join('\n\n') || null,
+        life: [lifeBlocks.life, tic, selfNoteFinal, diaryAskNote].filter(Boolean).join('\n\n') || null,
   });
-  const volatileBlock = [promptSplit.volatile, historyNote + pendingWait].filter(Boolean).join('\n\n');
+  // 站队这条放在**最后一条 system 的末尾**：他难受时这是最该压过他惯性的一句，
+  // 埋在时间/天气那一段中间时，模型会先去描述他的处境。
+  const volatileBlock = [promptSplit.volatile, historyNote + pendingWait, comfort]
+    .filter(Boolean)
+    .join('\n\n');
   const messages: DeepSeekMessage[] = [
     {
       role: 'system',
