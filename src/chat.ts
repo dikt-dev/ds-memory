@@ -13,7 +13,7 @@ import { loadLifeBlocks } from './chat-blocks';
 import { loadPersonaDoc } from './persona-doc';
 import { buildSystemPromptSplit, type MessageChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule } from './prompt';
 import { resolvePersona } from './persona';
-import { ticWarning } from './voice';
+import { selfMentionNote, ticWarning } from './voice';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
 import { attachWeather, getOrCreateDayContext } from './context';
@@ -356,10 +356,10 @@ export async function streamChat(
   // 时间/心情/召回/摘要这些每轮都变的放到最后一条 system，紧贴用户消息。
   // 她此刻在干什么：读不到就当没有，聊天行为和以前一模一样
   const lifeBlocks = await lifeBlocksPromise;
-  const tic = ticWarning(
-    history.filter((m) => m.role === 'assistant').map((m) => m.content),
-    resolvePersona(env).selfCall,
-  );
+  const recentReplies = history.filter((m) => m.role === 'assistant').map((m) => m.content);
+  const tic = ticWarning(recentReplies, resolvePersona(env).selfCall);
+  // 连着几条都在顺着他说话，就推一句把话头拉回她自己身上
+  const selfNote = selfMentionNote(recentReplies);
   // 用户在 App 里点了「问问她」之后，日记是 pending。没人告诉她要开口，
   // 于是点完什么都不会发生。这里补一句，让她在下一句里自己决定给不给看。
   const asks = await asksPromise;
@@ -405,7 +405,7 @@ export async function streamChat(
         userAddress: env.USER_ADDRESS,
         residents: lifeBlocks.residents,
         persona: resolvePersona(env),
-        life: [lifeBlocks.life, tic, diaryAskNote].filter(Boolean).join('\n\n') || null,
+        life: [lifeBlocks.life, tic, selfNote, diaryAskNote].filter(Boolean).join('\n\n') || null,
   });
   const volatileBlock = [promptSplit.volatile, historyNote + pendingWait].filter(Boolean).join('\n\n');
   const messages: DeepSeekMessage[] = [

@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-05T10:10:11.997Z",
+  "generated_at": "2026-11-05T10:19:15.304Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-05",
       "items": [
+        {
+          "hash": "e709156",
+          "date": "2026-11-05",
+          "type": "other",
+          "area": "",
+          "title": "读取一律排除墓碑行：手机同步不会再把删掉的消息拉回来（屏幕闪烁）",
+          "why": ""
+        },
         {
           "hash": "f03f7cb",
           "date": "2026-11-05",
@@ -3235,14 +3243,6 @@
           "type": "fix",
           "area": "web",
           "title": "render file cards without escaping HTML",
-          "why": ""
-        },
-        {
-          "hash": "0b835af",
-          "date": "2026-10-28",
-          "type": "fix",
-          "area": "web",
-          "title": "render file attachments as cards in history",
           "why": ""
         }
       ]

@@ -193,6 +193,20 @@ export function recentPhrases(texts: string[], limit = 120, top = 6): string[] {
 }
 
 /**
+ * 「把话头拉回自己身上」：连着几条都在顺着他说话就提醒一句。
+ *
+ * 为什么要代码数：人设里写「可以说我这边」是**允许**，模型一次都不会触发；
+ * 实测 43 条回复里只有 14% 提到自己，久了就成了只会接话的回声。
+ */
+export function selfMentionNote(recent: string[], window = 4): string | null {
+  const slice = recent.slice(-window);
+  if (slice.length < window) return null;
+  const mentioned = slice.some((t) => /我/.test(t ?? ''));
+  if (mentioned) return null;
+  return `最近 ${slice.length} 条你全在接他的话，一句都没提自己。这轮把话头拉回你身上：你刚才在做什么、你心里怎么想，别只评价他。`;
+}
+
+/**
  * 口癖硬提醒：最近若干条里自称出现太多就直说。
  *
  * 为什么需要：人设里写「本小姐每 3–4 句一次」时，实测会变成每条都带；
