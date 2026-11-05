@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-05T01:15:30.058Z",
+  "generated_at": "2026-11-05T01:45:25.847Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-05",
       "items": [
+        {
+          "hash": "3ad98e0",
+          "date": "2026-11-05",
+          "type": "feat",
+          "area": "",
+          "title": "B站链接也按带画面处理，全家福一起带上认人",
+          "why": ""
+        },
         {
           "hash": "097124a",
           "date": "2026-11-05",
@@ -3235,14 +3243,6 @@
           "type": "docs",
           "area": "",
           "title": "record memory link rollout",
-          "why": ""
-        },
-        {
-          "hash": "d684c53",
-          "date": "2026-10-28",
-          "type": "feat",
-          "area": "memory",
-          "title": "link facts/events and add audit trail",
           "why": ""
         }
       ]

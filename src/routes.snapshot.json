@@ -1117,6 +1117,14 @@
   ],
   [
     "POST",
+    "/api/app/video-asr"
+  ],
+  [
+    "POST",
+    "/api/app/video-asr"
+  ],
+  [
+    "POST",
     "/api/chat"
   ],
   [

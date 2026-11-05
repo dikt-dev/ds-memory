@@ -24,6 +24,7 @@ import { askDiary, diaryList, diaryOne } from './life/diary-api';
 import { nearestCity } from './life/weather';
 import { beijingDateKey } from './life/state';
 import { formatBiliMeta, type BiliMeta } from './bili';
+import { ASR_MAX_BYTES, transcribe } from './media/asr';
 
 type AppEnv = { Bindings: Env; Variables: { requestId: string } };
 
@@ -413,6 +414,32 @@ app.post('/api/app/pair', async (c) => {
   app.post('/api/app/flush', requireApp, async (c) => {
     const result = await flushHeldMessages(c.env, new Date()).catch((e) => ({ flushed: 0, skipped: 'error:' + String(e) }));
     return c.json({ ok: true, ...result, at: new Date().toISOString() });
+  });
+
+  /**
+   * 视频台词：手机抽出的音轨直接传过来，服务端转成带时间戳的台词。
+   *
+   * 只传音轨（一分钟约 1 MB），不传视频——隐私面小，也省得上传原始视频。
+   * 结果按音频内容缓存，同一个视频再发一次不会重复识别。
+   */
+  app.post('/api/app/video-asr', requireApp, async (c) => {
+    const declared = Number(c.req.header('content-length') ?? 0);
+    if (declared > ASR_MAX_BYTES) {
+      return c.json({ ok: false, error: '音频太大（上限 25 MB）' }, 413);
+    }
+    let audio: ArrayBuffer;
+    try {
+      audio = await c.req.arrayBuffer();
+    } catch (e) {
+      return c.json({ ok: false, error: '读不到音频：' + String(e) }, 400);
+    }
+    if (audio.byteLength < 512) return c.json({ ok: false, error: '音频为空' }, 400);
+    try {
+      const { lines, cached } = await transcribe(c.env, audio);
+      return c.json({ ok: true, lines, cached, bytes: audio.byteLength });
+    } catch (e) {
+      return c.json({ ok: false, error: '识别失败：' + String(e) }, 502);
+    }
   });
 
   app.get('/api/app/events', requireApp, async (c) => {
