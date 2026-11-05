@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-05T07:41:17.535Z",
+  "generated_at": "2026-11-05T08:43:40.388Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-05",
       "items": [
+        {
+          "hash": "0d0dbe5",
+          "date": "2026-11-05",
+          "type": "feat",
+          "area": "",
+          "title": "聊天分段计时（delay/pack/recall/build/upstream）落 request_log",
+          "why": ""
+        },
         {
           "hash": "6a268ac",
           "date": "2026-11-05",
@@ -3235,14 +3243,6 @@
           "type": "fix",
           "area": "memory",
           "title": "merge headerless daily summaries and replay missed days",
-          "why": ""
-        },
-        {
-          "hash": "70fc502",
-          "date": "2026-10-28",
-          "type": "fix",
-          "area": "memory",
-          "title": "merge headerless distill summaries and replay missed days",
           "why": ""
         }
       ]

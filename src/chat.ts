@@ -128,6 +128,17 @@ export async function streamChat(
       .slice(-3)
       .map((m) => m.content),
   ].join(' ');
+  // ★ 并行预取：人设、生活块、铭记、会话事实、日记提问都跟记忆召回互不依赖。
+  //   以前一条条 await 排下来，光这里就吃掉 2.5~3 秒；现在让它们在召回那 1.6 秒里跑完。
+  const factsPromise = readSessionFacts(env, now, dateKey);
+  const keepsakesPromise = loadKeepsakesBlock(env).catch(() => '');
+  const lifeBlocksPromise = loadLifeBlocks(env, now, content, history.slice(-6)).catch(() => ({
+    residents: null,
+    life: null,
+  }));
+  const personaTextPromise = loadPersonaDoc(env).catch(() => '');
+  const asksPromise = pendingDiaryAsks(env).catch(() => []);
+
   const memoryEngine = memoryEngineFor(env, channel);
   // 门控 / deadline / shadow-next / 输出封顶都在 resolveRecall 里，三个渠道共用一份
   const recall = await resolveRecall(env, {
@@ -193,7 +204,8 @@ export async function streamChat(
   });
   // 同一条 /api/chat 还有一条 http 记录（只有总耗时）；这条只记分段，回答「慢在哪一段」。
   // 只写计数与字节数，不写正文。
-  await recordRequest(env, {
+  // 埋点：不 await，失败也不影响回复
+  recordRequest(env, {
     requestId: requestId ?? 'none',
     kind: 'chat',
     path: '/api/chat#recall',
@@ -214,7 +226,7 @@ export async function streamChat(
 
   // ★ 活人感：在落库本条前采集「距上次聊天间隔 + 今日轮数」
   const relationVals = parseRelationValues(memory);
-  const facts = await readSessionFacts(env, now, dateKey);
+  const facts = await factsPromise;
   const hourForCard = beijingHour(now);
 
   // ★ 情感系统：事件 → 情绪向量 → 5 轴微增量 → 情绪快照（先算，后面的状态卡要用它派生心情）
@@ -235,7 +247,7 @@ export async function streamChat(
   });
 
   // ★ 铭记：常驻注入，不参与召回。KV 缓存，避免每轮查 D1。
-  const keepsakesBlock = await loadKeepsakesBlock(env).catch(() => '');
+  const keepsakesBlock = await keepsakesPromise;
 
   // ★ 脾气：情绪 → 配合度。让她可以拒绝，而不是"委屈地答应"。
   const temper = computeTemper({
@@ -307,7 +319,7 @@ export async function streamChat(
     const userRow = await insertUserMessage(env, recordContent, now, { channel });
     userId = userRow.id;
     // 有新用户消息 → 用户画像需要重算（下次主动消息决策时生效）
-    await markProfileDirty(env).catch(() => {});
+    markProfileDirty(env).catch(() => {});
   }
 
   // 3) 发给 DeepSeek 的图片从 R2 读回（压缩后的版本）
@@ -343,14 +355,14 @@ export async function streamChat(
   // ★ 稳定段（人设+长期记忆）单独作为第一条 system，每轮字节一致才能吃到缓存命中价；
   // 时间/心情/召回/摘要这些每轮都变的放到最后一条 system，紧贴用户消息。
   // 她此刻在干什么：读不到就当没有，聊天行为和以前一模一样
-  const lifeBlocks = await loadLifeBlocks(env, now, content, history.slice(-6));
+  const lifeBlocks = await lifeBlocksPromise;
   const tic = ticWarning(
     history.filter((m) => m.role === 'assistant').map((m) => m.content),
     resolvePersona(env).selfCall,
   );
   // 用户在 App 里点了「问问她」之后，日记是 pending。没人告诉她要开口，
   // 于是点完什么都不会发生。这里补一句，让她在下一句里自己决定给不给看。
-  const asks = await pendingDiaryAsks(env).catch(() => []);
+  const asks = await asksPromise;
   // 她在 App 里点「问问她」之后需要她开口。但只给一句「你想不想给看」不够——
   // 人设里没有「她会写日记」这件事，模型会直接否认日记存在（实测："本小姐哪来的日记啊"）。
   // 所以这里给的是**事实**加约束，不是提问。
@@ -366,7 +378,7 @@ export async function streamChat(
         '你可以答应看全部、只给看一眼、或者拒绝。日记是存在的，别否认自己写过。说一两句就够了。',
       ].join('\n')
     : null;
-  const personaDoc = await loadPersonaDoc(env);
+  const personaDoc = await personaTextPromise;
   const promptSplit = buildSystemPromptSplit({
         now,
         userText: content,
@@ -429,7 +441,7 @@ export async function streamChat(
     maxTokens: 8192,
     onFinish: async (text, usage) => {
       // 计时落库：只写数字，事后能回答「这 10 秒花在哪一段」
-      void recordRequest(env, {
+      recordRequest(env, {
         requestId: requestId ?? 'none',
         kind: 'chat',
         path: '/api/chat#timing',

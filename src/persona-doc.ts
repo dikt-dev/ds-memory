@@ -136,15 +136,24 @@ export function personaSectionText(doc: string, match: string): string {
 }
 
 /** 读人设文档；没有就返回空串（回退到代码里的内置骨架）。 */
-export async function loadPersonaDoc(env: { R2: R2Bucket }): Promise<string> {
+/** 人设文档的短期缓存：几小时才改一次，没必要每轮都读一次 R2。 */
+const CACHE_KEY = 'cache:persona:doc';
+const CACHE_TTL_SEC = 30;
+
+export async function loadPersonaDoc(env: { R2: R2Bucket; KV?: KVNamespace }): Promise<string> {
+  const cached = await env.KV?.get(CACHE_KEY).catch(() => null);
+  if (cached !== null && cached !== undefined) return cached;
   const obj = await env.R2.get(PERSONA_KEY).catch(() => null);
-  if (!obj) return '';
-  return (await obj.text()).trim();
+  const text = obj ? (await obj.text()).trim() : '';
+  await env.KV?.put(CACHE_KEY, text, { expirationTtl: CACHE_TTL_SEC }).catch(() => {});
+  return text;
 }
 
 /** 写入人设文档：后台编辑用。 */
-export async function savePersonaDoc(env: { R2: R2Bucket }, text: string): Promise<number> {
+export async function savePersonaDoc(env: { R2: R2Bucket; KV?: KVNamespace }, text: string): Promise<number> {
   const body = text.trim();
   await env.R2.put(PERSONA_KEY, body);
+  // 改完立刻失效，否则会有最多 30 秒还在用旧人设
+  await env.KV?.delete(CACHE_KEY).catch(() => {});
   return new TextEncoder().encode(body).length;
 }
