@@ -616,9 +616,17 @@ app.post('/api/admin/life/flag', requireAuth, async (c) => {
 /** 生活系统：现在这条消息会不会被压住（dry run，不动数据）。 */
 app.get('/api/admin/life/gate', requireAuth, async (c) => {
   const enabled = await lifeEnabled(c.env);
-  const decision = await gateDecision(c.env);
-  const status = await lifeNow(c.env);
-  return c.json({ ok: true, enabled, decision, status });
+  // 两段分别兜住：哪一段炸了要能一眼看出来，而不是一个笼统的 500
+  const errors: string[] = [];
+  const decision = await gateDecision(c.env).catch((e: unknown) => {
+    errors.push('gate: ' + String((e as Error)?.message ?? e));
+    return null;
+  });
+  const status = await lifeNow(c.env).catch((e: unknown) => {
+    errors.push('lifeNow: ' + String((e as Error)?.message ?? e));
+    return null;
+  });
+  return c.json({ ok: errors.length === 0, enabled, decision, status, errors });
 });
 
 /** 生活系统：手动写某天的日记（排查/补写用）。 */

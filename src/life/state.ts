@@ -49,6 +49,10 @@ export function peopleFor(activities: { unitId: string }[], dateKey: string): st
   const social = activities.find((a) => ACTIVITIES.find((x) => x.id === a.unitId)?.kind === 'social');
   if (!social) return null;
   const cast = socialCastFor(dateKey, social.unitId);
+  // 公寓楼设定已拆，socialCastFor 现在恒返回空数组。
+  // 以前这里直接 cast[0]!.id：非空断言骗过了编译器，线上却是 TypeError，
+  // 导致 ensureDayPlan 整天抛异常、ai_day 一条都写不进去（生活系统整体瘫掉）。
+  if (cast.length === 0) return null;
   return JSON.stringify({
     core: cast[0]!.id,
     cast: cast.map((x) => x.id),

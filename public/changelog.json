@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-05T07:08:21.537Z",
+  "generated_at": "2026-11-05T07:15:29.289Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-05",
       "items": [
+        {
+          "hash": "77a492d",
+          "date": "2026-11-05",
+          "type": "fix",
+          "area": "",
+          "title": "恢复 DEEPSEEK_API_KEY 并补兜底链路测试",
+          "why": ""
+        },
         {
           "hash": "0d230d6",
           "date": "2026-11-05",
@@ -3235,14 +3243,6 @@
           "type": "docs",
           "area": "",
           "title": "review memory code assessment and prioritize fixes",
-          "why": ""
-        },
-        {
-          "hash": "f58d73e",
-          "date": "2026-10-28",
-          "type": "docs",
-          "area": "",
-          "title": "consolidate pending work with start windows",
           "why": ""
         }
       ]
