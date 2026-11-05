@@ -27,6 +27,7 @@ import { formatBiliMeta, type BiliMeta } from './bili';
 import { ASR_MAX_BYTES, transcribe } from './media/asr';
 import { signMediaPath } from './media/signed-url';
 import { lookAtVideo } from './media/video-vision';
+import { biliVisionDirect } from './media/bili-vision';
 
 type AppEnv = { Bindings: Env; Variables: { requestId: string } };
 
@@ -466,6 +467,33 @@ app.post('/api/app/pair', async (c) => {
     try {
       const obs = await lookAtVideo(c.env, origin + path, { cacheKey: key });
       return c.json({ ok: true, text: obs.text, ms: obs.ms, cached: obs.cached, model: obs.model });
+    } catch (e) {
+      return c.json({ ok: false, error: String(e).slice(0, 200) }, 502);
+    }
+  });
+
+  /**
+   * B 站视频理解：拿 playurl 直链交给千问 omni，返回按时间点的画面笔记。
+   * 失败返回 ok:false，App 继续用原来的大纲 + 字幕 + 雪碧图。
+   */
+  app.post('/api/app/bili-vision', requireApp, async (c) => {
+    const body = (await c.req.json().catch(() => null)) as
+      | { direct?: string; title?: string; duration?: number; cacheKey?: string }
+      | null;
+    // 机房 IP 拉 B 站接口会被 412，所以直链由手机端取好传上来，服务端只负责交给模型。
+    const direct = (body?.direct ?? '').trim();
+    if (!/^https:\/\/[^\s]+$/.test(direct) || direct.length > 2000) {
+      return c.json({ ok: false, error: '缺少可用的直链' }, 400);
+    }
+    try {
+      const v = await biliVisionDirect(c.env, {
+        direct,
+        title: (body?.title ?? '').slice(0, 120),
+        duration: Number(body?.duration ?? 0) || 0,
+        cacheKey: (body?.cacheKey ?? '').slice(0, 120),
+      });
+      if (!v) return c.json({ ok: false, error: '拿不到直链或模型失败' }, 502);
+      return c.json({ ok: true, title: v.title, duration: v.duration, text: v.text, ms: v.ms, cached: v.cached });
     } catch (e) {
       return c.json({ ok: false, error: String(e).slice(0, 200) }, 502);
     }

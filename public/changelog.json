@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-05T05:38:48.135Z",
+  "generated_at": "2026-11-05T05:47:42.193Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-05",
       "items": [
+        {
+          "hash": "6070515",
+          "date": "2026-11-05",
+          "type": "feat",
+          "area": "",
+          "title": "追问视频细节时自动重看一遍",
+          "why": ""
+        },
         {
           "hash": "c3362c7",
           "date": "2026-11-05",
@@ -3235,14 +3243,6 @@
           "type": "feat",
           "area": "memory",
           "title": "add context budget and regression skeleton",
-          "why": ""
-        },
-        {
-          "hash": "04c7166",
-          "date": "2026-10-28",
-          "type": "docs",
-          "area": "",
-          "title": "record remaining memory backlog",
           "why": ""
         }
       ]
