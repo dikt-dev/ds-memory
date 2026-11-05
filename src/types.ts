@@ -23,7 +23,10 @@ export interface Env {
   LLM_SUMMARY_MODEL?: string;
   LLM_DIARY_MODEL?: string;
   PUBLIC_BASE_URL?: string; // 本服务对外地址（签名 URL 前缀），如 https://fae.us.ci
-  DASHSCOPE_API_KEY?: string; // 千问（视频理解）；缺失则视频理解整条链路降级
+  DASHSCOPE_API_KEY?: string;
+  /** 阿里云 AccessKey：只用来查账户余额（BSS QueryAccountBalance），不配就不显示余额 */
+  ALIYUN_ACCESS_KEY_ID?: string;
+  ALIYUN_ACCESS_KEY_SECRET?: string; // 千问（视频理解）；缺失则视频理解整条链路降级
   DASHSCOPE_VL_MODEL?: string; // 默认 qwen3.8-omni-flash
   DASHSCOPE_BASE_URL?: string; // 默认 https://dashscope.aliyuncs.com/compatible-mode/v1
   DISTILL_MODEL: string;

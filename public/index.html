@@ -1280,19 +1280,27 @@ async function loadBalance() {
     const res = await fetch('/api/balance');
     if (res.status === 401) return;
     balanceData = await res.json();
+    const qwen = balanceData.qwen || null;
+    const qwenText = qwen ? ` ｜ ${qwen.label}` : '';
     if (balanceData.error) {
-      $('balanceInfo').textContent = '';
+      $('balanceInfo').textContent = qwen ? qwen.label : '';
       return;
     }
-    $('balanceInfo').textContent = `余额 ¥${Number(balanceData.total || 0).toFixed(2)}`;
+    $('balanceInfo').textContent = `余额 ¥${Number(balanceData.total || 0).toFixed(2)}${qwenText}`;
     $('balanceInfo').title = `可用：${balanceData.available ? '是' : '否'}｜赠送 ¥${Number(balanceData.granted || 0).toFixed(2)}｜充值 ¥${Number(balanceData.topped_up || 0).toFixed(2)}`;
   } catch { /* 忽略 */ }
 }
 $('balanceInfo').addEventListener('click', () => {
   if (!balanceData || balanceData.error) { alert('余额信息暂不可用'); return; }
+  const qw = balanceData.qwen;
+  const qwLines = qw
+    ? `\n\n—— 千问（百炼）——\n` +
+      (qw.total !== null ? `账户余额：¥${Number(qw.total).toFixed(2)}\n` : '账户余额：需要配置阿里云 AccessKey\n') +
+      `本月已用：¥${Number(qw.spent30d || 0).toFixed(2)}\n今日已用：¥${Number(qw.spentToday || 0).toFixed(4)}\n调用次数：${qw.calls30d || 0}`
+    : '';
   alert(
     `DeepSeek 余额明细\n\n总余额：¥${Number(balanceData.total || 0).toFixed(2)}\n可用：${balanceData.available ? '是' : '否'}\n赠送余额：¥${Number(balanceData.granted || 0).toFixed(2)}\n充值余额：¥${Number(balanceData.topped_up || 0).toFixed(2)}`,
-  );
+  ) + qwLines;
 });
 
 /* ---------- 计费 ---------- */

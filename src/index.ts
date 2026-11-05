@@ -114,6 +114,7 @@ import { readUsageStats, summarizeUsage } from './usage-stats';
 import { backfillEvents, readEventStats } from './memory-events';
 import { loadTtsConfig, saveTtsConfig, speakWithCache } from './tts-config';
 import { getStatusSnapshot } from './status';
+import { qwenBalanceInfo } from './qwen-balance';
 import {
   insertKeepsake,
   loadKeepsakes,
@@ -268,8 +269,10 @@ app.get('/api/day', async (c) => {
 
 /** DeepSeek 账户余额（代理官方接口，密钥不出服务端）。 */
 app.get('/api/balance', requireAuth, async (c) => {
+  // 千问走阿里云账户，和 DeepSeek 是两本账；查不到也不该让整页报错
+  const qwen = await qwenBalanceInfo(c.env).catch(() => null);
   const apiKey = c.env.DEEPSEEK_API_KEY;
-  if (!apiKey) return c.json({ error: 'DEEPSEEK_API_KEY 未配置' }, 500);
+  if (!apiKey) return c.json({ qwen, error: 'DEEPSEEK_API_KEY 未配置' }, 200);
   const cachedBalance = await c.env.KV.get('balance:snapshot').catch(() => null);
   if (cachedBalance) {
     return c.json(JSON.parse(cachedBalance) as Record<string, unknown>, 200, {
@@ -299,7 +302,7 @@ app.get('/api/balance', requireAuth, async (c) => {
       topped_up: Number(info?.topped_up_balance ?? 0),
     };
     await c.env.KV.put('balance:snapshot', JSON.stringify(snapshot), { expirationTtl: 300 }).catch(() => {});
-    return c.json(snapshot, 200, {
+    return c.json({ ...snapshot, qwen }, 200, {
       'cache-control': 'private, max-age=60',
     });
   } catch (e) {

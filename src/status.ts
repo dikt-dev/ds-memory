@@ -5,6 +5,7 @@
  * 用户要的是感觉，不是仪表盘；数字一旦精确，就会被当成可以优化的目标。
  */
 import type { Env } from './types';
+import { qwenBalanceInfo, type QwenBalance } from './qwen-balance';
 import { getMemory } from './memory';
 import { facetsOf, loadEmotionState } from './emotion-context';
 import { emptyEmotionVector, type EmotionVector } from './emotion-vector';
@@ -22,6 +23,8 @@ export interface StatusSnapshot {
   memory: StatusLine;
   today: StatusLine;
   balance: (StatusLine & { total: number; currency: string }) | null;
+  /** 千问（百炼）的余额与花费：网页和 App 都读这一块 */
+  qwen: QwenBalance | null;
   updated_at: string;
 }
 
@@ -103,11 +106,12 @@ async function fetchBalance(env: Env): Promise<(StatusLine & { total: number; cu
 }
 
 export async function getStatusSnapshot(env: Env, now = Date.now()): Promise<StatusSnapshot> {
-  const [state, memory, todayCount, balance] = await Promise.all([
+  const [state, memory, todayCount, balance, qwen] = await Promise.all([
     loadEmotionState(env, now).catch(() => null),
     getMemory(env).catch(() => ''),
     countTodayMessages(env, now),
     fetchBalance(env),
+    qwenBalanceInfo(env).catch(() => null),
   ]);
   const vector = state?.vector ?? emptyEmotionVector();
   const facets = facetsOf(parseRelationValues(memory));
@@ -120,7 +124,11 @@ export async function getStatusSnapshot(env: Env, now = Date.now()): Promise<Sta
     relation: relationOf(facets.intimacy),
     memory: memoryOf(memory.length),
     today: todayOf(todayCount),
-    balance,
+    // App 状态页只认 label/hint：把千问那句接在 hint 后面，不重新打包 APK 也能看到
+    balance: balance
+      ? { ...balance, hint: qwen ? `${balance.hint}｜${qwen.label}` : balance.hint }
+      : balance,
+    qwen,
     updated_at: new Date(now).toISOString(),
   };
 }
