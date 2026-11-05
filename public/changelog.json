@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-05T09:52:24.483Z",
+  "generated_at": "2026-11-05T10:10:11.997Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-05",
       "items": [
+        {
+          "hash": "f03f7cb",
+          "date": "2026-11-05",
+          "type": "other",
+          "area": "",
+          "title": "聊天温度 0.8 + 加大 presence/frequency penalty；不再规定'才看见'开场白，治口癖和平",
+          "why": ""
+        },
         {
           "hash": "c022e13",
           "date": "2026-11-05",
@@ -3235,14 +3243,6 @@
           "type": "fix",
           "area": "web",
           "title": "render file attachments as cards in history",
-          "why": ""
-        },
-        {
-          "hash": "d6f3ab4",
-          "date": "2026-10-28",
-          "type": "fix",
-          "area": "web",
-          "title": "strip timestamps from streamed replies",
           "why": ""
         }
       ]

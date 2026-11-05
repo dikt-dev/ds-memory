@@ -259,13 +259,16 @@ export function compactHistoryMessage(content: string, maxChars = HISTORY_MESSAG
 }
 
 /** 增量读取：id 大于 afterId 的消息（升序），用于前端实时刷新。 */
+/** 墓碑里的消息对客户端已经不存在了，读取时一律排除 */
+const NOT_TOMBSTONED = 'id NOT IN (SELECT id FROM message_tombstones)';
+
 export async function messagesSince(
   env: Env,
   afterId: number,
   limit: number,
 ): Promise<{ messages: MessageRow[]; hasMore: boolean }> {
   const results = await env.DB.prepare(
-    `SELECT ${SELECT_COLS} FROM messages WHERE id > ? ORDER BY id ASC LIMIT ?`,
+    `SELECT ${SELECT_COLS} FROM messages WHERE id > ? AND ${NOT_TOMBSTONED} ORDER BY id ASC LIMIT ?`,
   )
     .bind(afterId, limit + 1)
     .all<MessageRow>();
@@ -281,12 +284,12 @@ export async function messagesPage(
 ): Promise<{ messages: MessageRow[]; hasMore: boolean }> {
   const results = opts.beforeId
     ? await env.DB.prepare(
-        `SELECT ${SELECT_COLS} FROM messages WHERE id < ? ORDER BY id DESC LIMIT ?`,
+        `SELECT ${SELECT_COLS} FROM messages WHERE id < ? AND ${NOT_TOMBSTONED} ORDER BY id DESC LIMIT ?`,
       )
         .bind(opts.beforeId, opts.limit + 1)
         .all<MessageRow>()
     : await env.DB.prepare(
-        `SELECT ${SELECT_COLS} FROM messages ORDER BY id DESC LIMIT ?`,
+        `SELECT ${SELECT_COLS} FROM messages WHERE ${NOT_TOMBSTONED} ORDER BY id DESC LIMIT ?`,
       )
         .bind(opts.limit + 1)
         .all<MessageRow>();
