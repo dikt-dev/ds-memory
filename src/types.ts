@@ -14,6 +14,7 @@ export interface Env {
   LATITUDE: string;
   LONGITUDE: string;
   DEEPSEEK_MODEL: string;
+  PUBLIC_BASE_URL?: string; // 本服务对外地址（签名 URL 前缀），如 https://fae.us.ci
   DASHSCOPE_API_KEY?: string; // 千问（视频理解）；缺失则视频理解整条链路降级
   DASHSCOPE_VL_MODEL?: string; // 默认 qwen3.8-omni-flash
   DASHSCOPE_BASE_URL?: string; // 默认 https://dashscope.aliyuncs.com/compatible-mode/v1

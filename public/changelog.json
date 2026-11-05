@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-05T03:58:21.156Z",
+  "generated_at": "2026-11-05T05:38:48.135Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-05",
       "items": [
+        {
+          "hash": "c3362c7",
+          "date": "2026-11-05",
+          "type": "feat",
+          "area": "",
+          "title": "视频理解接千问 omni（签名 URL + 观察卡），失败自动降级",
+          "why": ""
+        },
         {
           "hash": "4473e13",
           "date": "2026-11-05",
@@ -3235,14 +3243,6 @@
           "type": "docs",
           "area": "",
           "title": "record remaining memory backlog",
-          "why": ""
-        },
-        {
-          "hash": "7b8592c",
-          "date": "2026-10-28",
-          "type": "feat",
-          "area": "memory",
-          "title": "expose link provenance and add regression plan",
           "why": ""
         }
       ]

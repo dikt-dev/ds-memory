@@ -8,6 +8,7 @@
 import type { Env } from './types';
 import { lifePromptLine, residentNowLine } from './life/now-text';
 import { loadPersonaDoc, personaSectionText } from './persona-doc';
+import { findReplayKey, replayVideo } from './media/video-replay';
 
 /** 什么话会触发「她的日记现状」这块。只有存在声明是常驻的。 */
 const DIARY_WORDS = /日记|日志|写的东西|写完|那篇|写了吗|写了什么/;
@@ -171,6 +172,14 @@ export async function loadLifeBlocks(
     env.KV?.get('life:home-city').catch(() => null),
     env.KV?.get('life:user-city').catch(() => null),
   ]);
+  // 他追问视频细节时，重看一遍再答——比让他自己猜准得多
+  const replayKey = findReplayKey(userText, recent);
+  const replay = replayKey
+    ? await replayVideo(env, replayKey, userText)
+        .then((t) => (t ? `你又把刚才那段视频翻出来看了一遍，专门看他问的那处：\n${t}` : null))
+        .catch(() => null)
+    : null;
+
   const where = [
     `【位置】你在${homeCity || env.CITY || '家'}`,
     hisCity ? `，他在${hisCity}` : '；他在哪你不知道',
@@ -211,6 +220,6 @@ export async function loadLifeBlocks(
     .join('\n');
   return {
     residents: people.trim() || null,
-    life: [where, line, card, diary].filter(Boolean).join('\n\n') || null,
+    life: [where, line, card, diary, replay].filter(Boolean).join('\n\n') || null,
   };
 }

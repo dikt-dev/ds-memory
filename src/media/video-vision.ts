@@ -37,7 +37,7 @@ function endpoint(env: { DASHSCOPE_BASE_URL?: string }): string {
 export async function lookAtVideo(
   env: { DASHSCOPE_API_KEY?: string; DASHSCOPE_VL_MODEL?: string; DASHSCOPE_BASE_URL?: string; KV: KVNamespace },
   videoUrl: string,
-  opts: { cacheKey?: string; timeoutMs?: number } = {},
+  opts: { cacheKey?: string; timeoutMs?: number; prompt?: string; maxTokens?: number } = {},
 ): Promise<VideoObservation> {
   const apiKey = env.DASHSCOPE_API_KEY?.trim();
   if (!apiKey) throw new Error('DASHSCOPE_API_KEY 未配置');
@@ -60,11 +60,11 @@ export async function lookAtVideo(
           role: 'user',
           content: [
             { type: 'video_url', video_url: { url: videoUrl } },
-            { type: 'text', text: PROMPT },
+            { type: 'text', text: opts.prompt ?? PROMPT },
           ],
         },
       ],
-      max_tokens: 1200,
+      max_tokens: opts.maxTokens ?? 1200,
       enable_thinking: false,
     }),
     signal: AbortSignal.timeout(opts.timeoutMs ?? 90_000),
