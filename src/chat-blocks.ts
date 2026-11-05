@@ -134,8 +134,13 @@ export function wakeFriends(cards: FriendCard[], text: string): FriendCard[] {
     .filter((c) => (seen.has(c.name) ? false : (seen.add(c.name), true)));
 }
 
-/** 这条消息里带没带图片 / 视频 / 动图（带了就要把所有人的长相都带上，认人用）。 */
-export const MEDIA_RE = /\[(图片|视频|GIF)[:：]/i;
+/**
+ * 这条消息里带没带画面：图片 / 视频 / 动图，或者一条 B 站链接。
+ *
+ * B 站那条 App 会把宫格当图片另发、正文里只有 [BILI_META]，所以单独认一下——
+ * 不然她看着宫格认不出里面是谁。
+ */
+export const MEDIA_RE = /\[(图片|视频|GIF)[:：]|\[BILI_META\]/i;
 
 /**
  * 唤醒用的上下文：当前这句 + 最近几条。

@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-05T01:06:06.317Z",
+  "generated_at": "2026-11-05T01:15:30.058Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-05",
       "items": [
+        {
+          "hash": "097124a",
+          "date": "2026-11-05",
+          "type": "feat",
+          "area": "",
+          "title": "朋友唤醒支持跨轮与全角——最近 6 条都算，英文名 NFKC 归一化",
+          "why": ""
+        },
         {
           "hash": "fafa1a3",
           "date": "2026-11-05",
@@ -3235,14 +3243,6 @@
           "type": "feat",
           "area": "memory",
           "title": "link facts/events and add audit trail",
-          "why": ""
-        },
-        {
-          "hash": "1f87bc5",
-          "date": "2026-10-28",
-          "type": "feat",
-          "area": "memory",
-          "title": "add explicit links and lightweight audit",
           "why": ""
         }
       ]

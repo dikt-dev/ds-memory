@@ -95,4 +95,8 @@ describe('带画面的消息', () => {
     expect(MEDIA_RE.test('[GIF:gifs/2026-11-04/c.gif]')).toBe(true);
     expect(MEDIA_RE.test('就是一段话')).toBe(false);
   });
+
+  it('B 站链接也算带画面（宫格是另发的，正文里只有资料块）', () => {
+    expect(MEDIA_RE.test('看看这个\n[BILI_META]\n- 标题：做饭\n[/BILI_META]')).toBe(true);
+  });
 });
