@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-05T07:26:20.837Z",
+  "generated_at": "2026-11-05T07:30:25.365Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-05",
       "items": [
+        {
+          "hash": "adbe5cd",
+          "date": "2026-11-05",
+          "type": "feat",
+          "area": "",
+          "title": "日记失败重试 + 早八补写；B 站视频支持「再看一眼」",
+          "why": ""
+        },
         {
           "hash": "4cdb322",
           "date": "2026-11-05",
@@ -3235,14 +3243,6 @@
           "type": "fix",
           "area": "memory",
           "title": "cleanup, incremental links, bounded MMR",
-          "why": ""
-        },
-        {
-          "hash": "32de2c2",
-          "date": "2026-10-28",
-          "type": "fix",
-          "area": "memory",
-          "title": "correct budget, correction section, monthly merge",
           "why": ""
         }
       ]

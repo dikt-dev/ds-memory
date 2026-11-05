@@ -496,7 +496,13 @@ app.post('/api/app/pair', async (c) => {
       // 留一份直链：他之后说「再看一眼」时，服务端要靠它重看（直链约两小时有效）
       await c.env.KV.put(
         'bili:last',
-        JSON.stringify({ direct, title: v.title, cacheKey: body?.cacheKey ?? '', at: Date.now() }),
+        JSON.stringify({
+          direct,
+          title: v.title,
+          duration: v.duration,
+          cacheKey: body?.cacheKey ?? '',
+          at: Date.now(),
+        }),
         { expirationTtl: 6 * 3600 },
       ).catch(() => {});
       return c.json({ ok: true, title: v.title, duration: v.duration, text: v.text, ms: v.ms, cached: v.cached });

@@ -61,7 +61,7 @@ export async function replayBili(
   if (!env.DASHSCOPE_API_KEY) return null;
   const raw = await env.KV.get('bili:last').catch(() => null);
   if (!raw) return null;
-  let rec: { direct?: string; title?: string; cacheKey?: string; at?: number };
+  let rec: { direct?: string; title?: string; cacheKey?: string; duration?: number; at?: number };
   try {
     rec = JSON.parse(raw) as typeof rec;
   } catch {
@@ -70,11 +70,13 @@ export async function replayBili(
   if (!rec.direct || !rec.at) return null;
   // 直链只有两小时有效期，过期就别拿它去碰壁
   if (Date.now() - rec.at > 2.5 * 3600 * 1000) return null;
+  // 长视频重看一次要几十秒，回话前干等太难受：超过 5 分钟就不重看了
+  if ((rec.duration ?? 0) > 300) return null;
   const probe = await lookAtVideo(env, rec.direct, {
     cacheKey: `biliq:${rec.cacheKey ?? 'x'}#q:${Math.abs(hash32(question))}`,
     prompt: questionPrompt(question, rec.title),
     maxTokens: 400,
-    timeoutMs: 90_000,
+    timeoutMs: 45_000,
   }).catch(() => null);
   const text = probe?.text?.trim();
   return text || null;
