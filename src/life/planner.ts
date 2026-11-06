@@ -43,6 +43,8 @@ export interface DayPlan {
   activities: PlannedActivity[];
   /** 今天几点醒（分钟）。不写就是默认 08:00。 */
   wakeAt?: number;
+  /** 今晚几点睡（分钟，可超过 1440 表示次日凌晨）。不写就是默认 01:00。 */
+  sleepAt?: number;
 }
 
 export interface BuildDayInput {
@@ -61,6 +63,7 @@ export interface BuildDayInput {
 export function dayWindows(
   wakeAt = WAKE_AT,
   extra: Array<{ start: number; end: number }> = [],
+  sleepAt = SLEEP_START,
 ): Array<{ start: number; end: number }> {
   // 早饭跟着起床时间走：晚起半小时，就不会 09:10 吃早饭
   const breakfast = Math.max(MEALS[0].start, wakeAt + 10);
@@ -84,7 +87,7 @@ export function dayWindows(
     if (end - start >= 30) windows.push({ start, end });
   }
   const last = blocks[blocks.length - 1].end;
-  if (SLEEP_START - last >= 30) windows.push({ start: last, end: SLEEP_START });
+  if (sleepAt - last >= 30) windows.push({ start: last, end: sleepAt });
 
   // 只有超过 400 分钟才切。切太碎会让 240–420 分钟的爬山、游乐园永远抽不到。
   const out: Array<{ start: number; end: number }> = [];
@@ -321,6 +324,7 @@ function fillWindow(
   lazy = false,
   socialUsed = 0,
   kinds?: string[],
+  sleepAt = SLEEP_START,
 ): PlannedActivity[] {
   const out: PlannedActivity[] = [];
   let cursor = start;
@@ -368,7 +372,7 @@ function fillWindow(
       if (picked) break;
     }
     if (!picked) break;
-    const room = Math.min(free, SLEEP_START - cursor);
+    const room = Math.min(free, sleepAt - cursor);
     if (room < picked.min) break;
     const span = Math.min(room, rng.int(picked.min, Math.max(picked.min, picked.max)));
     out.push({ unitId: picked.id, start: cursor, end: cursor + span });
@@ -396,6 +400,8 @@ export function buildDay(input: BuildDayInput): DayPlan {
   const wakeAt = recipe
     ? recipe.wakeAt
     : WAKE_AT + (weekend ? 35 : 0) + rng.int(weekend ? -30 : -55, weekend ? 70 : 55);
+  // 睡觉也不是每天 01:00：00:00–02:30 之间浮动，周末再晚一点，同一天可复现。
+  const sleepAt = SLEEP_START + (weekend ? 25 : 0) + rng.int(-60, 90);
   const budget = recipe ? recipe.budget : MAX_ACTIVITIES;
   const lazy = recipe?.id === 'lazy';
   let socialUsed = 0;
@@ -430,23 +436,26 @@ export function buildDay(input: BuildDayInput): DayPlan {
     }
   }
 
-  // 晚上那段固定的「写日记」：不占活动名额（和吃饭一样是日常），但会把 22 点后的空档挤掉。
-  // 时间在 21:55–22:45 之间浮动，太准时反而不像人。
+  // 晚上那段固定的「写日记」：每天都有，贴在睡前写——睡前 45–80 分钟之间，
+  // 睡觉时间浮动，写日记的时间也跟着浮，不固定一个点。
   const diaryUnit = BY_ID.get('diary_write');
   const diaryBlock = diaryUnit
     ? (() => {
-        const start = 21 * 60 + 55 + rng.int(0, 50);
+        const start = sleepAt - rng.int(45, 80);
         const span = rng.int(diaryUnit.min, Math.min(diaryUnit.max, 40));
         return { unitId: 'diary_write', start, end: start + span };
       })()
     : null;
-  if (diaryBlock) activities.push(diaryBlock);
+  if (diaryBlock) {
+    activities.push(diaryBlock);
+    used.add('diary_write'); // 睡前已经排了，白天窗口里不再重复抽
+  }
 
   // 名额只算「活动」：三餐和加餐都在 activities 里，不能拿 length 当已用名额
   let actCount = 0;
   // 最后一个窗口 19:50–01:00 太长：名额从 19:50 就开吃，到 22:00 已经没了，
   // 深夜那几小时永远空着。在 22:00 切开，后半段单独给一个名额。
-  const windows = dayWindows(wakeAt, diaryBlock ? [diaryBlock] : []).flatMap((w) =>
+  const windows = dayWindows(wakeAt, diaryBlock ? [diaryBlock] : [], sleepAt).flatMap((w) =>
     w.start < 22 * 60 && w.end > 22 * 60
       ? [
           { start: w.start, end: 22 * 60, late: false },
@@ -460,7 +469,7 @@ export function buildDay(input: BuildDayInput): DayPlan {
   for (const w of windows) {
     const cap = w.late ? budget : hasLate ? Math.max(1, budget - 1) : budget;
     if (actCount >= cap) continue;
-    const filled = fillWindow(rng, w.start, w.end, input, used, cap - actCount, lazy, socialUsed, recipe?.kinds);
+    const filled = fillWindow(rng, w.start, w.end, input, used, cap - actCount, lazy, socialUsed, recipe?.kinds, sleepAt);
     actCount += filled.length;
     socialUsed += filled.filter((a) => ACTIVITIES.find((u) => u.id === a.unitId)?.kind === 'social').length;
     activities.push(...filled);
@@ -485,7 +494,7 @@ export function buildDay(input: BuildDayInput): DayPlan {
   }
 
   activities.sort((a, b) => a.start - b.start);
-  return { date: input.date, seed, activities, wakeAt };
+  return { date: input.date, seed, activities, wakeAt, sleepAt };
 }
 
 /** 校验不过就换盐重抽，最多 3 次（§5.5）。 */

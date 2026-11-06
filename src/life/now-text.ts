@@ -26,6 +26,17 @@ function wakeFromPlan(json: string | null): number {
   }
 }
 
+/** 从当天的 plan_json 里取睡觉时间；没有就按次日 01:00。 */
+function sleepFromPlan(json: string | null): number {
+  if (!json) return 25 * 60;
+  try {
+    const w = (JSON.parse(json) as { sleepAt?: unknown }).sleepAt;
+    return typeof w === 'number' && w >= 23 * 60 && w <= 28 * 60 ? w : 25 * 60;
+  } catch {
+    return 25 * 60;
+  }
+}
+
 function hhmm(minute: number): string {
   const m = minute % 1440;
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
@@ -111,7 +122,7 @@ export async function lifePromptLine(env: Env, now = new Date()): Promise<string
       interruptible: a.interruptible,
       reply_chance: a.reply_chance ?? 1,
   }));
-  const status = statusAt(actRows as never, minute, day.health, wakeFromPlan(day.plan_json));
+  const status = statusAt(actRows as never, minute, day.health, wakeFromPlan(day.plan_json), sleepFromPlan(day.plan_json));
 
   const bits: string[] = [];
   const where = day.location ? `你在${day.location}` : '';

@@ -25,18 +25,19 @@ function norm(minute: number): number {
  * 早先按「折回 0~1440 后判断端点」写，会漏掉两种：
  * 活动整个压在睡眠里，以及刚好停在 02:00 被判成越界。直接比时间轴最稳。
  */
-function outOfAwake(start: number, end: number, wakeAt = WAKE_AT): boolean {
-  return start < wakeAt || end > SLEEP_START;
+function outOfAwake(start: number, end: number, wakeAt = WAKE_AT, sleepAt = SLEEP_START): boolean {
+  return start < wakeAt || end > sleepAt;
 }
 
 export function validateDay(plan: DayPlan): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const acts = [...plan.activities].sort((a, b) => a.start - b.start);
   const wakeAt = plan.wakeAt ?? WAKE_AT;
+  const sleepAt = plan.sleepAt ?? SLEEP_START;
 
   // ① 01:00–08:00 必须是 sleep
   for (const a of acts) {
-    if (outOfAwake(a.start, a.end, wakeAt)) {
+    if (outOfAwake(a.start, a.end, wakeAt, sleepAt)) {
       issues.push({
         rule: 'sleep-window',
         detail: `${BY_ID.get(a.unitId)?.name ?? a.unitId} 压在 01:00–08:00 的睡眠上`,
@@ -66,7 +67,7 @@ export function validateDay(plan: DayPlan): ValidationIssue[] {
 
   // ④ 可回消息时长 ≥ 清醒时长 60%
   // 清醒 = 08:00 → 次日 01:00，共 17 小时；睡眠 01:00–08:00 是 7 小时
-  const awake = SLEEP_START - wakeAt;
+  const awake = sleepAt - wakeAt;
   const blocked = acts
     .filter((a) => BY_ID.get(a.unitId)?.interruptible === false)
     .reduce((sum, a) => sum + (a.end - a.start), 0);
