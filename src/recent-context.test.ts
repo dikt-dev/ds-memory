@@ -8,6 +8,7 @@ import {
   type MessageRow,
 } from './db';
 import {
+  trimHistoryToBudget,
   buildSessionBrief,
   conversationGapNote,
   resolveRecentRounds,
@@ -73,6 +74,8 @@ describe('takeLastRounds', () => {
 describe('时间戳与顺序说明', () => {
   it('每条历史带 [MM-DD HH:mm] 前缀', () => {
     expect(withHistoryTimestamp('在吗', '2026-10-24T19:01:00+08:00')).toBe('[10-24 19:01] 在吗');
+    expect(withHistoryTimestamp('在吗', '2026-10-24T19:01:00+08:00', 'user')).toBe('[10-24 19:01] 他：在吗');
+    expect(withHistoryTimestamp('在呢', '2026-10-24T19:01:00+08:00', 'assistant')).toBe('[10-24 19:01] 你：在呢');
   });
 
   it('顺序说明明确提到轮数、从旧到新、不要输出时间标签', () => {
@@ -185,5 +188,27 @@ describe('会话级短期记忆（A+B+C）', () => {
 
   it('空输入返回空串', () => {
     expect(buildSessionBrief([])).toBe('');
+  });
+});
+
+describe('trimHistoryToBudget —— 按体积裁历史', () => {
+  const row = (id: number, turn: number, role: 'user' | 'assistant', content: string) => ({
+    id, turn_id: turn, role, content, created_at: '', created_ms: id, date_key: '2026-11-06',
+  }) as never;
+
+  it('超预算时丢掉更早的整轮，至少留一轮', () => {
+    const rows = [
+      row(1, 1, 'user', 'a'.repeat(400)),
+      row(2, 1, 'assistant', 'b'.repeat(400)),
+      row(3, 2, 'user', 'c'.repeat(400)),
+      row(4, 2, 'assistant', 'd'.repeat(400)),
+    ];
+    const out = trimHistoryToBudget(rows, 900);
+    expect(out.map((m: any) => m.id)).toEqual([3, 4]);
+  });
+
+  it('预算足够时原样返回', () => {
+    const rows = [row(1, 1, 'user', '在吗'), row(2, 1, 'assistant', '在')];
+    expect(trimHistoryToBudget(rows, 1000)).toHaveLength(2);
   });
 });

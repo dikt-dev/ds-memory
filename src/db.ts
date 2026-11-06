@@ -306,6 +306,11 @@ export async function latestMessage(env: Env): Promise<MessageRow | null> {
   return row ?? null;
 }
 
+/** 落库后再补内容（图片标记、B 站资料）：只改正文，不动 id/时间。 */
+export async function updateMessageContent(env: Env, id: number, content: string): Promise<void> {
+  await env.DB.prepare('UPDATE messages SET content = ? WHERE id = ?').bind(content, id).run();
+}
+
 /** 回填费用与 token 用量。 */
 export async function updateMessageUsage(
   env: Env,
@@ -362,9 +367,23 @@ export function historyTimeLabel(createdAt: string): string {
   return (createdAt || '').slice(5, 16).replace('T', ' ') || '时间未知';
 }
 
-/** 给历史消息加上时间戳前缀（只进入本轮请求，不写回 D1）。 */
-export function withHistoryTimestamp(content: string, createdAt: string): string {
-  return `[${historyTimeLabel(createdAt)}] ${content}`;
+/**
+ * 谁说的。提示词里统一用「他」/「你」，不再出现 user/assistant 或「用户」。
+ *
+ * 为什么必须写出来：历史和当前消息是同一条数组里的不同 role，
+ * 但模型拿不到「这条是谁发的」以外的信息；中文里又常出现"她说""他说"，
+ * 不标清楚，它会把两句读成一个人说的。
+ */
+export type HistorySpeaker = 'user' | 'assistant';
+
+/** 给历史消息加上「时间 + 谁说的」前缀（只进入本轮请求，不写回 D1）。 */
+export function withHistoryTimestamp(
+  content: string,
+  createdAt: string,
+  speaker?: HistorySpeaker,
+): string {
+  const who = speaker === 'user' ? '他：' : speaker === 'assistant' ? '你：' : '';
+  return `[${historyTimeLabel(createdAt)}] ${who}${content}`;
 }
 
 /**
@@ -382,7 +401,7 @@ export function historyRangeNote(rows: MessageRow[], now: Date): string | null {
   const gap = Math.max(0, Math.round((last.created_ms - first.created_ms) / 3600000));
   return (
     `【历史顺序】接下来是最近 ${groups.length} 轮聊天记录，按时间从旧到新排列；` +
-    `每条开头的 [MM-DD HH:mm] 是发送时间，只用于判断先后，回复时绝对不要输出时间标签。` +
+    `每条开头的 [MM-DD HH:mm] 是发送时间、「他：」「你：」是说话人标记，只用于判断先后；回复时不要输出时间标签，也不要写「他：」「你：」。` +
     `最后一条是最近一条历史消息，当前用户消息在它之后。` +
     `最早 ${historyTimeLabel(first.created_at)}，最近 ${historyTimeLabel(last.created_at)}；` +
     `距现在约 ${hours} 小时，跨度约 ${gap} 小时。`

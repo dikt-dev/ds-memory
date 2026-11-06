@@ -34,7 +34,7 @@ function moodLine(mood: number | null): string | null {
 
 function bodyLine(health: number, recipe: string | null): string | null {
   if (recipe === 'sick' || health < 60) {
-    return '你今天病着，低烧、浑身发软，一整天基本躺着。说话短一点、慢一点，别逞强装没事；可以顺口提一句不舒服，但别反复诉苦，也别主动要人照顾。';
+    return '你今天病着，低烧、浑身发软，一整天基本躺着。别逞强装没事；可以顺口提一句不舒服，但别反复诉苦，也别主动要人照顾。';
   }
   if (health < 80) return '你今天身体有点沉，不算病，就是没精神。';
   if (recipe === 'marathon') return '你昨晚通宵了，今天脑子是糊的，反应会慢半拍。';

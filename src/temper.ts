@@ -61,15 +61,21 @@ export function temperCause(
   stance: TemperStance,
 ): string | null {
   if (!events || events.length === 0) return null;
-  const fresh = events.filter((e) => now - e.at <= 6 * 3600_000);
+  // 窗口从 6 小时收到 30 分钟：一次受挫不该锁死一整晚（2026-11-06）
+  const fresh = events.filter((e) => now - e.at <= 30 * 60_000);
   if (fresh.length === 0) return null;
   const negative = fresh.filter((e) => isNegativeEvent(e.type));
-  const positive = fresh.filter((e) => !isNegativeEvent(e.type));
+  // 「他倒苦水」既不是冲她来的，也不代表她心情好——不拿来当理由
+  const positive = fresh.filter(
+    (e) => !isNegativeEvent(e.type) && e.type !== 'share_pain' && e.type !== 'comfort_seek',
+  );
   const latest = (list: EmotionEvent[]): EmotionEvent | null =>
     list.length === 0 ? null : list.reduce((a, b) => (b.at > a.at ? b : a));
+  // 冷脸只能用「真正的不快」当理由；没有负向事件就别硬安一个（曾出现
+  // 「不想配合（因为他刚说了句好听的）」这种自相矛盾的归因）
   const pick =
     stance === 'cold' || stance === 'cool'
-      ? latest(negative) ?? latest(positive)
+      ? latest(negative)
       : latest(positive) ?? latest(negative);
   return pick ? CAUSE_WORDS[pick.type] : null;
 }
@@ -109,14 +115,16 @@ export function computeTemper(input: TemperInput): Temper {
   const allowRefuse = lowMood || compliance < 0.45;
 
   // 归因：只说「因为什么」，不写数值。没有依据就不写，别让她自己编理由。
-  const cause = temperCause(input.events, input.now ?? 0, stance);
+  // 「状态平常」不需要理由；只有有情绪倾向时才归因（否则会出现
+  // 「你状态平常（因为他刚说了句好听的）」这种自相矛盾的句子）
+  const cause = stance === 'steady' ? null : temperCause(input.events, input.now ?? 0, stance);
   const because = cause ? `（因为${cause}）` : '';
 
   const line =
     stance === "cold"
-      ? `你现在不想配合${because}：可以明确拒绝、可以说「不想」「一会儿再说」，也可以只回一两个字。理由不需要多正当——心情不好就够了。不要因为怕他不高兴就改口。`
+      ? `你现在不想配合${because}：可以明确拒绝、可以说「不想」「一会儿再说」。理由不需要多正当——心情不好就够了。不要因为怕他不高兴就改口。`
       : stance === "cool"
-        ? `你有点不痛快${because}：可以敷衍、可以少说、可以让他先哄你；不想做的事可以直接说不，不用先找个理由。`
+        ? `你有点不痛快${because}：可以敷衍、可以让他先哄你；不想做的事可以直接说不，不用先找个理由。`
         : stance === "steady"
           ? `你状态平常${because}：愿意就答应，不愿意就直接说，不用勉强。`
           : `你心情不错${because}：可以主动一点、多给一点反应，但依然可以不答应。`;

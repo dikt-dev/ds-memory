@@ -8,7 +8,7 @@ describe('聊天提示词的生活块', () => {
     const b = await loadLifeBlocks(bare, new Date('2026-11-02T09:00:00+08:00'));
     expect(b.residents).toBeNull();
     // 位置每轮都带；没有日程/天气时就只剩这一句
-    expect(b.life).toContain('【位置】');
+    expect(b.location).toContain('【位置】');
   });
 
   it('两个入口拿到的是同一个来源（不会一边有一边没有）', async () => {

@@ -29,7 +29,7 @@ import {
   HISTORY_FILE_MAX_CHARS,
   HISTORY_MESSAGE_MAX_CHARS,
 } from './db';
-import { conversationGapNote, loadSessionHistory } from './recent-context';
+import { conversationGapNote, loadSessionHistory, trimHistoryToBudget } from './recent-context';
 import { calcCost, loadPricing } from './pricing';
 import { recordChatUsage } from './usage-stats';
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -44,6 +44,7 @@ import { markProfileDirty } from './profile-cache';
 import { buildCharacterCard } from './character-card';
 import { facetsOf, processEmotionTurn } from './emotion-context';
 import { computeTemper } from './temper';
+import { recentPainEvent } from './emotion-events';
 import { loadKeepsakesBlock } from './keepsakes';
 import { moodFromVector } from './emotion-vector';
 import { readSessionFacts } from './session-facts';
@@ -106,7 +107,18 @@ export async function streamChat(
   ]);
   timing.packMs = Date.now() - tStart;
   // 短期记忆 = 本次会话全部（只追加不滑窗，缓存才命得中）；超出上限才有提要
-  const history = session.rows;
+  // index.ts 已经把这句写进 D1 了，历史里会再出现一次——去掉，别让同一句发两遍
+  const recordContentEarly = image ? [content, `[图片:${image.key}]`].filter(Boolean).join('\n') : content;
+  const deduped = session.rows.filter(
+    (m, i) =>
+      !(
+        i === session.rows.length - 1 &&
+        m.role === 'user' &&
+        (m.content === recordContentEarly || m.content === content)
+      ),
+  );
+  // 按字符预算裁历史（轮数上限之外再加一道体积闸）
+  const history = trimHistoryToBudget(deduped);
   const { memory, dayCtxFile, weather, ctx, promptMemory, personaState, personaDrift } = pack;
   if (pack.weather) await attachWeather(env, dateKey, pack.weather, dayCtxFile);
   // 最近几条回复的开头：避免连续几轮用同一句开场白
@@ -134,6 +146,7 @@ export async function streamChat(
   const keepsakesPromise = loadKeepsakesBlock(env).catch(() => '');
   const lifeBlocksPromise = loadLifeBlocks(env, now, content, history.slice(-6)).catch(() => ({
     residents: null,
+    location: null,
     life: null,
   }));
   const personaTextPromise = loadPersonaDoc(env).catch(() => '');
@@ -250,6 +263,11 @@ export async function streamChat(
   const keepsakesBlock = await keepsakesPromise;
 
   // ★ 脾气：情绪 → 配合度。让她可以拒绝，而不是"委屈地答应"。
+  // 他正在难受（最近 30 分钟内倒过苦水）：给她一句「先接住」，而不是让脾气变冷
+  const pain = recentPainEvent(emotion.state.events, now.getTime());
+  const careLine = pain
+    ? '他在跟你倒苦水，不是在问办法：先接住，别讲道理、别急着给建议；可以追问一句具体发生了什么。'
+    : null;
   const temper = computeTemper({
     vector: emotion.state.vector,
     facets: emotion.facets,
@@ -310,7 +328,7 @@ export async function streamChat(
   const cardTextWithMood = charCard.cardText;
 
   // 2) 落用户消息（D1 只存文本，图片记 R2 路径）
-  const recordContent = image ? [content, `[图片:${image.key}]`].filter(Boolean).join('\n') : content;
+  const recordContent = recordContentEarly;
   // 闸门补发时消息已经在库里了，复用它的 id，不再插一条（否则历史里会出现两条一样的话）
   let userId: number;
   if (opts.reuseUserMessageId) {
@@ -405,10 +423,12 @@ export async function streamChat(
     avoidPhrases,
         attitude,
         temper: temper.line,
+        care: careLine,
         keepsakes: keepsakesBlock,
         characterName: env.CHARACTER_NAME,
         userAddress: env.USER_ADDRESS,
         residents: lifeBlocks.residents,
+        location: lifeBlocks.location,
         persona: resolvePersona(env),
         life: [lifeBlocks.life, tic, selfNoteFinal, diaryAskNote].filter(Boolean).join('\n\n') || null,
   });
@@ -434,6 +454,7 @@ export async function streamChat(
           m.content.includes('【文件：') ? HISTORY_FILE_MAX_CHARS : HISTORY_MESSAGE_MAX_CHARS,
         ),
         m.created_at,
+        m.role,
       ),
     })),
     // 易变段放最后：时间、心情、召回、摘要每轮都在变，放在前缀里会让缓存全部失效

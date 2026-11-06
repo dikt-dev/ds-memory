@@ -23,10 +23,10 @@ describe('entryBody', () => {
 });
 
 describe('planSubjectFixes', () => {
-  it('动作条目补「用户」，状态标签保留在前面', () => {
+  it('动作条目补「他」，状态标签保留在前面', () => {
     const fixes = planSubjectFixes(doc);
     const first = fixes.find((f) => f.from.startsWith('[进行中] 记忆管理优化'));
-    expect(first?.to).toBe('[进行中] 用户记忆管理优化：已落地第一阶段，下一步待做分层预算');
+    expect(first?.to).toBe('[进行中] 他记忆管理优化：已落地第一阶段，下一步待做分层预算');
   });
 
   it('人工规则优先于通用规则', () => {
@@ -57,7 +57,7 @@ describe('applySubjectFixes', () => {
     expect(text).toContain('## 关于他');
     expect(text).toContain('- 职业=嵌入式开发');
     expect(text).toContain('- [26-10-30] 一起看完了可塑性记忆');
-    expect(text).toContain('- [进行中] 用户记忆管理优化');
+    expect(text).toContain('- [进行中] 他记忆管理优化');
     expect(text).toContain('用户写完了回滚方案草稿');
     // 幂等：再跑一次没有新改动
     expect(applySubjectFixes(text).changes).toEqual([]);

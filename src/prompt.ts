@@ -11,11 +11,12 @@
  * ★ 历史对话不再注入 system：调用方已经把它们作为原生 messages 传了，
  *   两处都放会让历史 token 翻倍（see chat.ts）。
  */
+import { buildNowCard } from './now-card';
 import { renderPersonaDoc } from './persona-doc';
 import { isoInBeijing, spokenTime } from './date';
 import { resolveCharacterName } from './identity';
 import { resolvePersona, type PersonaConfig } from './persona';
-import { compactMemoryForPrompt, splitMemoryForPrompt, slimMemoryForPrompt } from './memory-maintenance';
+import { splitMemoryForPrompt, slimMemoryForPrompt, unifyMemorySubjects } from './memory-maintenance';
 import type { DayContext } from './holidays';
 
 export interface WeatherInfo {
@@ -50,6 +51,8 @@ export interface BasePromptArgs {
   attitude?: string | null;
   /** 这一轮的脾气（由情绪换算，见 temper.ts） */
   temper?: string | null;
+  /** 他正在难受时的一句行为指引（先接住，别讲道理） */
+  care?: string | null;
   /** 铭记块（已渲染好的 Markdown，空串表示没有） */
   keepsakes?: string | null;
   /** 消息来源渠道 */
@@ -93,6 +96,8 @@ export interface BasePromptArgs {
   persona?: PersonaConfig;
   /** 她认识的人（稳定段）。人设文档里写了才带。 */
   residents?: string | null;
+  /** 她在哪 / 他在哪（稳定段：搬家或首次定位才变，不该每轮重发） */
+  location?: string | null;
   /** 只取某一段：stable = ①②（人设+长期记忆，可缓存前缀）；volatile = ③之后（每轮都变） */
   part?: 'all' | 'stable' | 'volatile';
 }
@@ -111,8 +116,10 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     todaySummary,
     attitude,
   temper,
+  care,
   keepsakes,
   residents,
+  location,
     channel,
     characterCard,
     voice,
@@ -201,16 +208,51 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   const memoryParts = memory?.trim()
     ? splitMemoryForPrompt(memory)
     : { stable: '', volatile: '' };
-  lines.push(slimMemoryForPrompt(memoryParts.stable, now) || '（暂无记忆）');
+  const stableMemory = memory?.trim() ? unifyMemorySubjects(slimMemoryForPrompt(memoryParts.stable, now)) : '';
+  if (stableMemory) {
+    // 记忆条目是「用户」「她」「助手」混着写的：不点明谁是谁，
+    // 她会把「用户熬夜调通」读成自己熬的夜（历史上真踩过）。
+    lines.push('（没写主语的条目，默认算他的。）');
+    lines.push(stableMemory);
+  } else {
+    lines.push('（暂无记忆）');
+  }
   if (memoryMode === 'compact') {
     lines.push('（其余记忆按本轮话题检索，可能不完整；没检索到就说记不清，不要编。）');
   }
   // 「记忆怎么用」整段已删：persona.md 里写了同样的边界（绝不编、先问别猜、感受随便说事实不行）。
   // 两处都写时，模型会各挑一半执行——这类"防编造"规则只需要一个出处。
 
-  // 「你说话的样子」整段已删：长度、语气词、动作、情绪先行都在 persona.md 的
-  // 「怎么说话」和「尾巴是第二张嘴」里。这里再写一遍只会出现两套口径
-  // （一处说"两句以内"、一处说"一到两句"）。
+  // ══ B2 她在哪 / 怎么说话 / 怎么发（稳定：一天或一次部署才变）══════════
+  // 这三段以前都在易变段里，每轮按未命中价（2.0 元/M）重发；其实一天都不变一次。
+  // 挪进前缀后按命中价（0.04 元/M）算，也少在每一轮里抢一次注意力。
+  if (location?.trim()) {
+    lines.push('');
+    lines.push(location.trim());
+  }
+  if (voice?.trim()) {
+    lines.push('');
+    lines.push(voice.trim());
+  }
+  // 怎么发：格式约束集中一处，别再混进"时间与环境"
+  const voiceRule =
+    '想发语音时，把 [语音]「要说的话」放在整条消息的最后；引号里是这一段完整要说的话，不是摘一句。' +
+    '标记前面的文字照常显示，但不会被念出来——想让人听见的话，放在标记后面。' +
+    '语音里可以用？！……～帮 TTS 停顿；要不要发语音、说多长，都由你判断。';
+  if (channel === 'astrobot' || voiceReply) {
+    lines.push('');
+    lines.push('## 怎么发');
+    if (channel === 'astrobot') {
+      lines.push('- 对方在 QQ 这类聊天软件里看：不支持 Markdown，纯文本才能正常显示。');
+      lines.push(
+        '- 你可以发表情：写成 [face:表情名]，系统会换成 QQ 表情。' +
+          (voiceReply ? voiceRule : '') +
+          '发不发、发哪种、发多长，都随你。',
+      );
+    } else {
+      lines.push('- ' + voiceRule);
+    }
+  }
 
   // ★ 前缀缓存边界：A + B 每天 04:00 才变，必须字节一致；
   // 之后的每一段都随轮次变化，放在用户消息附近，否则整段上下文吃不到命中价。
@@ -219,22 +261,22 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   // ══ C 你的生活（半稳定：几小时一变）══════════════════════════
   if (keepsakes?.trim()) {
     lines.push('');
-    lines.push(keepsakes.trim());
+    lines.push(unifyMemorySubjects(keepsakes.trim()));
   }
 
 
   // ══ D 最近发生的事（易变：五路来源合并 + 一条优先级）══════════
   // 之前这五块散落各处、没有优先级，life 说 A、中期记忆说 B 时模型只能猜。
   const recent: string[] = [];
-  if (recentMemo?.trim()) recent.push(recentMemo.trim());
-  if (recalled?.trim()) recent.push(recalled.trim());
+  if (recentMemo?.trim()) recent.push(unifyMemorySubjects(recentMemo.trim()));
+  if (recalled?.trim()) recent.push(unifyMemorySubjects(recalled.trim()));
   // 易变段也要瘦身：空分区不输出、日期同口径（近期动态还会补「几天前」）
   if (memoryParts.volatile.trim()) {
-    const slimVolatile = slimMemoryForPrompt(memoryParts.volatile, now).trim();
+    const slimVolatile = unifyMemorySubjects(slimMemoryForPrompt(memoryParts.volatile, now)).trim();
     if (slimVolatile) recent.push(slimVolatile);
   }
   if (todaySummary?.trim()) {
-    recent.push(`## 今日摘要（截至当前）\n${todaySummary.trim()}`);
+    recent.push(`## 今日摘要（截至当前）\n${unifyMemorySubjects(todaySummary.trim())}`);
   }
   if (recentFiles?.trim()) recent.push(recentFiles.trim());
   if (recent.length > 0) {
@@ -245,17 +287,17 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     lines.push(recent.join('\n\n'));
   }
 
-  // ══ E 这一轮的状态（易变）════════════════════════════════════
-  if (temper) lines.push('', '## 这一轮的你', temper);
-  if (attitude) lines.push('', '## 对用户的态度', attitude);
-  if (voice) lines.push('', voice);
-
-  if (characterCard) lines.push('', characterCard);
+  // ══ E 这一轮的状态（易变：脾气 + 情绪快照 + 状态卡，合成一张）════
+  // 以前是三张并列，每张都在说「她现在是什么状态」，术语和口径还会打架：
+  // 脾气说「不想配合」，情绪快照说「先接住情绪」，状态卡说「上午状态不错」。
+  if (temper || attitude || characterCard || care) {
+    lines.push('', buildNowCard({ temper, attitude, card: characterCard, care }));
+  }
   // 这两条原来嵌在 characterCard 里：卡片为空时提醒就整个丢了
   if (avoidOpeners && avoidOpeners.length > 0) {
     // 「仅供参考，不必刻意避开」是上一版为了不让她硬凑而写的，结果连续两条
     // 逐字相同（"你这人怎么回事，凌晨三点还不睡"）。重复比硬凑难看得多。
-    lines.push(`- 这几个开头刚连着用过，这条换一种起法，别再重复：${avoidOpeners.map((s) => `"${s}"`).join('、')}`);
+    lines.push(`- 这次换个起法——这几句刚用过：${avoidOpeners.map((s) => `"${s}"`).join('、')}`);
   }
   if (avoidPhrases && avoidPhrases.length > 0) {
     lines.push(`- 这些词你最近反复在用，这一轮尽量换种说法：${avoidPhrases.map((s) => `"${s}"`).join('、')}`);
@@ -278,7 +320,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   if (weather?.city && weather?.desc && typeof weather?.temp_c === 'number') {
     lines.push(
       `- 天气（你这边）：${weather.city} ${weather.desc}，${weather.temp_c}°C` +
-        '（他那边是另一个城市，别混用；他说下雨说的是他那边）',
+        '（这是你所在城市的天气；他说下雨，说的是他那边）',
     );
   }
   lines.push(`- 消息来源：${CHANNEL_LABELS[channel]}`);
@@ -287,23 +329,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     lines.push('');
     lines.push(life.trim());
   }
-  lines.push('- 时间、天气、地点以本节为准；记忆和你上一句里的说法都是往事，只用来排序。');
-
-  // 怎么发：格式约束集中一处，别再混进"时间与环境"
-  const voiceRule =
-    '想发语音时，把 [语音]「要说的话」放在整条消息的最后；引号里是这一段完整要说的话，不是摘一句。' +
-    '标记前面的文字照常显示，但不会被念出来——所以别把想说的话留在标记后面。' +
-    '语音里可以用？！……～帮 TTS 停顿；要不要发语音、说多长，都由你判断。';
-  if (channel === 'astrobot') {
-    lines.push('- 对方在 QQ 这类聊天软件里看：不支持 Markdown，纯文本才能正常显示。');
-    lines.push(
-      '- 你可以发表情：写成 [face:表情名]，系统会换成 QQ 表情。' +
-        (voiceReply ? voiceRule : '') +
-        '发不发、发哪种、发多长，都随你。',
-    );
-  } else if (voiceReply) {
-    lines.push('- ' + voiceRule);
-  }
+  lines.push('- 时间、天气、地点以本节为准；记忆和上一句里的说法当往事，只用来排序。');
 
   if (args.part === 'stable') return lines.slice(0, stableEnd).join('\n');
   if (args.part === 'volatile') return lines.slice(stableEnd).join('\n');

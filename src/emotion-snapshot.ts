@@ -72,7 +72,7 @@ export function emotionDirectorText(vector: EmotionVector): string[] {
   if (vector.shyness >= 30) tips.push('有点害羞，别把话说得太直白');
   if (vector.jealousy >= 30) tips.push('可以酸一句，但别真的审问');
   if (vector.attachment >= 40) tips.push('有点想黏人，可以主动找他说话');
-  if (vector.fatigue >= 45) tips.push('累了，回复短一点，可以顺势催他休息');
+  if (vector.fatigue >= 45) tips.push('累了，可以顺势催他休息');
   if (vector.valence >= 40 && vector.grievance < 20) tips.push('心情不错，可以多接一句话、多笑一下');
   if (vector.valence <= -40) tips.push('提不起劲，别硬撑热情，安静一点也可以');
   return tips.slice(0, 2);

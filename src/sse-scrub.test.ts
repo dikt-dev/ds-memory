@@ -91,3 +91,53 @@ describe('createSseRewriter —— 流式帧重写', () => {
     expect(textOf(out)).toBe('今天深圳二十六度，挺晒的');
   });
 });
+
+describe('说话人标记泄漏', () => {
+  const frame = (text: string) =>
+    'data: ' + JSON.stringify({ choices: [{ delta: { content: text } }] });
+
+  it('开头的「你：」会被扣住并剥掉', () => {
+    const r = createSseRewriter();
+    const out: string[] = [];
+    for (const line of [frame('你：'), frame('这问题问得……'), frame('')]) out.push(...r.rewrite(line));
+    out.push(...r.flush());
+    const text = out
+      .filter((l) => l.startsWith('data: '))
+      .map((l) => {
+        try {
+          return JSON.parse(l.slice(6)).choices?.[0]?.delta?.content ?? '';
+        } catch {
+          return '';
+        }
+      })
+      .join('');
+    expect(text).not.toContain('你：');
+    expect(text).toContain('这问题问得');
+  });
+
+  it('先来一个换行再吐「你：」也能剥掉（真实分片）', () => {
+    const r = createSseRewriter();
+    const out: string[] = [];
+    for (const piece of ['\n', '你', '：', '问第', '四遍啦。']) out.push(...r.rewrite(frame(piece)));
+    out.push(...r.flush());
+    const text = out
+      .filter((l) => l.startsWith('data: '))
+      .map((l) => {
+        try {
+          return JSON.parse(l.slice(6)).choices?.[0]?.delta?.content ?? '';
+        } catch {
+          return '';
+        }
+      })
+      .join('');
+    expect(text).not.toContain('你：');
+    expect(text).toContain('问第四遍');
+  });
+
+  it('正常的「他：」结尾不受影响', () => {
+    const r = createSseRewriter();
+    const out = r.rewrite(frame('我在的，你说吧'));
+    out.push(...r.flush());
+    expect(out.join('')).toContain('我在的');
+  });
+});

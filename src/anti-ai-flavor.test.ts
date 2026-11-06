@@ -234,6 +234,15 @@ describe('limitStageDirections（舞台指示限流）', () => {
   });
 });
 
+describe('普通消息的括号保留（2026-11-06）', () => {
+  it('句首动作、句中动作、语气说明都原样留下', () => {
+    const r = scrubAiFlavor('（顿了一下）行吧（把手机举远一点）你自己说的啊（语气软下来）。');
+    expect(r.text).toContain('（顿了一下）');
+    expect(r.text).toContain('（把手机举远一点）');
+    expect(r.text).toContain('（语气软下来）');
+  });
+});
+
 describe('报幕句清洗（从提示词搬到后处理）', () => {
   it('去掉「不过先说正事」这类元叙述，保留正文', () => {
     const r = scrubAiFlavor('不过先说正事：分层预算那笔账，你心里有数没？');

@@ -121,6 +121,7 @@ export function registerAdminOpsRoutes(app: Hono<AppEnv>): void {
       persona: resolvePersona(c.env),
       weather: weather ?? undefined,
       residents: lifeBlocks.residents,
+    location: lifeBlocks.location,
       // 和 chat.ts 一致：被问的日记要带上日期 + 她自己写的备忘摘要，否则这个调试页看不到真实提示词
       life:
         [lifeBlocks.life, await diaryAskPreview(c.env)].filter(Boolean).join('\n\n') || null,

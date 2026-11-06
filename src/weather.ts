@@ -5,6 +5,7 @@
 import type { Env } from './types';
 import type { WeatherInfo } from './prompt';
 import { getCityConfig } from './settings';
+import { CITIES } from './life/cities';
 import { getRuntimeState, putRuntimeState } from './runtime-store';
 import { logError, logWarn } from './error-log';
 
@@ -67,8 +68,18 @@ function parseCache(raw: string | null): CachedWeather | null {
   }
 }
 
-export async function fetchWeather(env: Env): Promise<WeatherInfo | null> {
-  const cfg = await getCityConfig(env);
+/**
+ * 取天气。
+ *
+ * @param city 指定城市时按这个城市取（她旅游时用目的地）；不传则用网页端设置的天气城市。
+ */
+export async function fetchWeather(env: Env, city?: string): Promise<WeatherInfo | null> {
+  let cfg = await getCityConfig(env);
+  if (city && city !== cfg.city) {
+    const coords = CITIES[city];
+    // 没有坐标就不硬凑，回落到默认城市（宁可天气不准，也不能报到别的城市头上）
+    if (coords) cfg = { city, latitude: coords.lat, longitude: coords.lon, updated_at: '' };
+  }
   const key = `${KV_PREFIX}${cfg.city}`;
   const cached = parseCache(await getRuntimeState(env, key).catch(() => null));
   if (cached && isFresh(cached.updated_at)) {

@@ -160,7 +160,7 @@ export function relationArchetype(f: RelationFacets, grievance = 0): RelationArc
     return {
       key: 'weary',
       label: '熟归熟，但最近有点烦你',
-      hint: '回应可以简短、敷衍一点，不用主动找话题。',
+      hint: '回应可以敷衍一点，不用主动找话题。',
     };
   }
   if (f.affection >= 600 && f.intimacy < 400) {

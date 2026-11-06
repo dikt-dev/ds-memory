@@ -306,6 +306,23 @@ export function extractEmotionEvents(text: string, at: number, target: EventTarg
     }
   }
 
+  // 「被领导当众骂了一顿」这类：关键词表按连续子串匹配，中间隔字就漏。
+  // 被动式 + 负面动词单独补一层，否则他真的受挫时她毫无反应。
+  if (events.length < MAX_EVENTS_PER_MESSAGE && !seen.has('share_pain')) {
+    const passive = /被[^，。！？,.!?\s]{0,6}(骂|批|批评|怼|嘲|罚|投诉|扣钱|开除)/.exec(trimmed);
+    if (passive) {
+      seen.add('share_pain');
+      events.push({
+        type: 'share_pain',
+        intensity: 2,
+        target,
+        evidence: sentenceOf(trimmed, passive[0]),
+        at,
+        resolved: true,
+      });
+    }
+  }
+
   return neutralizeIrony(trimmed, softenPlayfulInsult(trimmed, events), at);
 }
 
@@ -363,7 +380,11 @@ export function eventEmotionDelta(event: EmotionEvent): Partial<EmotionVector> {
     case 'share_joy':
       return { valence: scale(8) };
     case 'share_pain':
-      return { valence: -scale(5), attachment: scale(6) };
+      // ★ 他的遭遇不是她的事件（2026-11-06 修）：
+      //   以前这里连她的愉悦度一起扣，结果「他被领导骂」→ 她 valence 掉到 −10 以下
+      //   → 脾气判「不想配合」→ 他更难受，形成正反馈。
+      //   共情的正确表达是「更贴近」（依恋），不是「我自己也难过」。
+      return { attachment: scale(6) };
     case 'deep_talk':
       return { attachment: scale(10), shyness: scale(3) };
     case 'ignored':
@@ -492,6 +513,26 @@ export function reconcileWithApology(events: EmotionEvent[], now: number): Emoti
     }
     return e;
   });
+}
+
+/**
+ * 「他正在难受」：最近有没有倾诉类事件。
+ *
+ * 给状态卡用——他倒苦水时她该做的是接住、追问，而不是把自己的脾气调冷。
+ */
+export function recentPainEvent(
+  events: EmotionEvent[] | undefined,
+  now: number,
+  windowMs = 30 * 60_000,
+): EmotionEvent | null {
+  if (!events || events.length === 0) return null;
+  const fresh = events.filter(
+    (e) =>
+      e.target === 'user' &&
+      (e.type === 'share_pain' || e.type === 'comfort_seek') &&
+      now - e.at <= windowMs,
+  );
+  return fresh.length > 0 ? fresh[fresh.length - 1] : null;
 }
 
 /** 词典可能判错的信号：否定 / 反讽 / 正负冲突。 */

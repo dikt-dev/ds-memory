@@ -64,7 +64,7 @@ describe('fatigueLevel —— 疲惫度', () => {
   it('40 轮轻微累', () => {
     const f = fatigueLevel(30);
     expect(f.level).toBeGreaterThan(0);
-    expect(f.note).toContain('略短');
+    expect(f.note).toContain('有点累');
   });
   it('60+ 很累', () => {
     expect(fatigueLevel(70).level).toBe(1);
@@ -193,7 +193,7 @@ describe('CONVERSATION_BEHAVIORS —— 对话行为指令', () => {
     expect(CONVERSATION_BEHAVIORS).toContain('反问');
     expect(CONVERSATION_BEHAVIORS).toContain('主动提到');
     expect(CONVERSATION_BEHAVIORS).toContain('不太想聊');
-    expect(CONVERSATION_BEHAVIORS).toContain('别每次都长篇大论');
+    expect(CONVERSATION_BEHAVIORS).not.toContain('长篇大论');
   });
 });
 

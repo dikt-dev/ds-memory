@@ -15,6 +15,21 @@ import { RELATION_MAX, MOOD_MAX_DAILY_DELTA } from './relation-model';
  * 条目格式：- [YY-MM-DD] 内容（兼容旧的 YYYY-MM-DD）
  */
 
+/**
+ * 统一记忆里的主语：用户 → 「他」，助手 / 她 → 「你」。
+ *
+ * 记忆由三个地方写：提炼任务写「用户 / 她」，人工更正写「他」，旧数据里还有「助手」。
+ * 同一段提示词里三种叫法，模型会当成三个人——尤其「她」和「你」本来就是同一个人。
+ * 只改送进提示词的那一份，R2 里的原文一个字不动。
+ */
+export function unifyMemorySubjects(text: string): string {
+  if (!text) return text;
+  return text
+    .replace(/用户/g, '他')
+    .replace(/助手/g, '你')
+    .replace(/她/g, '你');
+}
+
 export function byteLength(s: string): number {
   return new TextEncoder().encode(s).length;
 }

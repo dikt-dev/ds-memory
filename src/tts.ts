@@ -22,8 +22,28 @@ export interface TtsJob {
   updated_at: string;
 }
 
+/**
+ * 语音文本清洗：**只有念出来的那一份**去括号。
+ *
+ * 括号里是动作和语气（「（顿了一下）」「（语气软下来）」），念出来就成了解说词；
+ * 但正常聊天消息里要原样保留——2026-11-06 起，后处理不再删普通消息的括号。
+ */
+export function cleanSpeechText(text: string): string {
+  return String(text || '')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/\[face[:：][^\]]{1,12}\]/gi, '')
+    .replace(/\[(?:图片|文件|语音|voice)[^\]]*\]/gi, '')
+    // 动作/语气括号整段去掉（只影响念出来的这一份）
+    .replace(/[（(][^（）()]{0,80}[）)]/g, '')
+    .replace(/[#*_`>~]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export async function createTtsJob(env: Env, text: string): Promise<number> {
-  const clean = text.trim().slice(0, 300);
+  const clean = cleanSpeechText(text).slice(0, 300);
   if (!clean) return 0;
   const now = isoInBeijing();
   const row = await env.DB.prepare(
@@ -93,7 +113,7 @@ export async function nackTtsJob(env: Env, id: number): Promise<void> {
 
 /** Worker MeloTTS 兜底：生成 MP3 存 R2，返回 audio key。 */
 export async function generateMeloTtsKey(env: Env, text: string): Promise<string | null> {
-  const clean = text.trim().slice(0, 300);
+  const clean = cleanSpeechText(text).slice(0, 300);
   if (!clean) return null;
   const out = (await env.AI.run(
     '@cf/myshell-ai/melotts' as never,

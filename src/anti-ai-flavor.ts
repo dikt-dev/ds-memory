@@ -217,7 +217,9 @@ export function stripLeadingStageDirection(text: string): string {
 export function scrubAiFlavor(raw: string): { text: string; cleaned: boolean } {
   // 主动消息的收尾清理收进这里：以前是两份实现，一份线上、一份只有测试
   const source = sanitizeProactiveText(raw);
-  const withoutTime = limitStageDirections(stripLeadingStageDirection(stripLeadingTimeLabels(source)));
+  // 2026-11-06：与提示词对齐——动作/语气括号交给模型自己决定，后处理不再删。
+  // 以前这里会删句首动作、只留 1 个括号，导致「用户看到的」和「落库的」不是同一句。
+  const withoutTime = stripLeadingTimeLabels(source);
   const applied = applyRules(withoutTime);
   const finalText = applied.text.trim();
 

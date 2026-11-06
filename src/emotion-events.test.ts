@@ -4,6 +4,7 @@ import {
   extractEmotionEvents,
   needsAiEventReview,
   parseAiEventLabels,
+  recentPainEvent,
   reconcileWithApology,
   sumFacetDelta,
   unresolvedEvents,
@@ -196,5 +197,43 @@ describe('parseAiEventLabels', () => {
 
   it('容错未知标签', () => {
     expect(parseAiEventLabels('whatever:3', AT)).toEqual([]);
+  });
+});
+
+describe('归属：他的遭遇不改她的情绪（2026-11-06）', () => {
+  it('他倾诉只加依恋，不扣她自己的愉悦度', () => {
+    const base = { ...emptyEmotionVector(), valence: 40, attachment: 30 };
+    // 用词典真能命中的句子（「被领导当众骂」里没有连续的「被骂」，不会触发事件）
+    const events = extractEmotionEvents('今天上班好累啊，不想动了', AT);
+    expect(events.some((e) => e.type === 'share_pain')).toBe(true);
+    const withEvent = applyEventsToVector(base, events);
+    const without = applyEventsToVector(base, []);
+    // 不因为"他被骂"额外掉愉悦度（只剩系统固有的自然衰减）
+    expect(withEvent.valence).toBe(without.valence);
+    expect(withEvent.attachment).toBeGreaterThan(without.attachment);
+  });
+
+  it('recentPainEvent 认得出「他正在难受」，超时就不认', () => {
+    const ev: EmotionEvent = {
+      type: 'share_pain',
+      intensity: 2,
+      target: 'user',
+      evidence: '被领导骂',
+      at: AT,
+    };
+    expect(recentPainEvent([ev], AT + 60_000)?.type).toBe('share_pain');
+    expect(recentPainEvent([ev], AT + 41 * 60_000)).toBeNull();
+    expect(recentPainEvent([{ ...ev, type: 'praise', target: 'ai' }], AT)).toBeNull();
+  });
+});
+
+describe('被动式受挫（被X骂 / 被X批）', () => {
+  it('「被领导当众骂了一顿」也判成 share_pain', () => {
+    const events = extractEmotionEvents('今天被领导当众骂了一顿', AT);
+    expect(events.some((e) => e.type === 'share_pain')).toBe(true);
+  });
+
+  it('「被老板批了一顿」同理', () => {
+    expect(extractEmotionEvents('被老板批了一顿', AT).some((e) => e.type === 'share_pain')).toBe(true);
   });
 });

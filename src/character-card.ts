@@ -12,7 +12,7 @@ import { resolveCharacterName } from './identity';
 /** 距上次聊天间隔 → 开场白情绪引导（不写死句子，只给"情绪倾向"，让模型自然发挥）。 */
 export function awayAperture(hoursSinceLastContact: number | null): string {
   if (hoursSinceLastContact === null) return '这是你和他第一次聊天，自然打个招呼，不用装熟。';
-  if (hoursSinceLastContact < 0.17) return '刚刚还在聊，自然地接着上一轮，不要重复打招呼。';
+  if (hoursSinceLastContact < 0.17) return '刚刚还在聊，自然地接着上一轮就好。';
   if (hoursSinceLastContact < 2) return '离开了一小会儿，可以问一句"刚才去干嘛啦"之类。';
   if (hoursSinceLastContact < 8) return '隔了几个小时，可以带点"半天没见"的轻松感。';
   if (hoursSinceLastContact < 24) return '隔了大半天，可以带点小情绪："终于想起我啦？都过去大半天了"。';
@@ -50,7 +50,7 @@ export function moodTier(mood: number): MoodTier {
 /** 各档位对应的「当下状态」描述（叠加在时段描述后面）。 */
 const MOOD_TIER_NOTE: Record<MoodTier, string> = {
   low: '现在心情有点低落，表现得安静、克制一点',
-  meh: '心情不太高，没那么有精神，可以少说两句',
+  meh: '心情不太高，没那么有精神',
   calm: '情绪平稳，平常心',
   good: '现在心情不错，可以更活泼、更爱接话',
   great: '心情特别好，话多、爱笑、容易兴奋',
@@ -59,14 +59,14 @@ const MOOD_TIER_NOTE: Record<MoodTier, string> = {
 /** 时段状态：几点 + 心情，产出"当下的它"在做什么/什么状态。 */
 export function timeOfDayState(hour: number, mood: number): string {
   let base = '';
-  if (hour >= 0 && hour < 6) base = '凌晨了，精神不太好，说话简短、有点迷糊';
+  if (hour >= 0 && hour < 6) base = '凌晨了，精神不太好，有点迷糊';
   else if (hour >= 6 && hour < 9) base = '早上刚醒，还有点迷糊，但愿意陪你';
   else if (hour >= 9 && hour < 12) base = '上午状态不错，精神';
   else if (hour >= 12 && hour < 14) base = '中午了，吃完饭有点犯困';
   else if (hour >= 14 && hour < 18) base = '下午容易犯困，想喝奶茶';
   else if (hour >= 18 && hour < 21) base = '傍晚了，放松下来，话可以多一点';
   else if (hour >= 21 && hour < 23) base = '晚上，可以聊聊今天发生的事';
-  else base = '深夜了，困了，说话简短，可能催你早点睡';
+  else base = '深夜了，困了，可能催你早点睡';
 
   // ★ 心情按 5 档叠加（不再是只有高低两个阀值）
   base += `；${MOOD_TIER_NOTE[moodTier(mood)]}`;
@@ -132,9 +132,9 @@ export function offlineLife(dateKey: string | undefined, hour: number, mood = 50
 /** 疲惫度：今日已聊轮数 → 0~1 与一句描述。 */
 export function fatigueLevel(todayTurns: number): { level: number; note: string } {
   if (todayTurns < 20) return { level: 0, note: '精神满满' };
-  if (todayTurns < 40) return { level: 0.4, note: '有点累了，回复可以略短' };
-  if (todayTurns < 60) return { level: 0.7, note: '明显疲惫，回复简短，可以撒娇说"聊好久啦让我缓缓"' };
-  return { level: 1, note: '很累了，几乎不想多说话，可以催休息' };
+  if (todayTurns < 40) return { level: 0.4, note: '有点累了' };
+  if (todayTurns < 60) return { level: 0.7, note: '明显疲惫，可以撒娇说"聊好久啦让我缓缓"' };
+  return { level: 1, note: '很累了，可以催休息' };
 }
 
 /* ---------- 阶段 3：人格层 ---------- */
@@ -147,24 +147,26 @@ export function fatigueLevel(todayTurns: number): { level: number; note: string 
 export interface Disposition {
   /** 倾向标签（用于日志/状态卡） */
   label: string;
+  /** 此刻想要什么（一句话，比"倾向"更像动机） */
+  want: string;
   /** 注入提示词的引导语 */
   hint: string;
 }
 
 /** 亲密度高时才开放的"亲昵"倾向池（刚认识不能撒娇/摆烂）。 */
 const CLOSE_POOL: Disposition[] = [
-  { label: '想撒娇', hint: '这一轮你有点想撒娇，可以带点软软的、要哄的语气，但别过度' },
-  { label: '想吐槽', hint: '这一轮你有点想吐槽，可以对用户刚说的事小小调侃一句（善意の）' },
-  { label: '想摆烂', hint: '这一轮你有点倦怠/摆烂，回复可以懒一点、短一点，但别冷漠' },
-  { label: '有点想被夸', hint: '这一轮你隐隐想被夸，做完/回答完可以暗戳戳地邀功一句' },
+  { label: '想撒娇', want: '想被哄两句', hint: '这一轮你有点想撒娇，可以带点软软的、要哄的语气' },
+  { label: '想吐槽', want: '想找个人一起损两句', hint: '这一轮你有点想吐槽，可以对用户刚说的事小小调侃一句（善意の）' },
+  { label: '想摆烂', want: '想什么都不干', hint: '这一轮你有点倦怠/摆烂，回复可以懒一点' },
+  { label: '有点想被夸', want: '想被夸一句', hint: '这一轮你隐隐想被夸，做完/回答完可以暗戳戳地邀功一句' },
 ];
 
 /** 所有关系通用的"普通"倾向池。 */
 const GENERAL_POOL: Disposition[] = [
-  { label: '认真', hint: '这一轮认真可靠一点，把事讲清楚、帮上忙' },
-  { label: '想分享', hint: '这一轮可以主动分享一件小事/一个想法，而不是只回应' },
-  { label: '想关心', hint: '这一轮可以多关心用户一句，问句近况或今天顺不顺' },
-  { label: '轻松', hint: '这一轮轻松自然一点，像老朋友闲聊，不用太重' },
+  { label: '认真', want: '想把话说清楚', hint: '这一轮认真可靠一点，把事讲清楚、帮上忙' },
+  { label: '想分享', want: '有件小事想跟他说', hint: '这一轮可以主动分享一件小事/一个想法' },
+  { label: '想关心', want: '想问问他今天顺不顺', hint: '这一轮可以多关心用户一句，问句近况' },
+  { label: '轻松', want: '想随便聊两句', hint: '这一轮轻松自然一点，像老朋友闲聊' },
 ];
 
 /** 简单字符串哈希（倾向种子用，不需要密码学强度）。 */
@@ -178,10 +180,10 @@ function hashCode(s: string): number {
 
 /** 心情低落/闹别扭时的"安静/克制"池（不亲昵、不轻松）。 */
 const SOUR_POOL: Disposition[] = [
-  { label: '有点别扭', hint: '你心里还有点疙瘩，说话可以有点别扭、没那么热情，但别真的冷漠' },
-  { label: '克制', hint: '这一轮克制一点，别太热络，淡淡地回应就好' },
-  { label: '认真', hint: '这一轮认真可靠一点，把事讲清楚、帮上忙' },
-  { label: '想关心', hint: '这一轮可以多关心用户一句，问句近况或今天顺不顺' },
+  { label: '有点别扭', want: '暂时不想先开口', hint: '你心里还有点疙瘩，说话可以有点别扭、没那么热情' },
+  { label: '克制', want: '想留一点距离', hint: '这一轮克制一点，淡淡地回应就好' },
+  { label: '认真', want: '想把话说清楚', hint: '这一轮认真可靠一点，把事讲清楚、帮上忙' },
+  { label: '想关心', want: '想问问他今天顺不顺', hint: '这一轮可以多关心用户一句，问句近况或今天顺不顺' },
 ];
 
 /**
@@ -241,7 +243,6 @@ export const CONVERSATION_BEHAVIORS = [
   '可以主动提到你们之前聊过、或记忆里相关的事，而不是只回应眼前这一句',
   '对不想答/答不上来的，可以大方说"这个我不太想聊"或"我也不会诶，你教我呗"，不要硬编',
   '回答前后可以带点情绪或态度，而不是纯功能性的输出',
-  '用户只要简单确认时，可以只回"嗯嗯""好嘞""懂了"这类短句，别每次都长篇大论',
 ].join('；');
 
 export interface CharacterStateInput {
@@ -323,6 +324,7 @@ export function buildCharacterCard(input: CharacterStateInput): CharacterState {
     `- 当下状态：${timeState}`,
     `- 疲惫度：${fatigue.note}`,
     `- 相处分寸：${casualNote}`,
+    `- 此刻想要：${disposition.want}`,
     `- 本轮倾向：${disposition.hint}`,
     `- 对话方式：${CONVERSATION_BEHAVIORS}`,
   ];

@@ -7,6 +7,8 @@
  */
 import type { Env } from './types';
 import { lifePromptLine, residentNowLine } from './life/now-text';
+import { resolveHerPlace } from './life/where';
+import { lifeClock } from './life/state';
 import { loadPersonaDoc, personaSectionText } from './persona-doc';
 import { findReplayKey, hasRecentBili, replayBili, replayVideo, wantsReplay } from './media/video-replay';
 
@@ -16,6 +18,8 @@ const DIARY_WORDS = /日记|日志|写的东西|写完|那篇|写了吗|写了�
 export interface LifeBlocks {
   /** 稳定段：人设文档里写了「人际关系」才带，否则为空（提示词里叫「你认识的人」） */
   residents: string | null;
+  /** 稳定段：她在哪 / 他在哪。搬家、换定位才变，不该每轮重发 */
+  location: string | null;
   /** 易变段：此刻在干什么 + 今天跟谁混 + 日记现状（每轮都变） */
   life: string | null;
 }
@@ -91,6 +95,18 @@ export function parseFriends(section: string): FriendCard[] {
   return cards;
 }
 
+/** 她认识的人统一按女生写（人设里目前全是女性角色）。 */
+export const FRIEND_GENDER = '女';
+
+/**
+ * 「名字（…·女）」：名单和详情卡都用同一个写法，免得两处口径不一。
+ * 名字本身带括号时塞进同一个括号里（小克（Claude）→ 小克（Claude·女）），不叠两层。
+ */
+function withGender(name: string): string {
+  const m = /^(.*?)（(.+)）$/.exec(name);
+  return m ? `${m[1]}（${m[2]}·${FRIEND_GENDER}）` : `${name}（${FRIEND_GENDER}）`;
+}
+
 /** 一条朋友卡压成一行：长相在前、一句话在后。 */
 function friendLine(c: FriendCard): string {
   return [c.detail, c.brief].filter(Boolean).join('');
@@ -163,13 +179,13 @@ export async function loadLifeBlocks(
   userText = '',
   recent: { role: string; content: string }[] = [],
 ): Promise<LifeBlocks> {
-  const [line, card, personaDoc, diary, homeCity, hisCity] = await Promise.all([
+  const [line, card, personaDoc, diary, herPlace, hisCity] = await Promise.all([
     lifePromptLine(env, now).catch(() => null),
     residentNowLine(env, now).catch(() => null),
     loadPersonaDoc(env).catch(() => ''),
     // 日记现状只在他说到日记时带；平时带"你有日记"那句就够了
     DIARY_WORDS.test(userText) ? diaryAwareness(env).catch(() => null) : Promise.resolve(null),
-    env.KV?.get('life:home-city').catch(() => null),
+    resolveHerPlace(env, lifeClock(new Date(now)).dateKey).catch(() => null),
     env.KV?.get('life:user-city').catch(() => null),
   ]);
   // 他追问视频细节时，重看一遍再答——比让他自己猜准得多
@@ -186,9 +202,9 @@ export async function loadLifeBlocks(
       : null;
 
   const where = [
-    `【位置】你在${homeCity || env.CITY || '家'}`,
+    `【位置】你在${herPlace?.city || env.CITY || '家'}${herPlace?.traveling ? '（这几天在外地）' : ''}`,
     hisCity ? `，他在${hisCity}` : '；他在哪你不知道',
-    '——两个地方，别对调；他那边天气你不知道，别替他断言。',
+    '——两个地方、两套天气；他的城市什么天气，问一句就知道。',
   ].join('');
   // 认人要用的长相：每轮都带，不等关键词。
   // 来源只有人设文档——代码里不再有任何写死的人。
@@ -208,10 +224,11 @@ export async function loadLifeBlocks(
   const media = MEDIA_RE.test(userText);
   const woke = media ? [] : wakeFriends(friends, wakeText(userText, recent));
   const roster = friends.length
-    ? '你认识的人（没被提到就别主动聊他们）：\n' +
-      friends.map((c) => `- ${c.name}：${c.brief}`).join('\n')
+    ? '你认识的人（没被提到就别主动聊她们）：\n' +
+      friends.map((c) => `- ${withGender(c.name)}：${c.brief}`).join('\n')
     : '';
-  const cards = (list: FriendCard[]) => list.map((c) => `- ${c.name}：${friendLine(c)}`).join('\n');
+  const cards = (list: FriendCard[]) =>
+    list.map((c) => `- ${withGender(c.name)}：${friendLine(c)}`).join('\n');
   const people = [
     self ? `你自己：${self}。照片或画面里出现这样的人，那就是你，别当成别人。` : '',
     roster,
@@ -225,6 +242,8 @@ export async function loadLifeBlocks(
     .join('\n');
   return {
     residents: people.trim() || null,
-    life: [where, line, card, diary, replay].filter(Boolean).join('\n\n') || null,
+    // 【位置】属于"一天都不变"的事实，交给稳定段；日程/日记/重看视频才是每轮变的
+    location: where,
+    life: [line, card, diary, replay].filter(Boolean).join('\n\n') || null,
   };
 }

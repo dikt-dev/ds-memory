@@ -100,7 +100,17 @@ describe('归因', () => {
     expect(t.line).not.toContain('因为');
   });
 
-  it('超出 6 小时的旧事不再当理由', () => {
+  it('他倒苦水既不是理由，也不该让她变冷', () => {
+    const pain = { type: 'share_pain' as const, intensity: 2 as const, target: 'user' as const, evidence: '被领导骂', at: now - 60_000 };
+    const v = { ...emptyEmotionVector(), valence: 40, attachment: 50 };
+    const t = computeTemper({ vector: v, facets, events: [pain], now });
+    expect(t.cause).toBeNull();
+    expect(t.stance).not.toBe('cold');
+    expect(t.allowRefuse).toBe(false);
+  });
+
+  it('超出 30 分钟的旧事不再当理由', () => {
     expect(temperCause([ev('insult', now - 7 * 3600_000)], now, 'cool')).toBeNull();
+    expect(temperCause([ev('insult', now - 45 * 60_000)], now, 'cool')).toBeNull();
   });
 });

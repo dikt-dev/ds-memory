@@ -13,12 +13,27 @@ describe('buildSystemPrompt', () => {
       weather: { city: '杭州', temp_c: 18.5, desc: '晴' },
       channel: 'web',
     });
-    expect(prompt).toContain('用户生活在杭州');
+    // 主语统一：记忆里的「用户」进提示词时变成「他」
+    expect(prompt).toContain('他生活在杭州');
+    expect(prompt).not.toContain('用户生活在杭州');
     expect(prompt).toContain('26-10-21');
   expect(prompt).toContain('星期三');
     expect(prompt).toContain('工作日');
     expect(prompt).toContain('杭州 晴，18.5°C');
     expect(prompt).toContain('消息来源：网页');
+  });
+
+  it('记忆里的主语统一成「他 / 你」，只留一句缺省规则', () => {
+    const prompt = buildSystemPrompt({
+      now: new Date('2026-10-21T01:00:00Z'),
+      ctx,
+      memory: '- [2026-10-01] 用户生活在杭州；助手说她会去。\n- [2026-10-02] 她煮了泡面',
+      channel: 'web',
+    });
+    expect(prompt).toContain('他生活在杭州；你说你会去');
+    expect(prompt).toContain('你煮了泡面');
+    expect(prompt).not.toMatch(/用户生活在|助手说/);
+    expect(prompt).toContain('（没写主语的条目，默认算他的。）');
   });
 
   it('保留安全边界，但不再写死傲娇配比与口癖模板', () => {
@@ -52,7 +67,7 @@ describe('buildSystemPrompt', () => {
       memory: '- [2026-10-01] 用户生活在杭州。',
       channel: 'web',
     });
-    const memoryAt = prompt.indexOf('用户生活在杭州');
+    const memoryAt = prompt.indexOf('他生活在杭州');
     const timeAt = prompt.indexOf('## 此刻');
     expect(memoryAt).toBeGreaterThan(-1);
     expect(timeAt).toBeGreaterThan(-1);
@@ -258,6 +273,32 @@ describe('时间与诚实性规则', () => {
     expect(split.stable).toContain('你是「');
   });
 
+  it('说话方式、位置、怎么发都进稳定段（每轮重发太贵）', () => {
+    const split = buildSystemPromptSplit({
+      ...base,
+      voice: '## 说话\n- 口语化。',
+      location: '【位置】你在杭州，他在深圳。',
+      voiceReply: true,
+    });
+    expect(split.stable).toContain('## 说话');
+    expect(split.stable).toContain('【位置】你在杭州，他在深圳');
+    expect(split.stable).toContain('## 怎么发');
+    expect(split.volatile).not.toContain('【位置】');
+    expect(split.volatile).not.toContain('## 说话');
+  });
+
+  it('脾气 / 情绪 / 状态卡合成一张「现在的你」', () => {
+    const prompt = buildSystemPrompt({
+      ...base,
+      temper: '你现在不想配合。',
+      attitude: '## 我现在的状态\n- 关系：还不太熟',
+      characterCard: '## 当前的小蓝\n- 当下状态：上午状态不错',
+    });
+    expect(prompt.match(/## 现在的你/g)).toHaveLength(1);
+    expect(prompt).not.toContain('## 这一轮的你');
+    expect(prompt).not.toContain('## 对用户的态度');
+  });
+
   it('时间与环境只写一处，且带口语说法', () => {
     const prompt = buildSystemPrompt({ ...base, weather: { city: '杭州', temp_c: 18.5, desc: '晴' } });
     expect(prompt).toContain('- 现在：26-10-29 21:11');
@@ -297,7 +338,7 @@ describe('buildSystemPromptSplit（前缀缓存）', () => {
       recalled: '## 相关往事\n- 昨天他说要早睡',
       weather: { city: '杭州', temp_c: 18.5, desc: '晴' },
     });
-    expect(split.stable).toContain('用户生活在杭州');
+    expect(split.stable).toContain('他生活在杭州');
     expect(split.stable).not.toContain('杭州 晴');
     expect(split.volatile).toContain('杭州 晴');
     expect(split.volatile).toContain('昨天他说要早睡');

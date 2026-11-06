@@ -186,7 +186,7 @@ export function pickKeyLines(rows: MemoRow[], maxLines = 60): MemoRow[] {
 export function buildMemoInput(prev: RecentMemo | null, rows: MemoRow[]): string {
   const picked = pickKeyLines(rows);
   const lines = picked.map((m) => {
-    if (m.role === "user") return "用户：" + m.content;
+    if (m.role === "user") return "他：" + m.content;
     return m.turn_type === "proactive" ? "助手（主动发起）：" + m.content : "助手：" + m.content;
   });
   let conversation = lines.join("\n");

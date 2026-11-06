@@ -19,20 +19,27 @@ describe('casualness', () => {
 });
 
 describe('buildVoiceDirective —— 指向人设，同时给四条机械约束', () => {
-  it('先指向「记忆里那个人」，再讲怎么打字', () => {
+  it('先指向「记忆里那个人」', () => {
     const d = buildVoiceDirective(900);
     expect(d).toContain('## 说话');
-    expect(d).toContain('像在手机上打字');
+    expect(d).toContain('你就是记忆里那个人');
   });
 
-  it('长度、敷衍、不解释、括号动作都有明确约束', () => {
+  it('全部改成正向引导：没有一条规则在用「别/不要/不准」', () => {
     const d = buildVoiceDirective(900);
-    expect(d).toContain('最多一两句');
-    expect(d).toContain('一条最多一次');   // 括号动作是限量，不是禁用
-    expect(d).toContain('不解释');
-    expect(d).toContain('允许敷衍');
-    expect(d).toContain('允许敷衍');
-    expect(d).toContain('反问是偶尔的');
+    for (const gone of ['最多一两句', '十几二十个字', '小作文', '像在手机上打字']) {
+      expect(d).not.toContain(gone);
+    }
+    // 2026-11-06：说话段从"禁止清单"改成正向引导
+    const ruleLines = d.split('\n').filter((l) => l.startsWith('- '));
+    expect(ruleLines.length).toBeGreaterThanOrEqual(6);
+    for (const line of ruleLines) {
+      expect(line).not.toMatch(/(别|不要|不准|不许|禁止)/);
+    }
+    expect(d).toContain('想到哪说到哪');
+    expect(d).toContain('标点也说话');
+    expect(d).toContain('一条一次');
+    expect(d).toContain('他示好就先接一句');
   });
 
   it('不再有禁用词/颜文字频率/口头禅/断句/情绪清单', () => {

@@ -101,13 +101,13 @@ describe('buildMemoInput', () => {
     expect(input).toContain('【当前纪要】');
     expect(input).toContain('旧：在修插件');
     expect(input).toContain('【新增对话】');
-    expect(input).toContain('用户：修好了');
+    expect(input).toContain('他：修好了');
   });
 
   it('没有旧纪要时不输出纪要段', () => {
     const input = buildMemoInput(null, [row('user', '在吗')]);
     expect(input).not.toContain('【当前纪要】');
-    expect(input).toContain('用户：在吗');
+    expect(input).toContain('他：在吗');
   });
 
   it('超长时保留最新对话（丢弃最早的）', () => {

@@ -11,6 +11,7 @@ import type { Env } from './types';
 import { getMemory } from './memory';
 import { getOrCreateDayContext, type DayContextFile } from './context';
 import { fetchWeather } from './weather';
+import { resolveHerPlace } from './life/where';
 import type { WeatherInfo } from './prompt';
 import { getRecentMemo, formatRecentMemoBlock } from './recent-memory';
 import { getTodaySummary } from './summary';
@@ -66,11 +67,13 @@ export async function buildMemoryPack(
   opts: BuildMemoryPackOptions,
 ): Promise<MemoryPack> {
   const dateKey = dateKeyInBeijing(now);
+  // 天气跟着她此刻所在的城市（旅游时是目的地），不是网页端设置的城市
+  const herPlace = await resolveHerPlace(env, dateKey).catch(() => null);
   const [memory, dayCtxFile, fetchedWeather, recentMemoRaw, summaryRaw, personaState] =
     await Promise.all([
       getMemory(env),
       getOrCreateDayContext(env, dateKey),
-      opts.weather !== undefined ? Promise.resolve(opts.weather) : fetchWeather(env),
+      opts.weather !== undefined ? Promise.resolve(opts.weather) : fetchWeather(env, herPlace?.city),
       getRecentMemo(env),
       getTodaySummary(env, dateKey),
       loadPersonaState(env),
@@ -127,5 +130,4 @@ export function shouldSkipMemoryRecall(pack: MemoryPack): boolean {
 }
 
 /** 召回引擎选择（渠道相关，集中一处便于以后按渠道收紧）。 */
-
 

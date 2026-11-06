@@ -26,6 +26,7 @@ import { getMemory } from './memory';
 import { fetchWeather } from './weather';
 import {
   insertUserMessage,
+  updateMessageContent,
   insertAssistantReply,
   latestMessage,
   compactHistoryMessage,
@@ -284,6 +285,8 @@ export function normalizeAssistantText(text: string): string {
     .replace(/\[face[:：][^\]]{1,12}\]/g, '');
   // 模型偶尔会模仿历史时间标签，把回复开头的时间戳去掉
   out = stripLeadingTimeLabels(out).trim();
+  // 同理：历史里的「他：」「你：」是说话人标记，模型有时会照着写在开头
+  out = out.replace(/^\s*(?:他|你)：\s*/, '').trim();
   // 模型偶发孤立代理项（\ud83d 之类），落库/发送前清掉
   out = out
     .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, '')
@@ -408,6 +411,71 @@ openaiApp.post('/chat/completions', async (c) => {
     return openaiError(c, 400, '缺少用户消息');
   }
 
+  // 渠道：客户端用 X-Client-Channel 声明。App 两个请求方法都会带上它；
+  // 旧版 App 没带，只有 X-Client-Voice —— 那就按手机端算，别再落到 AstrBot。
+  // 这条兜底很重要：以前默认值直接是 'astrobot'，于是手机发的消息在库里全成了「QQ」。
+  const declaredChannel = c.req.header('x-client-channel');
+  const channel = normalizeChannel(
+    declaredChannel ?? (c.req.header('x-client-voice') === '1' ? 'mobile' : undefined),
+    'astrobot',
+  );
+  // 客户端声明了支持语音，才告诉模型可以发 [语音]（没装 TTS 的客户端不会收到这句提示）
+  const voiceReply = c.req.header('x-client-voice') === '1';
+
+  // ★ 先落库，再组装提示词（2026-11-06）。
+  //   手机端的「发送中」只等这一行进 D1；以前插在提示词组装之后，
+  //   用户要白白多等 1~3 秒（记忆包 + 召回都排在中间）。
+  const nowForStore = new Date();
+  const earlyImageKeys = Array.isArray(body?.image_keys)
+    ? (body.image_keys as unknown[]).filter(
+        (k): k is string => typeof k === 'string' && k.startsWith('images/') && k.length <= 200,
+      )
+    : [];
+  const earlyAudioKeys = Array.isArray(body?.audio_keys)
+    ? (body.audio_keys as unknown[]).filter(
+        (k): k is string => typeof k === 'string' && k.startsWith('audio/') && k.length <= 200,
+      )
+    : [];
+  const earlyContent = [
+    lastUserCleaned,
+    ...earlyImageKeys.map((k) => `[图片:${k}]`),
+    ...earlyAudioKeys.map((k) => `[语音:${k}]`),
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  let userMessageId: number | undefined;
+  let storedEarly = false;
+  if (!skipRecording && earlyContent) {
+    const latest = await latestMessage(c.env);
+    if (latest && latest.role === 'user' && latest.content === earlyContent) {
+      userMessageId = latest.id; // 重试请求：复用已存在的这一轮
+    } else {
+      const saved = await insertUserMessage(c.env, earlyContent, nowForStore, {
+        channel,
+        clientMessageId: clientMessageId || undefined,
+      });
+      userMessageId = saved.id;
+      storedEarly = true;
+      await markProfileDirty(c.env).catch(() => {});
+    }
+  }
+
+  // ★ 消息闸门（P2）：她忙/在睡时先落库不回，到点由 cron 或 App 拉。
+  // 放在这里而不是生成前：闸门只需要一次 KV 读，held 也能立刻返回。
+  if (!skipRecording && userMessageId && earlyContent) {
+    const gate: GateDecision = await gateDecision(c.env, nowForStore).catch(() => ({ hold: false }));
+    if (gate.hold) {
+      await markHeld(c.env, userMessageId, untilMs(nowForStore, gate.until ?? '08:00'));
+      return c.json({
+        held: true,
+        until: gate.until,
+        reason: gate.reason,
+        user_message_id: userMessageId,
+      });
+    }
+  }
+
   // 2) 注入长期记忆与当天上下文（保留 AstrBot 自带的人格/系统消息）
   const now = new Date();
   const dateKey = dateKeyInBeijing(now);
@@ -430,16 +498,6 @@ openaiApp.post('/chat/completions', async (c) => {
   const relation = parseRelationValues(memory);
   const envHour = beijingHour(now);
   const envMonth = beijingMonth(now);
-  // 渠道：客户端用 X-Client-Channel 声明。App 两个请求方法都会带上它；
-  // 旧版 App 没带，只有 X-Client-Voice —— 那就按手机端算，别再落到 AstrBot。
-  // 这条兜底很重要：以前默认值直接是 'astrobot'，于是手机发的消息在库里全成了「QQ」。
-  const declaredChannel = c.req.header('x-client-channel');
-  const channel = normalizeChannel(
-    declaredChannel ?? (c.req.header('x-client-voice') === '1' ? 'mobile' : undefined),
-    'astrobot',
-  );
-  // 客户端声明了支持语音，才告诉模型可以发 [语音]（没装 TTS 的客户端不会收到这句提示）
-  const voiceReply = c.req.header('x-client-voice') === '1';
   // 上一轮提过的往事被确认了吗
   void consumePendingRecall(c.env, lastUserCleaned, now.getTime()).catch(() => {});
 
@@ -534,6 +592,7 @@ openaiApp.post('/chat/completions', async (c) => {
             m.content.includes('【文件：') ? HISTORY_FILE_MAX_CHARS : HISTORY_MESSAGE_MAX_CHARS,
           ),
           m.created_at,
+          m.role === 'assistant' ? 'assistant' : 'user',
         ),
       }));
     // 按轮数之外再加字符预算，防止 50 轮里塞进大段 B 站资料/文件。
@@ -634,6 +693,7 @@ openaiApp.post('/chat/completions', async (c) => {
       characterName: c.env.CHARACTER_NAME,
       userAddress: c.env.USER_ADDRESS,
       residents: lifeBlocks.residents,
+      location: lifeBlocks.location,
       persona: resolvePersona(c.env),
     }),
   ].join('\n\n') + (historyNote ? `\n\n${historyNote}` : '') + silentEndRule(channel);
@@ -830,34 +890,9 @@ openaiApp.post('/chat/completions', async (c) => {
     }
   }
 
-  let userMessageId: number | undefined;
-  if (!skipRecording && recordContent) {
-    const latest = await latestMessage(c.env);
-    if (latest && latest.role === 'user' && latest.content === contentToStore) {
-      userMessageId = latest.id; // 重试请求：复用已存在的这一轮
-    } else {
-      const saved = await insertUserMessage(c.env, contentToStore, now, {
-        channel,
-        clientMessageId: clientMessageId || undefined,
-      });
-      userMessageId = saved.id;
-      await markProfileDirty(c.env).catch(() => {});
-    }
-  }
-
-  // ★ 消息闸门（P2）：她忙/在睡时先落库不回，到点由 cron 或 App 拉。
-  // 开关默认关（KV life:enabled），关着时这里只多一次 KV 读，行为与原来完全一致。
-  if (!skipRecording && userMessageId && recordContent) {
-    const gate: GateDecision = await gateDecision(c.env, now).catch(() => ({ hold: false }));
-    if (gate.hold) {
-      await markHeld(c.env, userMessageId, untilMs(now, gate.until ?? '08:00'));
-      return c.json({
-        held: true,
-        until: gate.until,
-        reason: gate.reason,
-        user_message_id: userMessageId,
-      });
-    }
+  // 落库内容可能比"先落库"时多一点（图片标记、B 站资料）：以最终内容为准补一次
+  if (storedEarly && userMessageId && contentToStore && contentToStore !== earlyContent) {
+    await updateMessageContent(c.env, userMessageId, contentToStore).catch(() => {});
   }
 
   const onFinish = async (text: string, usage: TokenUsage | null) => {
@@ -906,7 +941,9 @@ openaiApp.post('/chat/completions', async (c) => {
   const requested =
     typeof body?.max_tokens === 'number' && body.max_tokens > 0 ? Math.floor(body.max_tokens) : null;
   // 8192 = DeepSeek 的输出上限，等于「不限制长度」
-  const maxTokens = requested ?? 8192;
+  // 默认 2048 约 1300 汉字：正常聊天够用，生成时间可控（手机端 120s 读超时的主要风险源）。
+    // 要写长文时由客户端在 body.max_tokens 里显式要更多。
+    const maxTokens = requested ?? 2048;
 
   // 4) 流式 / 非流式
   if (body?.stream !== false) {

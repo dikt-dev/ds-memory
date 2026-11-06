@@ -118,6 +118,30 @@ export const SESSION_MAX_ROUNDS = 120;
 /** 超限时保留的尾部轮数。 */
 export const SESSION_KEEP_ROUNDS = 40;
 
+/**
+ * 历史的字符预算（≈ 9,600 tokens）。
+ *
+ * 原来只按轮数（120 轮）切，实测 76 轮就 11.5k tokens——轮数和体积脱钩。
+ * 这里从最新往回按「整轮」累加，超预算就丢更早的轮，至少留一轮。
+ */
+export const HISTORY_BUDGET_CHARS = 12_000;
+
+export function trimHistoryToBudget(rows: MessageRow[], maxChars = HISTORY_BUDGET_CHARS): MessageRow[] {
+  if (rows.length === 0) return rows;
+  const turns = groupTurns(rows);
+  if (turns.length <= 1) return rows;
+  let used = 0;
+  let keepFrom = turns.length;
+  for (let i = turns.length - 1; i >= 0; i -= 1) {
+    const size = turns[i].reduce((sum, m) => sum + (m.content?.length ?? 0), 0);
+    // 至少留一轮：第一轮再大也带
+    if (keepFrom < turns.length && used + size > maxChars) break;
+    used += size;
+    keepFrom = i;
+  }
+  return turns.slice(keepFrom).flat();
+}
+
 export interface SessionHistory {
   /** 注入用的历史消息（时间升序）。 */
   rows: MessageRow[];

@@ -129,8 +129,12 @@ export async function loadEmotionState(env: Env, now: number): Promise<EmotionSt
     const parsed = JSON.parse(raw) as Partial<EmotionState>;
     const at = typeof parsed.at === 'number' ? parsed.at : now;
     const elapsedMin = Math.max(0, (now - at) / 60000);
+    // 每日结算没跑（漏了几天）时也温和退一点芥蒂：昨天的气不带进今天
+    const missedDays = Math.floor(elapsedMin / (60 * 24));
+    let vector = decayEmotion(parseEmotionVector(parsed.vector), elapsedMin);
+    if (missedDays >= 1) vector = decayGrievanceDaily(vector, Math.min(0.2, 0.04 * missedDays));
     return {
-      vector: decayEmotion(parseEmotionVector(parsed.vector), elapsedMin),
+      vector,
       events: sanitizeEvents(parsed.events),
       facetDelta: sanitizeFacetDelta(parsed.facetDelta),
       at,

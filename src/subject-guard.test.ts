@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { auditSubjects, classifyActor, isActionEntry, suggestRewrite } from './subject-guard';
 
 describe('classifyActor', () => {
-  it('显式用户是 user', () => {
+  it('「他」是 user，「你」是她（2026-11-06 起代词统一）', () => {
     expect(classifyActor('用户熬夜调通了 AstrBot')).toBe('user');
-    expect(classifyActor('你换了新手机')).toBe('user');
+    expect(classifyActor('他换了新手机')).toBe('user');
+    expect(classifyActor('你换了新手机')).toBe('assistant');
   });
 
   it('显式她自己 是 assistant', () => {
@@ -58,7 +59,7 @@ describe('auditSubjects', () => {
   });
 
   it('有主体的条目不报', () => {
-    const clean = '## 进行中的事\n- 用户写了回滚草稿\n- 她提醒了三次';
+    const clean = '## 进行中的事\n- 他写了回滚草稿\n- 你提醒了三次';
     expect(auditSubjects(clean)).toEqual([]);
   });
 
@@ -68,11 +69,11 @@ describe('auditSubjects', () => {
 });
 
 describe('suggestRewrite', () => {
-  it('默认归给用户', () => {
-    expect(suggestRewrite('熬夜调通了 AstrBot')).toBe('用户熬夜调通了 AstrBot');
+  it('默认归给他', () => {
+    expect(suggestRewrite('熬夜调通了 AstrBot')).toBe('他熬夜调通了 AstrBot');
   });
 
   it('带状态标签时插在标签后面', () => {
-    expect(suggestRewrite('[进行中] 监控脚本调好了')).toBe('[进行中] 用户监控脚本调好了');
+    expect(suggestRewrite('[进行中] 监控脚本调好了')).toBe('[进行中] 他监控脚本调好了');
   });
 });

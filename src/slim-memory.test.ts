@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { slimMemoryForPrompt } from './memory-maintenance';
+import { slimMemoryForPrompt, unifyMemorySubjects } from './memory-maintenance';
 
 const now = new Date('2026-11-04T12:00:00+08:00');
 
@@ -41,5 +41,19 @@ describe('近期动态的时间感', () => {
     const out = slimMemoryForPrompt('## 关于他\n- [26-11-01] 城市=深圳', now);
     expect(out).toContain('- [26-11-01] 城市=深圳');
     expect(out).not.toContain('天前');
+  });
+});
+
+describe('unifyMemorySubjects —— 主语统一成「他 / 你」', () => {
+  it('用户 → 他，助手/她 → 你', () => {
+    const out = unifyMemorySubjects(
+      '- [26-11-04] 用户用蓝鲸调侃她；助手回了一句；她深夜煮泡面',
+    );
+    expect(out).toBe('- [26-11-04] 他用蓝鲸调侃你；你回了一句；你深夜煮泡面');
+    expect(out).not.toMatch(/用户|助手|她/);
+  });
+
+  it('空串原样返回', () => {
+    expect(unifyMemorySubjects('')).toBe('');
   });
 });

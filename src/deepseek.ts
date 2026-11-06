@@ -109,8 +109,10 @@ async function requestDeepSeek(
         body: JSON.stringify({
           model: target.model,
           messages: sanitizeDeepSeekMessages(messages),
+          // 流式也要带上限：以前只在非流式分支带，网页端传的 8192 其实没发出去，
+          // 输出长度完全由模型默认值决定（2026-11-06 修）。
           ...(stream
-            ? { stream: true, stream_options: { include_usage: true } }
+            ? { stream: true, stream_options: { include_usage: true }, max_tokens: maxTokens ?? 4096 }
             : { max_tokens: maxTokens ?? 4096 }),
           // 聊天温度默认 0.8（想要更野就调 CHAT_TEMPERATURE）；
           // 两个 penalty 是治"平"的主力：她之前每轮都用"才看见……"开头，

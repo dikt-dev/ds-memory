@@ -34,10 +34,36 @@ function dataFrame(obj: unknown): string {
   return `data: ${JSON.stringify(obj)}\n`;
 }
 
+/** 模型有时会把历史的说话人标记（「他：」「你：」）照抄在回复开头。 */
+const SPEAKER_PREFIX_RE = /^\s*(?:他|你)：\s*/;
+
 export function createSseRewriter(scrubber: StreamScrubber = createStreamScrubber()): SseRewriter {
   let accumulated = '';
   let usage: SseUsage | null = null;
   let finished = false;
+  // 头几个字先扣住：够判断是不是「他：」「你：」再放行，否则用户会看到标记闪一下
+  let prefixChecked = false;
+  let held = '';
+
+  const releasePrefix = (): string => {
+    prefixChecked = true;
+    const body = held.replace(SPEAKER_PREFIX_RE, '');
+    held = '';
+    return body;
+  };
+
+  /**
+   * 还判断不了吗？
+   *
+   * 真实流里第一帧常常只是一个换行或半个词：只按长度判断会被「\n」提前放行，
+   * 后面真正的「你：」就漏出去了。这里按"去掉空白后还剩几个字"判断：
+   * 只剩 1 个字、或正好是「他」「你」，就继续等。
+   */
+  const needsMorePrefix = (): boolean => {
+    // 开头一律先扣住 8 个字符：真实流的第一帧可能只是换行/半个词，
+    // 任何启发式判断都会漏。8 个字对用户体感无感，但足够看清「你：」。
+    return held.length < 8;
+  };
 
   return {
     rewrite(line: string): string[] {
@@ -64,7 +90,15 @@ export function createSseRewriter(scrubber: StreamScrubber = createStreamScrubbe
         if (parsed.usage) usage = parsed.usage;
         const delta = parsed.choices?.[0]?.delta?.content;
         if (typeof delta !== 'string') return [line];
-        const cleaned = scrubber.push(delta);
+        let cleaned = '';
+        if (prefixChecked) {
+          cleaned = scrubber.push(delta);
+        } else {
+          held += delta;
+          if (needsMorePrefix()) return [];
+          cleaned = scrubber.push(releasePrefix());
+        }
+        if (!cleaned) return [];
         accumulated += cleaned;
         const choice = parsed.choices?.[0];
         if (choice?.delta) choice.delta.content = cleaned;
@@ -78,10 +112,12 @@ export function createSseRewriter(scrubber: StreamScrubber = createStreamScrubbe
     flush(): string[] {
       if (finished) return [];
       finished = true;
+      const head = prefixChecked ? '' : held ? scrubber.push(releasePrefix()) : '';
       const tail = scrubber.flush();
-      if (!tail) return [];
-      accumulated += tail;
-      return [dataFrame({ choices: [{ delta: { content: tail } }] }).trimEnd(), ''];
+      const out = head + tail;
+      if (!out) return [];
+      accumulated += out;
+      return [dataFrame({ choices: [{ delta: { content: out } }] }).trimEnd(), ''];
     },
 
     text: () => accumulated,
