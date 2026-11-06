@@ -289,8 +289,14 @@ export function normalizeAssistantText(text: string): string {
     .replace(/\[face[:：][^\]]{1,12}\]/g, (m) => replaceFaceMarkers(m));
   // 模型偶尔会模仿历史时间标签，把回复开头的时间戳去掉
   out = stripLeadingTimeLabels(out).trim();
-  // 同理：历史里的「他：」「你：」是说话人标记，模型有时会照着写在开头
-  out = out.replace(/^\s*(?:他|你)：\s*/, '').trim();
+  // 同理：历史里曾带「他：」「你：」，模型会照着写在开头；现在历史不再带标签，
+  // 但线上出现过「🙂你：……」这种表情在前、冒号在后的漏网（2026-11-06），所以放宽到「前 12 个非字母数字字符」
+  for (let i = 0; i < 3; i += 1) {
+    const next = out.replace(/^[^\p{L}\p{N}]{0,12}?(?:他|你)：\s*/u, '');
+    if (next === out) break;
+    out = next;
+  }
+  out = out.trim();
   // 模型偶发孤立代理项（\ud83d 之类），落库/发送前清掉
   out = out
     .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, '')
@@ -594,14 +600,10 @@ openaiApp.post('/chat/completions', async (c) => {
       .filter((m) => m.content.trim())
       .map((m) => ({
         role: m.role === 'assistant' ? ('assistant' as const) : ('user' as const),
-        content: withHistoryTimestamp(
-          compactHistoryMessage(
-            m.content,
-            m.content.includes('【文件：') ? HISTORY_FILE_MAX_CHARS : HISTORY_MESSAGE_MAX_CHARS,
+        content: withHistoryTimestamp(compactHistoryMessage(
+            m.content, m.content.includes('【文件：') ? HISTORY_FILE_MAX_CHARS : HISTORY_MESSAGE_MAX_CHARS,
           ),
-          m.created_at,
-          m.role === 'assistant' ? 'assistant' : 'user',
-        ),
+          m.created_at),
       }));
     // 按轮数之外再加字符预算，防止 50 轮里塞进大段 B 站资料/文件。
     const historyBudget =
@@ -1005,7 +1007,9 @@ openaiApp.post('/chat/completions', async (c) => {
       ).catch(() => {});
     }
   }
-  // 非流式回复也已经过 completeDeepSeek 的 AI 味清洗
+  // 非流式回复也已经过 completeDeepSeek 的 AI 味清洗；
+  // 手机/网页端直接给 emoji（客户端没有 QQ 表情表）；QQ 端保留 [face:名] 交给 AstrBot 转
+  const clientText = channel === 'astrobot' ? result.text : replaceFaceMarkers(result.text);
   const promptTokens = (result.usage?.prompt_cache_hit_tokens ?? 0) + (result.usage?.prompt_cache_miss_tokens ?? 0);
   return c.json({
     id: result.id,
@@ -1013,7 +1017,7 @@ openaiApp.post('/chat/completions', async (c) => {
     created: result.created,
     model: c.env.DEEPSEEK_MODEL,
     choices: [
-      { index: 0, message: { role: 'assistant', content: result.text }, finish_reason: result.finishReason },
+      { index: 0, message: { role: 'assistant', content: clientText }, finish_reason: result.finishReason },
     ],
     usage: result.usage
       ? {

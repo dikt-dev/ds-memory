@@ -72,10 +72,10 @@ describe('takeLastRounds', () => {
 });
 
 describe('时间戳与顺序说明', () => {
-  it('每条历史带 [MM-DD HH:mm] 前缀', () => {
+  it('每条历史只带 [MM-DD HH:mm]，不再带说话人标签', () => {
     expect(withHistoryTimestamp('在吗', '2026-10-24T19:01:00+08:00')).toBe('[10-24 19:01] 在吗');
-    expect(withHistoryTimestamp('在吗', '2026-10-24T19:01:00+08:00', 'user')).toBe('[10-24 19:01] 他：在吗');
-    expect(withHistoryTimestamp('在呢', '2026-10-24T19:01:00+08:00', 'assistant')).toBe('[10-24 19:01] 你：在呢');
+    expect(withHistoryTimestamp('在吗', '2026-10-24T19:01:00+08:00')).toBe('[10-24 19:01] 在吗');
+    expect(withHistoryTimestamp('在呢', '2026-10-24T19:01:00+08:00')).toBe('[10-24 19:01] 在呢');
   });
 
   it('顺序说明明确提到轮数、从旧到新、不要输出时间标签', () => {
@@ -86,7 +86,7 @@ describe('时间戳与顺序说明', () => {
     const note = historyRangeNote(rows, new Date('2026-10-24T19:10:00+08:00'));
     expect(note).toContain('最近 1 轮');
     expect(note).toContain('从旧到新');
-    expect(note).toContain('不要输出时间标签');
+    expect(note).toContain('不要输出时间');
     expect(note).toContain('当前用户消息在它之后');
   });
 });

@@ -457,7 +457,6 @@ export async function streamChat(
           m.content.includes('【文件：') ? HISTORY_FILE_MAX_CHARS : HISTORY_MESSAGE_MAX_CHARS,
         ),
         m.created_at,
-        m.role,
       ),
     })),
     // 易变段放最后：时间、心情、召回、摘要每轮都在变，放在前缀里会让缓存全部失效

@@ -377,13 +377,10 @@ export function historyTimeLabel(createdAt: string): string {
 export type HistorySpeaker = 'user' | 'assistant';
 
 /** 给历史消息加上「时间 + 谁说的」前缀（只进入本轮请求，不写回 D1）。 */
-export function withHistoryTimestamp(
-  content: string,
-  createdAt: string,
-  speaker?: HistorySpeaker,
-): string {
-  const who = speaker === 'user' ? '他：' : speaker === 'assistant' ? '你：' : '';
-  return `[${historyTimeLabel(createdAt)}] ${who}${content}`;
+export function withHistoryTimestamp(content: string, createdAt: string): string {
+  // ★ 不再写「他：」「你：」：角色由消息的 role 决定，写进正文只会被模型照抄，
+  //   线上真的出现过「🙂你：十一月的二十七八度…」（2026-11-06）。
+  return `[${historyTimeLabel(createdAt)}] ${content}`;
 }
 
 /**
@@ -401,7 +398,7 @@ export function historyRangeNote(rows: MessageRow[], now: Date): string | null {
   const gap = Math.max(0, Math.round((last.created_ms - first.created_ms) / 3600000));
   return (
     `【历史顺序】接下来是最近 ${groups.length} 轮聊天记录，按时间从旧到新排列；` +
-    `每条开头的 [MM-DD HH:mm] 是发送时间、「他：」「你：」是说话人标记，只用于判断先后；回复时不要输出时间标签，也不要写「他：」「你：」。` +
+    `每条开头的 [MM-DD HH:mm] 只是发送时间，谁说的由消息角色决定；回复时不要输出时间、不要写「他：」「你：」，也不要替他把话说出来。` +
     `最后一条是最近一条历史消息，当前用户消息在它之后。` +
     `最早 ${historyTimeLabel(first.created_at)}，最近 ${historyTimeLabel(last.created_at)}；` +
     `距现在约 ${hours} 小时，跨度约 ${gap} 小时。`
