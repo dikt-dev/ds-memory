@@ -489,8 +489,16 @@ app.post('/api/app/pair', async (c) => {
     try {
       // 把她的长相和认识的人一起给观察模型：否则它只会写「蓝发少女」，她认不出自己
       const doc = await loadPersonaDoc(c.env).catch(() => null);
+      const name = (c.env.CHARACTER_NAME || '小蓝').trim();
+      const self = doc ? personaSectionText(doc, '外貌') : '';
+      const people = doc ? personaSectionText(doc, '人际') : '';
+      const roster = people
+        .split('\n')
+        .filter((l) => l.trim().startsWith('-'))
+        .map((l) => l.replace(/｜唤醒：[^｜]*/, '').trim())
+        .join('\n');
       const castHint = doc
-        ? [personaSectionText(doc, '外貌'), personaSectionText(doc, '人际')].filter(Boolean).join('\n')
+        ? [`- ${name}（你本人）：${self.replace(/\n/g, ' ')}`, roster].filter(Boolean).join('\n')
         : '';
       const v = await biliVisionDirect(c.env, {
         direct,

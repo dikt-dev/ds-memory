@@ -92,7 +92,7 @@ export async function biliVisionDirect(
   castHint?: string,
 ): Promise<BiliVision | null> {
   if (!env.DASHSCOPE_API_KEY) return null;
-  const cacheKey = input.cacheKey ? `biliobs:v2:${input.cacheKey}` : '';
+  const cacheKey = input.cacheKey ? `biliobs:v3:${input.cacheKey}` : '';
   if (cacheKey) {
     const hit = await env.KV.get(cacheKey).catch(() => null);
     if (hit) {
@@ -112,7 +112,9 @@ export async function biliVisionDirect(
     const obs = await lookAtVideo(env, input.direct, {
       prompt: [
         PROMPT,
-        castHint ? `\n【已知角色（看到对得上就直接写名字，别写“蓝发少女”）】\n${castHint}` : '',
+        castHint
+          ? `\n【已知角色】\n${castHint}\n认人规则：先看发色再认（蓝发=${'小蓝'}/你本人，橙发=小克，白发+龙角=大白龙）；耳朵、尾巴、发饰对得上就写名字，服装换了也算。\n只在特征明显对得上时写名字；背景里模糊、只闪一两秒的人写「几个看不清的人」，不要硬认。`
+          : '',
         '',
         input.title ? `【视频标题】${input.title}` : '',
         input.duration ? `【时长】${input.duration} 秒` : '',
