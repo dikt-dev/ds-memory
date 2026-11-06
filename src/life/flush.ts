@@ -38,19 +38,26 @@ export function heldWaitNote(
   waitedMs: number,
   where: string | null,
   now: Date = new Date(),
+  sentAt: Date = new Date(now.getTime() - waitedMs),
 ): string {
   const waited = formatWait(waitedMs);
   const what = where ? `你当时${where}` : '你当时没顾上看手机';
-  // 只在**现在**这一刻的时段上说话。之前漏了这句，实测：
-  // 凌晨 2 点发的消息、早上 8 点补发，她回「睡什么睡都这个点了」——
-  // 「这个点」说的是凌晨两点，人却站在八点，两句话互相打架。
+  // 先报时段，再报时长。
+  // 只给"六小时前"这种数字，她会照抄成「六小时前的消息我现在才看见」——
+  // 那句读起来像消息是她自己发的，而且没有人会这么说话。
+  const sentText = spokenTime(sentAt);
   const nowText = spokenTime(now);
+  const short = waitedMs < 90 * 60_000;
   return (
-    `（他这几条是 ${waited}前发来的，${what}，现在才看到。` +
-    `现在是${nowText}，回的时候按现在这个时间说，不要用他发消息那会儿的时间感。` +
+    '（' +
+    (short
+      ? `他这几条是 ${waited}前发来的，${what}，现在才看到。`
+      : `他这几条是${sentText}发来的，${what}，现在是${nowText}，你刚看到。`) +
+    '回的时候直接说事：' +
+    (short ? '' : '别报"几小时前"这种时长，要提就说清是他什么时候发的；') +
     '第一句先把这段空档带出来（每次换个说法，别老用同一句），再回他的话。' +
     '那时候你是真的在睡/在忙，所以别把这件事反问回去。' +
-    '（别每次都用同一个说法——同一个开场用两次就腻了，换个方式讲。））'
+    '（同一个开场用两次就腻了，换个方式讲。））'
   );
 }
 
@@ -113,7 +120,7 @@ export async function flushHeldMessages(env: Env, now = new Date()): Promise<Flu
         : null;
   const merged = [
     claimed.map((r) => r.content).join('\n'),
-    heldWaitNote(nowMs - oldest, where, now),
+    heldWaitNote(nowMs - oldest, where, now, new Date(oldest)),
   ].join('\n\n');
   try {
     // 复用最后一条消息的 id：不插新用户消息，回复直接挂在那条上

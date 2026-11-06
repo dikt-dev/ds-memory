@@ -16,11 +16,22 @@ describe('压着的消息：告诉 AI 他等了多久', () => {
     expect(note).toContain('别把这件事反问回去');
   });
 
-  it('带上「现在几点」：凌晨发的、早上补发时不能说夜里那套', () => {
+  it('长间隔报时段而不是时长：他凌晨几点发的、现在几点', () => {
     const morning = new Date('2026-11-06T08:00:00+08:00');
-    const note = heldWaitNote(6 * 3600_000, '在睡觉', morning);
+    const night = new Date('2026-11-06T02:00:00+08:00');
+    const note = heldWaitNote(6 * 3600_000, '在睡觉', morning, night);
+    expect(note).toContain('凌晨两点发来的');
     expect(note).toContain('现在是上午八点');
-    expect(note).toContain('不要用他发消息那会儿的时间感');
+    // 「六小时前」是她自己发消息才会用的说法，不能出现
+    expect(note).not.toContain('6 小时前');
+    expect(note).toContain('别报"几小时前"这种时长');
+  });
+
+  it('短间隔保留「十几分钟前」，那是人话', () => {
+    const now = new Date('2026-11-06T08:00:00+08:00');
+    const note = heldWaitNote(18 * 60_000, null, now);
+    expect(note).toContain('18 分钟前发来的');
+    expect(note).not.toContain('别报');
   });
 
   it('不知道当时在干什么就说没顾上看手机', () => {

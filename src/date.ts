@@ -91,7 +91,9 @@ export function spokenTime(d: Date = new Date()): string {
   }
   const period =
     hour < 5 ? '凌晨' : hour < 8 ? '早上' : hour < 12 ? '上午' : hour === 12 ? '中午' : hour < 18 ? '下午' : '晚上';
-  const hourText = hour === 0 ? '零点' : `${cnNumber(hour % 12 === 0 ? 12 : hour % 12)}点`;
+  // 中文说"两点"，不说"二点"；整点用"十二点"不用"零点"（零点只在 0 点用）
+  const h = hour % 12 === 0 ? 12 : hour % 12;
+  const hourText = hour === 0 ? '零点' : h === 2 ? '两点' : `${cnNumber(h)}点`;
   return `${period}${hourText}${half ? '半' : ''}`;
 }
 

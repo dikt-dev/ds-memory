@@ -1,7 +1,20 @@
 {
-  "generated_at": "2026-11-06T00:41:51.405Z",
+  "generated_at": "2026-11-06T00:46:46.072Z",
   "count": 400,
   "days": [
+    {
+      "date": "2026-11-06",
+      "items": [
+        {
+          "hash": "5db75b1",
+          "date": "2026-11-06",
+          "type": "other",
+          "area": "",
+          "title": "补发消息带上当前时段：凌晨发的、早上补，不再用夜里那套口吻回",
+          "why": ""
+        }
+      ]
+    },
     {
       "date": "2026-11-05",
       "items": [
@@ -3230,14 +3243,6 @@
           "type": "fix",
           "area": "deepseek",
           "title": "strip lone surrogates before upstream request",
-          "why": ""
-        },
-        {
-          "hash": "fe75c1d",
-          "date": "2026-10-29",
-          "type": "docs",
-          "area": "",
-          "title": "record day four chat issues",
           "why": ""
         }
       ]
