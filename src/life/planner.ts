@@ -17,8 +17,8 @@ import type { Recipe } from './recipes';
 export const SLEEP_START = 25 * 60;
 /** 起床时间：08:00。 */
 export const WAKE_AT = 8 * 60;
-/** 一天最多几段活动。多了就显得「一天到晚都在做事」，不像人。 */
-export const MAX_ACTIVITIES = 4;
+/** 一天最多几段活动。8 段又会像排班表，6 段刚好：上午两段、下午两段、晚上一段。 */
+export const MAX_ACTIVITIES = 6;
 
 /** 三餐：不是背景板，是日程里真会出现的一段（「08:20 早餐」）。 */
 export const MEALS = [
@@ -28,8 +28,8 @@ export const MEALS = [
 ];
 /** 三餐最多 3 段，不占 MAX_ACTIVITIES 的名额（吃饭不是「活动」）。 */
 export const MAX_MEALS = MEALS.length;
-/** 加餐最多 2 段（下午茶、夜宵），同样不占名额。 */
-export const MAX_EXTRAS = 2;
+/** 加餐最多 3 段（下午茶、夜宵、再来一份），同样不占名额。 */
+export const MAX_EXTRAS = 3;
 
 export interface PlannedActivity {
   unitId: string;
@@ -41,6 +41,8 @@ export interface DayPlan {
   date: string;
   seed: string;
   activities: PlannedActivity[];
+  /** 今天几点醒（分钟）。不写就是默认 08:00。 */
+  wakeAt?: number;
 }
 
 export interface BuildDayInput {
@@ -56,14 +58,25 @@ export interface BuildDayInput {
 }
 
 /** 骨架空档：三餐和睡觉之间的可用时间。 */
-export function dayWindows(wakeAt = WAKE_AT): Array<{ start: number; end: number }> {
+export function dayWindows(
+  wakeAt = WAKE_AT,
+  extra: Array<{ start: number; end: number }> = [],
+): Array<{ start: number; end: number }> {
   // 早饭跟着起床时间走：晚起半小时，就不会 09:10 吃早饭
   const breakfast = Math.max(MEALS[0].start, wakeAt + 10);
-  const blocks = [
+  const raw = [
     { start: wakeAt, end: breakfast },
     { start: breakfast, end: breakfast + MEALS[0].minutes },
     ...MEALS.slice(1).map((m) => ({ start: m.start, end: m.start + m.minutes })),
-  ];
+    ...extra,
+  ].sort((a, b) => a.start - b.start);
+  // 固定块之间可能挨得很近（晚饭 19:50、写日记 22:10），先合并再算空档
+  const blocks: Array<{ start: number; end: number }> = [];
+  for (const b of raw) {
+    const prev = blocks[blocks.length - 1];
+    if (prev && b.start <= prev.end) prev.end = Math.max(prev.end, b.end);
+    else blocks.push({ ...b });
+  }
   const windows: Array<{ start: number; end: number }> = [];
   for (let i = 0; i < blocks.length - 1; i += 1) {
     const start = blocks[i].end;
@@ -376,7 +389,13 @@ export function buildDay(input: BuildDayInput): DayPlan {
   // 特殊日配方优先于普通装填；没有配方时按普通日子排。
   // 没有这层的话，每天都排满 4 段——她不像人，像排班表。
   const recipe = input.recipe ?? null;
-  const wakeAt = recipe ? recipe.wakeAt : WAKE_AT + rng.int(-20, 50);
+  // 起床不是每天 08:00：工作日 07:05–08:55、周末 07:45–09:45，同一天可复现。
+  // 用北京时间正午取星期：用 00:00 的话换算到 UTC 会退一天（周六被当成周五）
+  const weekday = new Date(`${input.date}T12:00:00+08:00`).getUTCDay();
+  const weekend = weekday === 0 || weekday === 6;
+  const wakeAt = recipe
+    ? recipe.wakeAt
+    : WAKE_AT + (weekend ? 35 : 0) + rng.int(weekend ? -30 : -55, weekend ? 70 : 55);
   const budget = recipe ? recipe.budget : MAX_ACTIVITIES;
   const lazy = recipe?.id === 'lazy';
   let socialUsed = 0;
@@ -411,11 +430,23 @@ export function buildDay(input: BuildDayInput): DayPlan {
     }
   }
 
+  // 晚上那段固定的「写日记」：不占活动名额（和吃饭一样是日常），但会把 22 点后的空档挤掉。
+  // 时间在 21:55–22:45 之间浮动，太准时反而不像人。
+  const diaryUnit = BY_ID.get('diary_write');
+  const diaryBlock = diaryUnit
+    ? (() => {
+        const start = 21 * 60 + 55 + rng.int(0, 50);
+        const span = rng.int(diaryUnit.min, Math.min(diaryUnit.max, 40));
+        return { unitId: 'diary_write', start, end: start + span };
+      })()
+    : null;
+  if (diaryBlock) activities.push(diaryBlock);
+
   // 名额只算「活动」：三餐和加餐都在 activities 里，不能拿 length 当已用名额
   let actCount = 0;
   // 最后一个窗口 19:50–01:00 太长：名额从 19:50 就开吃，到 22:00 已经没了，
   // 深夜那几小时永远空着。在 22:00 切开，后半段单独给一个名额。
-  const windows = dayWindows(wakeAt).flatMap((w) =>
+  const windows = dayWindows(wakeAt, diaryBlock ? [diaryBlock] : []).flatMap((w) =>
     w.start < 22 * 60 && w.end > 22 * 60
       ? [
           { start: w.start, end: 22 * 60, late: false },
@@ -454,7 +485,7 @@ export function buildDay(input: BuildDayInput): DayPlan {
   }
 
   activities.sort((a, b) => a.start - b.start);
-  return { date: input.date, seed, activities };
+  return { date: input.date, seed, activities, wakeAt };
 }
 
 /** 校验不过就换盐重抽，最多 3 次（§5.5）。 */

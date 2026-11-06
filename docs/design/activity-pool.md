@@ -33,6 +33,7 @@
 
 - **draw** 画画 ｜ 40–120 ｜ indoor,alone ｜ +0.3 ｜ 30% ｜ 画了什么、手抖了没
 - **journal_write** 写手账 ｜ 30–60 ｜ indoor,rainy_ok ｜ +0.2 ｜ 40% ｜ 记了什么、贴了什么
+- **diary_write** 写日记 ｜ 25–40 ｜ indoor,rainy_ok ｜ +0.3 ｜ 60% ｜ 今天写了什么、心情如何
 - **learn_guitar** 练琴 ｜ 30–60 ｜ indoor ｜ +0.2 ｜ 25% ｜ 练哪首、和弦按得疼不疼
 - **learn_cook** 学新菜 ｜ 60–120 ｜ indoor ｜ +0.3 ｜ 35% ｜ 做什么、成功没、味道如何
 - **plant_care** 照顾植物 ｜ 15–30 ｜ indoor ｜ +0.2 ｜ 50% ｜ 哪盆、长新叶了没

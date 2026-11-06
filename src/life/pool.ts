@@ -21,6 +21,7 @@ export const ACTIVITIES: ActUnit[] = [
   { id: 'game_boss_retry', kind: 'game', name: '死磕 Boss', min: 45, max: 120, tags: ['indoor'], mood: -0.1, interruptible: true, replyChance: 0.2, fill: '打了几次、过没过、摔没摔手柄', weight: 1 },
   { id: 'draw', kind: 'hobby', name: '画画', min: 40, max: 120, tags: ['indoor', 'alone'], mood: 0.3, interruptible: true, replyChance: 0.3, fill: '画了什么、手抖了没', weight: 1 },
   { id: 'journal_write', kind: 'hobby', name: '写手账', min: 30, max: 60, tags: ['indoor', 'rainy_ok'], mood: 0.2, interruptible: true, replyChance: 0.4, fill: '记了什么、贴了什么', weight: 1 },
+  { id: 'diary_write', kind: 'hobby', name: '写日记', min: 25, max: 40, tags: ['indoor', 'rainy_ok'], mood: 0.3, interruptible: true, replyChance: 0.6, fill: '今天写了什么、心情如何', weight: 1 },
   { id: 'learn_guitar', kind: 'hobby', name: '练琴', min: 30, max: 60, tags: ['indoor'], mood: 0.2, interruptible: true, replyChance: 0.25, fill: '练哪首、和弦按得疼不疼', weight: 1 },
   { id: 'learn_cook', kind: 'hobby', name: '学新菜', min: 60, max: 120, tags: ['indoor'], mood: 0.3, interruptible: true, replyChance: 0.35, fill: '做什么、成功没、味道如何', weight: 1 },
   { id: 'plant_care', kind: 'hobby', name: '照顾植物', min: 15, max: 30, tags: ['indoor'], mood: 0.2, interruptible: true, replyChance: 0.5, fill: '哪盆、长新叶了没', weight: 1 },

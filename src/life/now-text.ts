@@ -13,6 +13,18 @@ import type { Env } from '../types';
 import { beijingDateKey, lifeClock, statusAt } from './state';
 import { diaryPeopleBlock } from './residents';
 import { buildDayContext } from '../holidays';
+import { logError } from '../error-log';
+
+/** 从当天的 plan_json 里取起床时间；没有就按 08:00。 */
+function wakeFromPlan(json: string | null): number {
+  if (!json) return 8 * 60;
+  try {
+    const w = (JSON.parse(json) as { wakeAt?: unknown }).wakeAt;
+    return typeof w === 'number' && w >= 5 * 60 && w <= 11 * 60 ? w : 8 * 60;
+  } catch {
+    return 8 * 60;
+  }
+}
 
 function hhmm(minute: number): string {
   const m = minute % 1440;
@@ -69,11 +81,15 @@ function lateReplyLine(status: ReturnType<typeof statusAt>, minute: number): str
 export async function lifePromptLine(env: Env, now = new Date()): Promise<string | null> {
   const { dateKey, minute } = lifeClock(now);
   const day = await env.DB.prepare(
-    'SELECT recipe, health, weather, temp_c, location, mood_seed FROM ai_day WHERE date_key = ?',
+    'SELECT recipe, health, weather, temp_c, location, mood_seed, plan_json FROM ai_day WHERE date_key = ?',
   )
     .bind(dateKey)
-    .first<{ recipe: string | null; health: number; weather: string | null; temp_c: number | null; location: string | null; mood_seed: number | null }>()
-    .catch(() => null);
+    .first<{ recipe: string | null; health: number; weather: string | null; temp_c: number | null; location: string | null; mood_seed: number | null; plan_json: string | null }>()
+    // 以前静默吞掉：少一列/查库失败，整块日程就消失且没有任何日志（2026-11-06）
+    .catch((e) => {
+      logError('[life] 日程读取失败（可能缺迁移）:', e);
+      return null;
+    });
   if (!day) return null;
 
   const acts = await env.DB.prepare(
@@ -81,7 +97,10 @@ export async function lifePromptLine(env: Env, now = new Date()): Promise<string
   )
     .bind(dateKey)
     .all<{ unit_id: string; kind: string; title: string; start_min: number; end_min: number; interruptible: number; reply_chance: number | null }>()
-    .catch(() => null);
+    .catch((e) => {
+      logError('[life] 活动读取失败:', e);
+      return null;
+    });
   const actRows = (acts?.results ?? []).map((a) => ({
       date_key: dateKey,
       start_min: a.start_min,
@@ -92,7 +111,7 @@ export async function lifePromptLine(env: Env, now = new Date()): Promise<string
       interruptible: a.interruptible,
       reply_chance: a.reply_chance ?? 1,
   }));
-  const status = statusAt(actRows as never, minute, day.health);
+  const status = statusAt(actRows as never, minute, day.health, wakeFromPlan(day.plan_json));
 
   const bits: string[] = [];
   const where = day.location ? `你在${day.location}` : '';

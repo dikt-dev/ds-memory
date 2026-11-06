@@ -47,7 +47,7 @@ describe('特殊日频率（365 天统计）', () => {
 });
 
 describe('60 天日程评审', () => {
-  it('每天 2–5 段、全部过校验、天气与池子不冲突', () => {
+  it('每天 2–7 段、全部过校验、天气与池子不冲突', () => {
     const recent = new Map<string, string[]>();
     let prevHealth = 100;
     const history = { daysSinceSick: null as number | null, daysSinceDeepclean: null as number | null, daysSinceMarathon: null as number | null };
@@ -81,8 +81,10 @@ describe('60 天日程评审', () => {
       history.daysSinceMarathon = history.daysSinceMarathon === null ? null : history.daysSinceMarathon + 1;
       prevHealth = choice.recipe?.health ?? health;
       expect(validateDay(plan), date).toEqual([]);
-      // 三餐和加餐不算「活动名额」，这里只数非 meal 的段
-      const acts = plan.activities.filter((a) => BY_ID.get(a.unitId)?.kind !== 'meal');
+      // 三餐、加餐、写日记不算「活动名额」，这里只数非 meal 的段
+      const acts = plan.activities.filter(
+        (a) => BY_ID.get(a.unitId)?.kind !== 'meal' && a.unitId !== 'diary_write',
+      );
       expect(acts.length, date).toBeGreaterThanOrEqual(1);
       expect(acts.length, date).toBeLessThanOrEqual(MAX_ACTIVITIES);
 
@@ -125,7 +127,9 @@ describe('60 天日程评审', () => {
     // 阈值按 60 天定：单个单元最多 12 次（约每 5 天一次），至少用到 50 个单元。
     // 实测 55/64、最高频 11 次（拼图/乐高）。30 天样本只有 47–53，噪声盖过信号，
     // 才换成的 60 天。
-    expect(sorted[0]?.[1] ?? 0).toBeLessThanOrEqual(12);
-    expect(sorted.length).toBeGreaterThanOrEqual(50);
+    // 写日记每天都在，不参与「单元频次」统计
+    const ranked = sorted.filter(([id]) => id !== 'diary_write');
+    expect(ranked[0]?.[1] ?? 0).toBeLessThanOrEqual(12);
+    expect(ranked.length).toBeGreaterThanOrEqual(50);
   });
 });

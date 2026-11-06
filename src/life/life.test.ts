@@ -26,10 +26,10 @@ function dayAfter(start: string, n: number): string {
 const input = (date: string, salt = '') => ({ date, env, salt });
 
 describe('池子', () => {
-  it('74 条，id 不重复，时长区间合法', () => {
-    // 64 条日常 + 5 条夜间（泡澡/看小说/整理歌单/收拾屋子/写点东西）
-    expect(ACTIVITIES.length).toBe(74);
-    expect(new Set(ACTIVITIES.map((u) => u.id)).size).toBe(74);
+  it('75 条，id 不重复，时长区间合法', () => {
+    // 64 条日常 + 5 条夜间 + 5 条节日 + 写日记
+    expect(ACTIVITIES.length).toBe(75);
+    expect(new Set(ACTIVITIES.map((u) => u.id)).size).toBe(75);
     for (const u of ACTIVITIES) {
       expect(u.min).toBeGreaterThan(0);
       expect(u.max).toBeGreaterThanOrEqual(u.min);
@@ -71,9 +71,16 @@ describe('生成', () => {
     const plan = buildDay(input('2026-11-02'));
     const windows = dayWindows();
     for (const act of plan.activities) {
+      // 写日记和吃饭一样是固定块，不参与空档判断
+      if (act.unitId === 'diary_write') continue;
       if (BY_ID.get(act.unitId)?.kind === 'meal') {
         // 三餐占用固定时段（早/午/晚），不在空档里
-        const slot = MEALS.find((m) => act.start >= m.start - 15 && act.start <= m.start + 15);
+        // 早饭跟着起床时间走（晚起半小时就不会 08:10 吃），午/晚饭仍是固定格
+        const breakfastAt = Math.max(MEALS[0].start, (plan.wakeAt ?? WAKE_AT) + 10);
+        const slot = [
+          { start: breakfastAt, minutes: MEALS[0].minutes },
+          ...MEALS.slice(1),
+        ].find((m) => act.start >= m.start - 15 && act.start <= m.start + 15);
         expect(slot, JSON.stringify(act)).toBeTruthy();
         continue;
       }
@@ -167,6 +174,7 @@ describe('旅行', () => {
     });
     for (const a of plan.activities) {
       const kind = BY_ID.get(a.unitId)!.kind;
+      if (a.unitId === 'diary_write') continue; // 旅行也写日记
       expect(['outing', 'short_trip', 'meal', 'idle'], a.unitId).toContain(kind);
     }
     const home = buildDay({
@@ -175,6 +183,7 @@ describe('旅行', () => {
       recipe: RECIPES.homecoming,
     });
     for (const a of home.activities) {
+      if (a.unitId === 'diary_write') continue;
       expect(['idle', 'meal']).toContain(BY_ID.get(a.unitId)!.kind);
     }
   });

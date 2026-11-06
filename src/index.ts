@@ -136,6 +136,7 @@ import { buildEmotionSnapshot, describeEmotionState } from './emotion-snapshot';
 import { decayEmotion, emptyEmotionVector, type EmotionVector } from './emotion-vector';
 import { elapsedMs, logTrace, REQUEST_ID_HEADER, shouldLogHttp, startTrace } from './trace';
 import { runLifeDiary, runLifeMorning } from './life/jobs';
+import { generateDiary } from './life/diary-job';
 import { recordDualStats } from './memory-dual';
 import { flushHeldMessages } from './life/flush';
 import { maybeNightWake } from './life/night';
@@ -653,9 +654,35 @@ export type CronBranch = 'daily-archive' | 'daily-life' | 'daytime' | 'night';
  * 昨天没写成就重来，写了就跳过。claimJob 保证同一天不会被并发跑两遍。
  */
 async function catchUpDiary(env: Env, now: Date): Promise<void> {
-  const beijingHour = Number(
-    new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', hour: '2-digit', hour12: false }).format(now),
-  );
+  const bj = isoInBeijing(now);
+  const beijingHour = Number(bj.slice(11, 13));
+  const beijingMinute = Number(bj.slice(14, 16));
+
+  // ★ 晚上 23:05–23:20：这是她日程里固定的「写日记」时段，写**当天**的日记。
+  //   以前只有 04:05 一次（写昨天），等于白天永远看不到当天的日记。
+  if (beijingHour === 23 && beijingMinute >= 5 && beijingMinute <= 20) {
+    const todayKey = dateKeyInBeijing(now);
+    const writtenToday = await env.DB.prepare('SELECT date_key FROM ai_diary WHERE date_key = ?')
+      .bind(todayKey)
+      .first<{ date_key: string }>()
+      .catch(() => null);
+    if (writtenToday) return;
+    const claimedEvening = await claimJob(env, 'daily_diary_evening', todayKey).catch(() => false);
+    if (!claimedEvening) return;
+    const r = await generateDiary(env, todayKey).catch((e: unknown) => {
+      logError('[life] 日记(晚间)失败:', e);
+      return { ok: false, skipped: 'exception' };
+    });
+    await finishJob(
+      env,
+      'daily_diary_evening',
+      todayKey,
+      r.skipped ? `跳过：${r.skipped}` : '已生成',
+      r.ok && !r.skipped,
+    ).catch(() => {});
+    return;
+  }
+
   if (beijingHour !== 8) return;
   const yesterday = addDays(dateKeyInBeijing(now), -1);
   const written = await env.DB.prepare('SELECT date_key FROM ai_diary WHERE date_key = ?')

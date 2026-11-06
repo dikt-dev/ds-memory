@@ -316,8 +316,9 @@ export function statusAt(
   activities: ActivityRow[],
   minute: number,
   health = 100,
+  wakeMin = 8 * 60,
 ): NowStatus {
-  const sleeping = minute >= 25 * 60 || minute < 8 * 60;
+  const sleeping = minute >= 25 * 60 || minute < wakeMin;
   const hit = activities.find((a) => minute >= a.start_min && minute < a.end_min) ?? null;
   const next = activities.find((a) => a.start_min > minute) ?? null;
   if (sleeping && !hit) return { status: 'sleeping', current: null, next, health };
