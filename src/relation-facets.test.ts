@@ -74,8 +74,8 @@ describe('applyFacetDelta —— 轮级微增量', () => {
 describe('settleFacetDelta —— 天级结算', () => {
   it('按单日上限截断并取整', () => {
     const applied = settleFacetDelta({ affection: 12.4, trust: -20 });
-    expect(applied.affection).toBe(5);
-    expect(applied.trust).toBe(-4);
+    expect(applied.affection).toBe(8);
+    expect(applied.trust).toBe(-6);
   });
 
   it('空增量全 0', () => {

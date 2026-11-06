@@ -166,9 +166,9 @@ describe('effectiveFacets / settleEmotionDaily', () => {
   it('结算按单日上限截断，超出部分丢弃', () => {
     const state = { ...emptyEmotionState(T0), facetDelta: { affection: 99, trust: -99 } };
     const settled = settleEmotionDaily(state, base);
-    expect(settled.applied.affection).toBe(5);
-    expect(settled.applied.trust).toBe(-4);
-    expect(settled.facets.affection).toBe(base.affection + 5);
+    expect(settled.applied.affection).toBe(8);
+    expect(settled.applied.trust).toBe(-6);
+    expect(settled.facets.affection).toBe(base.affection + 8);
   });
 
   it('无变化时 changed=false', () => {
