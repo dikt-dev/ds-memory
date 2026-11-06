@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { replaceFaceMarkers, faceToEmoji } from './faces';
+import { replaceFaceMarkers, faceToEmoji, hasEmoji, stripEmoji } from './faces';
 
 describe('表情标记', () => {
   it('协议写法转 emoji', () => {
@@ -29,5 +29,17 @@ describe('表情标记', () => {
 
   it('多个混排', () => {
     expect(replaceFaceMarkers('[face:害羞][敲打][face:14]')).toBe('☺️🔨🙂');
+  });
+});
+
+describe('表情节流', () => {
+  it('识别是否带 emoji', () => {
+    expect(hasEmoji('好的🙄')).toBe(true);
+    expect(hasEmoji('好的')).toBe(false);
+  });
+
+  it('剥离 emoji，保留文字', () => {
+    expect(stripEmoji('谁大肥鱼啊！🙄 本小姐才不胖')).toBe('谁大肥鱼啊！ 本小姐才不胖');
+    expect(stripEmoji('😏🤦')).toBe('');
   });
 });

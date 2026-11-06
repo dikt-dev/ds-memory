@@ -57,3 +57,15 @@ export function replaceFaceMarkers(text: string): string {
     .replace(/\[face[:：]([^\]]{1,12})\]/g, (_m, name: string) => faceToEmoji(String(name)) ?? '')
     .replace(/\[([^\]\n]{1,6})\]/g, (m, name: string) => faceToEmoji(name) ?? m);
 }
+
+const EMOJI_CHARS = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu;
+
+/** 文本里有没有 emoji（判断上一条是否已经用过表情）。 */
+export function hasEmoji(text: string): boolean {
+  return /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(text);
+}
+
+/** 去掉 emoji（表情节流用）。 */
+export function stripEmoji(text: string): string {
+  return text.replace(EMOJI_CHARS, '').replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+}

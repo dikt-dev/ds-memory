@@ -18,7 +18,7 @@ import { buildBaseSystemPrompt, normalizeChannel, buildLiveFacts, isNowFactQuest
 import { resolvePersona } from './persona';
 import { ticWarning } from './voice';
 import { stripLeadingTimeLabels } from './anti-ai-flavor';
-import { replaceFaceMarkers } from './faces';
+import { hasEmoji, replaceFaceMarkers, stripEmoji } from './faces';
 import { facetsFromValues, stageFor } from './relation-facets';
 import { readRelationStageLevel } from './relation-stage';
 import { budgetContext, formatBudgetManifest } from './context-budget';
@@ -963,7 +963,11 @@ openaiApp.post('/chat/completions', async (c) => {
   if ('error' in result) return openaiError(c, result.status, result.error);
   const silent =
     isSilentEnd(result.text) && (channel === 'mobile' || channel === 'web');
-  const stored = silent ? '' : normalizeAssistantText(result.text);
+  let stored = silent ? '' : normalizeAssistantText(result.text);
+  // ★ 表情节流：上一条她已经发过表情，这一条就不再发（模型会每条都带，2026-11-06）
+  const prevAssistant = historyRaw.filter((m) => m.role === 'assistant').slice(-1);
+  const emojiThrottle = prevAssistant.some((m) => hasEmoji(m.content));
+  if (emojiThrottle && stored) stored = stripEmoji(stored);
   if (silent) {
     if (!skipRecording && userMessageId && cmidKey) {
       await c.env.KV.put(
@@ -1010,7 +1014,8 @@ openaiApp.post('/chat/completions', async (c) => {
   }
   // 非流式回复也已经过 completeDeepSeek 的 AI 味清洗；
   // 手机/网页端直接给 emoji（客户端没有 QQ 表情表）；QQ 端保留 [face:名] 交给 AstrBot 转
-  const clientText = channel === 'astrobot' ? result.text : replaceFaceMarkers(result.text);
+  const clientTextRaw = channel === 'astrobot' ? result.text : replaceFaceMarkers(result.text);
+  const clientText = emojiThrottle ? stripEmoji(clientTextRaw) : clientTextRaw;
   const promptTokens = (result.usage?.prompt_cache_hit_tokens ?? 0) + (result.usage?.prompt_cache_miss_tokens ?? 0);
   return c.json({
     id: result.id,
