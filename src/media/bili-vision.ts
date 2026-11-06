@@ -98,6 +98,15 @@ export async function biliVisionDirect(
       return { title: input.title ?? '', duration: input.duration ?? 0, text: hit, ms: 0, cached: true };
     }
   }
+  // ★ 手机端用 qn=64 取直链时，B 站会返回 PCDN edge 节点（*.edge.mountaintoys.cn），
+  //   千问 omni 拉不动，800ms 就报 "Failed to download multimodal content"。
+  //   直接判掉并留下原因，别再静默退回雪碧图（2026-11-06）。
+  const host = (() => { try { return new URL(input.direct).host; } catch { return ''; } })();
+  const isCdn = /\.bilivideo\.com$/.test(host) || /\.hdslb\.com$/.test(host);
+  if (!isCdn) {
+    await env.KV.put('bili:vision:last_error', JSON.stringify({ at: Date.now(), error: 'PCDN 直链模型拉不到', host }), { expirationTtl: 7 * 86400 }).catch(() => {});
+    throw new Error('PCDN 直链模型拉不到：' + host);
+  }
   try {
     const obs = await lookAtVideo(env, input.direct, {
       prompt: [
@@ -117,7 +126,8 @@ export async function biliVisionDirect(
       ms: obs.ms,
       cached: obs.cached,
     };
-  } catch {
+  } catch (e) {
+    await env.KV.put('bili:vision:last_error', JSON.stringify({ at: Date.now(), error: String(e).slice(0, 300), host }), { expirationTtl: 7 * 86400 }).catch(() => {});
     return null;
   }
 }
