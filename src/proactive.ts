@@ -68,12 +68,14 @@ export function targetMinutesFor(dateKey: string, slot: ProactiveSlot): number {
 
 /** 清理生成的文本（去引号/前缀、限长）。 */
 export function sanitizeProactiveText(text: string): string {
+  // ★ 去掉了 .slice(0, 500)：这段被 scrubAiFlavor 对所有非流式输出统一调用，
+  //   500 字截断会把日记/摘要/提炼的正文和末尾 JSON 拦腰砍掉（2026-11-07）。
+  //   只保留无害的引号/前缀清洗；长度由各调用方自己控制。
   return text
     .trim()
     .replace(/^[“”"'‘’\s]+|[“”"'‘’\s]+$/g, '')
     .replace(/^(消息|内容|回复)[:：]\s*/, '')
-    .trim()
-    .slice(0, 500);
+    .trim();
 }
 
 /* ---------- 随机主动聊天的时段参数 ---------- */

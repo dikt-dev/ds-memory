@@ -125,7 +125,8 @@ async function callModelWithRetry(
 ): Promise<Awaited<ReturnType<typeof completeDeepSeek>>> {
   let lastError = '';
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const res = await completeDeepSeek(env, messages, now, 8192, { thinking: true, kind: 'diary' }).catch(
+    // ★ 不开思考：deepseek-flash 开着思考时，长输入会提前停笔——正文写到一半、JSON 也漏掉（2026-11-07）
+  const res = await completeDeepSeek(env, messages, now, 8192, { thinking: false, kind: 'diary' }).catch(
       (e: unknown) => ({ error: String((e as Error)?.message ?? e), status: 502 }) as const,
     );
     if (!('error' in res) && res.text.trim()) return res;
