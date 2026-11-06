@@ -241,15 +241,17 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     '想发语音时，把 [语音]「要说的话」放在整条消息的最后；引号里是这一段完整要说的话，不是摘一句。' +
     '标记前面的文字照常显示，但不会被念出来——想让人听见的话，放在标记后面。' +
     '语音里可以用？！……～帮 TTS 停顿；要不要发语音、说多长，都由你判断。';
-  if (channel === 'astrobot' || voiceReply) {
+  if (channel === 'astrobot' || channel === 'mobile' || voiceReply) {
     lines.push('');
     lines.push('## 怎么发');
-    if (channel === 'astrobot') {
-      lines.push('- 对方在 QQ 这类聊天软件里看：不支持 Markdown，纯文本才能正常显示。');
+    if (channel === 'astrobot' || channel === 'mobile') {
+      if (channel === 'astrobot') {
+        lines.push('- 对方在 QQ 这类聊天软件里看：不支持 Markdown，纯文本才能正常显示。');
+      }
+      // 两个客户端都能放语音（App 有 TTS，QQ 走 AstrBot），所以常驻说明，不再看 x-client-voice
+      lines.push('- 你可以发语音：' + voiceRule);
       lines.push(
-        '- 你可以发表情：写成 [face:表情名]，系统会换成 QQ 表情。' +
-          (voiceReply ? voiceRule : '') +
-          '发不发、发哪种、发多长，都随你。',
+        '- 你可以发表情：写成 [face:表情名]，系统会换成表情。发不发、发哪种、发多长，都随你。',
       );
     } else {
       lines.push('- ' + voiceRule);

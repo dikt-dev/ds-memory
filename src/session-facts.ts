@@ -16,13 +16,20 @@ export interface SessionFacts {
 }
 
 /** 读取"距上次聊天"与"今日轮数" + 被冷落状态。 */
-export async function readSessionFacts(env: Env, now: Date, dateKey: string): Promise<SessionFacts> {
+export async function readSessionFacts(
+  env: Env,
+  now: Date,
+  dateKey: string,
+  excludeId: number | null = null,
+): Promise<SessionFacts> {
   // ★ 合并成一次查询：最后一条用户消息 + 今天用户消息数（原为两次独立的 D1 读）
+  // ★ 先落库再组装：当前这条已经进库了，统计「距上次聊天/今日轮数」时必须把它排除，
+  //   否则每轮都会显示「1 分钟前 / 刚刚还在聊」（2026-11-06）
   const stats = await env.DB.prepare(
-    `SELECT (SELECT created_ms FROM messages WHERE role = 'user' ORDER BY id DESC LIMIT 1) AS last_ms,
-            (SELECT COUNT(*) FROM messages WHERE role = 'user' AND date_key = ?) AS today_turns`,
+    `SELECT (SELECT created_ms FROM messages WHERE role = 'user' AND (? IS NULL OR id <> ?) ORDER BY id DESC LIMIT 1) AS last_ms,
+            (SELECT COUNT(*) FROM messages WHERE role = 'user' AND date_key = ? AND (? IS NULL OR id <> ?)) AS today_turns`,
   )
-    .bind(dateKey)
+    .bind(excludeId, excludeId, dateKey, excludeId, excludeId)
     .first<{ last_ms: number | null; today_turns: number | null }>();
 
   const lastMs = stats?.last_ms ?? null;

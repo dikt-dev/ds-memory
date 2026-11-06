@@ -18,6 +18,7 @@ import { buildBaseSystemPrompt, normalizeChannel, buildLiveFacts, isNowFactQuest
 import { resolvePersona } from './persona';
 import { ticWarning } from './voice';
 import { stripLeadingTimeLabels } from './anti-ai-flavor';
+import { replaceFaceMarkers } from './faces';
 import { budgetContext, formatBudgetManifest } from './context-budget';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
@@ -282,7 +283,8 @@ export function buildLastUserContent(
 export function normalizeAssistantText(text: string): string {
   let out = text
     .replace(/^\s*\[(?:语音|voice)\]\s*/i, '（语音）')
-    .replace(/\[face[:：][^\]]{1,12}\]/g, '');
+    // 表情标记换成 emoji 再入库：聊天记录里也能看到，而不是只在实时那一瞬间
+    .replace(/\[face[:：][^\]]{1,12}\]/g, (m) => replaceFaceMarkers(m));
   // 模型偶尔会模仿历史时间标签，把回复开头的时间戳去掉
   out = stripLeadingTimeLabels(out).trim();
   // 同理：历史里的「他：」「你：」是说话人标记，模型有时会照着写在开头
@@ -484,7 +486,7 @@ openaiApp.post('/chat/completions', async (c) => {
   // 这些读取互不依赖：并行发起，减少 QQ 场景的首字延迟。
   const [pack, facts] = await Promise.all([
     buildMemoryPack(c.env, now, { channel: 'astrobot' }),
-    readSessionFacts(c.env, now, dateKey),
+    readSessionFacts(c.env, now, dateKey, storedEarly ? (userMessageId ?? null) : null),
   ]);
   const { memory, dayCtxFile: dayCtx, weather, ctx, promptMemory, personaState } = pack;
   // 拉取失败时回退当天缓存，避免“没有天气”时模型去翻旧记忆
@@ -575,6 +577,8 @@ openaiApp.post('/chat/completions', async (c) => {
   if (body?.inject_history === true && !skipRecording) {
     const historyRounds = resolveRecentRounds(lastUserCleaned);
     historyRaw = await loadRecentRounds(c.env, historyRounds, now);
+    // 当前这条已经先落库了：历史统计和注入都要把它排除，否则会出现「最近 1 轮」但数组是空的
+    if (userMessageId) historyRaw = historyRaw.filter((m) => m.id !== userMessageId);
     historyNote = [historyRangeNote(historyRaw, now), conversationGapNote(historyRaw, now)]
       .filter(Boolean)
       .join('\n');
@@ -717,9 +721,7 @@ openaiApp.post('/chat/completions', async (c) => {
     //   比系统提示词里靠前的位置有效得多。网页端不需要 QQ 表情/语音标记。
     if (channel === 'astrobot' || channel === 'mobile') {
       parts.push(
-        '【可用】[face:表情名] → QQ 表情；' +
-          (voiceReply ? '想发语音可以写成 [语音]「要说的话」（只念引号里）。' : '') +
-          '用不用随你。',
+        '【可用】[face:表情名] → 表情；想发语音可以写成 [语音]「要说的话」（只念引号里）。用不用随你。',
       );
     }
     if (isNowFactQuestion(lastUserCleaned)) {

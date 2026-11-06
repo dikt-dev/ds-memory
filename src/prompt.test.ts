@@ -117,7 +117,7 @@ describe('buildSystemPrompt', () => {
     expect(prompt).not.toContain('最近发过的文件');
   });
 
-  it('客户端声明语音时才提示可以发 [语音]', () => {
+  it('始终提示可以发 [语音]（两个客户端都能放语音）', () => {
     const withVoice = buildSystemPrompt({
       now: new Date('2026-10-21T01:00:00Z'),
       ctx,
@@ -133,7 +133,7 @@ describe('buildSystemPrompt', () => {
       memory: 'x',
       channel: 'astrobot',
     });
-    expect(withoutVoice).not.toContain('[语音]');
+    expect(withoutVoice).toContain('[语音]');
   });
 
   it('网页渠道支持语音时也提示 [语音]', () => {

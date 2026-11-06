@@ -221,13 +221,13 @@ describe('normalizeAssistantText（落库前归一化）', () => {
     expect(normalizeAssistantText('  [voice] hi')).toBe('（语音）hi');
   });
 
-  it('表情标记直接去掉', () => {
-    expect(normalizeAssistantText('晚安[face:害羞]')).toBe('晚安');
-    expect(normalizeAssistantText('好耶[face：偷笑][face:微笑]')).toBe('好耶');
+  it('表情标记换成 emoji', () => {
+    expect(normalizeAssistantText('晚安[face:害羞]')).toBe('晚安☺️');
+    expect(normalizeAssistantText('好耶[face：偷笑][face:微笑]')).toBe('好耶🤭🙂');
   });
 
   it('语音 + 表情一起出现也干净', () => {
-    expect(normalizeAssistantText('[语音]晚安[face:害羞]')).toBe('（语音）晚安');
+    expect(normalizeAssistantText('[语音]晚安[face:害羞]')).toBe('（语音）晚安☺️');
   });
 
   it('普通文本原样保留（不会误伤 [ ] 内容）', () => {
