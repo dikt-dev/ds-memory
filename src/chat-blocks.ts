@@ -235,7 +235,7 @@ export async function loadLifeBlocks(
     woke.length ? `他这次说到了：\n${cards(woke)}` : '',
     media && friends.length ? `这条消息里有画面，里面的人可能是：\n${cards(friends)}` : '',
     self || friends.length
-      ? '认人只按上面这些长相来认；照片、视频帧、动图都可能糊，拿不准就说"看着像谁"，别一口咬定。'
+      ? '认人只按上面这些长相来认；对得上就认——服装、画风变了也算，别因为换了衣服就说不像。真拿不准再说"看着像谁"。'
       : '',
   ]
     .filter(Boolean)

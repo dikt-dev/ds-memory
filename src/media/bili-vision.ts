@@ -89,9 +89,10 @@ export interface BiliVision {
 export async function biliVisionDirect(
   env: { DASHSCOPE_API_KEY?: string; DASHSCOPE_VL_MODEL?: string; KV: KVNamespace },
   input: { direct: string; title?: string; duration?: number; cacheKey?: string },
+  castHint?: string,
 ): Promise<BiliVision | null> {
   if (!env.DASHSCOPE_API_KEY) return null;
-  const cacheKey = input.cacheKey ? `biliobs:${input.cacheKey}` : '';
+  const cacheKey = input.cacheKey ? `biliobs:v2:${input.cacheKey}` : '';
   if (cacheKey) {
     const hit = await env.KV.get(cacheKey).catch(() => null);
     if (hit) {
@@ -111,6 +112,7 @@ export async function biliVisionDirect(
     const obs = await lookAtVideo(env, input.direct, {
       prompt: [
         PROMPT,
+        castHint ? `\n【已知角色（看到对得上就直接写名字，别写“蓝发少女”）】\n${castHint}` : '',
         '',
         input.title ? `【视频标题】${input.title}` : '',
         input.duration ? `【时长】${input.duration} 秒` : '',

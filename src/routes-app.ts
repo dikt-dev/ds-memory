@@ -28,6 +28,7 @@ import { ASR_MAX_BYTES, transcribe } from './media/asr';
 import { signMediaPath } from './media/signed-url';
 import { lookAtVideo } from './media/video-vision';
 import { biliVisionDirect } from './media/bili-vision';
+import { loadPersonaDoc, personaSectionText } from './persona-doc';
 
 type AppEnv = { Bindings: Env; Variables: { requestId: string } };
 
@@ -486,12 +487,17 @@ app.post('/api/app/pair', async (c) => {
       return c.json({ ok: false, error: '缺少可用的直链' }, 400);
     }
     try {
+      // 把她的长相和认识的人一起给观察模型：否则它只会写「蓝发少女」，她认不出自己
+      const doc = await loadPersonaDoc(c.env).catch(() => null);
+      const castHint = doc
+        ? [personaSectionText(doc, '外貌'), personaSectionText(doc, '人际')].filter(Boolean).join('\n')
+        : '';
       const v = await biliVisionDirect(c.env, {
         direct,
         title: (body?.title ?? '').slice(0, 120),
         duration: Number(body?.duration ?? 0) || 0,
         cacheKey: (body?.cacheKey ?? '').slice(0, 120),
-      });
+      }, castHint);
       if (!v) return c.json({ ok: false, error: '拿不到直链或模型失败' }, 502);
       // 留一份直链：他之后说「再看一眼」时，服务端要靠它重看（直链约两小时有效）
       await c.env.KV.put(
