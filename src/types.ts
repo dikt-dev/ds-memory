@@ -34,7 +34,8 @@ export interface Env {
   SUMMARY_DEEPSEEK_MODEL?: string; // 旧开关：仅在 LLM_SUMMARY_MODEL 未设置时兜底
   EMBEDDING_MODEL?: string; // 记忆检索语义向量模型（默认 @cf/baai/bge-m3；缺失/失败自动降级关键词召回）
   SELF_REVIEW?: string; // 'on' 开启每夜自审（只执行 A 档动作，默认关）
-  MEMORY_PROMPT_MODE?: string; // 'evidence' 只注入宪法四节，其余靠召回（默认 full）
+  MEMORY_PROMPT_MODE?: string; // full | evidence | tiered（tiered：事实常驻 + 事件按窗口内联）
+  MEMORY_EVENT_INLINE_DAYS?: string; // tiered 模式下事件类条目的内联窗口（天，默认 60）
   MEMORY_SNAPSHOT?: string; // 'off' 关闭每日记忆快照（默认开启，见 docs/memory-rollback-plan.md）
   LLM_RERANK?: string; // 条件 LLM 重排开关：默认开，设 '0' 关闭（省一次调用的延迟）
   REQUEST_LOG?: string; // 'off' 关闭请求级 trace 落 D1（默认开，见 src/request-log.ts）

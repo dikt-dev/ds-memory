@@ -24,7 +24,7 @@ import { dateKeyInBeijing } from './date';
 
 export interface PromptMemory {
   text: string;
-  mode: 'full' | 'compact';
+  mode: 'full' | 'compact' | 'tiered';
   evidence?: boolean;
 }
 

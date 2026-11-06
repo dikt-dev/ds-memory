@@ -29,6 +29,7 @@ import { distillText } from './distill';
 import { logTrace } from './trace';
 import { logError, logWarn } from './error-log';
 import { promptModeFor } from './prompt-mode';
+import { extractTieredMemory } from './memory-tiered';
 
 const logInfo = (msg: string): void => logTrace('memory.index', { msg });
 
@@ -138,9 +139,17 @@ export function extractPromptMemory(
  */
 export function buildPromptMemoryFor(
   text: string,
-  env: { MEMORY_PROMPT_MODE?: string },
+  env: { MEMORY_PROMPT_MODE?: string; MEMORY_EVENT_INLINE_DAYS?: string },
   inlineMaxBytes = MEMORY_INLINE_MAX_BYTES,
-): { text: string; mode: 'full' | 'compact'; evidence?: boolean } {
+): { text: string; mode: 'full' | 'compact' | 'tiered'; evidence?: boolean } {
+  if (promptModeFor(env) === 'tiered') {
+    const days = Number(env.MEMORY_EVENT_INLINE_DAYS) || 60;
+    const r = extractTieredMemory(text, { days, maxBytes: inlineMaxBytes });
+    // 过滤后为空说明记忆文件结构异常，退回核心四节，别让整块记忆消失
+    const body = r.text.trim() === '' ? extractCoreMemory(text) : r.text;
+    logTrace('memory.inline', { mode: 'tiered', days, ...r.stats, fallback: r.text.trim() === '' });
+    return { text: body, mode: 'tiered' };
+  }
   if (promptModeFor(env) === 'evidence') {
     const core = extractCoreMemory(text);
     // 核心区块缺失时退回全量：宁可多带，不许把人物底色弄丢。

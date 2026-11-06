@@ -75,7 +75,7 @@ export interface BasePromptArgs {
   /** 从记忆档案按话题检索到的往事（无命中则为空） */
   recalled?: string | null;
   /** full = 本轮带完整长期记忆；compact = 只带核心+稳定画像，其余靠召回 */
-  memoryMode?: 'full' | 'compact';
+  memoryMode?: 'full' | 'compact' | 'tiered';
   /** 最近发过的文件（已格式化好的 markdown 块） */
   recentFiles?: string | null;
   /** 客户端是否支持语音回复（只有它声明了才提示模型可用 [语音]） */
@@ -203,7 +203,9 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   lines.push(
     memoryMode === 'compact'
       ? '## 核心记忆（人物底色/称呼/雷区 + 稳定画像；其余按本轮话题检索）'
-      : '## 长期记忆（本轮完整带上）',
+      : memoryMode === 'tiered'
+        ? '## 长期记忆（稳定事实 + 最近两个月的经历；更早的按本轮话题检索）'
+        : '## 长期记忆（本轮完整带上）',
   );
   const memoryParts = memory?.trim()
     ? splitMemoryForPrompt(memory)
@@ -217,8 +219,8 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   } else {
     lines.push('（暂无记忆）');
   }
-  if (memoryMode === 'compact') {
-    lines.push('（其余记忆按本轮话题检索，可能不完整；没检索到就说记不清，不要编。）');
+  if (memoryMode === 'compact' || memoryMode === 'tiered') {
+    lines.push('（更早或其余的记忆按本轮话题检索，可能不完整；没检索到就说记不清，不要编。）');
   }
   // 「记忆怎么用」整段已删：persona.md 里写了同样的边界（绝不编、先问别猜、感受随便说事实不行）。
   // 两处都写时，模型会各挑一半执行——这类"防编造"规则只需要一个出处。
