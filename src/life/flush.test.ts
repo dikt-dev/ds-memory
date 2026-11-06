@@ -9,12 +9,18 @@ describe('压着的消息：告诉 AI 他等了多久', () => {
     expect(formatWait(3 * 3600_000 + 20 * 60_000)).toBe('3 小时 20 分钟');
   });
 
-  it('写清当时在忙什么，并允许她先说一句「才看见」', () => {
+  it('写清当时在忙什么，并要求先说一句把空档带出来', () => {
     const note = heldWaitNote(47 * 60_000, '在洗澡');
     expect(note).toContain('47 分钟前发来的');
     expect(note).toContain('你当时在洗澡');
-    expect(note).toContain('随口带一句');
-    expect(note).toContain('别装作刚才发生');
+    expect(note).toContain('别把这件事反问回去');
+  });
+
+  it('带上「现在几点」：凌晨发的、早上补发时不能说夜里那套', () => {
+    const morning = new Date('2026-11-06T08:00:00+08:00');
+    const note = heldWaitNote(6 * 3600_000, '在睡觉', morning);
+    expect(note).toContain('现在是上午八点');
+    expect(note).toContain('不要用他发消息那会儿的时间感');
   });
 
   it('不知道当时在干什么就说没顾上看手机', () => {

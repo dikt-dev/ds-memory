@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-05T10:28:56.045Z",
+  "generated_at": "2026-11-06T00:41:51.405Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-05",
       "items": [
+        {
+          "hash": "72d0ac1",
+          "date": "2026-11-05",
+          "type": "other",
+          "area": "",
+          "title": "他受挫时先站队：场景识别 + 规则放到提示词末尾，并让'提自己'的提醒让位",
+          "why": ""
+        },
         {
           "hash": "45095dc",
           "date": "2026-11-05",
@@ -3230,14 +3238,6 @@
           "type": "docs",
           "area": "",
           "title": "record day four chat issues",
-          "why": ""
-        },
-        {
-          "hash": "191d247",
-          "date": "2026-10-29",
-          "type": "fix",
-          "area": "chat",
-          "title": "reconcile pending messages and retry DeepSeek 400",
           "why": ""
         }
       ]
