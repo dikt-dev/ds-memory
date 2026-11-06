@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-06T00:46:46.072Z",
+  "generated_at": "2026-11-06T00:51:21.086Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-06",
       "items": [
+        {
+          "hash": "b2674af",
+          "date": "2026-11-06",
+          "type": "other",
+          "area": "",
+          "title": "补发提示改用时段而非时长：她不会再说'六小时前的消息'；顺带修'凌晨二点'应为'两点'",
+          "why": ""
+        },
         {
           "hash": "5db75b1",
           "date": "2026-11-06",
@@ -3235,14 +3243,6 @@
           "type": "docs",
           "area": "",
           "title": "record DeepSeek surrogate root cause",
-          "why": ""
-        },
-        {
-          "hash": "1dd1097",
-          "date": "2026-10-29",
-          "type": "fix",
-          "area": "deepseek",
-          "title": "strip lone surrogates before upstream request",
           "why": ""
         }
       ]

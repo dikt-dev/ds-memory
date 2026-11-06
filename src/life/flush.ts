@@ -48,6 +48,19 @@ export function heldWaitNote(
   const sentText = spokenTime(sentAt);
   const nowText = spokenTime(now);
   const short = waitedMs < 90 * 60_000;
+  // 「睡过去了」单独一档：凌晨发的、早上才看到。
+  // 这一档光交代事实太冷（实测："哦，凌晨三点啊，我睡得正香呢，这会儿才看见。"），
+  // 她该有"一觉醒来发现错过消息"的错位感，先冲他熬夜，再关心——顺序不能反。
+  const overnight = !short && where === '在睡觉';
+  if (overnight) {
+    return (
+      `（他这几条是${sentText}发来的，你当时睡得死死的，现在是${nowText}，你刚醒，才拿起手机看到。` +
+      '先冲他半夜不睡这件事发火，再说自己睡得沉/刚醒，最后一句才问他现在怎么样。顺序别反。' +
+      '要让人听出来"一觉醒来发现错过他消息"，别当成他刚才发的。' +
+      '不要报时长，也别装成等了很久很委屈；更别把他半夜发消息这件事反问回去。' +
+      '（开场说法每次换，别用同一个；同一个开场用两次就腻了。））'
+    );
+  }
   return (
     '（' +
     (short
