@@ -51,11 +51,12 @@ export function buildDistillConversation(rows: DistillRow[]): string {
   return rows
     .map((row) => {
       const cleaned = collapseFileBlocks(sanitizeMessagePlaceholders(row.content ?? ''));
-      if (row.role === 'user') return `用户：${clip(cleaned, USER_MAX_CHARS)}`;
+      // 标签和提炼提示词里的主语保持一致：他 / 你
+      if (row.role === 'user') return `他：${clip(cleaned, USER_MAX_CHARS)}`;
       const text = clip(cleaned, ASSISTANT_MAX_CHARS);
       return row.turn_type === 'proactive'
-        ? `助手（主动发起，用户未回复）：${text}`
-        : `助手：${text}`;
+        ? `你（主动发起，他没回）：${text}`
+        : `你：${text}`;
     })
     .join('\n\n');
 }

@@ -462,8 +462,7 @@ export async function detectAiKeepsakes(
     KEEPSAKE_SYSTEM,
     user,
     800,
-    env.DISTILL_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL,
-    { thinking: false },
+    { thinking: false, kind: 'distill' },
   );
   await addLlmCost(env, dateKey, res.cost);
   const fallbackMs = Date.parse(`${dateKey}T12:00:00+08:00`);

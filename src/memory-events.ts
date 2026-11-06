@@ -163,7 +163,7 @@ export async function extractEvent(env: Env, rows: EventSourceRow[]): Promise<Me
     EVENT_SYSTEM,
     input,
     800,
-    env.SUMMARY_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL,
+    { kind: 'summary' },
   );
   await addLlmCost(env, dateKeyInBeijing(new Date(rows[rows.length - 1].created_ms)), result.cost);
   const parsed = parseEventJson(result.text);

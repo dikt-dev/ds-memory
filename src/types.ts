@@ -30,8 +30,8 @@ export interface Env {
   DASHSCOPE_VL_MODEL?: string; // 默认 qwen3.8-omni-flash
   DASHSCOPE_BASE_URL?: string; // 默认 https://dashscope.aliyuncs.com/compatible-mode/v1
   DISTILL_MODEL: string;
-  DISTILL_DEEPSEEK_MODEL: string; // 每日提炼使用的 DeepSeek 模型（默认 v4-pro，质量优先）
-  SUMMARY_DEEPSEEK_MODEL: string; // 滚动摘要使用的 DeepSeek 模型（默认 flash，成本优先）
+  DISTILL_DEEPSEEK_MODEL?: string; // 旧开关：仅在 LLM_DISTILL_MODEL 未设置时兜底
+  SUMMARY_DEEPSEEK_MODEL?: string; // 旧开关：仅在 LLM_SUMMARY_MODEL 未设置时兜底
   EMBEDDING_MODEL?: string; // 记忆检索语义向量模型（默认 @cf/baai/bge-m3；缺失/失败自动降级关键词召回）
   SELF_REVIEW?: string; // 'on' 开启每夜自审（只执行 A 档动作，默认关）
   MEMORY_PROMPT_MODE?: string; // 'evidence' 只注入宪法四节，其余靠召回（默认 full）

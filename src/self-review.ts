@@ -195,7 +195,7 @@ export async function proposeActions(
     REVIEW_SYSTEM,
     buildEvidenceText(evidence),
     700,
-    env.SUMMARY_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL,
+    { kind: 'summary' },
   );
   await addLlmCost(env, dateKeyInBeijing(new Date()), result.cost).catch(() => {});
   const text = result.text.replace(/```json/gi, '').replace(/```/g, '').trim();

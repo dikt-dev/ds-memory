@@ -140,7 +140,7 @@ export async function selectRecall(
   let result: Awaited<ReturnType<typeof distillText>> | null = null;
   try {
     result = await Promise.race([
-      distillText(env, system, user, 240, env.SUMMARY_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL),
+      distillText(env, system, user, 240, { kind: 'summary' }),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), opts.timeoutMs ?? SELECT_TIMEOUT_MS)),
     ]);
   } catch (e) {

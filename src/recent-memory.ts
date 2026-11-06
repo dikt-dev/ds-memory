@@ -321,7 +321,7 @@ export async function maybeRefreshRecentMemo(env: Env, now: Date = new Date()): 
         MEMO_SYSTEM,
         input,
         400,
-        env.SUMMARY_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL,
+        { kind: 'summary' },
       );
 
       const added = parseMemoItems(result.text, now.toISOString());

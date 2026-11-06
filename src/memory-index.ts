@@ -711,7 +711,7 @@ async function llmRerank(
       '只输出 JSON 数组，例如 [1,4,7]，不要解释。';
     const user = `用户消息：${query}\n\n候选：\n${lines}\n\n最多选 ${k} 条，输出序号数组。`;
     const res = await Promise.race([
-      distillText(env, system, user, 120, env.SUMMARY_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL),
+      distillText(env, system, user, 120, { kind: 'summary' }),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), RERANK_TIMEOUT_MS)),
     ]);
     if (!res) {

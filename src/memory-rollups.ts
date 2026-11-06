@@ -104,7 +104,7 @@ export async function generateRollup(
     ROLLUP_SYSTEM,
     input,
     512,
-    env.SUMMARY_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL,
+    { kind: 'summary' },
   );
   const content = result.text.slice(0, 600).trim();
   const sourceHash = rollupSourceHash(items);

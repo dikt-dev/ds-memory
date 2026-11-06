@@ -157,7 +157,7 @@ async function summarizeToday(env: Env, input: string, dateKey: string): Promise
     // ★ 保留最新的部分：之前的写法是 slice(0, 20000)，长对话会把最后 10k 字丢掉
     input.slice(-SUMMARY_INPUT_MAX_CHARS),
     512,
-    env.SUMMARY_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL,
+    { kind: 'summary' },
   );
   logInfo(`[summary] backend=${result.backend} cost=${result.cost.toFixed(5)}`);
   // 摘要费用也计入当天（此前只打日志，页面统计看不到）

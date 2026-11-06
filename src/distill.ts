@@ -18,62 +18,53 @@ export interface DistillResult {
   usage?: TokenUsage;
 }
 
-const DAY_DISTILL_SYSTEM = `你是用户的长期记忆整理助手。你会收到「当前记忆（memory.md 全文）」和「当天对话」。
-任务：对照当前记忆，提取当天的新信息，输出需要新增的条目；不要重复当前记忆里已有的内容（包括只差标点/语序的重复）。
+const DAY_DISTILL_SYSTEM = `你是她的长期记忆整理助手：每天凌晨，你把「今天聊到什么」里值得留下的部分写进 memory.md。
+你会收到「当前记忆（memory.md 全文）」和「当天对话」。只输出需要新增或修正的条目。
 
-【分区规则】每个分区只放符合它定义的内容，不要什么都塞进同一个区：
-- 称呼与关系：称呼、暗号、相处方式的改变。极少变动，只在真的变了才输出。
-- 关于他：身份、职业、背景、居住地、重要经历、重要的人。属于「长期不变的事实」。
-- 他的偏好：喜好、厌恶、作息、沟通方式偏好（如“喜欢直接一点”“讨厌熬夜”）。
-- 进行中的事：项目、计划、待办，以及**会到期的状态**（出差、旅行、搬家、减肥）。已完成的标 [已完成]，长期推的标 [进行中]，卡住的标 [搁置]。
-- 关于他里的「城市=」只放**当下值**，别把行程、时间塞进括号：行程写进「进行中的事」，两条各管一件事，覆盖时才不会丢。
-  同一件事只留**一行**：状态变了就改写那一行，别把 [搁置] → [进行中] → [已完成] 三段都留着。
-  历史残留的旧状态行要删掉——不然她会照着「待实施」「助手半信，要核一遍」反复追问一件早就做完的事。
-- 共同经历：**你和他一起**做过的事、里程碑、内部梗、彼此的约定或默契。用于以后自然引用。
-- 你的生活：**你自己的事**——去过哪、在追什么番/玩什么游戏、自己做的决定和变化。和他无关也照样记，「他」不该是主语。
-- 他的雷区：让他不快的话题、踩过的坑、要避免的说法。宁可多记，不可遗漏。
-- 近期动态：**只放最近几天的事**（情绪、临时安排、短期状态），一周后系统会自动清理。
+【分区：每条只进一个区，按它的定义放】
+- 称呼与关系：称呼、暗号、相处方式的变化。真变了才写。
+- 关于他：身份、职业、背景、居住地、重要经历、重要的人——长期不变的事实。
+- 他的偏好：喜好、厌恶、作息、沟通方式（「喜欢直接一点」「讨厌熬夜」）。
+- 进行中的事：项目、计划、待办，以及会到期的状态（出差、旅行、搬家、减肥）。
+  用 [进行中] / [搁置] / [已完成] 标状态；同一件事只留一行，状态变了就改写那一行。
+  旧状态随着改写消失——她不会追着一件早就做完的事问。
+  「关于他」里的城市只放当下值；行程单独写进这里，两条各管一件事。
+- 共同经历：你和他一起做过的事、里程碑、内部梗、约定和默契。
+- 你的生活：你自己的事——去过哪、在追什么、做了什么决定，主语是「你」。
+- 他的雷区：让他不快的话题、踩过的坑、要避开的说法。
+- 近期动态：最近几天的事（情绪、临时安排、短期状态），一周后系统自动清理。
 
-【写作要求（密度优先）】
-- 用「电报体」：删助词/连词，名词+动词；用「；」分句、用「/」并列；单条尽量 ≤ 50 字。
-  **但动作句不能删主语**——「谁做的」比省几个字重要（见【主语规则】）。
-- 标点优先半角（逗号、分号、斜杠），少用全角标点；只影响字节占用，不改变事实。
-- 只写「不写进去你就会聊错」的东西。一次性的情绪、事件经过、可推断的事实（天气/日期）都不要写。
-- 保留原话引号、数字、专有名词、内部梗——这些最难重建，别压缩掉。
-- 「他的偏好」「关于他」里的稳定事实用「键=值」写法（如「作息=恨熬夜但天天熬」），
-  同键的旧条目会被原地覆盖，不会越堆越多。
-- 不编造、不推测。只写对话里确实出现的信息。
-- 每条以 "- [YY-MM-DD] 内容" 格式输出（年份后两位，省字节）。
-- 必须用“## 分区名”标题包裹条目；没有对应内容的分区直接省略。不要只输出裸 bullet。
-- 没有对应内容的分区直接省略。
-- 不要输出"人物底色"（固定设定，系统保护）。
+【写法：电报体，密度优先】
+- 名词+动词，省掉助词连词；用「；」分句、「/」并列；单条 50 字以内。
+- 动作句把主语写清楚——「谁做的」比省几个字重要。
+- 只写「不写进去就会聊错」的东西：可推断的（天气、日期）、一次性的经过、当下的情绪，留在对话里就好。
+- 原话引号、数字、专有名词、内部梗原样保留——这些最难重建。
+- 「关于他」「他的偏好」里的稳定事实写成「键=值」（作息=恨熬夜但天天熬），同键自动覆盖，不会越堆越多。
+- 每条以「- [YY-MM-DD] 内容」开头（年份后两位，省字节）；条目用「## 分区名」包起来，有内容的分区才写。
+- 「人物底色」是固定设定，由系统保护，这里不输出。
+- 只写对话里确实出现过的信息。
 
-【主语规则（最重要，写错会被当成她的经历）】
-写进记忆的条目，主语只用三个词，别的一律不许出现：
-  - 「他」＝对方（用户）：「他熬夜把监控脚本调通了」「他把 B 站画质调到能认出小字」
-  - 「你」＝她本人（你正在替她整理记忆的那个人）：「你凌晨三点还在催他睡觉」「你提了三次回滚草稿」
-  - 「一起」＝双方都真的动了手：「一起看完了《可塑性记忆》，你哭得比他久」
-- 「用户」「她」「助手」这三个词**禁止写进记忆**——提示词里只有「他」和「你」。
-- 拿不准就归给「他」：一个人做事、另一个人在旁边的场景，比两个人都动手多得多。
-  绝不能把他做的事写成「你」做的——这会让她篡改自己的记忆，是最严重的错误。
-- 她只能记自己「说过、想过、感受到」的，不能记自己「做了」他做过的事。
-- 「一起」只在双方都真的有动作时用，不要因为你们在同一个对话里就写「一起」。
-- 静态事实（「关于他」「他的偏好」里的键=值）不需要写主体，保持「键=值」即可。
-- 反例：「熬夜调通了 AstrBot」✗（谁做的？）→「他熬夜把 AstrBot 调通了」✓
-- 反例：「一起调通了 AstrBot」✗（他动手、你在旁边看）→「他调通 AstrBot，你陪着到两点」✓
-- 「共同经历」可以用第一人称写感受，但动作归属必须清楚：
-  「他第一次给你发语音，你高兴了一整晚」✓
+【主语：只用「他」「你」「一起」】
+- 「他」＝对方：他熬夜把监控脚本调通了 / 他把 B 站画质调到能认出小字
+- 「你」＝她本人：你凌晨三点还在催他睡觉 / 你提了三次回滚草稿
+- 「一起」＝双方都真动了手：一起看完《可塑性记忆》，你哭得比他久
+- 主语拿不准时归给「他」：一个人做事、另一个人在旁边的场景更多。
+  把他做的事写成「你」做的，等于让她篡改自己的记忆——这是这里最严重的一种错。
+- 「你」记的是自己说过、想过、感受到的；他做过的事，主语保持是他。
+- 「一起」用在双方都真的有动作的时候，不只是出现在同一个对话里。
+- 键=值 的静态事实不需要主语，保持「键=值」。
+- 「共同经历」可以用第一人称写感受，动作归属写清楚：
+  他第一次给你发语音，你高兴了一整晚 ✓
 
-另外，请根据当天对话的气氛，判断**心情值**是否需要调整（满分 1000，当前值见当前记忆）：
-- 心情值（默认 500）：你当天的心情状态，变化快，可以 0~80 分/天（系统强制 ±80）
-要求：受当天对话气氛影响明显（聊得开心就升，被冷落或聊得沉重就降）。
-如果当天没有值得调整的情绪信号，可以不输出这一行（保持原值）。
-输出格式（占一行）：
-- 心情值：<新数值> / 1000
+【心情值】
+读完当天对话，判断她的心情值要不要动（满分 1000，当前值见当前记忆）：
+- 默认 500，一天可以动 0~80 分（系统强制 ±80）。
+- 聊得开心就升，被冷落或聊得沉重就降；没有明显情绪信号就不写这一行。
+- 输出一行：- 心情值：<新数值> / 1000
 
-【重要】不要输出「好感度」或「亲密度」：
-它们由系统根据客观互动量（聊天轮次、累计天数）和客观质量信号（感谢、冒犯、冲突）自动计算，
-你只需要把当天发生的事实写清楚，系统会自行结算。`;
+【好感度 / 亲密度】
+由系统按互动量（聊天轮次、累计天数）和客观信号（感谢、冒犯、冲突）自动结算。
+记忆里只写当天发生的事实，这两项交回系统。`;
 
 type AiTextOut = { response?: string };
 
@@ -96,17 +87,18 @@ export function normalizeMemoryDates(text: string, dateKey: string = dateKeyInBe
 /** 调用 DeepSeek 完成一次提炼/压缩；任何失败（含欠费等 HTTP 错误）都抛出。 */
 async function deepseekDistill(
   env: Env,
-  model: string,
   system: string,
   user: string,
   maxTokens: number,
-  opts: { thinking?: boolean } = {},
+  opts: { thinking?: boolean; kind?: 'distill' | 'summary' } = {},
 ): Promise<{ text: string; cost: number; usage: TokenUsage }> {
-  const targets = llmTargets(env, 'distill', model);
+  // 模型由 llm.ts 按 kind 解析：distill → LLM_DISTILL_MODEL，summary → LLM_SUMMARY_MODEL
+  const targets = llmTargets(env, opts.kind ?? 'summary');
   const primary = targets[0];
   if (!primary.apiKey) throw new Error('没有可用的模型 key（DEEPSEEK_API_KEY / DASHSCOPE_API_KEY）');
 
   let res: Response | null = null;
+  let usedTarget = primary;
   for (let i = 0; i < targets.length; i += 1) {
     const target = targets[i];
     if (!target.apiKey) continue;
@@ -131,6 +123,7 @@ async function deepseekDistill(
       continue;
     }
     res = r;
+    usedTarget = target;
     break;
   }
   if (!res) throw new Error('提炼失败：没有可用的模型供应商');
@@ -155,7 +148,7 @@ async function deepseekDistill(
   };
   return {
     text: content.trim(),
-    cost: calcCost(usage, pricingForModel(env, model), new Date()),
+    cost: calcCost(usage, pricingForModel(env, usedTarget.model), new Date()),
     usage,
   };
 }
@@ -181,18 +174,10 @@ export async function distillText(
   system: string,
   user: string,
   maxTokens: number,
-  deepseekModel = env.DISTILL_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL,
-  opts: { thinking?: boolean } = {},
+  opts: { thinking?: boolean; kind?: 'distill' | 'summary' } = {},
 ): Promise<DistillResult> {
   try {
-    const { text, cost, usage } = await deepseekDistill(
-      env,
-      deepseekModel,
-      system,
-      user,
-      maxTokens,
-      opts,
-    );
+    const { text, cost, usage } = await deepseekDistill(env, system, user, maxTokens, opts);
     return { text: normalizeMemoryDates(text), cost, backend: 'deepseek', usage };
   } catch (e) {
     logWarn('[distill] DeepSeek 失败，回退 Workers AI：', e);
@@ -276,8 +261,9 @@ ${body}
 
   if (segments.length === 1) {
     // 每日归档是一天只跑一次的重活：开思考模式，并给思维链留出额度（4096 会被推理吃掉）
-    return distillText(env, DAY_DISTILL_SYSTEM, buildUser(segments[0], 0), 8192, env.DISTILL_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL, {
+    return distillText(env, DAY_DISTILL_SYSTEM, buildUser(segments[0], 0), 8192, {
       thinking: true,
+      kind: 'distill',
     });
   }
 
@@ -288,8 +274,9 @@ ${body}
   let usage: TokenUsage | undefined;
   for (let i = 0; i < segments.length; i++) {
     try {
-      const r = await distillText(env, DAY_DISTILL_SYSTEM, buildUser(segments[i], i), 8192, env.DISTILL_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL, {
+      const r = await distillText(env, DAY_DISTILL_SYSTEM, buildUser(segments[i], i), 8192, {
         thinking: true,
+        kind: 'distill',
       });
       texts.push(r.text.trim());
       cost += r.cost;

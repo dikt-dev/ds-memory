@@ -177,7 +177,7 @@ export async function maybeReviewPersonaDrift(
 
   let deltas: Partial<TraitValues> | null = null;
   try {
-    const res = await distillText(env, system, user, 200, env.SUMMARY_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL);
+    const res = await distillText(env, system, user, 200, { kind: 'summary' });
     const match = res.text.match(/\{[\s\S]*\}/);
     if (match) deltas = clampDeltas(JSON.parse(match[0]) as Record<string, unknown>);
   } catch (e) {

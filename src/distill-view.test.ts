@@ -26,7 +26,7 @@ describe('buildDistillConversation', () => {
       { role: 'user', content: '今天有点累' },
       { role: 'assistant', content: long },
     ]);
-    expect(out).toContain('用户：今天有点累');
+    expect(out).toContain('他：今天有点累');
     expect(out).toContain('啊'.repeat(3000));
   });
 
@@ -42,7 +42,7 @@ describe('buildDistillConversation', () => {
     const out = buildDistillConversation([
       { role: 'assistant', content: '早', turn_type: 'proactive' },
     ]);
-    expect(out).toContain('助手（主动发起，用户未回复）：早');
+    expect(out).toContain('你（主动发起，他没回）：早');
   });
 
   it('图片/视频占位符压成标记，不带 R2 路径', () => {
