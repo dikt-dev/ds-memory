@@ -72,6 +72,9 @@ export function buildNowCard(parts: NowCardParts): string {
   push('对你的态度', parts.temper);
   push('开场情绪', card.map.get('开场情绪'));
   push('相处分寸', card.map.get('相处分寸'));
+  push('关系阶段', card.map.get('关系阶段'));
+  push('这一步可以', card.map.get('这一步可以'));
+  push('这一步还不行', card.map.get('这一步还不行'));
   push('距上次聊天', card.map.get('距上次聊天'));
 
   // 解析不到的原文照留（单测或将来改格式时不丢内容）

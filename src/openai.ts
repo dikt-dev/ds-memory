@@ -19,6 +19,8 @@ import { resolvePersona } from './persona';
 import { ticWarning } from './voice';
 import { stripLeadingTimeLabels } from './anti-ai-flavor';
 import { replaceFaceMarkers } from './faces';
+import { facetsFromValues, stageFor } from './relation-facets';
+import { readRelationStageLevel } from './relation-stage';
 import { budgetContext, formatBudgetManifest } from './context-budget';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
@@ -555,6 +557,7 @@ openaiApp.post('/chat/completions', async (c) => {
   // ★ 心情值不再单独维护：由情绪向量派生，保证只有一份真相
   const effectiveMood = moodFromVector(emotion.state.vector);
   // ★ 活人感：状态卡 + 口语化（AstrBot 落库在 send 之前，故此处查询的是落库前的状态）
+  const stageLevel = await readRelationStageLevel(c.env).catch(() => null);
   const charCard = buildCharacterCard({
     hour: envHour,
     hoursSinceLastContact: facts.hoursSinceLastContact,
@@ -566,6 +569,7 @@ openaiApp.post('/chat/completions', async (c) => {
     wasIgnored: facts.wasIgnored,
     ignoredMessage: facts.ignoredMessage,
     characterName: c.env.CHARACTER_NAME,
+    stage: stageFor(facetsFromValues(relation), stageLevel ?? undefined),
   tone: resolvePersona(c.env).tone,
 });
   const cardTextWithMood = charCard.cardText;

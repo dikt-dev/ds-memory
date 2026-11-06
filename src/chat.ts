@@ -43,6 +43,8 @@ import { byteLength, parseRelationValues } from './memory-maintenance';
 import { markProfileDirty } from './profile-cache';
 import { buildCharacterCard } from './character-card';
 import { facetsOf, processEmotionTurn } from './emotion-context';
+import { stageFor } from './relation-facets';
+import { readRelationStageLevel } from './relation-stage';
 import { computeTemper } from './temper';
 import { recentPainEvent } from './emotion-events';
 import { loadKeepsakesBlock } from './keepsakes';
@@ -323,6 +325,7 @@ export async function streamChat(
     wasIgnored: facts.wasIgnored,
     ignoredMessage: facts.ignoredMessage,
     characterName: env.CHARACTER_NAME,
+    stage: stageFor(facetsOf(relationVals), (await readRelationStageLevel(env)) ?? undefined),
   tone: resolvePersona(env).tone,
 });
   const cardTextWithMood = charCard.cardText;

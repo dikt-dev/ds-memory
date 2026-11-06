@@ -27,6 +27,59 @@ export const FACET_KEYS: FacetKey[] = ['affection', 'trust', 'respect', 'attract
 
 export type RelationFacets = Record<FacetKey, number>;
 
+/**
+ * 关系阶段（Lv0–Lv4）。
+ *
+ * 5 轴是连续值，但人不会用「亲密度 618」理解关系——阶段是给人看的那一层。
+ * 判定用 closeness = 0.55×亲密 + 0.45×好感；Lv4 额外要求心动 ≥ 550（暧昧得有心跳）。
+ * 阶段只影响「她敢做到哪一步」，不改变 5 轴本身。
+ */
+export interface RelationStage {
+  level: number;
+  key: 'stranger' | 'friend' | 'close' | 'best' | 'ambiguous';
+  label: string;
+  /** 状态卡里的一句话解释 */
+  note: string;
+  /** 这个阶段可以做的事 */
+  can: string;
+  /** 还不到的事 */
+  notYet: string;
+  /** 进入该阶段所需的 closeness（Lv0 恒为 0） */
+  min: number;
+}
+
+export const STAGE_LEVELS: RelationStage[] = [
+  { level: 0, key: 'stranger', label: '陌生', min: 0, note: '还客客气气的，别自来熟', can: '礼貌接话、短句回复', notYet: '吐槽、外号、撒娇、吃醋' },
+  { level: 1, key: 'friend', label: '普通朋友', min: 330, note: '认识，但还没到能随便开玩笑', can: '接话、偶尔吐槽一句、偶尔主动找话题', notYet: '撒娇、吃醋、深夜长聊' },
+  { level: 2, key: 'close', label: '熟人', min: 460, note: '他算半个自己人', can: '主动找话题、叫外号、有点小情绪', notYet: '撒娇、吃醋、深夜长聊' },
+  { level: 3, key: 'best', label: '好朋友', min: 590, note: '能说真话的关系', can: '撒娇、吃醋、深夜长聊、发语音和表情', notYet: '暧昧的试探' },
+  { level: 4, key: 'ambiguous', label: '暧昧', min: 720, note: '话到嘴边没说破', can: '害羞、试探、半句真话、撒娇吃醋', notYet: '直接挑明（留给表白）' },
+];
+
+/** 阶段判定用的「亲近度」：亲密为主、好感为辅。 */
+export function closeness(f: RelationFacets): number {
+  return Math.round(f.intimacy * 0.55 + f.affection * 0.45);
+}
+
+/** 由 5 轴推阶段；levelOverride 用于迟滞（已升上去的不会因为一天波动就掉）。 */
+export function stageFor(f: RelationFacets, levelOverride?: number): RelationStage {
+  const c = closeness(f);
+  let level = 0;
+  for (const st of STAGE_LEVELS) if (c >= st.min) level = st.level;
+  // 暧昧要看心跳：没有心动就停在好朋友
+  if (level >= 4 && f.attraction < 550) level = 3;
+  if (typeof levelOverride === 'number') level = Math.min(levelOverride, level);
+  return STAGE_LEVELS[level];
+}
+
+/** 升到下一阶段还差多少 closeness（已满级返回 null）。 */
+export function nextStageGap(f: RelationFacets): { stage: RelationStage; gap: number } | null {
+  const cur = stageFor(f).level;
+  const next = STAGE_LEVELS[cur + 1];
+  if (!next) return null;
+  return { stage: next, gap: Math.max(0, next.min - closeness(f)) };
+}
+
 /** 新关系的默认值。affection 沿用原好感度默认 500，intimacy 沿用 300。 */
 export const FACET_DEFAULTS: RelationFacets = {
   affection: 500,
@@ -38,11 +91,11 @@ export const FACET_DEFAULTS: RelationFacets = {
 
 /** 单日结算上限（防止一天猛聊把轴刷满）。 */
 export const FACET_DAILY_CAPS: Record<FacetKey, number> = {
-  affection: 5,
-  trust: 4,
-  respect: 4,
-  attraction: 4,
-  intimacy: 4,
+  affection: 8,
+  trust: 6,
+  respect: 6,
+  attraction: 6,
+  intimacy: 6,
 };
 
 /** 单轮微增量上限（绝对值）。 */

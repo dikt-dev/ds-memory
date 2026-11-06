@@ -245,6 +245,8 @@ export const CONVERSATION_BEHAVIORS = [
   '回答前后可以带点情绪或态度，而不是纯功能性的输出',
 ].join('；');
 
+import type { RelationStage } from './relation-facets';
+
 export interface CharacterStateInput {
   /** 北京时间小时 0-23 */
   hour: number;
@@ -266,6 +268,8 @@ export interface CharacterStateInput {
   ignoredMessage?: string | null;
   /** 角色名（缺省为开源默认值，见 identity.ts） */
   characterName?: string;
+  /** 关系阶段（由 5 轴派生，带持久化的迟滞）；不传就不输出阶段行 */
+  stage?: RelationStage | null;
   /** 人设语气：peer = 损友式，不受亲密度门槛限制 */
   tone?: 'auto' | 'peer';
 }
@@ -324,6 +328,13 @@ export function buildCharacterCard(input: CharacterStateInput): CharacterState {
     `- 当下状态：${timeState}`,
     `- 疲惫度：${fatigue.note}`,
     `- 相处分寸：${casualNote}`,
+    ...(input.stage
+      ? [
+          `- 关系阶段：Lv${input.stage.level} ${input.stage.label}（${input.stage.note}）`,
+          `- 这一步可以：${input.stage.can}`,
+          `- 这一步还不行：${input.stage.notYet}`,
+        ]
+      : []),
     `- 此刻想要：${disposition.want}`,
     `- 本轮倾向：${disposition.hint}`,
     `- 对话方式：${CONVERSATION_BEHAVIORS}`,

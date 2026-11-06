@@ -64,6 +64,7 @@ import { applyEventsToVector, sumFacetDelta } from './emotion-events';
 import { sumPendingFacetDelta } from './affect-store';
 import { moodFromVector } from './emotion-vector';
 import { FACET_KEYS } from './relation-facets';
+import { settleRelationStage } from './relation-stage';
 import { applyRelationDecay } from './memory-maintenance';
 import { getDaySummaryRaw, summaryKey } from './summary';
 import { checkStorageCapacity, cleanupStaleObjects, deleteObject, getObject, listKeys, putObject } from './storage';
@@ -441,6 +442,8 @@ export async function archiveOneDay(
       };
       const baseVals = parseRelationValues(memory);
       const settled = settleEmotionDaily(working, facetsOf(baseVals));
+      // 关系阶段：每日按 5 轴推进/回退（3 天升、7 天降的迟滞在 relation-stage 里）
+      await settleRelationStage(env, settled.facets).catch((e) => logWarn('[relation] 阶段推进失败:', e));
       // ★ 心情值是情绪向量的投影：结算时同步回写，保证 memory.md 与向量不脱节
       const nextMood = moodFromVector(vector);
       if (settled.changed || nextMood !== baseVals.mood) {
