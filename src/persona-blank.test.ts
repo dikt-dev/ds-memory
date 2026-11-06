@@ -37,7 +37,8 @@ describe('PERSONA_PROFILE=none', () => {
       expect(prompt, '残留: ' + banned).not.toContain(banned);
     }
     // 规则不跟人设一起消失：她仍要知道怎么用记忆、怎么说话
-    for (const rule of ['## 你们的称呼', '## 记忆怎么用', '## 你说话的样子', '分清楚谁在哪儿']) {
+    // 记忆/说话方式已经并入 persona.md；人设清空时仍保留的是「称呼」和「两地不要对调」
+    for (const rule of ['## 你们的称呼', '分清楚谁在哪儿', '【你手上的东西】']) {
       expect(prompt, '缺规则: ' + rule).toContain(rule);
     }
   });

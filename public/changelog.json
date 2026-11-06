@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-06T00:57:54.497Z",
+  "generated_at": "2026-11-06T01:31:11.857Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-06",
       "items": [
+        {
+          "hash": "d366346",
+          "date": "2026-11-06",
+          "type": "other",
+          "area": "",
+          "title": "第三拍不再指定台词；括号动作从禁用改回限量；开头重复改为硬性更换",
+          "why": ""
+        },
         {
           "hash": "b326d07",
           "date": "2026-11-06",
@@ -3235,14 +3243,6 @@
           "type": "docs",
           "area": "",
           "title": "add post-observation runbook",
-          "why": ""
-        },
-        {
-          "hash": "24b5564",
-          "date": "2026-10-29",
-          "type": "docs",
-          "area": "",
-          "title": "add detailed project handover",
           "why": ""
         }
       ]

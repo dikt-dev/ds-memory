@@ -84,6 +84,65 @@ function splitSections(text: string): {
  * 既费 token，又容易被读成"这件事她一点都不记得"。日记/记忆这类长文档里，
  * 空白标题比它占的字数更误导。
  */
+/** 数值 → 说得出口的话。分档故意粗：507 和 520 对"怎么说话"没有区别。 */
+function band(v: number, tiers: Array<[number, string]>, fallback: string): string {
+  for (const [min, text] of tiers) if (v >= min) return text;
+  return fallback;
+}
+
+const RELATION_TIERS = {
+  intimacy: [[800, '说话已经完全没大没小'], [600, '说话不用挑词'], [400, '能随便聊两句'], [0, '还带着点客气']] as Array<[number, string]>,
+  affection: [[800, '离不开了'], [650, '挺在意你'], [480, '还算顺眼'], [0, '还有点隔阂']] as Array<[number, string]>,
+  trust: [[650, '什么都敢跟你说'], [450, '愿意跟你讲事'], [0, '说话还留着一半']] as Array<[number, string]>,
+  respect: [[650, '挺服你的'], [450, '觉得你还算靠谱'], [0, '觉得你有点不靠谱']] as Array<[number, string]>,
+  heartbeat: [[600, '看你一眼就有点慌'], [350, '偶尔会心动一下'], [0, '还没往那方面想']] as Array<[number, string]>,
+  mood: [[680, '挺好'], [560, '不错'], [440, '一般'], [300, '有点闷'], [0, '挺差的']] as Array<[number, string]>,
+};
+
+/**
+ * 关系数值 → 两行定性描述。
+ *
+ * 为什么不在提示词里给数字：503 和 520 对"这句话怎么说"没有任何影响，
+ * 但六个数字要吃掉 345 字节，还让孩子误以为要按分数调节亲密程度。
+ * 数值本身继续留在 memory.md（每日 04:00 结算、快照照常留档），
+ * 这里只改**送进模型的那一份**。
+ */
+export function collapseRelationLines(text: string): string {
+  const nums = new Map<string, number>();
+  const kept: string[] = [];
+  for (const line of text.split('\n')) {
+    const m = /^-\s*(好感度|亲密度|心情值?|信任|尊重|心动)\s*[:：]\s*(\d+)\s*(?:\/\s*1000)?\s*$/.exec(line.trim());
+    if (!m) {
+      kept.push(line);
+      continue;
+    }
+    const key = m[1] === '心情' ? '心情值' : m[1];
+    nums.set(key, Number(m[2]));
+  }
+  if (nums.size === 0) return text;
+
+  const get = (k: string, d: number): number => nums.get(k) ?? d;
+  const parts: string[] = [
+    band(get('亲密度', 300), RELATION_TIERS.intimacy, '还带着点客气'),
+    band(get('好感度', 500), RELATION_TIERS.affection, '还算顺眼'),
+  ];
+  const heart = band(get('心动', 300), RELATION_TIERS.heartbeat, '');
+  if (heart) parts.push(heart);
+  const lines = [`- 关系：${parts.join('，')}。`];
+  lines.push(`- 心情：${band(get('心情值', 500), RELATION_TIERS.mood, '一般')}。`);
+  // 信任/尊重不单独说，只在极端时补一句，避免句子变长
+  const trust = get('信任', 500);
+  const respect = get('尊重', 500);
+  if (trust < 350 || respect < 350) lines.push('- 你对他还留着一手，不会什么都讲。');
+
+  // 放回原来那组数值所在的位置（「称呼与关系」段内），保持文档顺序
+  // 放在「称呼与关系」标题下面（不是上面），否则会跑到上一节的末尾
+  const headerIdx = kept.findIndex((l) => /^##\s*称呼与关系/.test(l.trim()));
+  const insertAt = headerIdx >= 0 ? headerIdx + 1 : kept.length;
+  kept.splice(insertAt, 0, ...lines);
+  return kept.join('\n');
+}
+
 export function slimMemoryForPrompt(text: string, now: Date = new Date()): string {
   if (!text.trim()) return '';
   const beijing = new Date(now.getTime() + 8 * 3600_000);
@@ -156,7 +215,8 @@ export function slimMemoryForPrompt(text: string, now: Date = new Date()): strin
     emit(rendered);
   }
   flush();
-  return out.join('\n').trim();
+  // 六个关系数值在这里折叠成两句定性描述（memory.md 本身不动）
+  return collapseRelationLines(out.join('\n').trim());
 }
 
 export function splitMemoryForPrompt(

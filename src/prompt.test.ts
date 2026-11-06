@@ -243,23 +243,19 @@ describe('时间与诚实性规则', () => {
     expect(prompt).not.toContain('不要拿 HH:mm 自己换算');
   });
 
-  it('记忆边界写成陈述：没依据就说没印象，感受可以编事实不行', () => {
+  it('记忆边界只留在 persona.md 一处，代码不再重复', () => {
     const prompt = buildSystemPrompt(base);
-    expect(prompt).toContain('## 记忆怎么用');
+    expect(prompt).not.toContain('## 记忆怎么用');
+    // 称呼那节仍然由代码生成（persona.md 没覆盖这件事）
     expect(prompt).toContain('## 你们的称呼');
-    expect(prompt).toContain('直接说“不知道/记不清了”');
-    expect(prompt).toContain('那也是在编');
-    expect(prompt).toContain('不要替他复述');
-    expect(prompt).toContain('他说你记错了，直接认');
-    expect(prompt).toContain('感受、态度、反应你随便说；事实不行');
     expect(prompt).not.toContain('硬规则');
   });
 
-  it('活人感：说话的样子是常量，进稳定段吃缓存', () => {
+  it('说话方式只由 persona.md 提供，代码不再写第二份', () => {
     const split = buildSystemPromptSplit({ ...base, voice: '口语化。' });
-    expect(split.stable).toContain('## 你说话的样子');
-    expect(split.stable).toContain('像发微信');
-    expect(split.volatile).not.toContain('## 你说话的样子');
+    expect(split.stable).not.toContain('## 你说话的样子');
+    // 人设文档缺位时仍然有身份兜底，不能变成没性格的客服
+    expect(split.stable).toContain('你是「');
   });
 
   it('时间与环境只写一处，且带口语说法', () => {

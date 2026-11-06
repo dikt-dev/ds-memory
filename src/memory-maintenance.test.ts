@@ -12,6 +12,7 @@ import {
   reportSectionBudgets,
   splitMemoryForPrompt,
   trimOldestEntries,
+  slimMemoryForPrompt,
 } from './memory-maintenance';
 
 const SAMPLE = `# 长期记忆
@@ -554,5 +555,31 @@ describe('demoteSectionToBudget', () => {
   it('受保护分区不参与', () => {
     const r = demoteSectionToBudget(doc, '## 他的雷区', 1);
     expect(r.removed).toEqual([]);
+  });
+
+  it('关系数值：进提示词前折成两句话，数值本身不进', () => {
+    const text = [
+      '## 称呼与关系',
+      '- 好感度：503 / 1000',
+      '- 亲密度：307 / 1000',
+      '- 心情值：482 / 1000',
+      '- 信任：604 / 1000',
+      '- 尊重：648 / 1000',
+      '- 心动：304 / 1000',
+      '- [26-11-04] 称呼=小蓝',
+    ].join('\n');
+    const out = slimMemoryForPrompt(text);
+    expect(out).not.toContain('好感度');
+    expect(out).not.toContain('503');
+    expect(out).toContain('- 关系：');
+    expect(out).toContain('- 心情：');
+    // 数值条目以外的东西必须原样保留
+    expect(out).toContain('- [26-11-04] 称呼=小蓝');
+  });
+
+  it('没有数值行时不动任何东西', () => {
+    const text = '## 关于他\n- 职业=上班族';
+    expect(slimMemoryForPrompt(text)).toContain('- 职业=上班族');
+    expect(slimMemoryForPrompt(text)).not.toContain('- 关系：');
   });
 });
