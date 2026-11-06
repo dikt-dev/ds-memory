@@ -285,9 +285,10 @@ export function buildLastUserContent(
 export function normalizeAssistantText(text: string): string {
   let out = text
     .replace(/^\s*\[(?:语音|voice)\]\s*/i, '（语音）')
-    // 表情标记换成 emoji 再入库：聊天记录里也能看到，而不是只在实时那一瞬间
+    // 表情标记换成 emoji 再入库（[face:敲打] 和直接写 [敲打] 两种都处理）
     .replace(/\[face[:：][^\]]{1,12}\]/g, (m) => replaceFaceMarkers(m));
   // 模型偶尔会模仿历史时间标签，把回复开头的时间戳去掉
+  out = replaceFaceMarkers(out);
   out = stripLeadingTimeLabels(out).trim();
   // 同理：历史里曾带「他：」「你：」，模型会照着写在开头；现在历史不再带标签，
   // 但线上出现过「🙂你：……」这种表情在前、冒号在后的漏网（2026-11-06），所以放宽到「前 12 个非字母数字字符」
