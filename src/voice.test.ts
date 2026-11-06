@@ -28,7 +28,7 @@ describe('buildVoiceDirective —— 指向人设，同时给四条机械约束'
   it('长度、敷衍、不解释、括号动作都有明确约束', () => {
     const d = buildVoiceDirective(900);
     expect(d).toContain('最多一两句');
-    expect(d).toContain('括号动作基本不写');
+    expect(d).toContain('一条最多一次');   // 括号动作是限量，不是禁用
     expect(d).toContain('不解释');
     expect(d).toContain('允许敷衍');
     expect(d).toContain('允许敷衍');

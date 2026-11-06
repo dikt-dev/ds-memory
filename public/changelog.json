@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-11-06T00:51:21.086Z",
+  "generated_at": "2026-11-06T00:57:54.497Z",
   "count": 400,
   "days": [
     {
       "date": "2026-11-06",
       "items": [
+        {
+          "hash": "b326d07",
+          "date": "2026-11-06",
+          "type": "other",
+          "area": "",
+          "title": "睡过去了单独一档：先怼熬夜、再说刚醒、最后才关心",
+          "why": ""
+        },
         {
           "hash": "b2674af",
           "date": "2026-11-06",
@@ -3235,14 +3243,6 @@
           "type": "docs",
           "area": "",
           "title": "add detailed project handover",
-          "why": ""
-        },
-        {
-          "hash": "80c097f",
-          "date": "2026-10-29",
-          "type": "docs",
-          "area": "",
-          "title": "record DeepSeek surrogate root cause",
           "why": ""
         }
       ]

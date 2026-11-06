@@ -276,7 +276,9 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   if (characterCard) lines.push('', characterCard);
   // 这两条原来嵌在 characterCard 里：卡片为空时提醒就整个丢了
   if (avoidOpeners && avoidOpeners.length > 0) {
-    lines.push(`- 你最近用过这些开头，仅供参考，不必刻意避开：${avoidOpeners.map((s) => `"${s}"`).join('、')}`);
+    // 「仅供参考，不必刻意避开」是上一版为了不让她硬凑而写的，结果连续两条
+    // 逐字相同（"你这人怎么回事，凌晨三点还不睡"）。重复比硬凑难看得多。
+    lines.push(`- 这几个开头刚连着用过，这条换一种起法，别再重复：${avoidOpeners.map((s) => `"${s}"`).join('、')}`);
   }
   if (avoidPhrases && avoidPhrases.length > 0) {
     lines.push(`- 这些词你最近反复在用，这一轮尽量换种说法：${avoidPhrases.map((s) => `"${s}"`).join('、')}`);
