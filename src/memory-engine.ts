@@ -156,6 +156,8 @@ export interface NextStageMs {
   rank: number;
   embed: number;
   expand: number;
+  /** rank 区间内子阶段实测之和（核对口径用） */
+  rankInner?: number;
 }
 
 /** 跑新引擎：关键词优先，弱召回才补向量，再扩关联、打包、格式化。 */
@@ -176,7 +178,7 @@ async function runNextEngine(
   tier: 'full' | 'recent' | 'summary';
   ids: string[];
 }> {
-  const stages: NextStageMs = { load: 0, rank: 0, embed: 0, expand: 0 };
+  const stages: NextStageMs = { load: 0, rank: 0, embed: 0, expand: 0, rankInner: 0 };
   const started = performance.now();
 
   // 分段计时：延迟要按段优化，先得知道哪段贵（见 recall-samples.ts）。
@@ -224,7 +226,11 @@ async function runNextEngine(
 
   t = performance.now();
   // 粗召回放宽到 20 条：选择器要在一个较大的池子里挑，而不是在 6 条里挑 5 条。
-  const keywordPicked = rankMemoryChunks(query, poolSource, CANDIDATE_TOP_K, focus, { onStage });
+  const innerStage = (name: string, ms: number) => {
+    stages.rankInner = (stages.rankInner ?? 0) + ms;
+    onStage?.(name, ms);
+  };
+  const keywordPicked = rankMemoryChunks(query, poolSource, CANDIDATE_TOP_K, focus, { onStage: innerStage });
   stages.rank = performance.now() - t;
 
   // 关键词已经够强时不再付 query embedding 延迟；弱召回才走向量。
@@ -239,7 +245,7 @@ async function runNextEngine(
   t = performance.now();
   const pool =
     queryVec !== null
-      ? rankMemoryChunks(query, poolSource, CANDIDATE_TOP_K, focus, { queryVec, onStage })
+      ? rankMemoryChunks(query, poolSource, CANDIDATE_TOP_K, focus, { queryVec, onStage: innerStage })
       : keywordPicked;
   stages.rank += performance.now() - t;
 
@@ -487,6 +493,7 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
       legacyMs,
       loadMs: stages.load,
       rankMs: stages.rank,
+      rankInnerMs: stages.rankInner ?? 0,
       embedMs: stages.embed,
       expandMs: stages.expand,
       totalMs: performance.now() - started,

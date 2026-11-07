@@ -610,7 +610,10 @@ export function rankMemoryChunks(
   const qVec = options.queryVec;
   const hasVectors = chunks.some((c) => Boolean(c.vec));
   if (!qVec || !hasVectors) {
-    return mmrSelectChunks(scored, Math.max(1, k), options.mmrLambda ?? 0.9);
+    const t0 = performance.now();
+    const out = mmrSelectChunks(scored, Math.max(1, k), options.mmrLambda ?? 0.9);
+    stage('rank_mmr', performance.now() - t0);
+    return out;
   }
 
   const tVec = performance.now();
@@ -623,7 +626,10 @@ export function rankMemoryChunks(
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score);
   if (vectorRanked.length === 0) {
-    return mmrSelectChunks(scored, Math.max(1, k), options.mmrLambda ?? 0.9);
+    const t0 = performance.now();
+    const out = mmrSelectChunks(scored, Math.max(1, k), options.mmrLambda ?? 0.9);
+    stage('rank_mmr', performance.now() - t0);
+    return out;
   }
 
   stage('rank_vec', performance.now() - tVec);

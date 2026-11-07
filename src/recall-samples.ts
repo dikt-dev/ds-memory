@@ -19,6 +19,8 @@ export interface RecallSample {
   legacyMs: number;
   loadMs: number;
   rankMs: number;
+  /** rankMs 区间内、子阶段实测之和（用于核对计时口径） */
+  rankInnerMs?: number;
   embedMs: number;
   expandMs: number;
   totalMs: number;
@@ -67,6 +69,7 @@ export async function ensureRecallSampleTable(env: Env): Promise<void> {
        has_vector  INTEGER NOT NULL DEFAULT 0,
        timed_out   INTEGER NOT NULL DEFAULT 0,
        legacy_skipped INTEGER NOT NULL DEFAULT 0,
+       rank_inner_ms INTEGER NOT NULL DEFAULT 0,
        created_at  INTEGER NOT NULL)
    `.trim(),
   ).run();
@@ -98,8 +101,8 @@ export async function recordRecallSample(env: Env, s: RecallSample, now = Date.n
       `INSERT INTO recall_samples
          (day_key, channel, mode, kind, legacy_ms, load_ms, rank_ms, embed_ms,
           expand_ms, total_ms, items, linked, has_vector, timed_out, legacy_skipped,
-          intents, picked, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          intents, picked, rank_inner_ms, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
       .bind(
         dateKeyInBeijing(new Date(now)),
@@ -119,6 +122,7 @@ export async function recordRecallSample(env: Env, s: RecallSample, now = Date.n
         s.legacySkipped ? 1 : 0,
         s.intents && s.intents.length > 0 ? JSON.stringify(s.intents) : null,
         Math.max(0, Math.round(s.picked ?? 0)),
+        ms(s.rankInnerMs ?? 0),
         now,
       )
       .run();
