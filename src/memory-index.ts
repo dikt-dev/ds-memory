@@ -872,7 +872,10 @@ export async function recallMemoryForChat(
     let picked = pool.slice(0, k);
     if (pool.length > k) picked = mmrSelect(pool, k);
     // LLM 重排默认开启；设置 LLM_RERANK=0 可关闭（只影响“选哪几条”，不动记忆本体）
-    if (env.LLM_RERANK !== '0' && needsLlmRerank(q, pool)) {
+    // ★ 候选池很小的时候不值得：池子只有十几条时确定性排序已经够准，
+    //   而重排是一次跨区模型调用，实测给每轮加 1.3s（2026-11-08）。
+    const rerankWorthIt = pool.length >= 10;
+    if (env.LLM_RERANK !== '0' && rerankWorthIt && needsLlmRerank(q, pool)) {
       const t0 = Date.now();
       const llm = await llmRerank(env, q, pool, k);
       if (llm && llm.length > 0) picked = llm;

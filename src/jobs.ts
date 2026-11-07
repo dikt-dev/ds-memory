@@ -25,6 +25,7 @@ import {
   refreshKeepsakesBlock,
 } from './keepsakes';
 import { reindexMemory } from './memory-index';
+import { refreshChunksCache } from './memory-context-store';
 import { backfillMemoryProvenance, embedMemoryChunks, replaceMemoryContext, syncRollupSummaries } from './memory-context-store';
 import { cleanupMemoryTables, enqueueMemoryJob, runMemoryJobs } from './memory-jobs';
 import { runSelfCheck } from './self-check';
@@ -755,6 +756,8 @@ export async function archiveOneDay(
     // 提炼失败时不把任务标 done：runDailyArchive 下次会把它当 failed 补跑
     // 话题索引：给「哪天聊过什么」留一份清单，跨天回指靠它
   await ensureDayTopics(env, target).catch((e: unknown) => logError('[topics] 生成失败:', e));
+  // 记忆变了就刷新召回缓存，别让请求侧为了拿 chunk 再跑一次全表
+  await refreshChunksCache(env).catch((e: unknown) => logError('[chunks] 缓存刷新失败:', e));
   await finishJob(env, 'daily_archive', target, detail, !distillError);
     return {
       target,

@@ -285,8 +285,35 @@ export async function replaceMemoryContext(
   return { origin, ...stats };
 }
 
+/**
+ * chunk 缓存（KV）。
+ *
+ * 为什么：memory_chunks 只有十几行，但每次召回都要全表 SELECT 一次，
+ * 而 D1 在 us-west，一次往返 200ms（2026-11-08 实测）。
+ * 把结果整份放 KV（同 colo，~40ms），召回只读 KV；记忆变更时由归档任务刷新。
+ */
+export const CHUNKS_CACHE_KEY = 'mem:chunks:v1';
+export const CHUNKS_CACHE_TTL_SECONDS = 24 * 3600;
+
+/** 强制刷新 chunk 缓存（归档/记忆变更后调用）。 */
+export async function refreshChunksCache(env: Env): Promise<number> {
+  const rows = await loadMemoryChunks(env, 1000, { skipCache: true });
+  await env.KV.put(CHUNKS_CACHE_KEY, JSON.stringify(rows), {
+    expirationTtl: CHUNKS_CACHE_TTL_SECONDS,
+  }).catch(() => undefined);
+  return rows.length;
+}
+
 /** 读取全部 chunk（当前规模很小；Phase 4 改为按候选集/FTS 查询）。 */
-export async function loadMemoryChunks(env: Env, limit = 1000): Promise<MemoryChunk[]> {
+export async function loadMemoryChunks(
+  env: Env,
+  limit = 1000,
+  opts: { skipCache?: boolean } = {},
+): Promise<MemoryChunk[]> {
+  if (!opts.skipCache) {
+    const cached = await env.KV.get<MemoryChunk[]>(CHUNKS_CACHE_KEY, 'json').catch(() => null);
+    if (cached && Array.isArray(cached) && cached.length > 0) return cached.slice(0, limit);
+  }
   const rows = await env.DB.prepare(
     `SELECT id, source, source_id, section, content, date, keywords, tags,
             importance, vec, content_hash, updated_at, use_count, last_used_at,

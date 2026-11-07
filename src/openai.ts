@@ -47,6 +47,7 @@ import { getTodaySummary, maybeSummarizeToday } from './summary';
 import { recentTopicsBlock } from './topics';
 import { getCachedTurn, putCachedTurn } from './cmid-cache';
 import { recordCpuSample } from './engine-metrics';
+import { maybePrewarmCaches } from './cache-warm';
 import { loadImageDataUrl, saveImageFromSource } from './media';
 import { byteLength, parseRelationValues } from './memory-maintenance';
 import { markProfileDirty } from './profile-cache';
@@ -362,6 +363,8 @@ openaiApp.post('/chat/completions', async (c) => {
   if (!Array.isArray(rawMessages) || rawMessages.length === 0) {
     return openaiError(c, 400, 'messages 不能为空');
   }
+  // 冷启动时预热召回缓存（每小时最多一次，不阻塞回复）
+  c.executionCtx.waitUntil(maybePrewarmCaches(c.env, c.executionCtx, new Date()));
   const prepT0 = performance.now();
   const clientMessageId =
     typeof body?.client_message_id === 'string' &&
@@ -509,7 +512,7 @@ openaiApp.post('/chat/completions', async (c) => {
     })(),
     readSessionFacts(c.env, now, dateKey, storedEarly ? (userMessageId ?? null) : null),
   ]);
-  c.executionCtx.waitUntil(recordCpuSample(c.env, channel, 'prep', packMs).catch(() => {}));
+  c.executionCtx.waitUntil(recordCpuSample(c.env, channel, 'pack_ms', packMs).catch(() => {}));
   const { memory, dayCtxFile: dayCtx, weather, ctx, promptMemory, personaState } = pack;
   // 拉取失败时回退当天缓存，避免“没有天气”时模型去翻旧记忆
   if (pack.weather) await attachWeather(c.env, dateKey, pack.weather, dayCtx);
@@ -650,6 +653,7 @@ openaiApp.post('/chat/completions', async (c) => {
     ...historyMessages.map((m) => (typeof m.content === 'string' ? m.content : contentToText(m.content))),
   ].join(' ');
   const memoryEngine = memoryEngineFor(c.env, channel);
+  const recallT0 = performance.now();
   const recall = await resolveRecall(c.env, {
     query: recallQuery,
     focus,
@@ -660,6 +664,7 @@ openaiApp.post('/chat/completions', async (c) => {
     nowMs: now.getTime(),
   });
   c.executionCtx.waitUntil(recordCpuSample(c.env, channel, 'cpu_total', performance.now() - packT0).catch(() => {}));
+  c.executionCtx.waitUntil(recordCpuSample(c.env, channel, 'recall_ms', performance.now() - recallT0).catch(() => {}));
   const recalledRaw = recall.text;
 
   void recordRecallUsage(c.env, recall.ids, now.getTime()).catch(() => {});

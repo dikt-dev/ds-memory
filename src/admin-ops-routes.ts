@@ -64,7 +64,8 @@ import { currentArchetype, effectiveFacets, facetsOf, listOpenGrievances, loadEm
 import { buildEmotionSnapshot, describeEmotionState } from './emotion-snapshot';
 import { readAmbient } from './emotion-ambient';
 import { ensureDayTopics } from './topics';
-import { readContextSnapshot, rebuildContextSnapshot } from './context-snapshot';
+import { refreshChunksCache } from './memory-context-store';
+import { readContextSnapshot, rebuildContextSnapshot, ensureContextSnapshot } from './context-snapshot';
 import { explainAttitude } from './attitude-policy';
 import { listAffectTimeline, recordAttitudeSnapshot } from './affect-store';
 import { readPathStats, readRecentRequests } from './request-log';
@@ -417,6 +418,13 @@ app.post('/api/admin/test-mood', requireAuth, async (c) => {
     model: c.env.DISTILL_MODEL,
     final: merged,
   });
+});
+
+/** 立即预热召回/上下文缓存（部署后调用）。 */
+app.post('/api/admin/cache/prewarm', requireAuth, async (c) => {
+  const chunks = await refreshChunksCache(c.env).catch(() => -1);
+  const snapshot = await ensureContextSnapshot(c.env, new Date()).catch(() => false);
+  return c.json({ ok: chunks >= 0, chunks, snapshot_rebuilt: snapshot });
 });
 
 /** 立即重建上下文快照（排查/上线后用）。 */

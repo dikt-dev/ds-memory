@@ -121,7 +121,7 @@ export async function readEngineMetrics(env: Env, days = 7): Promise<EngineMetri
 export async function recordCpuSample(
   env: Env,
   channel: string,
-  mode: 'cpu_prompt' | 'cpu_total' | 'prep' | 'snap_hit' | 'snap_miss' | 'kv_ms',
+  mode: 'cpu_prompt' | 'cpu_total' | 'prep' | 'snap_hit' | 'snap_miss' | 'kv_ms' | 'recall_ms' | 'pack_ms',
   ms: number,
   now = Date.now(),
 ): Promise<void> {
