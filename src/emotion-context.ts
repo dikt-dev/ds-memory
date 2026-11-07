@@ -52,6 +52,7 @@ import {
   type RelationFacets,
 } from './relation-facets';
 import { buildEmotionSnapshot } from './emotion-snapshot';
+import { readAmbient, withAmbient } from './emotion-ambient';
 import type { MoodEnvironment } from './mood-env';
 import { logError, logWarn } from './error-log';
 
@@ -326,12 +327,15 @@ async function processEmotionTurnUnlocked(
   if (changed && canSave) await saveEmotionState(input.env, nextState);
 
   const facets = effectiveFacets(base, facetDelta);
+  // 白天的底色只叠在「给他看的那一份」上：状态本身不写回，免得一路漂上去
+  const ambient = await readAmbient(input.env, new Date(now)).catch(() => null);
+  const shown = ambient ? withAmbient(vector, ambient) : vector;
   return {
     state: nextState,
     facets,
     snapshot: buildEmotionSnapshot({
       facets,
-      vector,
+      vector: shown,
       events: nextState.events,
       now,
       wasIgnored,
