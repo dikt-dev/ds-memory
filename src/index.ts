@@ -684,21 +684,35 @@ async function catchUpDiary(env: Env, now: Date): Promise<void> {
   }
 
   if (beijingHour !== 8) return;
-  const yesterday = addDays(dateKeyInBeijing(now), -1);
-  const written = await env.DB.prepare('SELECT date_key FROM ai_diary WHERE date_key = ?')
-    .bind(yesterday)
-    .first<{ date_key: string }>()
-    .catch(() => null);
-  if (written) return;
-  const claimed = await claimJob(env, 'daily_diary_catchup', yesterday).catch(() => false);
-  if (!claimed) return;
-  const r = await runLifeDiary(env, now).catch((e: unknown) => {
-    logError('[life] 日记补写失败:', e);
-    return { ok: false, skipped: 'exception' };
-  });
-  await finishJob(env, 'daily_diary_catchup', yesterday, r.skipped ? `跳过：${r.skipped}` : '已补写', r.ok && !r.skipped).catch(
-    () => {},
-  );
+  // ★ 保底：从昨天往前扫 7 天，补第一条「缺日记、且那天确实有生活痕迹」的日期。
+  //   以前只看昨天，一旦那天失败（模型抖动 / 日程没生成），过了当天就再也补不回来。
+  //   判据用「有消息或有日程」：重置后清空的老日期不会被凭空补出一篇。
+  const todayKeyForDiary = dateKeyInBeijing(now);
+  for (let back = 1; back <= 7; back += 1) {
+    const day = addDays(todayKeyForDiary, -back);
+    const written = await env.DB.prepare('SELECT date_key FROM ai_diary WHERE date_key = ?')
+      .bind(day)
+      .first<{ date_key: string }>()
+      .catch(() => null);
+    if (written) continue;
+    const trace = await env.DB.prepare(
+      'SELECT (SELECT 1 FROM messages WHERE date_key = ? LIMIT 1) AS msg, (SELECT 1 FROM ai_day WHERE date_key = ? LIMIT 1) AS plan',
+    )
+      .bind(day, day)
+      .first<{ msg: number | null; plan: number | null }>()
+      .catch(() => null);
+    if (!trace?.msg && !trace?.plan) continue; // 那天本来就没生活过，不该补
+    const claimed = await claimJob(env, 'daily_diary_catchup', day).catch(() => false);
+    if (!claimed) continue;
+    const r = await generateDiary(env, day).catch((e: unknown) => {
+      logError('[life] 日记补写失败:', e);
+      return { ok: false, skipped: 'exception' };
+    });
+    await finishJob(env, 'daily_diary_catchup', day, r.skipped ? `跳过：${r.skipped}` : '已补写', r.ok && !r.skipped).catch(
+      () => {},
+    );
+    break; // 一次只补一篇，别在早高峰连打模型
+  }
 }
 
 export function cronBranch(cron: string): CronBranch | null {
@@ -786,6 +800,11 @@ export default {
       ctx.waitUntil(maybeSendPostcard(env, now));
       // 这条 cron 实际覆盖 UTC 8 点 → 北京 16:00 的 context 刷新
       ctx.waitUntil(maybeRefreshContext(env, now));
+      // ★ 保底：09:00 补一次归档/提炼。runDailyArchive 内部只处理 failed/卡死的日期，
+      //   已经 done 的会跳过，所以不会重复烧钱；这样前一天失败的提炼不用等到第二天 04:00。
+      if (Number(isoInBeijing(now).slice(11, 13)) === 9) {
+        ctx.waitUntil(runDailyArchive(env, now).catch((e) => logError('[daily] 09:00 保底失败:', e)));
+      }
       logCron(env, ctx, cron, startedAt);
       return;
     }
