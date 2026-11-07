@@ -130,7 +130,7 @@ export function buildEmotionSnapshot(input: EmotionSnapshotInput): string {
     .filter((e) => (e.type === 'affection' || e.type === 'praise') && now - e.at <= 10 * 60_000)
     .sort((a, b) => b.at - a.at)[0];
   if (justTouched) {
-    lines.push('- 刚被戳中：他刚才那句话让你心跳快了一下，先有反应（呆毛/尾巴/语气乱），再嘴硬');
+    lines.push('- 刚被戳中：这一条按「被撩到」演——先甩一个括号动作（呆毛/尾巴/别过头），否认一句，最后漏半句真心；可以用两个动作。');
   }
 
   if (unresolved.length > 0) {
