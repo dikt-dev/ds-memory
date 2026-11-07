@@ -18,6 +18,7 @@ const PROMPT = [
   '4. 不要总结成一句话，不要用「视频展示了」这类套话，不要评价好坏。',
   '5. 只写你确实看到、听到的；没出现的东西不要推测。',
   '',
+  '6. 必须写到视频最后一秒：时间不够就前面细写（逐秒），两分钟之后按每 10 秒一段粗写，最后一行要落在结束处。',
   '输出纯文本，不要 markdown 代码块。',
 ].join('\n');
 
@@ -64,7 +65,7 @@ export async function lookAtVideo(
           ],
         },
       ],
-      max_tokens: opts.maxTokens ?? 1200,
+      max_tokens: opts.maxTokens ?? 2600,
       enable_thinking: false,
     }),
     signal: AbortSignal.timeout(opts.timeoutMs ?? 90_000),

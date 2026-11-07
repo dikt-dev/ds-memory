@@ -22,6 +22,7 @@ const PROMPT = [
   '2. 画面里的文字（标题、字幕、屏幕上的字、招牌）原样抄下来。',
   '3. 有人说话就写他说了什么，带时间点。',
   '4. 不要总结成一句话，不要评价，不要复述标题。',
+  '5. 必须写到视频最后一秒：时间不够就前面细写（逐秒），两分钟之后按每 10 秒一段粗写，最后一行要落在结束处。',
   '输出纯文本，不要 markdown。',
 ].join('\n');
 
@@ -119,7 +120,8 @@ export async function biliVisionDirect(
         input.title ? `【视频标题】${input.title}` : '',
         input.duration ? `【时长】${input.duration} 秒` : '',
       ].filter(Boolean).join('\n'),
-      maxTokens: 900,
+      // 900 token 只够写两分半：7 分钟的视频会被砍在半句话上（2026-11-07）
+      maxTokens: Math.min(4000, 700 + Math.round((input.duration ?? 60) * 6)),
       timeoutMs: 120_000,
     });
     if (cacheKey) await env.KV.put(cacheKey, obs.text, { expirationTtl: 30 * 24 * 3600 }).catch(() => {});
