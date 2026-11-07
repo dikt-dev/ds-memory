@@ -111,3 +111,35 @@ export async function readEngineMetrics(env: Env, days = 7): Promise<EngineMetri
     return [];
   }
 }
+
+/**
+ * 请求路径上的 JS 耗时采样（免费版 10ms CPU 预算的观测点）。
+ *
+ * 只测「拼提示词」这类纯 JS 段：D1/KV 的等待算 wall time，不算 CPU，
+ * 混进来会把结论带偏。mode = cpu_prompt / cpu_total。
+ */
+export async function recordCpuSample(
+  env: Env,
+  channel: string,
+  mode: 'cpu_prompt' | 'cpu_total',
+  ms: number,
+  now = Date.now(),
+): Promise<void> {
+  const day = dateKeyInBeijing(new Date(now));
+  try {
+    await env.DB.prepare(
+      `INSERT INTO engine_metrics
+       (day_key, channel, kind, mode, requests, old_items, new_items,
+        old_bytes, new_bytes, ms_sum, updated_at)
+       VALUES (?, ?, 'memory', ?, 1, 0, 0, 0, 0, ?, ?)
+       ON CONFLICT(day_key, channel, kind, mode) DO UPDATE SET
+         requests = requests + 1,
+         ms_sum = ms_sum + excluded.ms_sum,
+         updated_at = excluded.updated_at`,
+    )
+      .bind(day, channel, mode, Math.max(0, Math.round(ms)), now)
+      .run();
+  } catch {
+    // 指标失败不影响聊天
+  }
+}

@@ -46,6 +46,7 @@ import { completeDeepSeek, streamDeepSeek, type DeepSeekMessage } from './deepse
 import { getTodaySummary, maybeSummarizeToday } from './summary';
 import { recentTopicsBlock } from './topics';
 import { getCachedTurn, putCachedTurn } from './cmid-cache';
+import { recordCpuSample } from './engine-metrics';
 import { loadImageDataUrl, saveImageFromSource } from './media';
 import { byteLength, parseRelationValues } from './memory-maintenance';
 import { markProfileDirty } from './profile-cache';
@@ -686,6 +687,7 @@ openaiApp.post('/chat/completions', async (c) => {
   const personaDrift = buildPersonaDriftLine(personaState);
   const lifeBlocks = await loadLifeBlocks(c.env, now, lastUserCleaned, historyRaw.slice(-6));
   const personaDoc = await loadPersonaDoc(c.env);
+  const cpuT0 = performance.now();
   const mergedSystem = [
     ...astrbotSystems,
     buildBaseSystemPrompt({
@@ -716,6 +718,8 @@ openaiApp.post('/chat/completions', async (c) => {
       persona: resolvePersona(c.env),
     }),
   ].join('\n\n') + (historyNote ? `\n\n${historyNote}` : '') + silentEndRule(channel);
+  // 免费版 10ms CPU 预算：这里量的是纯 JS 拼装（D1/KV 等待不算 CPU）
+  c.executionCtx.waitUntil(recordCpuSample(c.env, channel, 'cpu_prompt', performance.now() - cpuT0).catch(() => {}));
 
   // 她此刻在干什么 / 今天跟谁混：每轮都变，必须贴在历史之后（放前面会打断前缀缓存）
   const recentAssistant = historyRaw.filter((m) => m.role === 'assistant').map((m) => m.content);
