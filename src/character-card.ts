@@ -333,6 +333,7 @@ export function buildCharacterCard(input: CharacterStateInput): CharacterState {
           `- 关系阶段：Lv${input.stage.level} ${input.stage.label}（${input.stage.note}）`,
           `- 这一步可以：${input.stage.can}`,
           `- 这一步还不行：${input.stage.notYet}`,
+          `- 演法：${input.stage.style}`,
         ]
       : []),
     `- 此刻想要：${disposition.want}`,
