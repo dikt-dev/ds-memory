@@ -899,6 +899,24 @@ openaiApp.post('/chat/completions', async (c) => {
     }
   }
 
+  // ★ 纯图片消息（没有文字）早期不落库：earlyContent 为空，userMessageId 也没有，
+  //   于是图片处理完拿到 [图片:key] 之后必须补落一次，否则这条消息在服务端根本不存在，
+  //   客户端会永远卡在「发送中」（2026-11-07）。
+  if (!skipRecording && !userMessageId && contentToStore) {
+    const latest = await latestMessage(c.env);
+    if (latest && latest.role === 'user' && latest.content === contentToStore) {
+      userMessageId = latest.id;
+    } else {
+      const saved = await insertUserMessage(c.env, contentToStore, nowForStore, {
+        channel,
+        clientMessageId: clientMessageId || undefined,
+      });
+      userMessageId = saved.id;
+      storedEarly = true;
+      await markProfileDirty(c.env).catch(() => {});
+    }
+  }
+
   // 落库内容可能比"先落库"时多一点（图片标记、B 站资料）：以最终内容为准补一次
   if (storedEarly && userMessageId && contentToStore && contentToStore !== earlyContent) {
     await updateMessageContent(c.env, userMessageId, contentToStore).catch(() => {});
