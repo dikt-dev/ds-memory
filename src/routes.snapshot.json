@@ -1021,6 +1021,14 @@
   ],
   [
     "POST",
+    "/api/admin/topics/backfill"
+  ],
+  [
+    "POST",
+    "/api/admin/topics/backfill"
+  ],
+  [
+    "POST",
     "/api/admin/trigger-proactive"
   ],
   [

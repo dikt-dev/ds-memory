@@ -45,6 +45,7 @@ import { calcCost, loadPricing, type TokenUsage } from './pricing';
 import { completeDeepSeek, streamDeepSeek, type DeepSeekMessage } from './deepseek';
 import { getTodaySummary, maybeSummarizeToday } from './summary';
 import { recentTopicsBlock } from './topics';
+import { getCachedTurn, putCachedTurn } from './cmid-cache';
 import { loadImageDataUrl, saveImageFromSource } from './media';
 import { byteLength, parseRelationValues } from './memory-maintenance';
 import { markProfileDirty } from './profile-cache';
@@ -366,9 +367,10 @@ openaiApp.post('/chat/completions', async (c) => {
     body.client_message_id.trim().length <= 100
       ? body.client_message_id.trim()
       : '';
-  const cmidKey = clientMessageId ? `app:cmid:${clientMessageId}` : '';
+  // 去重键在 D1（原 KV 每发一条就要写一次，免费版 1000 写/天很容易打满）
+  const cmidKey = clientMessageId;
   if (cmidKey) {
-    const cached = await c.env.KV.get<CachedTurn>(cmidKey, 'json').catch(() => null);
+    const cached = await getCachedTurn(c.env, cmidKey);
     if (cached && typeof cached.content === 'string' && cached.content) {
       return cachedTurnResponse(c, cached.content, body?.stream !== false);
     }
@@ -944,28 +946,15 @@ openaiApp.post('/chat/completions', async (c) => {
       });
       cost = saved.cost_rmb;
       if (cmidKey) {
-        await c.env.KV.put(
-          cmidKey,
-          JSON.stringify({
-            content: stored,
-            user_message_id: userMessageId,
-            assistant_message_id: saved.id,
-            created_at: new Date().toISOString(),
-          }),
-          { expirationTtl: 7 * 24 * 3600 },
-        ).catch(() => {});
+        await putCachedTurn(c.env, cmidKey, {
+          content: stored,
+          user_message_id: userMessageId,
+          assistant_message_id: saved.id,
+        });
       }
     } else if (silent && !skipRecording && userMessageId && cmidKey) {
       // 静默也是一种合法结果：缓存 [END]，重试时不再调用模型。
-      await c.env.KV.put(
-        cmidKey,
-        JSON.stringify({
-          content: '[END]',
-          user_message_id: userMessageId,
-          created_at: new Date().toISOString(),
-        }),
-        { expirationTtl: 7 * 24 * 3600 },
-      ).catch(() => {});
+      await putCachedTurn(c.env, cmidKey, { content: '[END]', user_message_id: userMessageId });
     }
     return cost;
   };
@@ -994,15 +983,7 @@ openaiApp.post('/chat/completions', async (c) => {
   if (emojiThrottle && stored) stored = stripEmoji(stored);
   if (silent) {
     if (!skipRecording && userMessageId && cmidKey) {
-      await c.env.KV.put(
-        cmidKey,
-        JSON.stringify({
-          content: '[END]',
-          user_message_id: userMessageId,
-          created_at: new Date().toISOString(),
-        }),
-        { expirationTtl: 7 * 24 * 3600 },
-      ).catch(() => {});
+      await putCachedTurn(c.env, cmidKey, { content: '[END]', user_message_id: userMessageId });
     }
     return c.json({
       id: result.id,
@@ -1024,16 +1005,11 @@ openaiApp.post('/chat/completions', async (c) => {
       completionTokens: result.usage?.completion_tokens ?? 0,
     });
     if (cmidKey) {
-      await c.env.KV.put(
-        cmidKey,
-        JSON.stringify({
+        await putCachedTurn(c.env, cmidKey, {
           content: stored,
           user_message_id: userMessageId,
           assistant_message_id: saved.id,
-          created_at: new Date().toISOString(),
-        }),
-        { expirationTtl: 7 * 24 * 3600 },
-      ).catch(() => {});
+        });
     }
   }
   // 非流式回复也已经过 completeDeepSeek 的 AI 味清洗；

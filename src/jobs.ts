@@ -34,6 +34,7 @@ import { maybeGenerateRollups } from './memory-rollups';
 import { buildRelationStatus } from './attitude';
 import { distillDay } from './distill';
 import { ensureDayTopics } from './topics';
+import { pruneCmidCache } from './cmid-cache';
 import {
   archiveCompletedItems,
   byteLength,
@@ -931,6 +932,7 @@ export async function runDailyArchive(env: Env, now: Date): Promise<DailyArchive
   await cleanupRuntimeState(env, now.getTime()).catch((e) => logError('[runtime] cleanup failed:', e));
   // 召回分段采样只留 14 天（一天约 100 行）
   await pruneRecallSamples(env).catch((e) => logError('[recall-samples] prune failed:', e));
+  await pruneCmidCache(env).catch(() => 0);
   await cleanupMemoryTables(env, now.getTime()).catch((e) =>
     logError('[memory] table cleanup failed:', e),
   );
