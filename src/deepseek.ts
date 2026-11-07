@@ -118,8 +118,10 @@ async function requestDeepSeek(
           // 两个 penalty 是治"平"的主力：她之前每轮都用"才看见……"开头，
           // 靠加大 presence 才压得住那种口头禅循环。
           temperature: chatTemperature(env),
-          frequency_penalty: 0.3,
-          presence_penalty: 0.35,
+          // 句子重复靠开头提醒治；惩罚值太高会连「尾巴/呆毛」这类动作词一起按掉，
+          // 结果是括号动作越来越少（2026-11-07 实测：0.35/0.3 时只有 8% 的回复带括号）
+          frequency_penalty: 0.2,
+          presence_penalty: 0.2,
           // 聊天必须快：思考模式只在日记/记忆这类后台任务里开
           ...thinkingParams(target.vendor, opts.thinking),
         }),
