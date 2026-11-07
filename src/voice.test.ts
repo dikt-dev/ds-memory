@@ -38,7 +38,7 @@ describe('buildVoiceDirective —— 指向人设，同时给四条机械约束'
     }
     expect(d).toContain('想到哪说到哪');
     expect(d).toContain('标点也说话');
-    expect(d).toContain('一条一次');
+    expect(d).toContain('括号里放一个小动作');
     expect(d).toContain('他示好就先接一句');
   });
 
