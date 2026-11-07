@@ -49,7 +49,7 @@ import { listPinnedChunks, setChunkPinned } from './memory-rehearsal';
 import { parseMemoryContext } from './memory-domain';
 import { applySubjectFixes } from './subject-fix';
 import { recordAction } from './memory-actions';
-import { dateKeyInBeijing } from './date';
+import { dateKeyInBeijing , addDays} from './date';
 import { backfillEvents, readEventStats } from './memory-events';
 import { insertKeepsake, loadKeepsakes, refreshKeepsakesBlock, setKeepsakePinned, setKeepsakeStatus } from './keepsakes';
 import { readUsageStats, summarizeUsage } from './usage-stats';
@@ -63,6 +63,7 @@ import { mergeMood, needsAiVerification, verifyMoodWithAI } from './mood-ai';
 import { currentArchetype, effectiveFacets, facetsOf, listOpenGrievances, loadEmotionState, processEmotionTurn, resetEmotionState, simulateEmotion } from './emotion-context';
 import { buildEmotionSnapshot, describeEmotionState } from './emotion-snapshot';
 import { readAmbient } from './emotion-ambient';
+import { ensureDayTopics } from './topics';
 import { explainAttitude } from './attitude-policy';
 import { listAffectTimeline, recordAttitudeSnapshot } from './affect-store';
 import { readPathStats, readRecentRequests } from './request-log';
@@ -415,6 +416,18 @@ app.post('/api/admin/test-mood', requireAuth, async (c) => {
     model: c.env.DISTILL_MODEL,
     final: merged,
   });
+});
+
+/** 补生成最近 N 天的话题索引（排查/初始化用）。 */
+app.post('/api/admin/topics/backfill', requireAuth, async (c) => {
+  const days = Math.min(Math.max(Number(c.req.query('days') ?? 7), 1), 30);
+  const out: Array<{ date: string; topics: string[] }> = [];
+  for (let back = 0; back < days; back += 1) {
+    const date = addDays(dateKeyInBeijing(new Date()), -back);
+    const topics = await ensureDayTopics(c.env, date).catch(() => []);
+    if (topics.length > 0) out.push({ date, topics });
+  }
+  return c.json({ ok: true, days, filled: out });
 });
 
 /** 调试：查看当前情感系统全貌（5 轴关系 + 8 维情绪 + 未化解芥蒂）。

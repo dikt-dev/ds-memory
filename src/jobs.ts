@@ -33,6 +33,7 @@ import { rebuildFactsDoc } from './memory-doc';
 import { maybeGenerateRollups } from './memory-rollups';
 import { buildRelationStatus } from './attitude';
 import { distillDay } from './distill';
+import { ensureDayTopics } from './topics';
 import {
   archiveCompletedItems,
   byteLength,
@@ -751,7 +752,9 @@ export async function archiveOneDay(
     const snapInfo = snap.written ? '；快照=写入' : snap.skipped === 'exists' ? '；快照=已存在' : snap.skipped === 'disabled' ? '' : '；快照=失败';
     const detail = `归档 ${rows.length} 条消息；记忆 ${before}→${after} 字节；提炼=${distilled}${costInfo}；去重=${compactedRemoved}；分层=${archivedCount}；裁剪=${trimmed}${snapInfo}${errorInfo}`;
     // 提炼失败时不把任务标 done：runDailyArchive 下次会把它当 failed 补跑
-    await finishJob(env, 'daily_archive', target, detail, !distillError);
+    // 话题索引：给「哪天聊过什么」留一份清单，跨天回指靠它
+  await ensureDayTopics(env, target).catch((e: unknown) => logError('[topics] 生成失败:', e));
+  await finishJob(env, 'daily_archive', target, detail, !distillError);
     return {
       target,
       messages: rows.length,

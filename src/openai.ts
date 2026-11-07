@@ -44,6 +44,7 @@ import { conversationGapNote, loadRecentRounds, resolveRecentRounds } from './re
 import { calcCost, loadPricing, type TokenUsage } from './pricing';
 import { completeDeepSeek, streamDeepSeek, type DeepSeekMessage } from './deepseek';
 import { getTodaySummary, maybeSummarizeToday } from './summary';
+import { recentTopicsBlock } from './topics';
 import { loadImageDataUrl, saveImageFromSource } from './media';
 import { byteLength, parseRelationValues } from './memory-maintenance';
 import { markProfileDirty } from './profile-cache';
@@ -695,6 +696,7 @@ openaiApp.post('/chat/completions', async (c) => {
       weather,
       todaySummary: contextBudget.recent,
       recentMemo: contextBudget.rollup,
+      recentTopics: await recentTopicsBlock(c.env, now).catch(() => ''),
       recalled: contextBudget.recall,
       personaDrift,
       recentFiles,

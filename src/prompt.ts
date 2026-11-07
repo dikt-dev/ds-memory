@@ -72,6 +72,8 @@ export interface BasePromptArgs {
   voice?: string | null;
   /** 最近一天的中期记忆（已格式化的 markdown 块，见 recent-memory.ts） */
   recentMemo?: string | null;
+  /** 最近几天聊过的话题标题（跨天回指用） */
+  recentTopics?: string | null;
   /** 从记忆档案按话题检索到的往事（无命中则为空） */
   recalled?: string | null;
   /** full = 本轮带完整长期记忆；compact = 只带核心+稳定画像，其余靠召回 */
@@ -124,6 +126,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     characterCard,
     voice,
     recentMemo,
+  recentTopics,
     recalled,
     recentFiles,
     memoryMode = 'full',
@@ -272,6 +275,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   // ══ D 最近发生的事（易变：五路来源合并 + 一条优先级）══════════
   // 之前这五块散落各处、没有优先级，life 说 A、中期记忆说 B 时模型只能猜。
   const recent: string[] = [];
+  if (recentTopics?.trim()) recent.push(`## 最近几天聊过的话题\n${recentTopics.trim()}`);
   if (recentMemo?.trim()) recent.push(unifyMemorySubjects(recentMemo.trim()));
   if (recalled?.trim()) recent.push(unifyMemorySubjects(recalled.trim()));
   // 易变段也要瘦身：空分区不输出、日期同口径（近期动态还会补「几天前」）
