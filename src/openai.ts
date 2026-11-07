@@ -1032,5 +1032,8 @@ openaiApp.post('/chat/completions', async (c) => {
           total_tokens: promptTokens + result.usage.completion_tokens,
         }
       : null,
+    // ★ 把这次实际落库的图片 key 回传：客户端收到后能把刚发的本地图按 key 存起来，
+    //   之后刷新成正式气泡时直接命中本地缓存，不用再从服务器下一遍（2026-11-07）
+    user_image_keys: imageKeys.length > 0 ? imageKeys : undefined,
   });
 });
