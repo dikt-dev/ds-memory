@@ -429,6 +429,8 @@ export interface FacetDelta {
   trust?: number;
   respect?: number;
   attraction?: number;
+  /** 熟悉度：只涨不跌（互动量），以前没接、导致关系阶段永远卡在 Lv1 */
+  intimacy?: number;
 }
 
 /**
@@ -443,17 +445,17 @@ export function eventFacetDelta(event: EmotionEvent): FacetDelta {
   const w = event.intensity === 3 ? 3 : event.intensity === 2 ? 2 : 1;
   switch (event.type) {
     case 'praise':
-      return { affection: 0.4 * w, respect: 0.1 * w };
+      return { affection: 0.4 * w, respect: 0.1 * w, intimacy: 0.3 * w };
     case 'thanks':
-      return { affection: 0.3 * w, trust: 0.1 * w };
+      return { affection: 0.3 * w, trust: 0.1 * w, intimacy: 0.3 * w };
     case 'apology':
       return { trust: 0.2 * w, respect: 0.1 * w };
     case 'comfort_seek':
-      return { affection: 0.3 * w, attraction: 0.2 * w };
+      return { affection: 0.3 * w, attraction: 0.2 * w, intimacy: 0.6 * w };
     case 'affection':
-      return { affection: 0.5 * w, attraction: 0.8 * w };
+      return { affection: 0.5 * w, attraction: 0.8 * w, intimacy: 0.8 * w };
     case 'tease':
-      return { affection: 0.2 * w, attraction: 0.1 * w };
+      return { affection: 0.2 * w, attraction: 0.1 * w, intimacy: 0.5 * w };
     case 'command':
       return { respect: -0.3 * w };
     case 'rejection':
@@ -465,9 +467,9 @@ export function eventFacetDelta(event: EmotionEvent): FacetDelta {
     case 'share_joy':
       return { affection: 0.2 * w };
     case 'share_pain':
-      return { affection: 0.3 * w, trust: 0.3 * w, attraction: 0.2 * w };
+      return { affection: 0.3 * w, trust: 0.3 * w, attraction: 0.2 * w, intimacy: 0.6 * w };
     case 'deep_talk':
-      return { trust: 0.6 * w, attraction: 0.4 * w };
+      return { trust: 0.6 * w, attraction: 0.4 * w, intimacy: 1.5 * w };
     case 'ignored':
       return { affection: -0.3 * w, attraction: -0.2 * w };
     default:
@@ -477,13 +479,14 @@ export function eventFacetDelta(event: EmotionEvent): FacetDelta {
 
 /** 把一批事件的 5 轴增量加总。 */
 export function sumFacetDelta(events: EmotionEvent[]): Required<FacetDelta> {
-  const total = { affection: 0, trust: 0, respect: 0, attraction: 0 };
+  const total = { affection: 0, trust: 0, respect: 0, attraction: 0, intimacy: 0 };
   for (const event of events) {
     const d = eventFacetDelta(event);
     total.affection += d.affection ?? 0;
     total.trust += d.trust ?? 0;
     total.respect += d.respect ?? 0;
     total.attraction += d.attraction ?? 0;
+    total.intimacy += d.intimacy ?? 0;
   }
   return total;
 }
