@@ -687,6 +687,8 @@ openaiApp.post('/chat/completions', async (c) => {
   const personaDrift = buildPersonaDriftLine(personaState);
   const lifeBlocks = await loadLifeBlocks(c.env, now, lastUserCleaned, historyRaw.slice(-6));
   const personaDoc = await loadPersonaDoc(c.env);
+  // KV 等待不算 CPU：先把需要 await 的块准备好，再开始打点
+  const topicsBlock = await recentTopicsBlock(c.env, now).catch(() => '');
   const cpuT0 = performance.now();
   const mergedSystem = [
     ...astrbotSystems,
@@ -700,7 +702,7 @@ openaiApp.post('/chat/completions', async (c) => {
       weather,
       todaySummary: contextBudget.recent,
       recentMemo: contextBudget.rollup,
-      recentTopics: await recentTopicsBlock(c.env, now).catch(() => ''),
+      recentTopics: topicsBlock,
       recalled: contextBudget.recall,
       personaDrift,
       recentFiles,

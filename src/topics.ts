@@ -80,8 +80,23 @@ export async function ensureDayTopics(env: Env, dateKey: string): Promise<string
   }
 }
 
-/** 最近 N 天的话题块（进提示词）；没有内容返回空串。 */
+/**
+ * 最近 N 天的话题块（进提示词）；没有内容返回空串。
+ *
+ * ★ 缓存成单个 KV key：原来是每天读一次 KV（3 天 = 3 次往返），
+ *   实测这段占了请求准备时间的绝大部分（每次 ~80ms × 3）。
+ *   现在 10 分钟内只读 1 次。
+ */
+export const TOPIC_BLOCK_KEY = 'topics:recent';
+const TOPIC_BLOCK_TTL_MS = 10 * 60 * 1000;
+
 export async function recentTopicsBlock(env: Env, now: Date, days = TOPIC_INJECT_DAYS): Promise<string> {
+  const cached = await env.KV.get(TOPIC_BLOCK_KEY, 'json').catch(() => null) as
+    | { at?: number; text?: string }
+    | null;
+  if (cached?.text != null && typeof cached.at === 'number' && now.getTime() - cached.at < TOPIC_BLOCK_TTL_MS) {
+    return cached.text;
+  }
   const today = dateKeyInBeijing(now);
   const lines: string[] = [];
   for (let back = 1; back <= days; back += 1) {
@@ -91,5 +106,9 @@ export async function recentTopicsBlock(env: Env, now: Date, days = TOPIC_INJECT
     const label = back === 1 ? '昨天' : back === 2 ? '前天' : `${back} 天前`;
     lines.push(`- ${label}（${day.slice(5)}）：${topics.join('、')}`);
   }
-  return lines.join('\n');
+  const text = lines.join('\n');
+  await env.KV.put(TOPIC_BLOCK_KEY, JSON.stringify({ at: now.getTime(), text }), {
+    expirationTtl: 3600,
+  }).catch(() => undefined);
+  return text;
 }

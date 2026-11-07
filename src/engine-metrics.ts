@@ -137,7 +137,8 @@ export async function recordCpuSample(
          ms_sum = ms_sum + excluded.ms_sum,
          updated_at = excluded.updated_at`,
     )
-      .bind(day, channel, mode, Math.max(0, Math.round(ms)), now)
+      // 存微秒：拼装只要几百微秒，用毫秒取整会全变成 0
+      .bind(day, channel, mode, Math.max(0, Math.round(ms * 1000)), now)
       .run();
   } catch {
     // 指标失败不影响聊天
