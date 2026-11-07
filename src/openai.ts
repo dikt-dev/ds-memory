@@ -719,7 +719,7 @@ openaiApp.post('/chat/completions', async (c) => {
       todaySummary: contextBudget.recent,
       recentMemo: contextBudget.rollup,
       recentTopics: topicsBlock,
-      recalled: contextBudget.recall,
+      recalled: '',
       personaDrift,
       recentFiles,
       voiceReply,
@@ -759,6 +759,15 @@ openaiApp.post('/chat/completions', async (c) => {
     if (channel === 'astrobot' || channel === 'mobile') {
       parts.push(
         '【可用】[face:表情名] → 表情；想发语音可以写成 [语音]「要说的话」（只念引号里）。用不用随你。',
+      );
+    }
+    // ★ 召回结果贴到用户消息最前面（注意力最强的位置）：
+    //   放在系统提示词中部时，隔着几千字，模型经常"看见了但没用"（2026-11-08）
+    if (contextBudget.recall.trim()) {
+      parts.push(
+        '你记得这些（他以前说过的、一起经历过的，可能和这轮有关）：\n' +
+          contextBudget.recall.trim() +
+          '\n（自然地用，不要逐条念出来；这轮用不上也不用硬提）',
       );
     }
     if (isNowFactQuestion(lastUserCleaned)) {
