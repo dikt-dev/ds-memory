@@ -171,7 +171,7 @@ export function relationArchetype(f: RelationFacets, grievance = 0): RelationArc
     return {
       key: 'distant',
       label: '客气而疏远',
-      hint: '保持礼貌的距离，别自作熟，别说太重的话。',
+      hint: '礼貌还在，但不用绷着装客气；该有的情绪照样有。',
     };
   }
   if (grievance >= 40 && f.intimacy >= 500) {
@@ -228,7 +228,8 @@ export function relationArchetype(f: RelationFacets, grievance = 0): RelationArc
     return {
       key: 'acquaintance',
       label: '还不太熟，客气而友好',
-      hint: '别太自来熟，先有分寸地聊，话不用太多。',
+      // 早期关系只约束「分寸」，不该顺手把话量也压掉——那样每次回复都变成客气话
+      hint: '还不到能随便闹的程度，但他示好就接住，该炸毛就炸毛，别憋着。',
     };
   }
   return {
