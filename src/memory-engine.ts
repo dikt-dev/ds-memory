@@ -29,6 +29,7 @@ import { CANDIDATE_TOP_K, embedTexts, recallMemoryForChat } from './memory-index
 import { selectRecall } from './recall-intent';
 import { byteLength } from './memory-maintenance';
 import { logTrace } from './trace';
+import { recordCpuSample } from './engine-metrics';
 
 /**
  * 整条召回的时间预算。超时就当没召回——空召回是合法降级，卡住不是。
@@ -162,6 +163,7 @@ async function runNextEngine(
   env: Env,
   query: string,
   focus: string,
+  onStage?: (name: string, ms: number) => void,
 ): Promise<{
   text: string;
   items: number;
@@ -222,7 +224,7 @@ async function runNextEngine(
 
   t = performance.now();
   // 粗召回放宽到 20 条：选择器要在一个较大的池子里挑，而不是在 6 条里挑 5 条。
-  const keywordPicked = rankMemoryChunks(query, poolSource, CANDIDATE_TOP_K, focus);
+  const keywordPicked = rankMemoryChunks(query, poolSource, CANDIDATE_TOP_K, focus, { onStage });
   stages.rank = performance.now() - t;
 
   // 关键词已经够强时不再付 query embedding 延迟；弱召回才走向量。
@@ -237,7 +239,7 @@ async function runNextEngine(
   t = performance.now();
   const pool =
     queryVec !== null
-      ? rankMemoryChunks(query, poolSource, CANDIDATE_TOP_K, focus, { queryVec })
+      ? rankMemoryChunks(query, poolSource, CANDIDATE_TOP_K, focus, { queryVec, onStage })
       : keywordPicked;
   stages.rank += performance.now() - t;
 
@@ -316,9 +318,10 @@ async function runNextEngineSafe(
   focus: string,
   deadlineMs: number,
   onTimeout: () => void,
+  onStage?: (name: string, ms: number) => void,
 ): Promise<Awaited<ReturnType<typeof runNextEngine>>> {
   const empty = emptyNext();
-  return withDeadline(runNextEngine(env, query, focus), deadlineMs, empty, onTimeout).catch(
+  return withDeadline(runNextEngine(env, query, focus, onStage), deadlineMs, empty, onTimeout).catch(
     () => empty,
   );
 }
@@ -422,6 +425,9 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
     legacyPromise,
     runNextEngineSafe(env, engineQuery, focus, deadlineMs, () => {
       result.timedOut = true;
+    }, (name, ms) => {
+      // 子阶段耗时：排查 rank 到底花在哪（rank_kw / rank_vec / rank_mmr）
+      void recordCpuSample(env, opts.channel, name, ms).catch(() => {});
     }),
   ]);
   // next 模式不跑 legacy：这里必须记 0，否则会因为 Promise.all 等到 next 结束

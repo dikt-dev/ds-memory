@@ -395,6 +395,8 @@ export function projectMemoryContext(pinnedText: string, parsed: ParsedMemoryCon
 }
 
 export interface RankOptions {
+  /** 子阶段耗时回调（排查用） */
+  onStage?: (name: string, ms: number) => void;
   /** 查询向量；为空或没有 chunk 向量时自动退回关键词。 */
   queryVec?: number[] | null;
   /** MMR 多样性系数，0=纯分数，1=强去冗余。 */
@@ -582,6 +584,8 @@ export function rankMemoryChunks(
 ): MemoryChunk[] {
   const q = (query || '').slice(-1000).trim();
   if (!q || chunks.length === 0) return [];
+  const stage = options.onStage ?? (() => {});
+  const tKw = performance.now();
   const scored = chunks
     .map((chunk) => ({
       chunk,
@@ -602,12 +606,14 @@ export function rankMemoryChunks(
         dateOfChunk(b.chunk).localeCompare(dateOfChunk(a.chunk)),
     );
 
+  stage('rank_kw', performance.now() - tKw);
   const qVec = options.queryVec;
   const hasVectors = chunks.some((c) => Boolean(c.vec));
   if (!qVec || !hasVectors) {
     return mmrSelectChunks(scored, Math.max(1, k), options.mmrLambda ?? 0.9);
   }
 
+  const tVec = performance.now();
   const vectorRanked = chunks
     .map((chunk) => {
       const vec = decodeVec(chunk.vec ?? null);
@@ -620,6 +626,7 @@ export function rankMemoryChunks(
     return mmrSelectChunks(scored, Math.max(1, k), options.mmrLambda ?? 0.9);
   }
 
+  stage('rank_vec', performance.now() - tVec);
   const RRF_K = 60;
   const fused = new Map<string, ScoredChunk>();
   const add = (chunk: MemoryChunk, rank: number) => {
@@ -630,7 +637,10 @@ export function rankMemoryChunks(
   scored.slice(0, 30).forEach((x, i) => add(x.chunk, i));
   vectorRanked.slice(0, 30).forEach((x, i) => add(x.chunk, i));
   const merged = [...fused.values()].sort((a, b) => b.score - a.score);
-  return mmrSelectChunks(merged, Math.max(1, k), options.mmrLambda ?? 0.75);
+  const tMmr = performance.now();
+  const out = mmrSelectChunks(merged, Math.max(1, k), options.mmrLambda ?? 0.75);
+  stage('rank_mmr', performance.now() - tMmr);
+  return out;
 }
 
 export function formatMemoryChunks(chunks: MemoryChunk[]): string {
