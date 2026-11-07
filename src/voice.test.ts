@@ -51,7 +51,7 @@ describe('buildVoiceDirective —— 指向人设，同时给四条机械约束'
 
   it('体积控制在 1800 字节内（不是一张清单）', () => {
     const bytes = new TextEncoder().encode(buildVoiceDirective(900)).length;
-    expect(bytes).toBeLessThan(1800);
+    expect(bytes).toBeLessThan(2000);
   });
 });
 

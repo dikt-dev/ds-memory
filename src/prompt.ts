@@ -280,7 +280,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     if (slimVolatile) recent.push(slimVolatile);
   }
   if (todaySummary?.trim()) {
-    recent.push(`## 今日摘要（截至当前）\n${unifyMemorySubjects(todaySummary.trim())}`);
+    recent.push(`## 今天聊过的（按时间，最新在最后）\n${unifyMemorySubjects(todaySummary.trim())}`);
   }
   if (recentFiles?.trim()) recent.push(recentFiles.trim());
   if (recent.length > 0) {

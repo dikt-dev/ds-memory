@@ -7,53 +7,23 @@ import {
 } from './summary';
 
 describe('shouldSummarize', () => {
-  it('无历史摘要：达到 20 条才首次触发', () => {
-    expect(shouldSummarize(19, null, Date.now())).toBe(false);
-    expect(shouldSummarize(20, null, Date.now())).toBe(true);
-    expect(shouldSummarize(21, null, Date.now())).toBe(true);
+  it('无历史摘要：达到 12 条才首次触发', () => {
+    expect(shouldSummarize(11, null, Date.now())).toBe(false);
+    expect(shouldSummarize(12, null, Date.now())).toBe(true);
   });
 
-  it('有历史摘要：新增不足 10 条且未到 1 小时时不重复触发', () => {
+  it('有历史摘要：新增不足 6 条且未到 20 分钟时不重复触发', () => {
     const now = Date.parse('2026-10-21T10:00:00Z');
-    const fresh: DaySummary = {
-      text: 'x',
-      updated_at: '2026-10-21T09:30:00Z',
-      up_to_id: 25,
-      total: 25,
-    };
-    expect(shouldSummarize(29, fresh, now)).toBe(false); // 新增 4 条
-    expect(shouldSummarize(34, fresh, now)).toBe(false); // 新增 9 条
-    expect(shouldSummarize(35, fresh, now)).toBe(true); // 新增 10 条
+    const fresh: DaySummary = { text: 'x', updated_at: '2026-10-21T09:50:00Z', up_to_id: 25, total: 25 };
+    expect(shouldSummarize(28, fresh, now)).toBe(false); // 新增 3 条
+    expect(shouldSummarize(30, fresh, now)).toBe(false); // 新增 5 条
+    expect(shouldSummarize(31, fresh, now)).toBe(true); // 新增 6 条
   });
 
-  it('有历史摘要：新增达到 10 条就触发', () => {
+  it('有历史摘要：距上次超过 20 分钟也触发（即使新增很少）', () => {
     const now = Date.parse('2026-10-21T10:00:00Z');
-    const prev: DaySummary = {
-      text: 'x',
-      updated_at: '2026-10-21T09:30:00Z',
-      up_to_id: 20,
-      total: 20,
-    };
-    expect(shouldSummarize(29, prev, now)).toBe(false);
-    expect(shouldSummarize(30, prev, now)).toBe(true);
-  });
-
-  it('有历史摘要：距上次超过 1 小时也触发（即使新增很少）', () => {
-    const now = Date.parse('2026-10-21T10:00:00Z');
-    const boundary: DaySummary = {
-      text: 'x',
-      updated_at: '2026-10-21T09:00:00Z',
-      up_to_id: 20,
-      total: 20,
-    };
-    const stale: DaySummary = {
-      text: 'x',
-      updated_at: '2026-10-21T08:00:00Z',
-      up_to_id: 20,
-      total: 20,
-    };
-    expect(shouldSummarize(22, boundary, now)).toBe(true);
-    expect(shouldSummarize(22, stale, now)).toBe(true);
+    const boundary: DaySummary = { text: 'x', updated_at: '2026-10-21T09:30:00Z', up_to_id: 20, total: 20 };
+    expect(shouldSummarize(21, boundary, now)).toBe(true);
   });
 });
 

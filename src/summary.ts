@@ -17,11 +17,11 @@ import { logError, logWarn } from './error-log';
 const logInfo = (msg: string): void => logTrace('summary', { msg });
 
 /** 首次生成摘要的消息条数阈值（约 10 轮）。 */
-export const SUMMARY_TRIGGER_COUNT = 20;
+export const SUMMARY_TRIGGER_COUNT = 12;
 /** 首次之后，新增消息达到这个数才再生成。 */
-export const SUMMARY_TRIGGER_DELTA = 10;
+export const SUMMARY_TRIGGER_DELTA = 6;
 /** 首次之后的最小重算间隔（1 小时）。 */
-export const SUMMARY_TRIGGER_INTERVAL_MS = 60 * 60 * 1000;
+export const SUMMARY_TRIGGER_INTERVAL_MS = 20 * 60 * 1000;
 export const SUMMARY_KV_TTL_SECONDS = 36 * 60 * 60;
 /** 单次送给摘要模型的最大字符数（保留最新的部分）。 */
 export const SUMMARY_INPUT_MAX_CHARS = 20000;
@@ -122,7 +122,10 @@ export async function maybeSummarizeToday(env: Env, dateKey: string): Promise<vo
       const msgs = rows.results ?? [];
       if (msgs.length === 0) return;
 
-      const conversation = msgs.map((m) => `${m.role === 'user' ? '用户' : '助手'}：${m.content}`).join('\n');
+      // 时间戳由系统给：模型拿不到真实时钟，让它写时间只会凑整点（22:00/00:00）
+      const conversation = msgs
+        .map((m) => `[${hhmmOf((m as { created_at?: string }).created_at)}] ${m.role === 'user' ? '他' : '你'}：${m.content}`)
+        .join('\n');
       const input = buildSummaryInput(fresh?.text ?? null, conversation);
       const text = await summarizeToday(env, input, dateKey);
       if (!text) return;
@@ -146,8 +149,19 @@ export async function maybeSummarizeToday(env: Env, dateKey: string): Promise<vo
   }
 }
 
-const SUMMARY_SYSTEM =
-  '你是对话摘要助手。把用户今天的对话提炼成约 100 字的"今日摘要"，突出用户今天提到的事实、偏好、情绪与进行中的事。输出简洁的中文纯文本，不要列表、标题或解释。';
+const SUMMARY_SYSTEM = [
+  '你在维护一份「今天聊过的清单」，给之后回想用。',
+  '',
+  '输出格式：每条一行，固定为「- [HH:mm] 一句话」。',
+  '- 时间一律从输入里的 [HH:mm] 原样复制，不要自己推算、不要凑整点；输入没给时间就写 [--]',
+  '- 一句话说清"聊了什么":具体到事、人、物（视频名、外号、地点、决定、情绪起点），不要抽象概括',
+  '- 按时间先后排，覆盖今天所有话题；同一件事只写一行（写最早的起点）',
+  '- 只要之后还可能被提起的：分享的东西、玩笑与外号、约定、决定、他的状态、她的反应',
+  '- 不写寒暄（早安晚安以外的问候）、不写"用户/助手"，用「他」「你」',
+  '- 最多 15 行；一直在聊同一件事就合并成一行',
+  '',
+  '只输出清单，不要标题、不要解释、不要总结段。',
+].join('\n');
 
 /** 生成今日摘要：DeepSeek flash 档优先（成本），失败自动回退 Workers AI。 */
 async function summarizeToday(env: Env, input: string, dateKey: string): Promise<string> {
@@ -162,5 +176,12 @@ async function summarizeToday(env: Env, input: string, dateKey: string): Promise
   logInfo(`[summary] backend=${result.backend} cost=${result.cost.toFixed(5)}`);
   // 摘要费用也计入当天（此前只打日志，页面统计看不到）
   await addLlmCost(env, dateKey, result.cost);
-  return result.text.slice(0, 180); // 防模型超长，保持约 100 字目标
+  return result.text.slice(0, 900); // 话题清单最多 15 行，别让模型写成长文
+}
+
+/** 取消息里的 HH:mm（北京时间），拿不到就给 --。 */
+function hhmmOf(createdAt?: string): string {
+  if (!createdAt) return '--';
+  const m = createdAt.match(/T(\d{2}):(\d{2})/);
+  return m ? `${m[1]}:${m[2]}` : '--';
 }

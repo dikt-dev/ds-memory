@@ -186,8 +186,10 @@ export function pickKeyLines(rows: MemoRow[], maxLines = 60): MemoRow[] {
 export function buildMemoInput(prev: RecentMemo | null, rows: MemoRow[]): string {
   const picked = pickKeyLines(rows);
   const lines = picked.map((m) => {
-    if (m.role === "user") return "他：" + m.content;
-    return m.turn_type === "proactive" ? "助手（主动发起）：" + m.content : "助手：" + m.content;
+    // ★ 时间戳由系统给：以前只给正文，模型只能凑整点（22:00 / 00:00 全是假的）
+    const stamp = m.created_ms ? hhmmOfMs(m.created_ms) : '--';
+    const who = m.role === "user" ? "他" : m.turn_type === "proactive" ? "助手（主动发起）" : "你";
+    return `[${stamp}] ${who}：${m.content}`;
   });
   let conversation = lines.join("\n");
   if (conversation.length > MEMO_INPUT_MAX_CHARS) {
@@ -259,6 +261,7 @@ const MEMO_SYSTEM = [
   "你负责维护一份「最近三天」的中期记忆纪要。",
   "你会看到【当前纪要】（可能为空）和【新增对话】。",
   "只输出**新增**的条目：1~3 条，每条一行，格式固定为： - [MM/DD HH:mm] 内容",
+  "时间从输入里的 [HH:mm] 原样复制（日期用今天）；输入没给时间就写 [--] → 会丢掉，别自己推算、别凑整点。",
   "内容 40 字以内，电报体，按发生时间先后排列，最近的在最后。",
   "只写之后可能被提到的事：正在做的事、情绪变化、约定、决定、遇到的问题、身体状态。",
   "不写寒暄、不复述助手已经回应过的话、不写可推断的事实（时间/天气）。",
@@ -347,4 +350,9 @@ export async function maybeRefreshRecentMemo(env: Env, now: Date = new Date()): 
   } catch (e) {
     logError("[memo] refresh failed:", e);
   }
+}
+/** 毫秒时间戳 → 北京时间 HH:mm。 */
+function hhmmOfMs(ms: number): string {
+  const d = new Date(ms + 8 * 3600_000);
+  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
 }
