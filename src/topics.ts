@@ -90,13 +90,21 @@ export async function ensureDayTopics(env: Env, dateKey: string): Promise<string
 export const TOPIC_BLOCK_KEY = 'topics:recent';
 const TOPIC_BLOCK_TTL_MS = 10 * 60 * 1000;
 
-export async function recentTopicsBlock(env: Env, now: Date, days = TOPIC_INJECT_DAYS): Promise<string> {
+export async function recentTopicsBlock(
+  env: Env,
+  now: Date,
+  days = TOPIC_INJECT_DAYS,
+  opts: { allowDb?: boolean } = {},
+): Promise<string> {
   const cached = await env.KV.get(TOPIC_BLOCK_KEY, 'json').catch(() => null) as
     | { at?: number; text?: string }
     | null;
   if (cached?.text != null && typeof cached.at === 'number' && now.getTime() - cached.at < TOPIC_BLOCK_TTL_MS) {
     return cached.text;
   }
+  // 请求路径上读不到缓存就返回空：D1 跨区一次 200ms，宁可这一轮少三行话题，
+  // 也不要把回复拖慢（cron 会很快把缓存填上）
+  if (!opts.allowDb) return '';
   const today = dateKeyInBeijing(now);
   const lines: string[] = [];
   for (let back = 1; back <= days; back += 1) {

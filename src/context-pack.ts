@@ -13,7 +13,9 @@ import { getOrCreateDayContext, type DayContextFile } from './context';
 import { fetchWeather } from './weather';
 import { resolveHerPlace } from './life/where';
 import type { WeatherInfo } from './prompt';
-import { readContextSnapshot, contextSnapshotFresh } from './context-snapshot';
+import { recentTopicsBlock } from './topics';
+import { recordCpuSample } from './engine-metrics';
+import { readContextSnapshot, contextSnapshotFresh, rebuildContextSnapshot } from './context-snapshot';
 import { getRecentMemo, formatRecentMemoBlock } from './recent-memory';
 import { getTodaySummary } from './summary';
 import { loadPersonaState, buildPersonaDriftLine, type PersonaState } from './persona-drift';
@@ -57,6 +59,8 @@ export interface BuildMemoryPackOptions {
   memoMaxItems?: number;
   /** 外部已经取到的天气（避免重复请求）。 */
   weather?: WeatherInfo | null;
+  /** 快照过期时用来后台重建（不阻塞这一轮回复）。 */
+  ctx?: { waitUntil: (p: Promise<unknown>) => void };
 }
 
 /**
@@ -71,7 +75,15 @@ export async function buildMemoryPack(
 ): Promise<MemoryPack> {
   const dateKey = dateKeyInBeijing(now);
   // ★ 先试上下文快照：1 次 KV 读换掉 6~7 次跨区往返（2026-11-08）
+  const kvT0 = performance.now();
   const snap = await readContextSnapshot(env).catch(() => null);
+  opts.ctx?.waitUntil(
+    recordCpuSample(env, opts.channel, 'kv_ms', performance.now() - kvT0).catch(() => {}),
+  );
+  // 诊断：快照有没有读到（free 版排查用，各计一次）
+  opts.ctx?.waitUntil(
+    recordCpuSample(env, opts.channel, snap ? 'snap_hit' : 'snap_miss', snap ? 0 : 1).catch(() => {}),
+  );
   if (contextSnapshotFresh(snap, now) && snap) {
     const promptMemory = buildPromptMemoryFor(snap.memory, env);
     const recentMemo = snap.memo ?? null;
@@ -94,6 +106,32 @@ export async function buildMemoryPack(
       topics: snap.topics ?? '',
     } as MemoryPack;
   }
+  // 过期快照直接用：10~15 分钟前的 memo/summary 完全可以接受，
+  // 回 D1 刷新的代价是 3~5 次跨区往返（实测 ~1s），不值得。
+  if (snap) {
+    opts.ctx?.waitUntil(rebuildContextSnapshot(env, now));
+    const promptMemory = buildPromptMemoryFor(snap.memory, env);
+    const recentMemo = snap.memo ?? null;
+    return {
+      memory: snap.memory,
+      dayCtxFile: snap.dayCtx,
+      weather: snap.weather ?? snap.dayCtx?.weather ?? null,
+      ctx: {
+        date: snap.dayCtx?.date ?? dateKey,
+        weekday: snap.dayCtx?.weekday ?? '',
+        is_holiday: Boolean(snap.dayCtx?.is_holiday),
+        holiday_note: snap.dayCtx?.holiday_note ?? '',
+      },
+      promptMemory,
+      recentMemoRaw: null,
+      recentMemo,
+      todaySummary: recentMemo ? null : snap.summary,
+      personaState: snap.personaState,
+      personaDrift: buildPersonaDriftLine(snap.personaState),
+      topics: snap.topics ?? '',
+    } as MemoryPack;
+  }
+
   // 天气跟着她此刻所在的城市（旅游时是目的地），不是网页端设置的城市
   const herPlace = await resolveHerPlace(env, dateKey).catch(() => null);
   const [memory, dayCtxFile, fetchedWeather, recentMemoRaw, summaryRaw, personaState] =

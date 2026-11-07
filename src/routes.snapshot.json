@@ -549,6 +549,14 @@
   ],
   [
     "POST",
+    "/api/admin/context-snapshot/rebuild"
+  ],
+  [
+    "POST",
+    "/api/admin/context-snapshot/rebuild"
+  ],
+  [
+    "POST",
     "/api/admin/emotion/simulate"
   ],
   [

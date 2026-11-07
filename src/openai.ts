@@ -498,10 +498,18 @@ openaiApp.post('/chat/completions', async (c) => {
   c.executionCtx.waitUntil(maybeSummarizeToday(c.env, dateKey)); // 异步滚动摘要，不阻塞
   c.executionCtx.waitUntil(maybeRefreshRecentMemo(c.env, now)); // 异步刷新中期记忆（最近 24h）
   // 这些读取互不依赖：并行发起，减少 QQ 场景的首字延迟。
+  let packMs = 0;
+  const packT0 = performance.now();
   const [pack, facts] = await Promise.all([
-    buildMemoryPack(c.env, now, { channel: 'astrobot' }),
+    (async () => {
+      const t0 = performance.now();
+      const result = await buildMemoryPack(c.env, now, { channel: 'astrobot', ctx: c.executionCtx });
+      packMs = performance.now() - t0;
+      return result;
+    })(),
     readSessionFacts(c.env, now, dateKey, storedEarly ? (userMessageId ?? null) : null),
   ]);
+  c.executionCtx.waitUntil(recordCpuSample(c.env, channel, 'prep', packMs).catch(() => {}));
   const { memory, dayCtxFile: dayCtx, weather, ctx, promptMemory, personaState } = pack;
   // 拉取失败时回退当天缓存，避免“没有天气”时模型去翻旧记忆
   if (pack.weather) await attachWeather(c.env, dateKey, pack.weather, dayCtx);
@@ -651,6 +659,7 @@ openaiApp.post('/chat/completions', async (c) => {
     skipMemorySource: shouldSkipMemoryRecall(pack),
     nowMs: now.getTime(),
   });
+  c.executionCtx.waitUntil(recordCpuSample(c.env, channel, 'cpu_total', performance.now() - packT0).catch(() => {}));
   const recalledRaw = recall.text;
 
   void recordRecallUsage(c.env, recall.ids, now.getTime()).catch(() => {});

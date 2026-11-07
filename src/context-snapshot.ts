@@ -21,7 +21,7 @@ import { fetchWeather } from './weather';
 import type { WeatherInfo } from './prompt';
 import { getRecentMemo, formatRecentMemoBlock } from './recent-memory';
 import { getTodaySummary } from './summary';
-import { recentTopicsBlock } from './topics';
+import { recentTopicsBlock, TOPIC_INJECT_DAYS } from './topics';
 import { loadPersonaState } from './persona-drift';
 import type { PersonaState } from './persona-drift';
 import { resolveHerPlace } from './life/where';
@@ -65,7 +65,7 @@ export async function loadAllBlocks(
     getRecentMemo(env).catch(() => null),
     getTodaySummary(env, dateKey).catch(() => null),
     loadPersonaState(env).catch(() => null),
-    recentTopicsBlock(env, now).catch(() => ''),
+    recentTopicsBlock(env, now, TOPIC_INJECT_DAYS, { allowDb: true }).catch(() => ''),
   ]);
   return {
     at: now.getTime(),
