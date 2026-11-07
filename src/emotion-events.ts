@@ -357,7 +357,7 @@ export function eventEmotionDelta(event: EmotionEvent): Partial<EmotionVector> {
   const scale = (n: number) => Math.round(n * w);
   switch (event.type) {
     case 'praise':
-      return { valence: scale(12), shyness: scale(10), dominance: scale(4) };
+      return { valence: scale(12), shyness: scale(10), dominance: scale(4), arousal: scale(8) };
     case 'thanks':
       return { valence: scale(8), attachment: scale(5) };
     case 'apology':
@@ -366,19 +366,19 @@ export function eventEmotionDelta(event: EmotionEvent): Partial<EmotionVector> {
     case 'comfort_seek':
       return { attachment: scale(8), valence: scale(2) };
     case 'affection':
-      return { shyness: scale(12), attachment: scale(10), valence: scale(10) };
+      return { shyness: scale(12), attachment: scale(10), valence: scale(10), arousal: scale(12) };
     case 'tease':
-      return { valence: scale(4), grievance: scale(2) };
+      return { valence: scale(4), grievance: scale(2), arousal: scale(6) };
     case 'command':
       return { dominance: -scale(4), grievance: scale(3) };
     case 'rejection':
-      return { valence: -scale(8), dominance: -scale(6), grievance: scale(8) };
+      return { valence: -scale(8), dominance: -scale(6), grievance: scale(8), arousal: scale(8) };
     case 'insult':
-      return { valence: -scale(14), grievance: scale(16), dominance: -scale(10) };
+      return { valence: -scale(14), grievance: scale(16), dominance: -scale(10), arousal: scale(10) };
     case 'broken_promise':
       return { grievance: scale(10), valence: -scale(6) };
     case 'share_joy':
-      return { valence: scale(8) };
+      return { valence: scale(8), arousal: scale(10) };
     case 'share_pain':
       // ★ 他的遭遇不是她的事件（2026-11-06 修）：
       //   以前这里连她的愉悦度一起扣，结果「他被领导骂」→ 她 valence 掉到 −10 以下

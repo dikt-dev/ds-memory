@@ -57,7 +57,7 @@ export const EMOTION_MAX_STEP_PER_TURN = 30;
  *
  * 取值依据：
  * - shyness 15min：害羞本来就散得快
- * - arousal 25min：兴奋劲儿来得快去得也快
+ * - arousal 90min：兴奋劲儿起得快、留得住一阵（25min 太短，聊完就归零）
  * - valence 40min：整体好坏感受比单点情绪持久
  * - dominance 2h：被压一头的憋屈能撑一阵
  * - jealousy 3h：醋意比一般情绪黏
@@ -67,7 +67,7 @@ export const EMOTION_MAX_STEP_PER_TURN = 30;
  */
 export const EMOTION_HALF_LIFE_MIN: Record<EmotionDim, number | null> = {
   valence: 40,
-  arousal: 25,
+  arousal: 90,
   dominance: 120,
   attachment: 360,
   jealousy: 180,
