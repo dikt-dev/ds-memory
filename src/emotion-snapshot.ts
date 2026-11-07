@@ -20,7 +20,7 @@ import type { EmotionDim, EmotionVector } from './emotion-vector';
 import { dominantEmotions } from './emotion-vector';
 import type { EmotionEvent, EmotionEventType } from './emotion-events';
 import { isNegativeEvent, unresolvedEvents } from './emotion-events';
-import { describeFacetsQualitative, relationArchetype, type RelationFacets } from './relation-facets';
+import { describeFacetsQualitative, relationArchetype, stageFor, type RelationFacets } from './relation-facets';
 
 export interface EmotionSnapshotInput {
   facets: RelationFacets;
@@ -130,7 +130,16 @@ export function buildEmotionSnapshot(input: EmotionSnapshotInput): string {
     .filter((e) => (e.type === 'affection' || e.type === 'praise') && now - e.at <= 10 * 60_000)
     .sort((a, b) => b.at - a.at)[0];
   if (justTouched) {
-    lines.push('- 刚被戳中：这一条按「被撩到」演——先甩一个括号动作（呆毛/尾巴/别过头），否认一句，最后漏半句真心；可以用两个动作。');
+    // ★ 强度必须跟着关系阶段走：否则刚认识也会照抄人设里的「两个动作 + 漏真心」，
+    //   第五句就吃醋撒娇，把成长曲线直接跳过去（2026-11-07）。
+    const lv = stageFor(facets).level;
+    lines.push(
+      lv <= 1
+        ? '- 刚被戳中：这一条只到「嘴上否认」——一个括号动作 + 一句嘴硬，真心话先憋着。'
+        : lv === 2
+          ? '- 刚被戳中：先一个括号动作，否认一句，末尾漏半句真心。'
+          : '- 刚被戳中：这一条按「被撩到」演——先甩动作（可以两个），否认一句，最后漏半句真心。',
+    );
   }
 
   if (unresolved.length > 0) {
