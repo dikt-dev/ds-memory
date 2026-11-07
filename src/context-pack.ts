@@ -13,6 +13,7 @@ import { getOrCreateDayContext, type DayContextFile } from './context';
 import { fetchWeather } from './weather';
 import { resolveHerPlace } from './life/where';
 import type { WeatherInfo } from './prompt';
+import { readContextSnapshot, contextSnapshotFresh } from './context-snapshot';
 import { getRecentMemo, formatRecentMemoBlock } from './recent-memory';
 import { getTodaySummary } from './summary';
 import { loadPersonaState, buildPersonaDriftLine, type PersonaState } from './persona-drift';
@@ -44,6 +45,8 @@ export interface MemoryPack {
   todaySummary: string | null;
   personaState: PersonaState;
   personaDrift: string | null;
+  /** 最近几天的话题标题（快照路径才有） */
+  topics?: string;
 }
 
 export interface BuildMemoryPackOptions {
@@ -67,6 +70,30 @@ export async function buildMemoryPack(
   opts: BuildMemoryPackOptions,
 ): Promise<MemoryPack> {
   const dateKey = dateKeyInBeijing(now);
+  // ★ 先试上下文快照：1 次 KV 读换掉 6~7 次跨区往返（2026-11-08）
+  const snap = await readContextSnapshot(env).catch(() => null);
+  if (contextSnapshotFresh(snap, now) && snap) {
+    const promptMemory = buildPromptMemoryFor(snap.memory, env);
+    const recentMemo = snap.memo ?? null;
+    return {
+      memory: snap.memory,
+      dayCtxFile: snap.dayCtx,
+      weather: snap.weather ?? snap.dayCtx?.weather ?? null,
+      ctx: {
+        date: snap.dayCtx?.date ?? dateKey,
+        weekday: snap.dayCtx?.weekday ?? '',
+        is_holiday: Boolean(snap.dayCtx?.is_holiday),
+        holiday_note: snap.dayCtx?.holiday_note ?? '',
+      },
+      promptMemory,
+      recentMemoRaw: null,
+      recentMemo,
+      todaySummary: recentMemo ? null : snap.summary,
+      personaState: snap.personaState,
+      personaDrift: buildPersonaDriftLine(snap.personaState),
+      topics: snap.topics ?? '',
+    } as MemoryPack;
+  }
   // 天气跟着她此刻所在的城市（旅游时是目的地），不是网页端设置的城市
   const herPlace = await resolveHerPlace(env, dateKey).catch(() => null);
   const [memory, dayCtxFile, fetchedWeather, recentMemoRaw, summaryRaw, personaState] =

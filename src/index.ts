@@ -96,6 +96,7 @@ import { getLlmCost } from './llm-cost';
 import { getRecentMemo } from './recent-memory';
 import { CORE_TARGET_BYTES, getArchiveLines } from './memory-archive';
 import { maybeSummarizeToday } from './summary';
+import { ensureContextSnapshot } from './context-snapshot';
 import { maybeRefreshRecentMemo } from './recent-memory';import { normalizeChannel } from './prompt';
 import {
   currentArchetype,
@@ -818,6 +819,7 @@ export default {
       // 日记补写：04:00 那次失败（模型抖动 / 当天日程没生成）就在这里补一次。
       // 只在早上 8 点试，避免一天里反复打模型。
       ctx.waitUntil(catchUpDiary(env, now));
+      ctx.waitUntil(ensureContextSnapshot(env, now).catch(() => false));
       logCron(env, ctx, cron, startedAt);
       return;
     }

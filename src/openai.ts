@@ -362,6 +362,7 @@ openaiApp.post('/chat/completions', async (c) => {
   if (!Array.isArray(rawMessages) || rawMessages.length === 0) {
     return openaiError(c, 400, 'messages 不能为空');
   }
+  const prepT0 = performance.now();
   const clientMessageId =
     typeof body?.client_message_id === 'string' &&
     body.client_message_id.trim().length > 0 &&
@@ -688,7 +689,8 @@ openaiApp.post('/chat/completions', async (c) => {
   const lifeBlocks = await loadLifeBlocks(c.env, now, lastUserCleaned, historyRaw.slice(-6));
   const personaDoc = await loadPersonaDoc(c.env);
   // KV 等待不算 CPU：先把需要 await 的块准备好，再开始打点
-  const topicsBlock = await recentTopicsBlock(c.env, now).catch(() => '');
+  // 快照里带了话题块就直接用，避免再一次 D1 往返
+  const topicsBlock = pack.topics || (await recentTopicsBlock(c.env, now).catch(() => ''));
   const cpuT0 = performance.now();
   const mergedSystem = [
     ...astrbotSystems,
@@ -978,6 +980,7 @@ openaiApp.post('/chat/completions', async (c) => {
     return streamDeepSeek(c.env, upstream, { appendUsageEvent: false, maxTokens, onFinish });
   }
 
+  c.executionCtx.waitUntil(recordCpuSample(c.env, channel, 'prep', performance.now() - prepT0).catch(() => {}));
   const result = await completeDeepSeek(c.env, upstream, now, maxTokens);
   if ('error' in result) return openaiError(c, result.status, result.error);
   const silent =
