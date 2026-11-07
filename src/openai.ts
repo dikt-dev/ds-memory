@@ -590,7 +590,10 @@ openaiApp.post('/chat/completions', async (c) => {
     historyRaw = await loadRecentRounds(c.env, historyRounds, now);
     // 当前这条已经先落库了：历史统计和注入都要把它排除，否则会出现「最近 1 轮」但数组是空的
     if (userMessageId) historyRaw = historyRaw.filter((m) => m.id !== userMessageId);
-    historyNote = [historyRangeNote(historyRaw, now), conversationGapNote(historyRaw, now)]
+    // ★ 同一条链接/内容他又发了一次：明确告诉她「你看过」，否则她会把同一段视频当新的、
+    //   再演一遍「整个人凑到屏幕前」，看起来就像完全不记得刚才聊过（2026-11-07）。
+    const repeatNote = repeatedContentNote(historyRaw, lastUserCleaned, now);
+    historyNote = [repeatNote, historyRangeNote(historyRaw, now), conversationGapNote(historyRaw, now)]
       .filter(Boolean)
       .join('\n');
     historyMessages = historyRaw
@@ -607,8 +610,9 @@ openaiApp.post('/chat/completions', async (c) => {
           m.created_at),
       }));
     // 按轮数之外再加字符预算，防止 50 轮里塞进大段 B 站资料/文件。
+    // 30 轮短句大约 6~9k 字符；原来 7k 的预算会把最早几轮直接挤掉
     const historyBudget =
-      historyRounds >= 50 ? 14_000 : historyRounds >= 30 ? 10_000 : 7_000;
+      historyRounds >= 60 ? 20_000 : historyRounds >= 30 ? 14_000 : 10_000;
     let historyChars = historyMessages.reduce(
       (sum, m) => sum + (typeof m.content === 'string' ? m.content.length : 0),
       0,
@@ -1055,3 +1059,22 @@ openaiApp.post('/chat/completions', async (c) => {
     user_image_keys: imageKeys.length > 0 ? imageKeys : undefined,
   });
 });
+/** 同一条链接/视频他又发了一次？返回一句提醒，让她顺着上次说。 */
+function repeatedContentNote(history: MessageRow[], current: string, now: Date): string | null {
+  const idOf = (text: string): string | null => {
+    const m = text.match(/b23\.tv\/([A-Za-z0-9]+)/) ?? text.match(/(BV[0-9A-Za-z]{10})/);
+    return m ? (m[1] ?? m[0]) : null;
+  };
+  const cur = idOf(current);
+  if (!cur) return null;
+  let at = -1;
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    if (history[i].role === 'user' && history[i].content.includes(cur)) { at = i; break; }
+  }
+  if (at < 0) return null;
+  const prev = history[at];
+  const reply = history.slice(at + 1).find((m) => m.role === 'assistant');
+  const mins = Math.max(1, Math.round((now.getTime() - new Date(prev.created_at).getTime()) / 60_000));
+  const said = reply ? `，你当时回的是「${compactHistoryMessage(reply.content, 40)}」` : '';
+  return `（这条内容他 ${mins} 分钟前发过一次${said}；这次顺着上次往下说，别当成新的再演一遍）`;
+}

@@ -11,9 +11,9 @@ import { addDays, dateKeyInBeijing } from './date';
 import { getObject } from './storage';
 
 /** 默认携带的最近轮数。一轮 = 用户消息 + 它的回复，或一条主动消息。 */
-export const RECENT_ROUNDS = 15;
+export const RECENT_ROUNDS = 30;
 /** 单次请求的硬上限；只有明确“接着刚才/前面”才取 50。 */
-export const MAX_RECENT_ROUNDS = 60;
+export const MAX_RECENT_ROUNDS = 120;
 /** 主动消息不需要占用聊天级的长历史。 */
 export const PROACTIVE_RECENT_ROUNDS = 10;
 
@@ -40,22 +40,22 @@ export function conversationGapNote(history: MessageRow[], now: Date): string {
 
 /**
  * 自适应短期记忆：
- * - 默认 15 轮；
- * - 明确指代前文（“接着刚才/前面那个”）→ 50 轮；
- * - 长技术/项目/调试类消息 → 30 轮。
+ * - 默认 30 轮：15 轮只够覆盖半小时内的短句往来，「刚聊过的」常常已经掉出窗口（2026-11-07）
+ * - 明确指代前文（“接着刚才/前面那个”）→ 60 轮；
+ * - 长技术/项目/调试类消息 → 60 轮。
  */
 export function resolveRecentRounds(text: string): number {
   const t = (text || '').trim();
   if (/(接着刚才|继续刚才|接着前面|继续前面|前面那个|上一条|回到刚才|接着上面|继续上面)/.test(t)) {
-    return 50;
+    return 60;
   }
   if (
     t.length > 80 ||
     /(代码|报错|debug|bug|调试|项目|实现|修复|部署|日志|函数|接口|数据库|记忆|归档)/i.test(t)
   ) {
-    return 30;
+    return 60;
   }
-  return 15;
+  return RECENT_ROUNDS;
 }
 
 const compareMessages = (a: MessageRow, b: MessageRow) =>
