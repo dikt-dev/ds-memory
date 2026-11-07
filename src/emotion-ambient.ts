@@ -17,6 +17,8 @@ import type { EmotionVector } from './emotion-vector';
 export interface Ambient {
   /** 这个时段的唤醒度基线 */
   arousal: number;
+  hour: number;
+  weather: string | null;
   /** 对好心情的偏移（小幅度，只影响观感） */
   valence: number;
   /** 一句话说明，排查时看 */
@@ -59,7 +61,7 @@ export function ambientFrom(input: {
   }
   arousal = Math.min(Math.max(Math.round(arousal), 5), 30);
   valence = Math.min(Math.max(Math.round(valence), -8), 8);
-  return { arousal, valence, note: `${hour}点/${weather ?? '-'}/mood${mood.toFixed(2)}` };
+  return { arousal, valence, hour, weather: weather ?? null, note: `${hour}点/${weather ?? '-'}/mood${mood.toFixed(2)}` };
 }
 
 /** 读当天的天气与心情种子；读不到就按默认算。 */
@@ -79,4 +81,17 @@ export function withAmbient(vector: EmotionVector, ambient: Ambient): EmotionVec
     arousal: Math.max(vector.arousal, ambient.arousal),
     valence: Math.min(Math.max(vector.valence + ambient.valence, -100), 100),
   };
+}
+
+/** 一句话描述这个时段的底色（进快照，给他看的） */
+export function describeAmbient(ambient: Ambient): string {
+  const h = ambient.hour;
+  const when = h >= 5 && h < 9 ? '早上' : h >= 9 && h < 12 ? '上午' : h >= 12 && h < 14 ? '中午'
+    : h >= 14 && h < 18 ? '下午' : h >= 18 && h < 22 ? '晚上' : '深夜';
+  const energy = ambient.arousal >= 24 ? '精神头挺足' : ambient.arousal >= 18 ? '还算有精神'
+    : ambient.arousal >= 12 ? '有点懒' : '困劲儿上来了';
+  const w = (ambient.weather ?? '').toLowerCase();
+  const mood = w.includes('sun') ? '，外面太阳不错' : w.includes('rain') ? '，外面在下雨'
+    : w.includes('snow') ? '，外面下雪' : w.includes('cloud') ? '，天有点阴' : '';
+  return `${when}这会儿${energy}${mood}`;
 }

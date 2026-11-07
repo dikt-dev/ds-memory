@@ -29,6 +29,8 @@ export interface EmotionSnapshotInput {
   now: number;
   /** 主动消息被冷落时，额外加一句小情绪 */
   wasIgnored?: boolean;
+  /** 白天底色（时间/天气/当天心情），只影响描述 */
+  ambient?: { arousal: number; valence: number; hour: number; weather: string | null; note: string } | null;
 }
 
 /** 某个情绪维度是被哪类事件挑起来的（用于「因为…」）。 */
@@ -107,6 +109,18 @@ export function buildEmotionSnapshot(input: EmotionSnapshotInput): string {
       parts.push(reason ? `${word}（因为「${reason}」）` : word);
     }
     lines.push(`- 当下：${parts.join('，')}`);
+  }
+
+  if (input.ambient) {
+    const h = input.ambient.hour;
+    const when = h >= 5 && h < 9 ? '早上' : h >= 9 && h < 12 ? '上午' : h >= 12 && h < 14 ? '中午'
+      : h >= 14 && h < 18 ? '下午' : h >= 18 && h < 22 ? '晚上' : '深夜';
+    const energy = input.ambient.arousal >= 24 ? '精神头挺足' : input.ambient.arousal >= 18 ? '还算有精神'
+      : input.ambient.arousal >= 12 ? '有点懒' : '困劲儿上来了';
+    const w = (input.ambient.weather ?? '').toLowerCase();
+    const mood = w.includes('sun') ? '，外面太阳不错' : w.includes('rain') ? '，外面在下雨'
+      : w.includes('snow') ? '，外面下雪' : w.includes('cloud') ? '，天有点阴' : '';
+    lines.push(`- 这会儿：${when}${energy}${mood}`);
   }
 
   if (unresolved.length > 0) {

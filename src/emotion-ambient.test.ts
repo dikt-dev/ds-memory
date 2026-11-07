@@ -25,7 +25,7 @@ describe('白天的底色', () => {
 
   it('叠加只抬不压：已有的高唤醒不会被盖掉', () => {
     const base = { valence: 10, arousal: 60, dominance: 0, attachment: 0, jealousy: 0, grievance: 0, shyness: 0, fatigue: 0 };
-    const out = withAmbient(base, { arousal: 20, valence: 3, note: '' });
+    const out = withAmbient(base, { arousal: 20, valence: 3, hour: 15, weather: 'cloudy', note: '' });
     expect(out.arousal).toBe(60);
     expect(out.valence).toBe(13);
   });

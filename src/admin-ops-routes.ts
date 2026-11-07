@@ -62,6 +62,7 @@ import { analyzeMood } from './mood';
 import { mergeMood, needsAiVerification, verifyMoodWithAI } from './mood-ai';
 import { currentArchetype, effectiveFacets, facetsOf, listOpenGrievances, loadEmotionState, processEmotionTurn, resetEmotionState, simulateEmotion } from './emotion-context';
 import { buildEmotionSnapshot, describeEmotionState } from './emotion-snapshot';
+import { readAmbient } from './emotion-ambient';
 import { explainAttitude } from './attitude-policy';
 import { listAffectTimeline, recordAttitudeSnapshot } from './affect-store';
 import { readPathStats, readRecentRequests } from './request-log';
@@ -439,7 +440,13 @@ app.get('/api/admin/relation', requireAuth, async (c) => {
       evidence: e.evidence,
       at: e.at,
     })),
-    snapshot: buildEmotionSnapshot({ facets, vector: state.vector, events: state.events, now }),
+    snapshot: buildEmotionSnapshot({
+      facets,
+      vector: state.vector,
+      events: state.events,
+      now,
+      ambient: await readAmbient(c.env, new Date(now)).catch(() => null),
+    }),
     affect_engine: c.env.AFFECT_ENGINE ?? 'legacy',
     policy: explainAttitude({
       facets,

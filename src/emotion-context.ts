@@ -339,6 +339,7 @@ async function processEmotionTurnUnlocked(
       events: nextState.events,
       now,
       wasIgnored,
+      ambient,
     }),
   };
 }
