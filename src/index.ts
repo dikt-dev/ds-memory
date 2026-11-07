@@ -97,6 +97,7 @@ import { getRecentMemo } from './recent-memory';
 import { CORE_TARGET_BYTES, getArchiveLines } from './memory-archive';
 import { maybeSummarizeToday } from './summary';
 import { ensureContextSnapshot } from './context-snapshot';
+import { incrementalDistill } from './incremental-distill';
 import { maybeRefreshRecentMemo } from './recent-memory';import { normalizeChannel } from './prompt';
 import {
   currentArchetype,
@@ -820,6 +821,8 @@ export default {
       // 只在早上 8 点试，避免一天里反复打模型。
       ctx.waitUntil(catchUpDiary(env, now));
       ctx.waitUntil(ensureContextSnapshot(env, now).catch(() => false));
+      // 增量提炼：今晚聊的今晚进记忆，不用等次日 04:00（30 分钟一次）
+      ctx.waitUntil(incrementalDistill(env, now).catch(() => ({ ok: false })));
       logCron(env, ctx, cron, startedAt);
       return;
     }

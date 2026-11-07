@@ -64,6 +64,8 @@ import { currentArchetype, effectiveFacets, facetsOf, listOpenGrievances, loadEm
 import { buildEmotionSnapshot, describeEmotionState } from './emotion-snapshot';
 import { readAmbient } from './emotion-ambient';
 import { ensureDayTopics } from './topics';
+import { incrementalDistill } from './incremental-distill';
+import { getRuntimeState } from './runtime-store';
 import { refreshChunksCache } from './memory-context-store';
 import { readContextSnapshot, rebuildContextSnapshot, ensureContextSnapshot } from './context-snapshot';
 import { explainAttitude } from './attitude-policy';
@@ -418,6 +420,13 @@ app.post('/api/admin/test-mood', requireAuth, async (c) => {
     model: c.env.DISTILL_MODEL,
     final: merged,
   });
+});
+
+/** 手动跑一次增量提炼（排查/验证用）。 */
+app.post('/api/admin/distill/incremental', requireAuth, async (c) => {
+  const r = await incrementalDistill(c.env, new Date());
+  const cursor = await getRuntimeState(c.env, 'distill:inc:cursor').catch(() => null);
+  return c.json({ ...r, cursor });
 });
 
 /** 立即预热召回/上下文缓存（部署后调用）。 */
