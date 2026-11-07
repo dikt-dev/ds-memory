@@ -71,12 +71,12 @@ export function emotionDirectorText(vector: EmotionVector): string[] {
   const tips: string[] = [];
   if (vector.grievance >= 35) tips.push('先别急着说「没关系」，可以闹一句再慢慢释怀');
   else if (vector.grievance >= 15) tips.push('心里还有点小疙瘩，语气可以淡一点');
-  if (vector.shyness >= 30) tips.push('有点害羞，别把话说得太直白');
-  if (vector.jealousy >= 30) tips.push('可以酸一句，但别真的审问');
-  if (vector.attachment >= 40) tips.push('有点想黏人，可以主动找他说话');
+  if (vector.shyness >= 10) tips.push('被戳中了：先乱半拍（心跳、呆毛、语气软），再嘴硬');
+  if (vector.jealousy >= 15) tips.push('可以酸一句，但别真的审问');
+  if (vector.attachment >= 25) tips.push('有点想黏人，可以主动找他说话');
   if (vector.fatigue >= 45) tips.push('累了，可以顺势催他休息');
-  if (vector.valence >= 40 && vector.grievance < 20) tips.push('心情不错，可以多接一句话、多笑一下');
-  if (vector.valence <= -40) tips.push('提不起劲，别硬撑热情，安静一点也可以');
+  if (vector.valence >= 25 && vector.grievance < 20) tips.push('心情不错，可以多接一句话、多笑一下');
+  if (vector.valence <= -25) tips.push('提不起劲，别硬撑热情，安静一点也可以');
   return tips.slice(0, 2);
 }
 
@@ -85,7 +85,9 @@ export function emotionDirectorText(vector: EmotionVector): string[] {
  */
 export function buildEmotionSnapshot(input: EmotionSnapshotInput): string {
   const { facets, vector, events, now, wasIgnored } = input;
-  const dominant = dominantEmotions(vector, 10, 2);
+  // 有「害羞 / 吃醋」这种需要被看见的信号时多列一条，否则她们永远排不进前二
+  const dominantCount = vector.shyness >= 10 || vector.jealousy >= 10 ? 3 : 2;
+  const dominant = dominantEmotions(vector, 10, dominantCount);
   const grievance = Math.max(0, vector.grievance);
   const archetype = relationArchetype(facets, grievance);
   const unresolved = unresolvedEvents(events, now, 7 * 86400_000, 3);
@@ -121,6 +123,14 @@ export function buildEmotionSnapshot(input: EmotionSnapshotInput): string {
     const mood = w.includes('sun') ? '，外面太阳不错' : w.includes('rain') ? '，外面在下雨'
       : w.includes('snow') ? '，外面下雪' : w.includes('cloud') ? '，天有点阴' : '';
     lines.push(`- 这会儿：${when}${energy}${mood}`);
+  }
+
+  // 刚被撩/被夸：明确要求「先乱半拍」，否则她会顺着逻辑回一句漂亮的吐槽
+  const justTouched = events
+    .filter((e) => (e.type === 'affection' || e.type === 'praise') && now - e.at <= 10 * 60_000)
+    .sort((a, b) => b.at - a.at)[0];
+  if (justTouched) {
+    lines.push('- 刚被戳中：他刚才那句话让你心跳快了一下，先有反应（呆毛/尾巴/语气乱），再嘴硬');
   }
 
   if (unresolved.length > 0) {

@@ -108,7 +108,7 @@ const RULES: Rule[] = [
   },
   {
     type: 'affection',
-    intensity: 2,
+    intensity: 3,
     target: 'ai',
     words: ['想你', '喜欢你', '爱你', '抱抱', '亲亲', '陪我', '别走', '在等你'],
   },
@@ -150,7 +150,7 @@ const RULES: Rule[] = [
   },
   {
     type: 'tease',
-    intensity: 1,
+    intensity: 2,
     target: 'ai',
     words: ['哈哈哈', '笑死', '笨蛋', '笨死了', '傻子', '嫌弃你', '嫌弃', '小笨蛋'],
   },
