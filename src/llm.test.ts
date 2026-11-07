@@ -43,9 +43,13 @@ describe('llm 统一入口', () => {
     expect(fallback.apiKey).toBe('dk');
   });
 
-  it('没配兜底就只有一段；撞成同一家时也不重复', () => {
-    expect(llmTargets(base, 'chat')).toHaveLength(1);
-    const same = { ...base, LLM_PROVIDER: 'deepseek', LLM_FALLBACK_PROVIDER: 'deepseek' };
+  it('没配兜底时自动切另一家；撞成同一家时也不重复', () => {
+    // 2026-11-07：官方 DeepSeek 抖动，写死一家的兜底等于没有兜底，
+    // 现在默认跨厂商：官方→千问同款，千问→官方 flash。
+    const [primary, fallback] = llmTargets(base, 'chat');
+    expect(primary).toMatchObject({ vendor: 'deepseek' });
+    expect(fallback).toMatchObject({ vendor: 'dashscope', fallback: true });
+    const same = { ...base, LLM_PROVIDER: 'deepseek', LLM_FALLBACK_PROVIDER: 'deepseek', LLM_FALLBACK_MODEL: 'deepseek-flash' };
     expect(fallbackLlm(same, 'chat')).toBeNull();
   });
 

@@ -115,14 +115,19 @@ export function resolveLlm(env: LlmEnv, kind: LlmKind = 'chat', model?: string):
  * 和主目标撞成同一个地址+模型时返回 null，免得白重试一次。
  */
 export function fallbackLlm(env: LlmEnv, kind: LlmKind): LlmTarget | null {
-  const vendorRaw = str(env.LLM_FALLBACK_PROVIDER);
-  if (!vendorRaw) return null;
-  const vendor = toVendor(vendorRaw);
+  const primary = resolveLlm(env, kind);
+  // ★ 默认走「另一家」而不是写死某一家（2026-11-07 官方 DeepSeek 抖动）：
+  //   写死 deepseek 时，主用官方的那几条（对话/日记）根本没有兜底——
+  //   官方一抖就直接失败，只能干等它恢复。
+  const explicitVendor = str(env.LLM_FALLBACK_PROVIDER);
+  const vendor: LlmVendor = explicitVendor ? toVendor(explicitVendor) : primary.vendor === 'dashscope' ? 'deepseek' : 'dashscope';
   const url = str(env.LLM_FALLBACK_BASE_URL) ?? (vendor === 'dashscope' ? DASHSCOPE_URL : DEEPSEEK_URL);
   const apiKey = str(env.LLM_FALLBACK_API_KEY) ?? keyFor(vendor, env);
-  const model = str(env.LLM_FALLBACK_MODEL) ?? defaultModel(env, kind);
+  // 没显式配模型时：千问侧用同名的 deepseek-v4.1-flash-1017，官方侧用 deepseek-flash
+  const model =
+    str(env.LLM_FALLBACK_MODEL) ??
+    (vendor === 'dashscope' ? 'deepseek-v4.1-flash-1017' : 'deepseek-flash');
   if (!apiKey || !model) return null;
-  const primary = resolveLlm(env, kind);
   if (primary.url === url && primary.model === model) return null;
   return { vendor, url, apiKey, model, fallback: true };
 }
