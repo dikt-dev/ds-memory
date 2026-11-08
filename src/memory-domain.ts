@@ -428,6 +428,15 @@ export function subjectFactor(chunkSubject: string | null | undefined, bias: 'hi
   return opposite ? 0.7 : 1;
 }
 
+/**
+ * 问"那个视频/番"时，带作品名（《》）或写着视频二创的条目更容易是目标；
+ * 纯规则加权，避免同名多条被随便挑一条（2026-11-08 探针第 1 题）。
+ */
+export function mediaFactor(query: string, content: string): number {
+  if (!/视频|片子|番|电影|二创|直播/.test(query)) return 1;
+  return /《|二创|视频/.test(content) ? 1.15 : 1;
+}
+
 export interface RankOptions {
   /** 子阶段耗时回调（排查用） */
   onStage?: (name: string, ms: number) => void;
@@ -633,7 +642,8 @@ export function rankMemoryChunks(
         recallDecay(chunk) *
         importanceFactor(chunk.importance) *
         (chunk.pinned ? PINNED_RECALL_BOOST : 1) *
-        subjectFactor(chunk.subject, options.subjectBias),
+        subjectFactor(chunk.subject, options.subjectBias) *
+        mediaFactor(q, chunk.content),
     }))
     .filter((x) => x.score > 0)
     .sort(
