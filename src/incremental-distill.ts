@@ -16,6 +16,17 @@ import { mergeMemoryEntry } from './memory-maintenance';
 import { refreshChunksCacheFromMemory } from './memory-context-store';
 import { getRuntimeState, putRuntimeState } from './runtime-store';
 import { logError } from './error-log';
+import { collapseOngoing } from './memory-ongoing';
+import { crossSectionPass } from './memory-compact';
+
+/** 增量写入前的就地折叠：并掉同实体的多版本、跨分区去重、补锚点。全部纯函数。 */
+function compactIncremental(memory: string): string {
+  try {
+    return crossSectionPass(collapseOngoing(memory).text).text;
+  } catch {
+    return memory;
+  }
+}
 
 export const INC_CURSOR_KEY = 'distill:inc:cursor';
 export const INC_LAST_RUN_KEY = 'distill:inc:at';
@@ -72,13 +83,17 @@ export async function incrementalDistill(env: Env, now: Date = new Date()): Prom
     let added = 0;
     if (text) {
       const merged = mergeMemoryEntry(memory, text, dateKey, {});
-      if (merged !== memory) {
-        const saved = await putMemory(env, merged).catch(() => false);
+      // ★ 增量写入时顺手做一次折叠/去重（纯 JS，几毫秒）：
+      //   白天每 30 分钟就会写一次记忆，如果只在次日凌晨折叠，
+      //   同一件事的多版本会在当天一直存在（2026-11-08 实测 5 个版本）。
+      const folded = compactIncremental(merged);
+      if (folded !== memory) {
+        const saved = await putMemory(env, folded).catch(() => false);
         if (saved) {
           added = 1;
           // ★ 只重建召回缓存，不跑全量 reindex：reindex 会给所有条目重算向量（实测 145s），
           //   而增量只需要新条目进召回；新条目 vec 留空也能被关键词召回命中。
-          await refreshChunksCacheFromMemory(env, merged).catch((e: unknown) =>
+          await refreshChunksCacheFromMemory(env, folded).catch((e: unknown) =>
             logError('[inc-distill] chunk cache failed:', e),
           );
         }

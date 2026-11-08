@@ -431,6 +431,10 @@ function reassemble(pre: string, sections: Section[]): string {
 function normalizeForCompare(s: string): string {
   return s
     .toLowerCase()
+    // ★ 去掉条目锚点【黑化视频】：锚点是给人看的索引，不是内容。
+    //   不去掉的话，带锚点的旧行和新提炼出来的同一条会被判成「几乎一样」，
+    //   于是「新内容更长就替换」那条规则永远不触发，条目会卡在旧版本上（2026-11-08）。
+    .replace(/【[^】]{1,12}】/g, '')
     .replace(/[\s\u3000]+/g, '')
     .replace(/[，。、；：！？,.;:!?"'“”‘’（）()【】\[\]]/g, '');
 }

@@ -583,3 +583,26 @@ describe('demoteSectionToBudget', () => {
     expect(slimMemoryForPrompt(text)).not.toContain('- 关系：');
   });
 });
+
+describe('锚点不参与去重比较', () => {
+  const WITH_ANCHOR = `# 长期记忆
+
+## 共同经历
+- [26-11-07] 【黑化视频】他发黑化视频，修 bug 重发。
+`;
+
+  it('带锚点的旧行不会被新提炼的同一条重复追加', () => {
+    const distilled = `## 共同经历
+- [26-11-08] 他发黑化视频，修 bug 重发。`;
+    const out = mergeMemoryEntry(WITH_ANCHOR, distilled, '26-11-08');
+    const lines = out.split('\n').filter((l) => l.includes('黑化视频'));
+    expect(lines).toHaveLength(1);
+  });
+
+  it('新版本信息更多时仍然会替换掉旧行（锚点不该把更新挡住）', () => {
+    const distilled = `## 共同经历
+- [26-11-08] 他发黑化视频，修 bug 重发，结尾那句「因为我们是朋友」把你看哭了。`;
+    const out = mergeMemoryEntry(WITH_ANCHOR, distilled, '26-11-08');
+    expect(out).toContain('因为我们是朋友');
+  });
+});
