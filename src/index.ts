@@ -218,9 +218,12 @@ app.get('/api/health', async (c) => {
     checks.r2 = 'unavailable';
   }
   checks.ai = 'bound';
+  // 维护窗口：记忆正在被重写（折叠/归档）。评估脚本看到 maintenance=true 要等一等，
+  // 否则会量到一个「正在被改写的记忆」（2026-11-08 实测过一次 5/10 的假结论）。
+  const maintenance = (await c.env.KV.get('maintenance:running').catch(() => null)) === '1';
   // ★ 配置明细不对外：哪些 Key 配了、用的是哪个存储、节假日表有没有缺，
   //   这些是给运维看的，公开等于把家底摊给扫端口的人。见 /api/admin/health。
-  return c.json({ status: 'ok', time: isoInBeijing(), checks });
+  return c.json({ status: 'ok', time: isoInBeijing(), checks, maintenance });
 });
 
 /** 配置体检（仅管理员）：公开的健康检查只报"活着"，细节在这里。 */

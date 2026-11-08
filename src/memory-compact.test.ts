@@ -6,7 +6,9 @@ import {
   entryDate,
   foldClusters,
   mergeDetail,
+  anchorEntries,
   constitutionBlocks,
+  entryTitle,
   coveredBy,
   crossSectionPass,
   sameEvent,
@@ -194,5 +196,27 @@ describe('coveredBy：带独有信息的行不许删', () => {
   });
   it('重合不到 8 字 → false', () => {
     expect(coveredBy('杭州下毛毛雨', '他发二创视频')).toBe(false);
+  });
+});
+
+describe('anchorEntries：给事件加一句话锚点', () => {
+  it('标题取句首到第一个标点，去掉主语', () => {
+    expect(entryTitle('- [26-11-07] 他发黑化 Claude vs 大肥鱼视频，修 bug 重发')).toBe('发黑化 Clau');
+    expect(entryTitle('- [26-11-07] 很短')).toBe('');
+  });
+  it('加在日期后面，已有【】的不重复加', () => {
+    const r = anchorEntries(['- [26-11-07] 他发黑化视频，修 bug 重发', '- [26-11-08] 【已有锚点】内容']);
+    expect(r.lines[0]).toMatch(/^- \[26-11-07\] 【.+】他发黑化视频/);
+    expect(r.lines[1]).toBe('- [26-11-08] 【已有锚点】内容');
+    expect(r.anchored).toBe(1);
+  });
+  it('非条目行原样保留', () => {
+    const r = anchorEntries(['<!-- 注释 -->', '']);
+    expect(r.anchored).toBe(0);
+  });
+  it('跑两次不会叠加（幂等）', () => {
+    const once = anchorEntries(['- [26-11-07] 他发黑化视频，修 bug 重发']).lines;
+    const twice = anchorEntries(once).lines;
+    expect(twice[0]).toBe(once[0]);
   });
 });

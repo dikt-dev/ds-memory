@@ -24,6 +24,8 @@ export interface CompactOutcome {
 }
 
 export async function compactMemoryCrossSection(env: Env): Promise<CompactOutcome> {
+  // 直接调用（04:00 链路或管理端）时也要打维护标记，评估脚本同样会等。
+  await env.KV.put('maintenance:running', '1', { expirationTtl: 180 }).catch(() => {});
   if ((env.MEMORY_COMPACT ?? '').toLowerCase() === 'off') {
     return { removed: 0, promiseDuplicates: 0, recentDuplicates: 0, beforeBytes: 0, afterBytes: 0, skipped: 'off' };
   }
@@ -67,6 +69,7 @@ export async function compactMemoryCrossSection(env: Env): Promise<CompactOutcom
   }, Date.now()).catch(() => {});
   // 派生数据跟着重建（chunk 缓存 / facts / events）：别的记忆写入都走这一步
   await replaceMemoryContext(env, result.text, 'legacy').catch(() => null);
+  await env.KV.delete('maintenance:running').catch(() => {});
   return {
     removed: result.removed.length,
     promiseDuplicates: result.promiseDuplicates,
@@ -95,6 +98,9 @@ export async function maybeCompactMemoryOnceDaily(
   const marker = MARKER_PREFIX + day;
   const done = await env.KV.get(marker).catch(() => null);
   if (done) return null;
+  // 维护窗口标记：/api/health 会报 maintenance=true，评估脚本据此等待，
+  // 免得量到「记忆正在被改写」的中间态（TTL 兜底，异常也不会永久卡住）。
+  await env.KV.put('maintenance:running', '1', { expirationTtl: 180 }).catch(() => {});
   // 先把「进行中的事」里的同实体多版本并掉（原来只在 04:00 跑，一条链路失败就拖一天），
   // 再做跨分区去重：顺序反了会把刚并掉的行又当成重复删一遍。
   await collapseOngoingItems(env).catch(() => null);
@@ -103,5 +109,6 @@ export async function maybeCompactMemoryOnceDaily(
   if (!out.skipped || out.skipped === 'unchanged') {
     await env.KV.put(marker, String(Date.now()), { expirationTtl: 3 * 24 * 3600 }).catch(() => {});
   }
+  await env.KV.delete('maintenance:running').catch(() => {});
   return out;
 }

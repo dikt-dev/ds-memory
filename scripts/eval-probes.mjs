@@ -24,7 +24,7 @@ const PROBES = [
   ['anxiety', '我最近在焦虑什么'],
   ['gift', '我说过要送你什么'],
   ['promise', '你答应过我什么'],
-  ['video_3d', '三天前那个视频讲了什么'],
+  ['video_3d', '你之前看的那个黑化视频，里面讲了什么'],
 ];
 
 if (!APP_TOKEN || !ADMIN_TOKEN) {
@@ -64,6 +64,27 @@ async function ask(question) {
   }
   return '';
 }
+
+
+// 维护窗口等待：记忆正在被重写时不要评估（会量到中间态，2026-11-08 踩过）。
+async function waitForIdle(maxTries = 10) {
+  for (let i = 0; i < maxTries; i += 1) {
+    try {
+      const res = await fetch(BASE_URL + '/api/health');
+      const data = await res.json();
+      if (!data || data.maintenance !== true) return true;
+      console.warn('  ~ 记忆维护中（maintenance=true），等 30 秒');
+    } catch {
+      // 健康检查都失败就不折腾了，继续跑
+      return false;
+    }
+    await sleep(30000);
+  }
+  console.warn('  ~ 维护窗口一直没结束，仍然继续（结果可能偏低）');
+  return false;
+}
+
+await waitForIdle();
 
 const answers = [];
 for (const [id, q] of PROBES) {

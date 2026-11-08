@@ -427,6 +427,12 @@ export function crossSectionPass(memory: string): CrossSectionResult {
     });
   }
 
+  // 规则 3：事件条目加锚点（【黑化视频】…），给她一个检索词
+  for (const sec of [shared, recent]) {
+    if (!sec) continue;
+    sec.lines = anchorEntries(sec.lines).lines;
+  }
+
   return {
     text: joinRawSections(pre, sections),
     removed,
@@ -442,3 +448,36 @@ export function constitutionBlocks(memory: string): string[] {
     .filter((s) => CONSTITUTION_SECTIONS.includes(s.name))
     .map((s) => s.lines.join('\n').replace(/\s+/g, ''));
 }
+
+/** 条目标题：句首到第一个标点，去掉主语代词，截到 8 字。 */
+export function entryTitle(line: string, maxChars = 8): string {
+  const core = entryCore(line);
+  let head = core.split(/[：:，,。；;、]/)[0].trim();
+  head = head.replace(/^(他|你|我|又|还|就|说|问)+/, '').trim();
+  if (head.length < 3) return '';
+  return head.length > maxChars ? head.slice(0, maxChars) : head;
+}
+
+/**
+ * 给事件条目加一行「锚点」：【黑化视频】他发…
+ *
+ * 为什么需要：事实（铁链 / 荆棘冠）埋在一句 60 字的流水里，被问到「那个视频」时
+ * 她不会主动去翻。前面挂 4~8 字标题，等于给她一个索引词（2026-11-08）。
+ *
+ * 已带【】的不重复加；标题取不出来（太短）就跳过。
+ */
+export function anchorEntries(lines: string[]): { lines: string[]; anchored: number } {
+  let anchored = 0;
+  const out = lines.map((line) => {
+    if (!/^- \[/.test(line.trim())) return line;
+    if (line.indexOf('【') >= 0) return line;
+    const title = entryTitle(line);
+    if (!title) return line;
+    const m = /^(- \[\d{2,4}-\d{2}-\d{2}\]\s*)(.*)$/.exec(line.trim());
+    if (!m) return line;
+    anchored += 1;
+    return m[1] + '【' + title + '】' + m[2];
+  });
+  return { lines: out, anchored };
+}
+
