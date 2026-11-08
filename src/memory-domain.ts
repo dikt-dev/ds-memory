@@ -437,6 +437,20 @@ export function mediaFactor(query: string, content: string): number {
   return /《|二创|视频/.test(content) ? 1.15 : 1;
 }
 
+/**
+ * 问法和分区对齐时的加权。
+ *
+ * - 问「外号/称呼/叫我什么」→ 「称呼与关系」分区更重要；
+ * - 问「为什么不高兴/生气/难受」→ 「近期动态」里的情绪事件更相关。
+ * 纯规则，避免这些高频问法被别的同词条目挤掉（2026-11-08 探针第 3、6 题）。
+ */
+export function intentFactor(query: string, section: string): number {
+  const q = query || '';
+  if (/外号|称呼|叫我|喊我|叫什么/.test(q) && /称呼|关系/.test(section)) return 1.3;
+  if (/不高兴|生气|难受|烦|委屈|难过|情绪|心情/.test(q) && /近期动态|共同经历/.test(section)) return 1.25;
+  return 1;
+}
+
 export interface RankOptions {
   /** 子阶段耗时回调（排查用） */
   onStage?: (name: string, ms: number) => void;
@@ -643,7 +657,8 @@ export function rankMemoryChunks(
         importanceFactor(chunk.importance) *
         (chunk.pinned ? PINNED_RECALL_BOOST : 1) *
         subjectFactor(chunk.subject, options.subjectBias) *
-        mediaFactor(q, chunk.content),
+        mediaFactor(q, chunk.content) *
+        intentFactor(q, chunk.section),
     }))
     .filter((x) => x.score > 0)
     .sort(

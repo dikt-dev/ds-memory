@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { querySubjectBias, subjectFactor, rankMemoryChunks, type MemoryChunk } from './memory-domain';
+import { intentFactor, querySubjectBias, subjectFactor, rankMemoryChunks, type MemoryChunk } from './memory-domain';
 
 const chunk = (id: string, content: string, subject: string | null): MemoryChunk => ({
   id,
@@ -58,5 +58,19 @@ describe('rankMemoryChunks 按主体偏置', () => {
     ];
     const picked = rankMemoryChunks('项目', chunks, 2);
     expect(picked.length).toBe(2);
+  });
+});
+
+describe('intentFactor —— 问法和分区对齐', () => {
+  it('问外号 → 称呼分区加权', () => {
+    expect(intentFactor('我叫你什么外号', '称呼与关系')).toBeGreaterThan(1);
+    expect(intentFactor('我叫你什么外号', '关于他')).toBe(1);
+  });
+  it('问情绪 → 近期动态加权', () => {
+    expect(intentFactor('昨天为什么不高兴', '近期动态')).toBeGreaterThan(1);
+    expect(intentFactor('昨天为什么不高兴', '关于他')).toBe(1);
+  });
+  it('无关问法不加权', () => {
+    expect(intentFactor('今天吃什么', '近期动态')).toBe(1);
   });
 });
