@@ -158,10 +158,15 @@ export function collapseOngoing(text: string, opts: { maxRemove?: number } = {})
       return statusRank(entries[b]) - statusRank(entries[a]);
     });
     const keep = sorted[0];
+    const keepDate = lineDate(entries[keep]);
     for (const i of list) {
       if (i === keep) continue;
-      // 已经标了 [已完成] 的旧行不删：它是结论，留着比删掉安全
-      if (/\[已完成\]/.test(entries[i])) continue;
+      // [已完成] 是结论，不能被「更旧的状态行」盖掉——只有保留条确实更新时才允许删它。
+      // 实测场景：
+      //   [26-11-06] [已完成] 他填完转正自评表，自打满分
+      //   [26-11-08] [进行中] 他的转正流程：已经交自评表（自己打满分），等结果
+      // 后一条已经把前一条说全了，两条并存的代价是「她被问项目时反问两个项目」（2026-11-08）。
+      if (/\[已完成\]/.test(entries[i]) && !(keepDate > lineDate(entries[i]))) continue;
       drop.add(i);
     }
     // 不把旧版本的细节拼回保留条：进行中的事本来就是「状态」，

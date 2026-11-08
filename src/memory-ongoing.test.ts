@@ -59,3 +59,30 @@ describe('合并过期状态行', () => {
     expect(twice.removed).toEqual([]);
   });
 });
+
+describe('已完成的旧行：被更新行覆盖时才允许删', () => {
+  const DOC2 = [
+    '# 长期记忆',
+    '',
+    '## 进行中的事',
+    '',
+    '- [26-11-06] [已完成] 他填完转正自评表，自打满分',
+    '- [26-11-08] [进行中] 他的转正流程：已经交自评表（自己打满分），等结果',
+    '',
+    '## 共同经历',
+    '',
+  ].join('\n');
+
+  it('新版本已把旧内容说全 → 删掉旧的已完成行', () => {
+    const { text, removed } = collapseOngoing(DOC2);
+    expect(removed).toHaveLength(1);
+    expect(text).toContain('他的转正流程');
+    expect(text).not.toContain('他填完转正自评表');
+  });
+
+  it('结论比更新行更晚时，保留结论（不让旧状态盖掉它）', () => {
+    const doc = DOC2.replace('[26-11-06] [已完成]', '[26-11-09] [已完成]');
+    const { text } = collapseOngoing(doc);
+    expect(text).toContain('他填完转正自评表');
+  });
+});
