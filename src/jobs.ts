@@ -652,14 +652,14 @@ export async function archiveOneDay(
     } else if (saved) {
       logInfo('[daily] memory 未变化，跳过索引重建');
     }
-    // Phase 2：同步 Memory Context（facts/events/chunks）；表未迁移时只记录，不影响归档。
+    // 只重建召回真正用的 chunk 缓存。facts/events 自 2026-11-08 起停止自动维护：
+    // 它们没有提示词消费者（只在 stats 与手动投影里用），每晚重算等于维护一份过期数据。
+    // 需要时手动：POST /api/admin/memory/rebuild-context。
     if (saved && memoryChanged) try {
-      const ctx = await replaceMemoryContext(env, memory, 'memory');
-      logInfo(
-        `[daily] memory context：facts=${ctx.facts} events=${ctx.events} chunks=${ctx.chunks}`,
-      );
+      const chunks = await refreshChunksCache(env, memory);
+      logInfo(`[daily] chunks：${chunks} 条`);
     } catch (e) {
-      logError('[daily] memory context sync failed:', e);
+      logError('[daily] chunk cache refresh failed:', e);
     }
     // 时间金字塔：周一滚上周摘要、每月 1 日滚上月摘要（幂等，失败不影响归档）
     try {
@@ -694,13 +694,9 @@ export async function archiveOneDay(
         return 0;
       });
       if (embedded > 0) logInfo(`[daily] embedding fallback：${embedded} 条`);
-      // ADR-001 S12：每晚重建给人看的 facts.md（只读投影，不进提示词）。
-      try {
-        const doc = await rebuildFactsDoc(env, dateKeyInBeijing(now));
-        logInfo(`[daily] facts.md：${doc.facts} 条 / ${doc.bytes} 字节`);
-      } catch (e) {
-        logError('[daily] facts.md rebuild failed:', e);
-      }
+      // facts.md 停止自动重建（2026-11-08）：它是给人看的白皮书，代码里没有读取者。
+      // 需要时手动：POST /api/admin/memory/facts-doc
+      logInfo('[daily] facts.md：跳过（未接线，按需生成）');
       // ADR-001 S9：自审（默认关，SELF_REVIEW=on 才跑；只执行 A 档动作）。
       if (env.SELF_REVIEW === 'on') {
         try {

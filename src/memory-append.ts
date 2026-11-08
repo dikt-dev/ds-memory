@@ -10,7 +10,7 @@ import { getMemoryFresh, putMemory } from './memory';
 import { putObject } from './storage';
 import { recordAction } from './memory-actions';
 import { SECTION_COMMENTS, SECTION_ORDER, byteLength } from './memory-maintenance';
-import { replaceMemoryContext } from './memory-context-store';
+import { refreshChunksCache } from './memory-context-store';
 
 
 export interface AppendResult {
@@ -100,7 +100,8 @@ export async function appendMemoryLine(
     Date.now(),
   ).catch(() => {});
 
-  await replaceMemoryContext(env, after, 'legacy').catch(() => null);
+  // 只维护召回真正用的 chunk 缓存；facts/events 已停自动维护（2026-11-08）
+  await refreshChunksCache(env, after).catch(() => null);
   return { applied: true, backupKey };
 }
 
@@ -136,6 +137,7 @@ export async function removeMemoryLine(
     },
     Date.now(),
   ).catch(() => {});
-  await replaceMemoryContext(env, after, 'legacy').catch(() => null);
+  // 只维护召回真正用的 chunk 缓存；facts/events 已停自动维护（2026-11-08）
+  await refreshChunksCache(env, after).catch(() => null);
   return { removed: true };
 }

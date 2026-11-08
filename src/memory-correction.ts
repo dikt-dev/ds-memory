@@ -10,7 +10,7 @@
 import type { Env } from './types';
 import { getMemory, putMemory } from './memory';
 import { dateKeyInBeijing } from './date';
-import { embedMemoryChunks, replaceMemoryContext, syncRollupSummaries } from './memory-context-store';
+import { embedMemoryChunks, refreshChunksCache, syncRollupSummaries } from './memory-context-store';
 import { reindexMemory } from './memory-index';
 import { generateRollup, weekStartKey } from './memory-rollups';
 import { auditHash, recordMemoryAudit } from './memory-audit';
@@ -98,8 +98,9 @@ export async function applyMemoryCorrection(
   await penalizeCorrectedFact(env, kv ? kv[1].trim() : text, now).catch((e) => {
     logError('[memory] correction penalty failed:', e);
   });
-  await replaceMemoryContext(env, next, 'correction').catch((e) => {
-    logError('[memory] correction context rebuild failed:', e);
+  // 只刷新召回用的 chunk 缓存；facts/events 已停自动维护（2026-11-08）
+  await refreshChunksCache(env, next).catch((e) => {
+    logError('[memory] correction chunk refresh failed:', e);
   });
   await reindexMemory(env).catch((e) => {
     logError('[memory] correction reindex failed:', e);

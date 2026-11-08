@@ -12,7 +12,7 @@ import { recordAction } from './memory-actions';
 import { byteLength } from './memory-maintenance';
 import { constitutionBlocks, crossSectionPass } from './memory-compact';
 import { collapseOngoingItems } from './memory-ongoing-job';
-import { replaceMemoryContext } from './memory-context-store';
+import { refreshChunksCache } from './memory-context-store';
 
 export interface CompactOutcome {
   removed: number;
@@ -69,7 +69,8 @@ export async function compactMemoryCrossSection(env: Env): Promise<CompactOutcom
     revertible: true,
   }, Date.now()).catch(() => {});
   // 派生数据跟着重建（chunk 缓存 / facts / events）：别的记忆写入都走这一步
-  await replaceMemoryContext(env, result.text, 'legacy').catch(() => null);
+  // 只维护召回真正用的 chunk 缓存；facts/events 已停自动维护（2026-11-08）
+  await refreshChunksCache(env, result.text).catch(() => null);
   await env.KV.delete('maintenance:running').catch(() => {});
   return {
     removed: result.removed.length,

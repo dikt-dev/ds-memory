@@ -4,6 +4,8 @@
  * 设计见 docs/memory/memory-architecture-v2.md。
  * 这里只做三件事：把消息切成事件、让模型产出结构化事件、幂等落库。
  * **读路径完全没动**，所以出问题只要删表或停 cron，线上行为不变。
+ * @unwired 未接线（2026-11-08）：memory_events 只在 stats 与手动投影里用，
+ *          不进提示词，已停止夜间自动维护。表与管理端接口保留。
  */
 import type { Env } from './types';
 import { assertAllowed } from './policy';

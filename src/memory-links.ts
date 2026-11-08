@@ -5,6 +5,8 @@
  * - 同实体：共享具体 tag；
  * - 同事件：事实日期与 event.date_key 相同；
  * - 关联只从已召回结果做有界扩展，不扩张召回根集。
+ * @unwired 未接线（2026-11-08）：memory_links 只服务召回扩展（expandLinkedChunks），
+ *          而召回在覆盖率短路下几乎不执行扩展。已停止夜间自动维护。
  */
 import type { Env } from './types';
 import { stableHash, type MemoryChunk, type MemoryFact } from './memory-domain';

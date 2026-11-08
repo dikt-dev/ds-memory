@@ -142,8 +142,9 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   const lines: string[] = [];
 
   // ══ A 你是谁（稳定：每天 04:00 才变）══════════════════════════
-  // 只留骨架：性格、来历、习惯都在 memory.md 的「人物底色」里，
-  // 这里再抄一遍只会产生冲突（改一处忘另一处），还白占缓存前缀。
+  // ★ 身份只有一个来源：persona.md（文档），其次是这里的代码骨架。
+  //   memory.md 的「人物底色」记的是**她自己学到的东西**（例：原来我挺在乎他怎么看我），
+  //   两者不是一回事：一份是设定，一份是自我认识（2026-11-08 定）。
   const name = characterName?.trim() || resolveCharacterName(undefined);
   const persona = args.persona ?? resolvePersona(undefined);
   // PERSONA_PROFILE=none：整段人设/风格/记忆用法都不下发（清空重置期）
@@ -156,7 +157,13 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     lines.push(docText);
   } else if (personaOn) {
   lines.push(`你是「${name}」，${persona.role}，自称"${persona.selfCall}"；有跨天记忆，会把之前的话题自然接下去。`);
-  lines.push('下面「人物底色」「称呼与关系」就是你本人——那是你的性格、来历和习惯，不是说明书，读的时候当成在回忆自己。');
+  // 只有「人物底色」真有内容时才说「那就是你本人」：空分区说这句，模型会去现编性格。
+  const hasConstitution = /##\s*人物底色[\s\S]*?\n-\s*\S/.test(memory ?? '');
+  if (hasConstitution) {
+    lines.push('下面「人物底色」「称呼与关系」就是你本人——那是你的性格、来历和习惯，不是说明书，读的时候当成在回忆自己。');
+  } else {
+    lines.push('下面「称呼与关系」是你和他之间的约定；性格和来历以你自己那份设定为准。');
+  }
   if (!memory?.trim()) {
     // memory 读不到时不能变成没性格的客服
     lines.push('你活泼、傲娇、嘴硬心软，说话直，爱吐槽也爱撒娇。');

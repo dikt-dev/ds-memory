@@ -530,7 +530,26 @@ export function mergeMemoryEntry(
   }
 
   for (const ds of dist.sections) {
-    if (ds.header.trim() === IMMUTABLE_HEADER) continue; // 人物底色不可变：忽略提炼输出中的同名区块
+    // 「人物底色」只允许**追加**：那是她对自己的认识（例：原来我挺在乎他的评价），会慢慢长；
+    // 但设定不能被自动改写或删除——改写设定是人的事，不是提炼的事（2026-11-08）。
+    if (ds.header.trim() === IMMUTABLE_HEADER) {
+      const target = cur.sections.find((s) => s.header.trim() === IMMUTABLE_HEADER);
+      const bullets = normalizeBullets(ds.lines, fallbackDate);
+      if (target && bullets.length > 0) {
+        for (const b of bullets) {
+          const key = normalizeForCompare(b.replace(ENTRY_PREFIX_RE, ''));
+          const dup = target.lines.some((l) => {
+            if (!ENTRY_RE.test(l)) return false;
+            const old = normalizeForCompare(l.replace(ENTRY_PREFIX_RE, ''));
+            return old === key || isNearDuplicate(old, key);
+          });
+          if (dup) continue;
+          target.lines.push(b);
+          changed = true;
+        }
+      }
+      continue;
+    }
     const bullets = normalizeBullets(ds.lines, fallbackDate);
     if (bullets.length === 0) continue;
     const existing = cur.sections.find((s) => s.header.trim() === ds.header.trim());

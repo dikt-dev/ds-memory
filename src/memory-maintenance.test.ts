@@ -158,14 +158,17 @@ describe('人物底色（不可变区块）', () => {
 - [2026-10-01] 旧事实A。
 `;
 
-  it('提炼结果不能修改或新增人物底色', () => {
+  // 2026-11-08 改：人物底色从「完全不可变」放宽成「只允许追加」。
+  // 理由：那一节该记的是她对自己慢慢摸出来的认识（会变长），
+  // 而不是把 persona.md 的设定抄一份进来。设定本身仍然不能被自动改写或删除。
+  it('提炼可以追加人物底色，但改不掉已有内容', () => {
     const distilled = `## 人物底色
-- 新的性格设定（不应写入）。
+- 新的自我认识（应当追加）。
 ## 关于他
 - [2026-10-21] 新事实。`;
     const out = mergeMemoryEntry(WITH_IMMUTABLE, distilled, '2026-10-21');
-    expect(out).not.toContain('新的性格设定');
-    expect(out).toContain('昵称"小忆"');
+    expect(out).toContain('新的自我认识');
+    expect(out).toContain('昵称"小忆"'); // 旧内容一个字都没丢
     expect(out).toContain('新事实');
   });
 
@@ -604,5 +607,22 @@ describe('锚点不参与去重比较', () => {
 - [26-11-08] 他发黑化视频，修 bug 重发，结尾那句「因为我们是朋友」把你看哭了。`;
     const out = mergeMemoryEntry(WITH_ANCHOR, distilled, '26-11-08');
     expect(out).toContain('因为我们是朋友');
+  });
+});
+
+describe('人物底色只追加', () => {
+  const doc = ['# 长期记忆', '', '## 人物底色', '- 你嘴上凶其实先心软', '', '## 关于他', '- 城市=杭州'].join(String.fromCharCode(10));
+
+  it('提炼可以追加新的自我认识', () => {
+    const distilled = ['## 人物底色', '- 你发现自己在乎他的评价'].join(String.fromCharCode(10));
+    const out = mergeMemoryEntry(doc, distilled, '26-11-08');
+    expect(out).toContain('你发现自己在乎他的评价');
+    expect(out).toContain('你嘴上凶其实先心软');
+  });
+
+  it('提炼不会改写或删除已有的自我认识', () => {
+    const distilled = ['## 人物底色', '- 完全不同的一句话在这里'].join(String.fromCharCode(10));
+    const out = mergeMemoryEntry(doc, distilled, '26-11-08');
+    expect(out).toContain('你嘴上凶其实先心软');
   });
 });

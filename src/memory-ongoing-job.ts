@@ -8,7 +8,7 @@ import type { Env } from './types';
 import { getMemory, putMemory } from './memory';
 import { putObject } from './storage';
 import { recordAction } from './memory-actions';
-import { replaceMemoryContext } from './memory-context-store';
+import { refreshChunksCache } from './memory-context-store';
 import { byteLength } from './memory-maintenance';
 import { collapseOngoing, suspendStaleOngoing } from './memory-ongoing';
 
@@ -50,6 +50,7 @@ export async function collapseOngoingItems(env: Env): Promise<CollapseOutcome> {
     Date.now(),
   ).catch(() => {});
 
-  await replaceMemoryContext(env, text, 'legacy').catch(() => null);
+  // 只维护召回真正用的 chunk 缓存；facts/events 已停自动维护（2026-11-08）
+  await refreshChunksCache(env, text).catch(() => null);
   return { removed: removed.length + suspended.length, lines: [...removed, ...suspended], backupKey };
 }
