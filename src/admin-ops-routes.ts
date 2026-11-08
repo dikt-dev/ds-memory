@@ -66,7 +66,7 @@ import { readAmbient } from './emotion-ambient';
 import { ensureDayTopics } from './topics';
 import { incrementalDistill } from './incremental-distill';
 import { backfillNextDay } from './memory-backfill';
-import { runProbeEval } from './probe-eval';
+import { runProbeEval, scoreProbeAnswers } from './probe-eval';
 import { getRuntimeState } from './runtime-store';
 import { refreshChunksCache } from './memory-context-store';
 import { readContextSnapshot, rebuildContextSnapshot, ensureContextSnapshot } from './context-snapshot';
@@ -426,7 +426,7 @@ app.post('/api/admin/test-mood', requireAuth, async (c) => {
 
 /** 记忆探针：后台跑一轮 10 题，结果写 KV + engine_metrics。 */
 app.post('/api/admin/eval/probes', requireAuth, async (c) => {
-  // 内部调用令牌：10 分钟有效，只用于 record:false 的探针请求
+  // 进程内调用也要过鉴权：临时设备令牌，10 分钟有效，跑完即删
   const token = `eval-${crypto.randomUUID()}`;
   await c.env.KV.put(`app:device:${token}`, '1', { expirationTtl: 600 });
   c.executionCtx.waitUntil(
@@ -436,6 +436,17 @@ app.post('/api/admin/eval/probes', requireAuth, async (c) => {
     })(),
   );
   return c.json({ scheduled: true });
+});
+
+/** 客户端跑完探针后把原始回答交回来，由服务端统一判分入库。 */
+app.post('/api/admin/eval/probes/report', requireAuth, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { answers?: Array<{ id?: unknown; answer?: unknown }> } | null;
+  const answers = body?.answers ?? [];
+  if (!Array.isArray(answers) || answers.length === 0) {
+    return c.json({ ok: false, error: '需要 answers: [{id, answer}]' }, 400);
+  }
+  const card = await scoreProbeAnswers(c.env, answers, new Date());
+  return c.json({ ok: true, card });
 });
 
 /** 最近一次探针结果。 */

@@ -19,7 +19,8 @@
     "deploy:record": "node scripts/record-deploy.mjs",
     "dead-code": "node scripts/dead-code.mjs",
     "style-audit": "node scripts/style-audit.mjs",
-    "gen:pool": "node scripts/gen-pool.mjs"
+    "gen:pool": "node scripts/gen-pool.mjs",
+    "eval:probes": "node scripts/eval-probes.mjs"
   },
   "dependencies": {
     "@types/spark-md5": "^3.0.5",

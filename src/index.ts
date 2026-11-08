@@ -98,6 +98,7 @@ import { CORE_TARGET_BYTES, getArchiveLines } from './memory-archive';
 import { maybeSummarizeToday } from './summary';
 import { ensureContextSnapshot } from './context-snapshot';
 import { incrementalDistill } from './incremental-distill';
+import { setProbeInvoker } from './probe-eval';
 import { maybeRefreshRecentMemo } from './recent-memory';import { normalizeChannel } from './prompt';
 import {
   currentArchetype,
@@ -724,6 +725,9 @@ export function cronBranch(cron: string): CronBranch | null {
   if (cron === '* 23,0,14,15,16 * * *') return 'night';
   return null;
 }
+
+// 探针评估在进程内调用自己（走公网域名会 522）
+setProbeInvoker((req, env) => Promise.resolve(app.fetch(req, env)));
 
 export default {
   fetch: app.fetch,
