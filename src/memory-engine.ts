@@ -115,6 +115,13 @@ export interface RecallOptions {
   injectedText?: string;
   nowMs?: number;
   deadlineMs?: number;
+  /**
+   * 把指标写盘挪到响应之后（Workers 的 waitUntil）。
+   *
+   * 不传就退化成 fire-and-forget：指标可以丢，但绝不能卡住回复。
+   * 实测两次 D1 写占了召回 74~88ms 里的 ~70ms（2026-11-08）。
+   */
+  waitUntil?: (p: Promise<unknown>) => void;
 }
 
 export interface RecallResult {
@@ -445,6 +452,8 @@ async function embedFor(env: Env, query: string): Promise<number[] | null> {
 export async function resolveRecall(env: Env, opts: RecallOptions): Promise<RecallResult> {
   const started = performance.now();
   const nowMs = opts.nowMs ?? Date.now();
+  // 指标写盘不阻塞回复：有 waitUntil 就交给它，没有就 fire-and-forget
+  const flush = opts.waitUntil ?? ((p: Promise<unknown>) => { void p; });
   const deadlineMs = opts.deadlineMs ?? RECALL_DEADLINE_MS;
   const requestId = opts.requestId ?? 'none';
   const kind = opts.kind ?? 'memory';
@@ -555,7 +564,7 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
       timedOut: result.timedOut,
       tier: next.tier,
     });
-    await recordEngineMetric(env, {
+    flush(recordEngineMetric(env, {
       channel: opts.channel,
       kind,
       mode: opts.mode,
@@ -565,9 +574,9 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
       newBytes: byteLength(nextRaw),
       ms: Math.round(performance.now() - started),
       now: nowMs,
-    });
+    }).catch(() => {}));
     // 分段采样：聚合表看趋势，这里看分布（p50/p95）与各段占比。
-    await recordRecallSample(env, {
+    flush(recordRecallSample(env, {
       channel: opts.channel,
       mode: opts.mode,
       kind,
@@ -592,7 +601,7 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
       covered: next.covered,
       uncovered: next.uncovered,
       selectorSkipped: next.selectorSkipped,
-    }, nowMs);
+    }, nowMs).catch(() => {}));
   } catch (e) {
     logTrace('memory.engine.error', {
       requestId,

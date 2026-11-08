@@ -161,3 +161,54 @@ describe('覆盖率短路（召回只带提示词里没有的）', () => {
     expect(isCovered({ content: '她怕打雷，晚上戴耳机' }, '前言 她怕打雷，晚上戴耳机 后记')).toBe(true);
   });
 });
+
+describe('指标写盘不阻塞回复', () => {
+  const chunk = {
+    id: 'x1',
+    source: 'fact' as const,
+    sourceId: 'x1',
+    section: '共同经历',
+    content: '他云请客点砂锅粥，加了双份虾',
+    date: '26-11-07',
+    keywords: [],
+    tags: [],
+    importance: 5,
+    contentHash: 'x1',
+    updatedAt: 1,
+    useCount: 0,
+    lastUsedAt: null,
+    confirmedCount: 0,
+    pinned: false,
+    vec: null,
+    subject: 'shared',
+  };
+
+  it('D1 写永远不 resolve 时，召回仍然按时返回，写盘交给 waitUntil', async () => {
+    const never = new Promise(() => undefined);
+    const env = {
+      KV: { get: async () => [chunk], put: async () => undefined, delete: async () => undefined },
+      DB: {
+        prepare: () => ({
+          bind: () => ({ run: () => never, first: async () => null, all: async () => ({ results: [] }) }),
+          run: () => never,
+          first: async () => null,
+          all: async () => ({ results: [] }),
+        }),
+      },
+    } as unknown as Env;
+
+    const waits: Promise<unknown>[] = [];
+    const started = Date.now();
+    const r = await resolveRecall(env, {
+      query: '砂锅粥是哪家',
+      mode: 'next',
+      channel: 'mobile',
+      injectedText: '## 别的记忆',
+      waitUntil: (p) => waits.push(p),
+    });
+    const elapsed = Date.now() - started;
+    expect(r.text).toContain('砂锅粥');
+    expect(elapsed).toBeLessThan(200);
+    expect(waits.length).toBeGreaterThan(0); // 指标仍然被提交，只是不 await
+  });
+});

@@ -668,6 +668,7 @@ openaiApp.post('/chat/completions', async (c) => {
     // 已经注入的记忆：召回只在「提示词里没有」的候选上跑（2026-11-08）
     injectedText: clipCore(pack.promptMemory.text),
     nowMs: now.getTime(),
+    waitUntil: (p) => c.executionCtx.waitUntil(p),
   });
   c.executionCtx.waitUntil(recordCpuSample(c.env, channel, 'cpu_total', performance.now() - packT0).catch(() => {}));
   c.executionCtx.waitUntil(recordCpuSample(c.env, channel, 'recall_ms', performance.now() - recallT0).catch(() => {}));

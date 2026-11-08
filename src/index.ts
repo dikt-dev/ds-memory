@@ -447,6 +447,7 @@ app.post('/api/chat', requireAuth, async (c) => {
   }
 
   return streamChat(c.env, content, now, image, channel, c.get('requestId'), {
+      waitUntil: (p) => c.executionCtx.waitUntil(p),
     reuseUserMessageId: userRow.id,
   });
 });

@@ -79,7 +79,7 @@ export async function streamChat(
   image?: ChatImage,
   channel: MessageChannel = 'web',
   requestId?: string,
-  opts: { reuseUserMessageId?: number } = {},
+  opts: { reuseUserMessageId?: number; waitUntil?: (p: Promise<unknown>) => void } = {},
 ): Promise<Response> {
   if (!env.DEEPSEEK_API_KEY && !env.DASHSCOPE_API_KEY) {
     return Response.json({ error: '没有配置模型 key（DEEPSEEK_API_KEY / DASHSCOPE_API_KEY）' }, { status: 500 });
@@ -170,6 +170,8 @@ export async function streamChat(
     // 已经注入的记忆：召回只在「提示词里没有」的候选上跑（2026-11-08）
     injectedText: clipCore(pack.promptMemory.text),
     nowMs: now.getTime(),
+    // 指标写盘交给 waitUntil：不卡这一轮
+    waitUntil: opts.waitUntil,
   });
   timing.recallMs = Date.now() - tStart;
   const recalledRaw = recall.text;
