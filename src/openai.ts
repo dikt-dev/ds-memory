@@ -48,7 +48,7 @@ import { recentTopicsBlock } from './topics';
 import { getCachedTurn, putCachedTurn } from './cmid-cache';
 import { recordCpuSample } from './engine-metrics';
 import { maybePrewarmCaches } from './cache-warm';
-import { expandVagueQuery } from './query-expand';
+import { expandVagueQuery, isMemoryQuestion, memoryAnswerHint } from './query-expand';
 import { promisesBlock } from './memory-promises';
 import { loadImageDataUrl, saveImageFromSource } from './media';
 import { byteLength, parseRelationValues } from './memory-maintenance';
@@ -767,6 +767,10 @@ openaiApp.post('/chat/completions', async (c) => {
     }
     // ★ 召回结果贴到用户消息最前面（注意力最强的位置）：
     //   放在系统提示词中部时，隔着几千字，模型经常"看见了但没用"（2026-11-08）
+    // 记忆题：先直答、别反问——否则同一题三发里两次"你说哪个"，像记不住
+    if (isMemoryQuestion(lastUserCleaned)) {
+      parts.push(memoryAnswerHint(Boolean(contextBudget.recall.trim())));
+    }
     // 未完成的约定每轮都带上：它不靠关键词命中，忘了就是忘了
     const promiseText = promisesBlock(pack.memory ?? '').trim();
     if (promiseText) parts.push(promiseText);

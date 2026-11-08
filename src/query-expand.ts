@@ -72,3 +72,21 @@ export async function expandVagueQuery(
   if (extra.length === 0) return { query: baseQuery, resolved };
   return { query: `${baseQuery} ${extra.join(' ')}`, resolved };
 }
+
+/**
+ * 是不是在考记忆力（"还记得…吗""上次""答应过我什么""我叫你什么"）。
+ *
+ * 这类问题最怕被反问推回去——同一题三发里两次答"你说哪个"、一次答对，
+ * 观感上就是"她记不住"。命中时给一条明确的作答要求（2026-11-08）。
+ */
+export function isMemoryQuestion(text: string): boolean {
+  const t = text || '';
+  return /记得|还记得|上次|上回|之前|那天|那个|答应|说过|外号|叫什么|什么名字|哪家|怎么点的|为什么事/.test(t);
+}
+
+/** 记忆题的作答要求：先直答、答不出就说记不清，不要反问。 */
+export function memoryAnswerHint(hasRecall: boolean): string {
+  return hasRecall
+    ? '他在问记忆里的事：先直接回答，把记得的细节说出来（时间、地点、原话），别用反问把话推回去。'
+    : '他在问记忆里的事，但记忆里没有直接相关的：老实说记不清，可以说个印象；不要编，也不要用反问把问题推回给他。';
+}
