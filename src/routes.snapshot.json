@@ -33,6 +33,14 @@
   ],
   [
     "GET",
+    "/api/admin/eval/probes"
+  ],
+  [
+    "GET",
+    "/api/admin/eval/probes"
+  ],
+  [
+    "GET",
     "/api/admin/health"
   ],
   [
@@ -586,6 +594,14 @@
   [
     "POST",
     "/api/admin/emotion/simulate"
+  ],
+  [
+    "POST",
+    "/api/admin/eval/probes"
+  ],
+  [
+    "POST",
+    "/api/admin/eval/probes"
   ],
   [
     "POST",
