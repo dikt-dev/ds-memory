@@ -49,6 +49,7 @@ import { getCachedTurn, putCachedTurn } from './cmid-cache';
 import { recordCpuSample } from './engine-metrics';
 import { maybePrewarmCaches } from './cache-warm';
 import { expandVagueQuery } from './query-expand';
+import { promisesBlock } from './memory-promises';
 import { loadImageDataUrl, saveImageFromSource } from './media';
 import { byteLength, parseRelationValues } from './memory-maintenance';
 import { markProfileDirty } from './profile-cache';
@@ -766,6 +767,9 @@ openaiApp.post('/chat/completions', async (c) => {
     }
     // ★ 召回结果贴到用户消息最前面（注意力最强的位置）：
     //   放在系统提示词中部时，隔着几千字，模型经常"看见了但没用"（2026-11-08）
+    // 未完成的约定每轮都带上：它不靠关键词命中，忘了就是忘了
+    const promiseText = promisesBlock(pack.memory ?? '').trim();
+    if (promiseText) parts.push(promiseText);
     if (contextBudget.recall.trim()) {
       parts.push(
         '你记得这些（他以前说过的、一起经历过的，可能和这轮有关）：\n' +
