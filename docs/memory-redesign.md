@@ -1070,3 +1070,57 @@ daily_archive 2026-11-07  done
 ```
 
 新测试：让假 D1 的写永远不 resolve，断言召回仍然按时返回、且指标被提交到 waitUntil。
+
+---
+
+## 26. 收尾：身份单一来源 + 停用未接线的表（2026-11-08 17:0x）
+
+### 26.1 为什么停 facts/events/links
+
+只读核查：
+
+```text
+facts.md          每晚写入 R2，代码里没有任何读取者
+loadMemoryFacts   只用于 stats 与手动投影
+loadMemoryEvents  同上
+memory_links      只服务 expandLinkedChunks，而召回 100% 覆盖率短路，该分支从不执行
+memory_facts 15 条 = memory.md「关于他 / 他的偏好」的同一批内容
+```
+
+结论：三张表既不进提示词，也不产生行为；每晚重算等于养一份过期数据。
+
+改动（行为零变化）：
+
+```text
+写路径       replaceMemoryContext -> refreshChunksCache（只维护召回真正用的 chunk 缓存）
+nightly      memory context 日志改成 chunks=N；facts.md 改为「跳过（按需生成）」
+模块头        memory-events / memory-links / memory-doc 标 @unwired
+保留         表、schema、管理端手动接口（rebuild-context / facts-doc / sync-archive）
+```
+
+### 26.2 身份只留一个来源
+
+约定：
+
+```text
+persona.md            她是谁（设定）——唯一来源，已在提示词里
+memory.md 人物底色     她对自己的认识（学到的）——允许追加，允许为空
+memory.md 他的雷区     手工禁区 + 提炼累积的踩坑
+```
+
+对应的三处改动：
+
+| 位置 | 改动 |
+|---|---|
+| `prompt.ts` | 「人物底色」为空时不再说「那就是你本人」，改成「性格和来历以你自己那份设定为准」 |
+| `memory-maintenance.ts` | 人物底色从「完全不可变」放宽成「**只允许追加**」：改写/删除仍然禁止 |
+| `distill.ts` | 新增分区说明：人物底色只写「你自己发现自己是什么样」，不是抄设定 |
+
+### 26.3 验收
+
+```text
+tsc / vitest     1,461 全绿（新增 4 条：prompt 条件句 2、追加语义 2）
+deploy           73c28c8e / 8b7845d1，health 200
+探针             gift、project 正常；video_3d 判据补上「锁链/泡在水里」
+cron_runs        明早 04:00 应看到 chunks=N、facts.md 跳过、去重不再恒为 0
+```
