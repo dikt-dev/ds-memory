@@ -835,13 +835,39 @@ isCovered(chunk, injected)
 
 记忆长到超过 tiered 的 16 KB / core 的 12 KB 上限后，被裁掉的条目自动变成「未覆盖」，召回价值自动回来——不需要额外开关。
 
-### 24.4 验收
+### 24.4 验收（实测，2026-11-08 14:47 部署后）
 
 ```text
 npx tsc --noEmit          0 error
 npx vitest run            150 files / 1424 tests 全绿（新增 11 条：短路 4、快照 3、计时 1、schema 3）
-/api/health               200
+/api/health               200  {d1 ok, kv ok, r2 ok, ai bound}
+deploy                    Version 8660ff19（commit 692662f）
 ```
+
+**召回实测（同一条记忆题，改动前后）**
+
+```text
+recall_samples 最新一条：
+  covered 74 / uncovered 0 / selector_skipped 1 / items 0 / total_ms 51
+engine_cpu 当天：
+  select_ms    0 µs（原来 1,300,000 µs）
+  recall_ms  152,000 µs 平均（原来 1,490,000 µs）
+```
+
+召回从 ~1,300 ms 掉到 51~152 ms，且选择器一次都没再调；注入的记忆内容没有减少。
+
+**探针（10 题，单发，脚本直打线上）**
+
+```text
+PASS video_end / nickname / why_upset / porridge / why_nick / anxiety / promise
+FAIL project（反问「是聊天 app 还是转正」）
+FAIL gift（记成「夜宵那档子事」，没说剥虾）
+FAIL video_3d（只记得是二创，缺少铁链/荆棘冠）
+得分 7/10（上一轮 6/10，anxiety 由 FAIL 转 PASS）
+```
+
+值得注意的是：这 7 分是在**召回完全短路（注入 0 条）**的情况下拿到的，
+说明上一轮那 2.27 条/请求的召回本来就没有贡献新信息。
 
 ### 24.5 指标口径（部署后 24 小时看这三处）
 
