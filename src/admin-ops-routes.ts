@@ -66,6 +66,7 @@ import { readAmbient } from './emotion-ambient';
 import { ensureDayTopics } from './topics';
 import { incrementalDistill } from './incremental-distill';
 import { backfillNextDay } from './memory-backfill';
+import { runProbeEval } from './probe-eval';
 import { getRuntimeState } from './runtime-store';
 import { refreshChunksCache } from './memory-context-store';
 import { readContextSnapshot, rebuildContextSnapshot, ensureContextSnapshot } from './context-snapshot';
@@ -421,6 +422,27 @@ app.post('/api/admin/test-mood', requireAuth, async (c) => {
     model: c.env.DISTILL_MODEL,
     final: merged,
   });
+});
+
+/** 记忆探针：后台跑一轮 10 题，结果写 KV + engine_metrics。 */
+app.post('/api/admin/eval/probes', requireAuth, async (c) => {
+  // 内部调用令牌：10 分钟有效，只用于 record:false 的探针请求
+  const token = `eval-${crypto.randomUUID()}`;
+  await c.env.KV.put(`app:device:${token}`, '1', { expirationTtl: 600 });
+  c.executionCtx.waitUntil(
+    (async () => {
+      await runProbeEval(c.env, new Date(), { token }).catch((e: unknown) => logError('[probe] run failed:', e));
+      await c.env.KV.delete(`app:device:${token}`).catch(() => {});
+    })(),
+  );
+  return c.json({ scheduled: true });
+});
+
+/** 最近一次探针结果。 */
+app.get('/api/admin/eval/probes', requireAuth, async (c) => {
+  const raw = await c.env.KV.get('eval:probe:last').catch(() => null);
+  if (!raw) return c.json({ ok: false, error: '还没有结果' }, 404);
+  return c.json({ ok: true, card: JSON.parse(raw) });
 });
 
 /** 历史回填：一次补一天，反复调用直到 nothing_left。 */
