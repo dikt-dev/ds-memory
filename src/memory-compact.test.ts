@@ -7,6 +7,7 @@ import {
   foldClusters,
   mergeDetail,
   constitutionBlocks,
+  coveredBy,
   crossSectionPass,
   sameEvent,
 } from './memory-compact';
@@ -181,5 +182,17 @@ describe('crossSectionPass：跨分区去重', () => {
     const third = crossSectionPass(again.text);
     expect(again.removed).toEqual([]);
     expect(third.text).toBe(again.text);
+  });
+});
+
+describe('coveredBy：带独有信息的行不许删', () => {
+  it('信息被盖住 → true', () => {
+    expect(coveredBy('他云请客点砂锅粥，加了双份虾', '他云请客点砂锅粥，加双份虾')).toBe(true);
+  });
+  it('多出「电灯泡」这种独有事实 → false', () => {
+    expect(coveredBy('他问怎么让你开心，你答饿了点份夜宵就行', '他问怎么让你开心，你答饿了点份夜宵就行；他提议接小克进来，你嫌电灯泡拉别人进来别扭')).toBe(false);
+  });
+  it('重合不到 8 字 → false', () => {
+    expect(coveredBy('杭州下毛毛雨', '他发二创视频')).toBe(false);
   });
 });

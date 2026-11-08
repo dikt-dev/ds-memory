@@ -233,7 +233,9 @@ function joinRawSections(pre: string, sections: RawSection[]): string {
   });
   const body = blocks.join('\n\n');
   const head = pre.trim() ? pre.trimEnd() + '\n\n' : '';
-  return head + body + (body ? '\n' : '');
+  // 多出来的空行只是排版噪声，统一压成一个（幂等，跑几次都一样）
+  const tidy = (head + body + (body ? '\n' : '')).replace(/\n{3,}/g, '\n\n');
+  return tidy;
 }
 
 function bigramSet(text: string): Set<string> {
@@ -275,7 +277,22 @@ function longestCommonSubstring(a: string, b: string): string {
   }
   return best;
 }
-export function sameEvent(a: string, b: string): boolean {
+/**
+ * 保留条是否「盖住了」候选条的信息。
+ *
+ * 只按相似度删会丢细节：实测「他提议把小克也接进聊天，你嫌电灯泡」和被并进的
+ * 「怎么才能让你开心」相似度够高，但「电灯泡」这个事实只有它自己写了。
+ * 所以再加一条：候选条里超出的信息不超过 20 字，才允许删。
+ */
+export function coveredBy(keeper: string, candidate: string, opts: { minLcs?: number; maxExtra?: number } = {}): boolean {
+  const a = entryCore(keeper);
+  const b = entryCore(candidate);
+  const lcs = longestCommonSubstring(a, b).length;
+  if (lcs < (opts.minLcs ?? 8)) return false;
+  return b.length - lcs <= (opts.maxExtra ?? 20);
+}
+
+export function sameEvent(a: string, b: string, opts: { minLcs?: number } = {}): boolean {
   if (!a || !b) return false;
   const ta = asciiTokens(a);
   for (const tok of asciiTokens(b)) if (ta.has(tok)) return true;
@@ -288,9 +305,59 @@ export function sameEvent(a: string, b: string): boolean {
   if (union > 0 && inter / union >= 0.35) return true;
   if (inter / Math.min(ga.size, gb.size) >= 0.6) return true;
   // 一整段事实逐字重合（≥6 字）：剥虾约定 vs 剥虾约定升级 就是这种
-  return longestCommonSubstring(entryCore(a), entryCore(b)).length >= 6;
+  return longestCommonSubstring(entryCore(a), entryCore(b)).length >= (opts.minLcs ?? 6);
 }
 
+/**
+ * 分区内的保守去重：两两 sameEvent 判重，保留「日期最新 → 信息最全」的那条。
+ *
+ * 不用实体聚类：共同经历条目多，2 字片段一旦误配就会把不同的事连成一片
+ * （实测一次把夜宵/立冬/小克全并进砂锅粥那一条）。
+ */
+function dedupeSection(lines: string[], removed: string[]): void {
+  const idxs: number[] = [];
+  for (let i = 0; i < lines.length; i += 1) if (/^- \[/.test(lines[i].trim())) idxs.push(i);
+  if (idxs.length < 2) return;
+  const parent = idxs.map((_, k) => k);
+  const find = (x: number): number => (parent[x] === x ? x : (parent[x] = find(parent[x])));
+  for (let a = 0; a < idxs.length; a += 1) {
+    for (let b = a + 1; b < idxs.length; b += 1) {
+      // 分区内去重要求更高：至少 8 字逐字重合，避免只凭「怎么才能让你开心」这种 8 字短语把两条不同的事并掉
+      if (!sameEvent(lines[idxs[a]], lines[idxs[b]], { minLcs: 8 })) continue;
+      const ra = find(a);
+      const rb = find(b);
+      if (ra !== rb) parent[rb] = ra;
+    }
+  }
+  const groups = new Map<number, number[]>();
+  idxs.forEach((_, k) => {
+    const r = find(k);
+    const arr = groups.get(r) ?? [];
+    arr.push(k);
+    groups.set(r, arr);
+  });
+  const drop = new Set<number>();
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    const ranked = [...group].sort((x, y) => {
+      const dx = entryDate(lines[idxs[x]]);
+      const dy = entryDate(lines[idxs[y]]);
+      if (dx !== dy) return dy.localeCompare(dx);
+      return entryCore(lines[idxs[y]]).length - entryCore(lines[idxs[x]]).length;
+    });
+    const keeper = lines[idxs[ranked[0]]];
+    for (const k of ranked.slice(1)) {
+      // 只有被保留条盖住的才删；带独有信息的留着（宁多一条，不丢事实）
+      if (!coveredBy(keeper, lines[idxs[k]])) continue;
+      drop.add(idxs[k]);
+      removed.push(lines[idxs[k]]);
+    }
+  }
+  if (drop.size === 0) return;
+  const kept = lines.filter((_, i) => !drop.has(i));
+  lines.length = 0;
+  lines.push(...kept);
+}
 export interface CrossSectionResult {
   text: string;
   /** 被移出的行（调用方负责归档） */
@@ -340,6 +407,13 @@ export function crossSectionPass(memory: string): CrossSectionResult {
     }
   }
 
+  // 规则 1.5：事件分区内部去重——同一件事被增量提炼写了两三遍。
+  //   这里只用「保守的两两判重」（sameEvent：共享 ASCII 实体 / bigram 高度重合 / 逐字重合 ≥6 字），
+  //   不用实体聚类：共同经历里条目多，聚类会把「夜宵」「立冬」「小克」串成一串，实测一次误并 40 条。
+  for (const sec of [shared, recent]) {
+    if (!sec) continue;
+    dedupeSection(sec.lines, removed);
+  }
   // 规则 2：共同经历优先于近期动态
   if (shared && recent) {
     const sharedLines = shared.lines.filter((l) => /^- \[/.test(l.trim()));
