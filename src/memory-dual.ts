@@ -11,6 +11,8 @@ import { logWarn } from './error-log';
  *   数量级都不一致时，逐条比对只是在比对噪声。
  *
  * 开关：KV memory:dual = '1'。关着时这一整个函数只有一次 KV 读。
+ * @deprecated 开关常关：KV memory:dual 没开，recordDualStats 只在 reindex 后记一行日志。
+ *             engine=next 后 legacy 索引不再维护，这个双引擎账本也失去意义。
  */
 export interface DualStats {
   date: string;

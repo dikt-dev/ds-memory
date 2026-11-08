@@ -40,3 +40,22 @@ describe('schema.sql 与索引代码保持一致', () => {
     expect(migrationSql).toContain('ADD COLUMN dup_of');
   });
 });
+
+describe('运行期建表的表也必须写进 schema.sql（新环境否则静默失效）', () => {
+  it('cmid_cache / request_log / recall_samples / engine_cpu 都在 schema.sql 里', () => {
+    for (const name of ['cmid_cache', 'request_log', 'recall_samples', 'engine_cpu']) {
+      expect(schemaSql).toContain('CREATE TABLE IF NOT EXISTS ' + name);
+    }
+  });
+
+  it('cmid_cache 有 TTL 清理需要的 created_at 索引', () => {
+    expect(schemaSql).toContain('idx_cmid_cache_at');
+  });
+
+  it('recall_samples 带上计时口径修正后的列', () => {
+    const table = schemaSql.slice(schemaSql.indexOf('CREATE TABLE IF NOT EXISTS recall_samples'));
+    for (const col of ['select_ms', 'covered', 'uncovered', 'selector_skipped']) {
+      expect(table).toContain(col);
+    }
+  });
+});

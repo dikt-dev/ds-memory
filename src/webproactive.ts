@@ -19,7 +19,7 @@ import type { Env } from './types';
 import { dateKeyInBeijing, isoInBeijing } from './date';
 import { buildBaseSystemPrompt } from './prompt';
 import { loadPersonaDoc } from './persona-doc';
-import { budgetContext } from './context-budget';
+import { budgetContext, clipCore } from './context-budget';
 import { getMemory } from './memory';
 import { detectFarewell } from './proactive-context';
 import { fetchWeather } from './weather';
@@ -278,6 +278,8 @@ async function generateProactive(
     channel: 'web',
     kind: 'proactive',
     skipMemorySource: promptMemory.mode === 'full' && !promptMemory.evidence,
+    // 已经注入的记忆：召回只在「提示词里没有」的候选上跑（2026-11-08）
+    injectedText: clipCore(promptMemory.text),
     nowMs: now.getTime(),
   });
   // 复习计数：主动消息注入的往事也算"被想起"，否则它们永远等不到加固。

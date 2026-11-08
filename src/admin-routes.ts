@@ -33,7 +33,7 @@ import { MemoryContextStats, MemoryJobStats, backfillMemoryProvenance, embedMemo
 import { expandLinkedChunks, expansionBudget, linkAllFacts, linksForMemory } from './memory-links';
 import { rankMemoryChunks } from './memory-domain';
 import { resolveRecall } from './memory-engine';
-import { readEngineMetrics } from './engine-metrics';
+import { readCpuSamples, readEngineMetrics } from './engine-metrics';
 import { readRecallSamples, summarizeSamples } from './recall-samples';
 import { listActions, markReverted } from './memory-actions';
 import { policyTable, type ActionKind } from './policy';
@@ -231,8 +231,12 @@ app.get('/api/admin/memory/recall', requireAuth, async (c) => {
 /** Phase 5 观察：按天读取 shadow/next 指标（不记录正文）。 */
 app.get('/api/admin/engine-metrics', requireAuth, async (c) => {
   const days = Math.min(30, Math.max(1, Number(c.req.query('days') ?? 7) || 7));
-  const rows = await readEngineMetrics(c.env, days);
-  return c.json({ ok: true, days, rows });
+  // 引擎行（shadow/next 对比）与 CPU 采样分两张表：ms 与 µs 的口径不同，不能混着看。
+  const [rows, cpu] = await Promise.all([
+    readEngineMetrics(c.env, days),
+    readCpuSamples(c.env, days),
+  ]);
+  return c.json({ ok: true, days, rows, cpu });
 });
 
 /** 召回分段耗时：p50/p95 与各段占比（只读，不含正文）。 */

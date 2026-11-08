@@ -15,7 +15,12 @@ import { resolveHerPlace } from './life/where';
 import type { WeatherInfo } from './prompt';
 import { recentTopicsBlock } from './topics';
 import { recordCpuSample } from './engine-metrics';
-import { readContextSnapshot, contextSnapshotFresh, rebuildContextSnapshot } from './context-snapshot';
+import {
+  readContextSnapshot,
+  contextSnapshotFresh,
+  rebuildContextSnapshot,
+  type ContextSnapshot,
+} from './context-snapshot';
 import { getRecentMemo, formatRecentMemoBlock } from './recent-memory';
 import { getTodaySummary } from './summary';
 import { loadPersonaState, buildPersonaDriftLine, type PersonaState } from './persona-drift';
@@ -85,51 +90,13 @@ export async function buildMemoryPack(
     recordCpuSample(env, opts.channel, snap ? 'snap_hit' : 'snap_miss', snap ? 0 : 1).catch(() => {}),
   );
   if (contextSnapshotFresh(snap, now) && snap) {
-    const promptMemory = buildPromptMemoryFor(snap.memory, env);
-    const recentMemo = snap.memo ?? null;
-    return {
-      memory: snap.memory,
-      dayCtxFile: snap.dayCtx,
-      weather: snap.weather ?? snap.dayCtx?.weather ?? null,
-      ctx: {
-        date: snap.dayCtx?.date ?? dateKey,
-        weekday: snap.dayCtx?.weekday ?? '',
-        is_holiday: Boolean(snap.dayCtx?.is_holiday),
-        holiday_note: snap.dayCtx?.holiday_note ?? '',
-      },
-      promptMemory,
-      recentMemoRaw: null,
-      recentMemo,
-      todaySummary: recentMemo ? null : snap.summary,
-      personaState: snap.personaState,
-      personaDrift: buildPersonaDriftLine(snap.personaState),
-      topics: snap.topics ?? '',
-    } as MemoryPack;
+    return packFromSnapshot(snap, env, opts, dateKey);
   }
   // 过期快照直接用：10~15 分钟前的 memo/summary 完全可以接受，
   // 回 D1 刷新的代价是 3~5 次跨区往返（实测 ~1s），不值得。
   if (snap) {
     opts.ctx?.waitUntil(rebuildContextSnapshot(env, now));
-    const promptMemory = buildPromptMemoryFor(snap.memory, env);
-    const recentMemo = snap.memo ?? null;
-    return {
-      memory: snap.memory,
-      dayCtxFile: snap.dayCtx,
-      weather: snap.weather ?? snap.dayCtx?.weather ?? null,
-      ctx: {
-        date: snap.dayCtx?.date ?? dateKey,
-        weekday: snap.dayCtx?.weekday ?? '',
-        is_holiday: Boolean(snap.dayCtx?.is_holiday),
-        holiday_note: snap.dayCtx?.holiday_note ?? '',
-      },
-      promptMemory,
-      recentMemoRaw: null,
-      recentMemo,
-      todaySummary: recentMemo ? null : snap.summary,
-      personaState: snap.personaState,
-      personaDrift: buildPersonaDriftLine(snap.personaState),
-      topics: snap.topics ?? '',
-    } as MemoryPack;
+    return packFromSnapshot(snap, env, opts, dateKey);
   }
 
   // 天气跟着她此刻所在的城市（旅游时是目的地），不是网页端设置的城市
@@ -165,6 +132,42 @@ export async function buildMemoryPack(
     todaySummary: recentMemo ? null : summaryRaw,
     personaState,
     personaDrift: buildPersonaDriftLine(personaState),
+  };
+}
+
+/**
+ * 快照分支的打包：**必须**保留原始 memo。
+ *
+ * 只存格式化文本时，请求侧拿不到 items，「按会话起点过滤」和「条数上限」都做不了，
+ * 结果就是 web 那条路径把中期记忆整块丢掉（2026-11-08 实测）。
+ */
+function packFromSnapshot(
+  snap: ContextSnapshot,
+  env: Env,
+  opts: BuildMemoryPackOptions,
+  dateKey: string,
+): MemoryPack {
+  const promptMemory = buildPromptMemoryFor(snap.memory, env);
+  const recentMemoRaw = snap.memoRaw ?? null;
+  const memoBlock = formatRecentMemoBlock(recentMemoRaw, opts.memoMaxItems, opts.sessionStartMs);
+  const recentMemo = memoBlock ? memoBlock : null;
+  return {
+    memory: snap.memory,
+    dayCtxFile: snap.dayCtx,
+    weather: snap.weather ?? snap.dayCtx?.weather ?? null,
+    ctx: {
+      date: snap.dayCtx?.date ?? dateKey,
+      weekday: snap.dayCtx?.weekday ?? '',
+      is_holiday: Boolean(snap.dayCtx?.is_holiday),
+      holiday_note: snap.dayCtx?.holiday_note ?? '',
+    },
+    promptMemory,
+    recentMemoRaw,
+    recentMemo,
+    todaySummary: recentMemo ? null : snap.summary,
+    personaState: snap.personaState,
+    personaDrift: buildPersonaDriftLine(snap.personaState),
+    topics: snap.topics ?? '',
   };
 }
 

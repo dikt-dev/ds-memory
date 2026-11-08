@@ -58,3 +58,80 @@ describe('budgetFromPack', () => {
     expect(budget.recent).toBe('');
   });
 });
+
+describe('快照分支（ctx:snapshot:v2）', () => {
+  const NL = String.fromCharCode(10);
+  const snapJson = (over: Record<string, unknown> = {}) => ({
+    at: Date.now(),
+    dateKey: '2026-11-08',
+    memory: ['## 人物底色', '- [26-11-08] 她嘴硬心软'].join(NL),
+    dayCtx: { date: '2026-11-08', weekday: '周六', is_holiday: false, holiday_note: '' },
+    weather: null,
+    memoRaw: {
+      items: [
+        { at: '2026-11-08T04:00:00.000Z', text: '中午吃了面', superseded: false },
+        { at: '2026-11-08T05:00:00.000Z', text: '晚上在改记忆系统', superseded: false },
+      ],
+      up_to_id: 1,
+      updated_at: '2026-11-08T05:00:00.000Z',
+    },
+    summary: '今天的摘要',
+    topics: '记忆系统',
+    personaState: { values: {}, baseline: {}, updatedAt: '', lastReview: '', history: [] },
+    ...over,
+  });
+
+  const envWith = (snap: unknown) =>
+    ({
+      KV: { get: async () => snap, put: async () => undefined, delete: async () => undefined },
+      MEMORY_PROMPT_MODE: 'tiered',
+      MEMORY_EVENT_INLINE_DAYS: '60',
+    }) as never;
+
+  it('快照命中时中期记忆不丢（web 丢过），今日摘要按规则让位', async () => {
+    const { buildMemoryPack } = await import('./context-pack');
+    const pack = await buildMemoryPack(envWith(snapJson()), new Date(), { channel: 'web' });
+    expect(pack.recentMemoRaw).not.toBeNull();
+    expect(pack.recentMemo).toContain('中午吃了面');
+    expect(pack.todaySummary).toBeNull();
+  });
+
+  it('会话起点过滤照旧生效（会话内的条目不重复注入）', async () => {
+    const { buildMemoryPack } = await import('./context-pack');
+    const pack = await buildMemoryPack(envWith(snapJson()), new Date(), {
+      channel: 'web',
+      sessionStartMs: Date.parse('2026-11-08T04:30:00.000Z'),
+    });
+    // 会话起点之前的事要带上；会话开始之后的条目历史里已经有原文，不再重复注入
+    expect(pack.recentMemo).toContain('中午吃了面');
+    expect(pack.recentMemo).not.toContain('晚上在改记忆系统');
+  });
+
+  it('v1 旧快照仍能读出来（memo 是字符串，退化成整块带上）', async () => {
+    const { readContextSnapshot } = await import('./context-snapshot');
+    const calls: string[] = [];
+    const env = {
+      KV: {
+        get: async (key: string) => {
+          calls.push(key);
+          if (key === 'ctx:snapshot:v2') return null;
+          return {
+            at: Date.now(),
+            dateKey: '2026-11-08',
+            memory: '## 人物底色',
+            dayCtx: { date: '2026-11-08', weekday: '周六', is_holiday: false, holiday_note: '' },
+            weather: null,
+            memo: ['## 最近三天（中期记忆）', '- 旧格式的中期记忆'].join(NL),
+            summary: null,
+            topics: '',
+            personaState: {},
+          };
+        },
+      },
+    } as never;
+    const snap = await readContextSnapshot(env);
+    expect(calls).toContain('ctx:snapshot:v2');
+    expect(snap?.memoRaw?.items?.length).toBe(1);
+    expect(snap?.memoRaw?.items?.[0]?.text).toContain('旧格式的中期记忆');
+  });
+});

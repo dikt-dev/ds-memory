@@ -483,7 +483,7 @@ app.post('/api/admin/context-snapshot/rebuild', requireAuth, async (c) => {
   return c.json({
     ok,
     at: snap?.at ?? null,
-    has_memo: Boolean(snap?.memo),
+    has_memo: Boolean(snap?.memoRaw?.items?.length),
     has_summary: Boolean(snap?.summary),
     topics: snap?.topics ?? '',
     memory_bytes: snap?.memory?.length ?? 0,

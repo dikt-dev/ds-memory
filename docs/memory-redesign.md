@@ -445,6 +445,14 @@ expand 0 ms
 **结论**：召回慢在 `rankMemoryChunks` 这一段，需要继续在函数内部打子阶段
 （关键词打分 / MMR / 向量解码），当前还没有定位到具体是哪一步。
 
+> **更正（2026-11-08 下午）**：上面这个结论是错的。
+> `rank` 的累加写在 `selectRecall` 之后，把「一次蒸馏模型往返」记进了排序里。
+> 纯 JS 排序（rank_kw / rank_vec / rank_mmr）实测全是 **0 µs**（254 次采样），
+> 1.3 s 全部是选择器。现在已经拆成独立的 `select` 段与 `select_ms` 指标。
+>
+> 更根本的问题在 §24：召回语料就是提示词里已经注入的 memory.md，
+> 即便把它优化到 0 ms，产出的内容也只是重复。
+
 ### 15.6 KV 额度核算
 
 | 项 | 免费额度 | 本方案用量 |
@@ -779,3 +787,72 @@ expand 0 ms
 
 前几次进程内调用失败（0 命中）也写进了 `engine_metrics`，
 所以那张表里的 `probe_hits` 均值不可信；**以 KV 里的 `eval:probe:last` 成绩卡为准**。
+
+---
+
+## 24. 收敛：召回不再重复，三处口径统一（2026-11-08 下午）
+
+### 24.1 发现的根因
+
+原本以为「新旧两套引擎在抢答」，实测不是：**新引擎的语料就是提示词里已经注入的 memory.md**。
+
+```text
+memory.md                     4,325 字符
+mem:chunks:v1                 31 条，其中 30 条逐字出现在 memory.md 里
+早于 60 天的 chunk            0 条
+```
+
+所以召回在当时的配置下**不可能带回新信息**，却每条消息：
+
+- 读一次 KV（5~20 ms，可接受）
+- 排序几百微秒（可接受）
+- **调一次选择器模型（实测 avg 1,306 ms，n=309）** ← 唯一的瓶颈
+
+顺带修正 §15.5 的误判：`rank` 的累加写在 `selectRecall` 之后，把模型往返算成了排序。
+
+### 24.2 本轮改动（6 组）
+
+| 组 | 改动 | 效果 |
+|---|---|---|
+| 计时 | `select` 从 `rank` 里拆出来；`recall_samples` 加 `select_ms/covered/uncovered/selector_skipped` | 指标不再骗人 |
+| 短路 | `resolveRecall({ injectedText })`：候选正文已在本轮注入内容里就不召回；全被覆盖时不调选择器 | 省 1.3 s/条 + 一次模型调用 |
+| 快照 | `ctx:snapshot:v2` 存**原始 memo items**（v1 只读兜底）；渠道侧不再自己 format | 网页端不再丢中期记忆与今日摘要 |
+| 装配 | 网页端补 `promisesBlock` / `memoryAnswerHint`；App/QQ 改 `buildSystemPromptSplit` | 两渠道行为一致；App 前缀缓存恢复命中 |
+| 清理 | `next` 模式跳过 legacy `reindexMemory`；chunk 缓存合成一个函数（memory.md ∪ D1 archive） | 不再每晚重算两套索引 |
+| 表 | CPU 采样移到 `engine_cpu`；`schema.sql` 补 4 张运行期建表 + 迁移 027 | 新环境不会静默失效 |
+
+### 24.3 覆盖率短路的规则
+
+```text
+isCovered(chunk, injected)
+  body = chunk.content.trim()
+  body.length < 8                     → 不算覆盖（太短会误杀）
+  injected.includes(body)             → 覆盖
+  injected.includes(body.slice(0,24)) → 覆盖（容忍提示词侧改写/截断）
+```
+
+开关：`RECALL_SKIP_COVERED=off` 一键回退；`RECALL_SELECT_MIN_POOL`（默认 4）控制候选少于多少条时干脆不调选择器。
+
+记忆长到超过 tiered 的 16 KB / core 的 12 KB 上限后，被裁掉的条目自动变成「未覆盖」，召回价值自动回来——不需要额外开关。
+
+### 24.4 验收
+
+```text
+npx tsc --noEmit          0 error
+npx vitest run            150 files / 1424 tests 全绿（新增 11 条：短路 4、快照 3、计时 1、schema 3）
+/api/health               200
+```
+
+### 24.5 指标口径（部署后 24 小时看这三处）
+
+| 指标 | 位置 | 期望 |
+|---|---|---|
+| `select_ms` | engine_cpu | 覆盖率 100% 时归零 |
+| `items/请求` | engine_metrics（next） | 从 2.27 降到 0~1 |
+| `recall_ms` p50 | recall_samples | < 50 ms |
+
+### 24.6 未做（下一阶段）
+
+- `context-budget` 的 `rollup` 参数还没改名（改了要动 4 处调用与测试，纯命名收益，先放着）。
+- `memory_rollups` / `memory_summaries` / `memory_dual` 只加了 `@deprecated` 注释，没有接线也没有删。
+- docs §4 的 `mem_log / mem_records` 目标模型仍是更大的一次重写，不在本轮范围。

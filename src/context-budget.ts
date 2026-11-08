@@ -122,6 +122,16 @@ export function budgetContext(input: ContextBudgetInput): ContextBudgetResult {
   };
 }
 
+/**
+ * 只算「核心记忆」这一段的裁剪结果。
+ *
+ * 召回要判断「这条是不是已经在提示词里」，必须和真正注入的那段逐字一致；
+ * 用同一个 clip 才能保证口径不分叉（budgetContext 内部也走它）。
+ */
+export function clipCore(text: string, coreMaxChars = DEFAULT_CORE_MAX_CHARS): string {
+  return clip(clean(text), Math.max(0, Math.floor(coreMaxChars))).text;
+}
+
 export function formatBudgetManifest(manifest: ContextBlockManifest[]): string {
   return manifest
     .map(

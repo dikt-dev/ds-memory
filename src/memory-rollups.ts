@@ -3,6 +3,8 @@
  *
  * 用途：条目越来越多时，只让摘要参与常规召回，原始条目靠强关键词/向量命中，
  * 越老的记忆占用越少召回名额，同时本体（memory.md / archive / 日-月日志）永远完整。
+ * @deprecated 未接线：memory_rollups 表长期 0 行，prompt 的 rollup 槽实际装的是中期记忆（memo）。
+ *             保留接口与 nightly 调用，等时间金字塔真正接线时再启用。
  */
 import type { Env } from './types';
 import { distillText } from './distill';

@@ -14,9 +14,21 @@ const SNAPSHOT = join(process.cwd(), 'src', 'routes.snapshot.json');
 
 describe('路由清单', () => {
   it('与快照完全一致（新增路由请同步更新 routes.snapshot.json）', () => {
-    const actual = app.routes
-      .map((r) => [r.method, r.path] as [string, string])
-      .sort((a, b) => (a[0] + a[1]).localeCompare(b[0] + b[1]));
+    // Hono 对 app.post(path, requireAuth, handler) 会按 handler 数量各记一条 routes，
+    // 所以这里按 (method, path) 去重后比较：这份快照的用途是「别漏挂路由」，
+    // 不是「别改 handler 个数」（2026-11-08：一条路由多挂一个 handler 就让快照红，纯噪声）。
+    const dedupe = (rows: Array<[string, string]>) => {
+      const seen = new Set<string>();
+      const out: Array<[string, string]> = [];
+      for (const row of rows) {
+        const key = row[0] + ' ' + row[1];
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(row);
+      }
+      return out.sort((a, b) => (a[0] + a[1]).localeCompare(b[0] + b[1]));
+    };
+    const actual = dedupe(app.routes.map((r) => [r.method, r.path] as [string, string]));
     if (!existsSync(SNAPSHOT)) {
       writeFileSync(SNAPSHOT, JSON.stringify(actual, null, 2) + '\n', 'utf8');
       return;

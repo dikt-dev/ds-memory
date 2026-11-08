@@ -14,14 +14,14 @@ import { shouldSkipMemoryRecall, buildMemoryPack, budgetFromPack  } from './cont
 import { consumePendingRecall, recordRecallUsage, rememberPendingRecall } from './memory-rehearsal';
 import { fetchBiliMeta, findBiliUrl, formatBiliMeta } from './bili';
 import { loadPersonaDoc } from './persona-doc';
-import { buildBaseSystemPrompt, normalizeChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, stripSilentEndToken } from './prompt';
+import { buildSystemPromptSplit, normalizeChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, stripSilentEndToken } from './prompt';
 import { resolvePersona } from './persona';
 import { ticWarning } from './voice';
 import { stripLeadingTimeLabels } from './anti-ai-flavor';
 import { hasEmoji, replaceFaceMarkers, stripEmoji } from './faces';
 import { facetsFromValues, stageFor } from './relation-facets';
 import { readRelationStageLevel } from './relation-stage';
-import { budgetContext, formatBudgetManifest } from './context-budget';
+import { budgetContext, clipCore, formatBudgetManifest } from './context-budget';
 import { buildPersonaDriftLine, loadPersonaState } from './persona-drift';
 import { beijingHour, beijingMonth, dateKeyInBeijing } from './date';
 import { attachWeather, getOrCreateDayContext } from './context';
@@ -665,6 +665,8 @@ openaiApp.post('/chat/completions', async (c) => {
     channel,
     requestId,
     skipMemorySource: shouldSkipMemoryRecall(pack),
+    // 已经注入的记忆：召回只在「提示词里没有」的候选上跑（2026-11-08）
+    injectedText: clipCore(pack.promptMemory.text),
     nowMs: now.getTime(),
   });
   c.executionCtx.waitUntil(recordCpuSample(c.env, channel, 'cpu_total', performance.now() - packT0).catch(() => {}));
@@ -710,9 +712,10 @@ openaiApp.post('/chat/completions', async (c) => {
   // 快照里带了话题块就直接用，避免再一次 D1 往返
   const topicsBlock = pack.topics || (await recentTopicsBlock(c.env, now).catch(() => ''));
   const cpuT0 = performance.now();
-  const mergedSystem = [
-    ...astrbotSystems,
-    buildBaseSystemPrompt({
+  // ★ 稳定段（人设 + 长期记忆 + 口吻）单独一条 system，每轮字节一致才吃得到前缀缓存。
+  //   以前把易变段（话题 / 中期记忆 / 文件 / 状态卡 / 此刻）也拼进这一条，
+  //   等于每轮都让整个前缀失效——按未命中价计费，也更容易被后面的内容抢走注意力。
+  const promptSplit = buildSystemPromptSplit({
       now,
       personaDoc,
       userText: lastUserCleaned,
@@ -738,8 +741,9 @@ openaiApp.post('/chat/completions', async (c) => {
       residents: lifeBlocks.residents,
       location: lifeBlocks.location,
       persona: resolvePersona(c.env),
-    }),
-  ].join('\n\n') + (historyNote ? `\n\n${historyNote}` : '') + silentEndRule(channel);
+  });
+  // AstrBot 自带的人格/系统消息属于「别人的稳定前缀」：排在第一位，位置也别动
+  const stableSystem = [...astrbotSystems, promptSplit.stable].join('\n') + silentEndRule(channel);
   // 免费版 10ms CPU 预算：这里量的是纯 JS 拼装（D1/KV 等待不算 CPU）
   c.executionCtx.waitUntil(recordCpuSample(c.env, channel, 'cpu_prompt', performance.now() - cpuT0).catch(() => {}));
 
@@ -748,11 +752,14 @@ openaiApp.post('/chat/completions', async (c) => {
   const tic = ticWarning(recentAssistant, resolvePersona(c.env).selfCall);
   const lifeBlock = [lifeBlocks.life, tic].filter(Boolean).join('\n\n') || null;
 
+  // 易变段统一贴在历史之后、用户消息之前：每轮都在变，放进前缀会让缓存全部失效
+  const volatileSystem = [promptSplit.volatile, historyNote, lifeBlock].filter(Boolean).join('\n');
+
   const upstream: DeepSeekMessage[] = [
-    { role: 'system', content: mergedSystem },
-    ...(lifeBlock ? [{ role: 'system' as const, content: lifeBlock }] : []),
+    { role: 'system', content: stableSystem },
     ...historyMessages,
     ...textMessages.filter((m) => m.role !== 'system'),
+    ...(volatileSystem ? [{ role: 'system' as const, content: volatileSystem }] : []),
   ];
 
   // 每轮把语气提醒贴到用户消息最前面；实时类问题再叠加准确事实（只改发给模型的内容，不写 D1）

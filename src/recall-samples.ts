@@ -21,6 +21,14 @@ export interface RecallSample {
   rankMs: number;
   /** rankMs 区间内、子阶段实测之和（用于核对计时口径） */
   rankInnerMs?: number;
+  /** 选择器（一次蒸馏模型往返）。以前算在 rankMs 里，导致「排序慢」的误判。 */
+  selectMs?: number;
+  /** 候选里「已经在本轮提示词里」的条数（覆盖率短路的分母） */
+  covered?: number;
+  /** 过滤后真正参与排序的条数 */
+  uncovered?: number;
+  /** 是否因为全部覆盖而跳过了选择器 */
+  selectorSkipped?: boolean;
   embedMs: number;
   expandMs: number;
   totalMs: number;
@@ -89,6 +97,21 @@ export async function ensureRecallSampleTable(env: Env): Promise<void> {
   await env.DB.prepare('ALTER TABLE recall_samples ADD COLUMN picked INTEGER NOT NULL DEFAULT 0')
     .run()
     .catch(() => undefined);
+  // 计时口径修正 + 覆盖率短路（2026-11-08）：选择器时间与 rank 分开记。
+  await env.DB.prepare('ALTER TABLE recall_samples ADD COLUMN select_ms INTEGER NOT NULL DEFAULT 0')
+    .run()
+    .catch(() => undefined);
+  await env.DB.prepare('ALTER TABLE recall_samples ADD COLUMN covered INTEGER NOT NULL DEFAULT 0')
+    .run()
+    .catch(() => undefined);
+  await env.DB.prepare('ALTER TABLE recall_samples ADD COLUMN uncovered INTEGER NOT NULL DEFAULT 0')
+    .run()
+    .catch(() => undefined);
+  await env.DB.prepare(
+    'ALTER TABLE recall_samples ADD COLUMN selector_skipped INTEGER NOT NULL DEFAULT 0',
+  )
+    .run()
+    .catch(() => undefined);
   ensured = true;
 }
 
@@ -101,8 +124,9 @@ export async function recordRecallSample(env: Env, s: RecallSample, now = Date.n
       `INSERT INTO recall_samples
          (day_key, channel, mode, kind, legacy_ms, load_ms, rank_ms, embed_ms,
           expand_ms, total_ms, items, linked, has_vector, timed_out, legacy_skipped,
-          intents, picked, rank_inner_ms, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          intents, picked, rank_inner_ms, select_ms, covered, uncovered, selector_skipped,
+          created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
       .bind(
         dateKeyInBeijing(new Date(now)),
@@ -123,6 +147,10 @@ export async function recordRecallSample(env: Env, s: RecallSample, now = Date.n
         s.intents && s.intents.length > 0 ? JSON.stringify(s.intents) : null,
         Math.max(0, Math.round(s.picked ?? 0)),
         ms(s.rankInnerMs ?? 0),
+        ms(s.selectMs ?? 0),
+        ms(s.covered ?? 0),
+        ms(s.uncovered ?? 0),
+        s.selectorSkipped ? 1 : 0,
         now,
       )
       .run();
@@ -151,7 +179,7 @@ export async function readRecallSamples(env: Env, days = 3): Promise<RecallSampl
   const rows = await env.DB.prepare(
     `SELECT day_key, channel, mode, kind, legacy_ms, load_ms, rank_ms, embed_ms,
             expand_ms, total_ms, items, linked, has_vector, timed_out, legacy_skipped,
-            created_at
+            select_ms, covered, uncovered, selector_skipped, created_at
        FROM recall_samples
       WHERE day_key >= ?
       ORDER BY id DESC
@@ -174,6 +202,10 @@ export async function readRecallSamples(env: Env, days = 3): Promise<RecallSampl
       has_vector: number;
       timed_out: number;
       legacy_skipped: number;
+      select_ms: number;
+      covered: number;
+      uncovered: number;
+      selector_skipped: number;
       created_at: number;
     }>();
   return (rows.results ?? []).map((r) => ({
@@ -192,6 +224,10 @@ export async function readRecallSamples(env: Env, days = 3): Promise<RecallSampl
     hasVector: r.has_vector === 1,
     timedOut: r.timed_out === 1,
     legacySkipped: r.legacy_skipped === 1,
+    selectMs: r.select_ms ?? 0,
+    covered: r.covered ?? 0,
+    uncovered: r.uncovered ?? 0,
+    selectorSkipped: r.selector_skipped === 1,
     created_at: r.created_at,
   }));
 }
@@ -207,9 +243,9 @@ export function percentile(values: number[], p: number): number {
 export interface StageSummary {
   n: number;
   total: { p50: number; p95: number; max: number };
-  stages: Record<'legacy' | 'load' | 'rank' | 'embed' | 'expand', { p50: number; p95: number }>;
+  stages: Record<'legacy' | 'load' | 'rank' | 'select' | 'embed' | 'expand', { p50: number; p95: number }>;
   /** p95 里各段的占比（0-1），用来快速看谁是大头 */
-  share: Record<'legacy' | 'load' | 'rank' | 'embed' | 'expand', number>;
+  share: Record<'legacy' | 'load' | 'rank' | 'select' | 'embed' | 'expand', number>;
   timedOutRate: number;
   avgItems: number;
 }
@@ -220,6 +256,7 @@ export function summarizeSamples(rows: RecallSampleRow[]): StageSummary | null {
   const legacy = col((r) => r.legacyMs);
   const load = col((r) => r.loadMs);
   const rank = col((r) => r.rankMs);
+  const select = col((r) => r.selectMs ?? 0);
   const embed = col((r) => r.embedMs);
   const expand = col((r) => r.expandMs);
   const total = col((r) => r.totalMs);
@@ -228,6 +265,7 @@ export function summarizeSamples(rows: RecallSampleRow[]): StageSummary | null {
     legacy: p95(legacy),
     load: p95(load),
     rank: p95(rank),
+    select: p95(select),
     embed: p95(embed),
     expand: p95(expand),
   };
@@ -242,6 +280,7 @@ export function summarizeSamples(rows: RecallSampleRow[]): StageSummary | null {
       legacy: { p50: percentile(legacy, 50), p95: p95(legacy) },
       load: { p50: percentile(load, 50), p95: p95(load) },
       rank: { p50: percentile(rank, 50), p95: p95(rank) },
+      select: { p50: percentile(select, 50), p95: p95(select) },
       embed: { p50: percentile(embed, 50), p95: p95(embed) },
       expand: { p50: percentile(expand, 50), p95: p95(expand) },
     },

@@ -7,6 +7,7 @@
 import type { Env } from './types';
 import { hashId, parseMemoryEntries, sectionImportance, topKeywords } from './memory-index';
 import { assertAllowed } from './policy';
+import { getMemory } from './memory';
 import { dedupeIdenticalFacts, expireSupersededFacts } from './fact-expiry';
 import { confidenceForSource, mergeConfidence } from './fact-confidence';
 import { autoTags, bigrams } from './memory-archive';
@@ -298,15 +299,23 @@ export const CHUNKS_CACHE_KEY = 'mem:chunks:v1';
 export const CHUNKS_CACHE_TTL_SECONDS = 24 * 3600;
 
 /**
- * 用 memory.md 文本直接重建 chunk 缓存，**不调 embedding、不写 D1**。
+ * 重建 chunk 缓存：**一个口径**。
  *
- * 增量提炼用它：只需要新条目进召回，全量 reindex 会重算所有向量（实测 145s → 目标 10s）。
- * 新条目 vec 留空（关键词召回照样命中），旧条目按内容 hash 复用已有向量。
+ * 以前有两个函数互相覆盖彼此的结果：
+ *   - refreshChunksCacheFromMemory 只解析 memory.md（不调 embedding、不写 D1）
+ *   - refreshChunksCache 回源 D1（包含 archive 行）
+ * 谁后跑谁说了算，archive 的旧事于是时有时无（2026-11-08 复盘）。
+ *
+ * 现在只有一个：memory.md 解析结果 ∪ D1 里的 archive 行，按 contentHash 去重，一次 KV 写。
+ * 传了 memoryText 就省掉一次读取（写记忆的那条链路本来就有新文本）。
  */
-export async function refreshChunksCacheFromMemory(env: Env, memory: string): Promise<number> {
+export async function refreshChunksCache(env: Env, memoryText?: string): Promise<number> {
   const prev = await env.KV.get<MemoryChunk[]>(CHUNKS_CACHE_KEY, 'json').catch(() => null);
   const prevByContent = new Map<string, MemoryChunk>();
   for (const c of prev ?? []) prevByContent.set(c.content, c);
+
+  const given = (memoryText ?? '').trim();
+  const memory = given || (await getMemoryForChunks(env));
   const entries = parseMemoryEntries(memory, 'memory');
   const now = Date.now();
   const chunks: MemoryChunk[] = entries.map((p) => {
@@ -330,21 +339,62 @@ export async function refreshChunksCacheFromMemory(env: Env, memory: string): Pr
       subject: inferMemorySubject(p.content),
     };
   });
-  await env.KV.put(CHUNKS_CACHE_KEY, JSON.stringify(chunks), {
+
+  // archive 的旧事不在 memory.md 里，必须从 D1 合并进来，否则「翻旧账」永远翻不到。
+  const archived = await env.DB.prepare(
+    `SELECT id, source, source_id, section, content, date, keywords, tags,
+            importance, vec, content_hash, updated_at, use_count, last_used_at,
+            confirmed_count, pinned
+     FROM memory_chunks WHERE source = 'archive' LIMIT 4000`,
+  )
+    .all<Record<string, unknown>>()
+    .catch(() => null);
+  const archiveChunks: MemoryChunk[] = (archived?.results ?? []).map((r) => ({
+    id: String(r.id),
+    source: 'event' as const,
+    sourceId: String(r.source_id ?? ''),
+    section: String(r.section ?? '共同经历'),
+    content: String(r.content ?? ''),
+    date: (r.date as string | null) ?? null,
+    keywords: parseArray<string>(String(r.keywords ?? '')),
+    tags: parseArray<string>(String(r.tags ?? '')),
+    importance: Number(r.importance) || 5,
+    vec: (r.vec as string | null) ?? null,
+    contentHash: String(r.content_hash ?? r.id),
+    updatedAt: Number(r.updated_at) || now,
+    useCount: Number(r.use_count) || 0,
+    lastUsedAt: (r.last_used_at as number | null) ?? null,
+    confirmedCount: Number(r.confirmed_count) || 0,
+    pinned: Number(r.pinned) === 1,
+    subject: inferMemorySubject(String(r.content ?? '')),
+  }));
+
+  const byHash = new Map<string, MemoryChunk>();
+  for (const c of chunks) byHash.set(c.contentHash || c.content, c);
+  for (const c of archiveChunks) {
+    const key = c.contentHash || c.content;
+    if (!byHash.has(key)) byHash.set(key, c);
+  }
+  const merged = [...byHash.values()];
+  await env.KV.put(CHUNKS_CACHE_KEY, JSON.stringify(merged), {
     expirationTtl: CHUNKS_CACHE_TTL_SECONDS,
   }).catch(() => undefined);
-  return chunks.length;
+  return merged.length;
 }
 
-/** 强制刷新 chunk 缓存（归档/记忆变更后调用）。 */
-export async function refreshChunksCache(env: Env): Promise<number> {
-  const rows = await loadMemoryChunks(env, 1000, { skipCache: true });
-  await env.KV.put(CHUNKS_CACHE_KEY, JSON.stringify(rows), {
-    expirationTtl: CHUNKS_CACHE_TTL_SECONDS,
-  }).catch(() => undefined);
-  return rows.length;
+/** 兼容旧调用点：拿到新记忆文本时直接用它重建（不调 embedding、不写 D1）。 */
+export async function refreshChunksCacheFromMemory(env: Env, memory: string): Promise<number> {
+  return await refreshChunksCache(env, memory);
 }
 
+/** 取 memory.md 原文（只给 chunk 重建用；缓存优先，失败返回空串）。 */
+async function getMemoryForChunks(env: Env): Promise<string> {
+  try {
+    return await getMemory(env);
+  } catch {
+    return '';
+  }
+}
 /** 读取全部 chunk（当前规模很小；Phase 4 改为按候选集/FTS 查询）。 */
 export async function loadMemoryChunks(
   env: Env,

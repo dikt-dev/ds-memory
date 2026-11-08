@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { capRecallText, resolveRecall, withDeadline, RECALL_DEADLINE_MS } from './memory-engine';
+import {
+  capRecallText,
+  isCovered,
+  resolveRecall,
+  withDeadline,
+  RECALL_DEADLINE_MS,
+} from './memory-engine';
 import type { Env } from './types';
 
 const NL = String.fromCharCode(10);
@@ -62,5 +68,96 @@ describe('resolveRecall 门控', () => {
 
   it('默认预算按实测校准到 3500ms（并行后是 max 而非 sum）', () => {
     expect(RECALL_DEADLINE_MS).toBe(3500);
+  });
+});
+
+describe('覆盖率短路（召回只带提示词里没有的）', () => {
+  const chunk = (content: string, id: string) => ({
+    id,
+    source: 'fact' as const,
+    sourceId: id,
+    section: '共同经历',
+    content,
+    date: '26-11-07',
+    keywords: [],
+    tags: [],
+    importance: 5,
+    contentHash: id,
+    updatedAt: 1,
+    useCount: 0,
+    lastUsedAt: null,
+    confirmedCount: 0,
+    pinned: false,
+    vec: null,
+    subject: 'shared',
+  });
+
+  const envWith = (chunks: unknown[], extra: Record<string, string> = {}) =>
+    ({
+      KV: {
+        get: async () => chunks,
+        put: async () => undefined,
+        delete: async () => undefined,
+      },
+      DB: {
+        prepare: () => ({
+          bind: () => ({
+            run: async () => ({ meta: { changes: 0 } }),
+            first: async () => null,
+            all: async () => ({ results: [] }),
+          }),
+          run: async () => ({ meta: { changes: 0 } }),
+          first: async () => null,
+          all: async () => ({ results: [] }),
+        }),
+      },
+      ...extra,
+    }) as unknown as Env;
+
+  const LINE = '她怕打雷，晚上会戴着耳机睡';
+
+  it('全部候选都在注入内容里 → 空召回，且不调选择器', async () => {
+    const env = envWith([chunk(LINE, 'a')]);
+    const r = await resolveRecall(env, {
+      query: '你还记得我怕打雷那件事吗',
+      mode: 'next',
+      channel: 'mobile',
+      injectedText: ['## 长期记忆', '- [26-11-07] ' + LINE].join(NL),
+    });
+    expect(r.text).toBe('');
+    expect(r.covered).toBe(1);
+    expect(r.uncovered).toBe(0);
+    expect(r.selectorSkipped).toBe(true);
+  });
+
+  it('注入内容里没有 → 正常参与召回', async () => {
+    const env = envWith([chunk(LINE, 'a')]);
+    const r = await resolveRecall(env, {
+      query: '你还记得我怕打雷那件事吗',
+      mode: 'next',
+      channel: 'mobile',
+      injectedText: '## 长期记忆（别的内容）',
+    });
+    expect(r.covered).toBe(0);
+    expect(r.uncovered).toBe(1);
+    expect(r.selectorSkipped).toBe(false);
+    expect(r.text).toContain('打雷');
+  });
+
+  it('RECALL_SKIP_COVERED=off 时回到旧行为', async () => {
+    const env = envWith([chunk(LINE, 'a')], { RECALL_SKIP_COVERED: 'off' });
+    const r = await resolveRecall(env, {
+      query: '你还记得我怕打雷那件事吗',
+      mode: 'next',
+      channel: 'mobile',
+      injectedText: ['## 长期记忆', '- [26-11-07] ' + LINE].join(NL),
+    });
+    expect(r.text).toContain('打雷');
+    expect(r.selectorSkipped).toBe(false);
+  });
+
+  it('isCovered：短条目不算覆盖，避免 8 字以下误杀', () => {
+    expect(isCovered({ content: '怕打雷' }, '他怕打雷')).toBe(false);
+    expect(isCovered({ content: '她怕打雷，晚上戴耳机' }, '前言 她怕打雷，晚上戴耳机 后记')).toBe(true);
   });
 });

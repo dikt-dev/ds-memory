@@ -25,6 +25,7 @@ import {
   refreshKeepsakesBlock,
 } from './keepsakes';
 import { reindexMemory } from './memory-index';
+import { memoryEngineFor } from './engine-flags';
 import { refreshChunksCache } from './memory-context-store';
 import { backfillMemoryProvenance, embedMemoryChunks, replaceMemoryContext, syncRollupSummaries } from './memory-context-store';
 import { cleanupMemoryTables, enqueueMemoryJob, runMemoryJobs } from './memory-jobs';
@@ -635,10 +636,14 @@ export async function archiveOneDay(
     if (!saved) {
       logError('[daily] 记忆写回失败（R2 读回校验未通过），跳过索引与 context 重建，避免两者不一致');
     }
-    // 重建 D1 记忆检索索引（幂等；失败不影响归档，下次可手动 /api/admin/memory/reindex）
-    // memory 没变就不重建：全量 reindex + context 重写是这条链路里最贵的一步，
-    // 而"当天没有新记忆"（比如整天都在闲聊）并不罕见。
-    if (saved && memoryChanged) try {
+    // 重建 D1 记忆检索索引（旧引擎 memory_entries）。
+    // ★ 只有 legacy/shadow 才需要它：next 模式召回走 memory_chunks，这份索引
+    //   既不读也不该维护——以前每晚照样重算一遍向量、还写一次 KV memory:index（2026-11-08 复盘）。
+    //   需要时仍可手动 /api/admin/memory/reindex。
+    const needLegacyIndex = memoryEngineFor(env, 'web') !== 'next';
+    if (!needLegacyIndex) {
+      logInfo('[daily] MEMORY_ENGINE=next：跳过 legacy 索引重建（memory_entries 不再维护）');
+    } else if (saved && memoryChanged) try {
       const idx = await reindexMemory(env);
       if (idx.errors) logError('[daily] memory reindex failed:', idx.errors);
       else logInfo(`[daily] 记忆索引重建：${idx.entries} 条，含向量 ${idx.withVec} 条`);

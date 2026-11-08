@@ -48,6 +48,16 @@ describe('summarizeSamples', () => {
     expect(s.avgItems).toBe(4);
   });
 
+  it('选择器单独成段，不再混进 rank（2026-11-08 计时口径修正）', () => {
+    const s = summarizeSamples([
+      row({ rankMs: 2, selectMs: 1200 }),
+      row({ rankMs: 4, selectMs: 900 }),
+    ])!;
+    expect(s.stages.rank.p95).toBe(4);
+    expect(s.stages.select.p95).toBe(1200);
+    expect(s.share.select).toBeGreaterThan(0.5);
+  });
+
   it('占比之和约等于 1（用 p95 计算）', () => {
     const s = summarizeSamples([row(), row({ embedMs: 100 })])!;
     const sum = Object.values(s.share).reduce((a, b) => a + b, 0);

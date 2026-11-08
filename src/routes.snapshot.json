@@ -13,19 +13,7 @@
   ],
   [
     "GET",
-    "/api/admin/affect/explain"
-  ],
-  [
-    "GET",
     "/api/admin/cost"
-  ],
-  [
-    "GET",
-    "/api/admin/cost"
-  ],
-  [
-    "GET",
-    "/api/admin/engine-metrics"
   ],
   [
     "GET",
@@ -37,19 +25,7 @@
   ],
   [
     "GET",
-    "/api/admin/eval/probes"
-  ],
-  [
-    "GET",
     "/api/admin/health"
-  ],
-  [
-    "GET",
-    "/api/admin/health"
-  ],
-  [
-    "GET",
-    "/api/admin/kv-audit"
   ],
   [
     "GET",
@@ -61,19 +37,7 @@
   ],
   [
     "GET",
-    "/api/admin/life/diary/item"
-  ],
-  [
-    "GET",
     "/api/admin/life/diary/list"
-  ],
-  [
-    "GET",
-    "/api/admin/life/diary/list"
-  ],
-  [
-    "GET",
-    "/api/admin/life/gate"
   ],
   [
     "GET",
@@ -85,19 +49,7 @@
   ],
   [
     "GET",
-    "/api/admin/life/now"
-  ],
-  [
-    "GET",
     "/api/admin/life/prompt"
-  ],
-  [
-    "GET",
-    "/api/admin/life/prompt"
-  ],
-  [
-    "GET",
-    "/api/admin/memory/actions"
   ],
   [
     "GET",
@@ -109,19 +61,7 @@
   ],
   [
     "GET",
-    "/api/admin/memory/context-stats"
-  ],
-  [
-    "GET",
     "/api/admin/memory/degradations"
-  ],
-  [
-    "GET",
-    "/api/admin/memory/degradations"
-  ],
-  [
-    "GET",
-    "/api/admin/memory/events"
   ],
   [
     "GET",
@@ -133,19 +73,7 @@
   ],
   [
     "GET",
-    "/api/admin/memory/facts-doc"
-  ],
-  [
-    "GET",
     "/api/admin/memory/health"
-  ],
-  [
-    "GET",
-    "/api/admin/memory/health"
-  ],
-  [
-    "GET",
-    "/api/admin/memory/jobs"
   ],
   [
     "GET",
@@ -157,19 +85,7 @@
   ],
   [
     "GET",
-    "/api/admin/memory/keepsakes"
-  ],
-  [
-    "GET",
     "/api/admin/memory/links"
-  ],
-  [
-    "GET",
-    "/api/admin/memory/links"
-  ],
-  [
-    "GET",
-    "/api/admin/memory/persona-drift"
   ],
   [
     "GET",
@@ -181,19 +97,7 @@
   ],
   [
     "GET",
-    "/api/admin/memory/pinned"
-  ],
-  [
-    "GET",
     "/api/admin/memory/projection"
-  ],
-  [
-    "GET",
-    "/api/admin/memory/projection"
-  ],
-  [
-    "GET",
-    "/api/admin/memory/prompt-preview"
   ],
   [
     "GET",
@@ -205,19 +109,7 @@
   ],
   [
     "GET",
-    "/api/admin/memory/raw"
-  ],
-  [
-    "GET",
     "/api/admin/memory/recall"
-  ],
-  [
-    "GET",
-    "/api/admin/memory/recall"
-  ],
-  [
-    "GET",
-    "/api/admin/memory/self-check"
   ],
   [
     "GET",
@@ -229,19 +121,7 @@
   ],
   [
     "GET",
-    "/api/admin/memory/self-review"
-  ],
-  [
-    "GET",
     "/api/admin/memory/snapshots"
-  ],
-  [
-    "GET",
-    "/api/admin/memory/snapshots"
-  ],
-  [
-    "GET",
-    "/api/admin/memory/subject-audit"
   ],
   [
     "GET",
@@ -253,19 +133,7 @@
   ],
   [
     "GET",
-    "/api/admin/memory/variants"
-  ],
-  [
-    "GET",
     "/api/admin/pair-code"
-  ],
-  [
-    "GET",
-    "/api/admin/pair-code"
-  ],
-  [
-    "GET",
-    "/api/admin/persona"
   ],
   [
     "GET",
@@ -277,19 +145,7 @@
   ],
   [
     "GET",
-    "/api/admin/prompt/peek"
-  ],
-  [
-    "GET",
     "/api/admin/readiness"
-  ],
-  [
-    "GET",
-    "/api/admin/readiness"
-  ],
-  [
-    "GET",
-    "/api/admin/recall-samples"
   ],
   [
     "GET",
@@ -301,19 +157,7 @@
   ],
   [
     "GET",
-    "/api/admin/relation"
-  ],
-  [
-    "GET",
     "/api/admin/requests"
-  ],
-  [
-    "GET",
-    "/api/admin/requests"
-  ],
-  [
-    "GET",
-    "/api/admin/stats"
   ],
   [
     "GET",
@@ -325,19 +169,7 @@
   ],
   [
     "GET",
-    "/api/admin/storage-check"
-  ],
-  [
-    "GET",
     "/api/app/ai-diary"
-  ],
-  [
-    "GET",
-    "/api/app/ai-diary"
-  ],
-  [
-    "GET",
-    "/api/app/ai-diary/index"
   ],
   [
     "GET",
@@ -349,19 +181,7 @@
   ],
   [
     "GET",
-    "/api/app/ai-status"
-  ],
-  [
-    "GET",
     "/api/app/client-messages"
-  ],
-  [
-    "GET",
-    "/api/app/client-messages"
-  ],
-  [
-    "GET",
-    "/api/app/diary-image/*"
   ],
   [
     "GET",
@@ -373,19 +193,7 @@
   ],
   [
     "GET",
-    "/api/app/events"
-  ],
-  [
-    "GET",
     "/api/app/image"
-  ],
-  [
-    "GET",
-    "/api/app/image"
-  ],
-  [
-    "GET",
-    "/api/app/link-preview"
   ],
   [
     "GET",
@@ -397,19 +205,7 @@
   ],
   [
     "GET",
-    "/api/app/media"
-  ],
-  [
-    "GET",
     "/api/app/status"
-  ],
-  [
-    "GET",
-    "/api/app/status"
-  ],
-  [
-    "GET",
-    "/api/app/tombstones"
   ],
   [
     "GET",
@@ -421,27 +217,11 @@
   ],
   [
     "GET",
-    "/api/app/tts-config"
-  ],
-  [
-    "GET",
-    "/api/app/web-preview"
-  ],
-  [
-    "GET",
     "/api/app/web-preview"
   ],
   [
     "GET",
     "/api/audio/*"
-  ],
-  [
-    "GET",
-    "/api/audio/*"
-  ],
-  [
-    "GET",
-    "/api/balance"
   ],
   [
     "GET",
@@ -461,14 +241,6 @@
   ],
   [
     "GET",
-    "/api/history"
-  ],
-  [
-    "GET",
-    "/api/history/since"
-  ],
-  [
-    "GET",
     "/api/history/since"
   ],
   [
@@ -477,19 +249,7 @@
   ],
   [
     "GET",
-    "/api/image/*"
-  ],
-  [
-    "GET",
     "/api/proactive/plan"
-  ],
-  [
-    "GET",
-    "/api/proactive/plan"
-  ],
-  [
-    "GET",
-    "/api/proactive/stats"
   ],
   [
     "GET",
@@ -509,23 +269,11 @@
   ],
   [
     "GET",
-    "/api/tts/config"
-  ],
-  [
-    "GET",
-    "/api/tts/jobs/:id"
-  ],
-  [
-    "GET",
     "/api/tts/jobs/:id"
   ],
   [
     "GET",
     "/api/tts/pending"
-  ],
-  [
-    "GET",
-    "/api/usage"
   ],
   [
     "GET",
@@ -545,19 +293,7 @@
   ],
   [
     "POST",
-    "/api/admin/affect/ingest"
-  ],
-  [
-    "POST",
     "/api/admin/affect/reset"
-  ],
-  [
-    "POST",
-    "/api/admin/affect/reset"
-  ],
-  [
-    "POST",
-    "/api/admin/cache/prewarm"
   ],
   [
     "POST",
@@ -569,19 +305,7 @@
   ],
   [
     "POST",
-    "/api/admin/context-snapshot/rebuild"
-  ],
-  [
-    "POST",
     "/api/admin/distill/backfill"
-  ],
-  [
-    "POST",
-    "/api/admin/distill/backfill"
-  ],
-  [
-    "POST",
-    "/api/admin/distill/incremental"
   ],
   [
     "POST",
@@ -593,19 +317,11 @@
   ],
   [
     "POST",
-    "/api/admin/emotion/simulate"
-  ],
-  [
-    "POST",
     "/api/admin/eval/probes"
   ],
   [
     "POST",
-    "/api/admin/eval/probes"
-  ],
-  [
-    "POST",
-    "/api/admin/kv/clear"
+    "/api/admin/eval/probes/report"
   ],
   [
     "POST",
@@ -617,19 +333,7 @@
   ],
   [
     "POST",
-    "/api/admin/life/day"
-  ],
-  [
-    "POST",
     "/api/admin/life/diary"
-  ],
-  [
-    "POST",
-    "/api/admin/life/diary"
-  ],
-  [
-    "POST",
-    "/api/admin/life/diary/ask"
   ],
   [
     "POST",
@@ -641,19 +345,7 @@
   ],
   [
     "POST",
-    "/api/admin/life/diary/cover"
-  ],
-  [
-    "POST",
     "/api/admin/life/diary/generate"
-  ],
-  [
-    "POST",
-    "/api/admin/life/diary/generate"
-  ],
-  [
-    "POST",
-    "/api/admin/life/diary/summary"
   ],
   [
     "POST",
@@ -665,19 +357,7 @@
   ],
   [
     "POST",
-    "/api/admin/life/flag"
-  ],
-  [
-    "POST",
     "/api/admin/life/move"
-  ],
-  [
-    "POST",
-    "/api/admin/life/move"
-  ],
-  [
-    "POST",
-    "/api/admin/life/night"
   ],
   [
     "POST",
@@ -689,19 +369,7 @@
   ],
   [
     "POST",
-    "/api/admin/life/photo"
-  ],
-  [
-    "POST",
     "/api/admin/life/postcard"
-  ],
-  [
-    "POST",
-    "/api/admin/life/postcard"
-  ],
-  [
-    "POST",
-    "/api/admin/life/trip"
   ],
   [
     "POST",
@@ -713,19 +381,7 @@
   ],
   [
     "POST",
-    "/api/admin/life/weather"
-  ],
-  [
-    "POST",
     "/api/admin/memory/actions/:id/revert"
-  ],
-  [
-    "POST",
-    "/api/admin/memory/actions/:id/revert"
-  ],
-  [
-    "POST",
-    "/api/admin/memory/backfill-provenance"
   ],
   [
     "POST",
@@ -737,19 +393,7 @@
   ],
   [
     "POST",
-    "/api/admin/memory/collapse-ongoing"
-  ],
-  [
-    "POST",
     "/api/admin/memory/embed"
-  ],
-  [
-    "POST",
-    "/api/admin/memory/embed"
-  ],
-  [
-    "POST",
-    "/api/admin/memory/enqueue-rebuild"
   ],
   [
     "POST",
@@ -761,19 +405,7 @@
   ],
   [
     "POST",
-    "/api/admin/memory/events/backfill"
-  ],
-  [
-    "POST",
     "/api/admin/memory/extract"
-  ],
-  [
-    "POST",
-    "/api/admin/memory/extract"
-  ],
-  [
-    "POST",
-    "/api/admin/memory/facts-doc"
   ],
   [
     "POST",
@@ -785,19 +417,7 @@
   ],
   [
     "POST",
-    "/api/admin/memory/jobs/run"
-  ],
-  [
-    "POST",
     "/api/admin/memory/keepsakes"
-  ],
-  [
-    "POST",
-    "/api/admin/memory/keepsakes"
-  ],
-  [
-    "POST",
-    "/api/admin/memory/keepsakes/:id/pin"
   ],
   [
     "POST",
@@ -809,19 +429,7 @@
   ],
   [
     "POST",
-    "/api/admin/memory/keepsakes/:id/status"
-  ],
-  [
-    "POST",
     "/api/admin/memory/link-all"
-  ],
-  [
-    "POST",
-    "/api/admin/memory/link-all"
-  ],
-  [
-    "POST",
-    "/api/admin/memory/pin"
   ],
   [
     "POST",
@@ -833,19 +441,7 @@
   ],
   [
     "POST",
-    "/api/admin/memory/project"
-  ],
-  [
-    "POST",
     "/api/admin/memory/rebuild-context"
-  ],
-  [
-    "POST",
-    "/api/admin/memory/rebuild-context"
-  ],
-  [
-    "POST",
-    "/api/admin/memory/reconcile-facts"
   ],
   [
     "POST",
@@ -857,19 +453,7 @@
   ],
   [
     "POST",
-    "/api/admin/memory/refresh"
-  ],
-  [
-    "POST",
     "/api/admin/memory/reindex"
-  ],
-  [
-    "POST",
-    "/api/admin/memory/reindex"
-  ],
-  [
-    "POST",
-    "/api/admin/memory/reload"
   ],
   [
     "POST",
@@ -881,19 +465,7 @@
   ],
   [
     "POST",
-    "/api/admin/memory/remove-line"
-  ],
-  [
-    "POST",
     "/api/admin/memory/replay-distill"
-  ],
-  [
-    "POST",
-    "/api/admin/memory/replay-distill"
-  ],
-  [
-    "POST",
-    "/api/admin/memory/restore"
   ],
   [
     "POST",
@@ -905,19 +477,7 @@
   ],
   [
     "POST",
-    "/api/admin/memory/rollup"
-  ],
-  [
-    "POST",
     "/api/admin/memory/section-line"
-  ],
-  [
-    "POST",
-    "/api/admin/memory/section-line"
-  ],
-  [
-    "POST",
-    "/api/admin/memory/self-check"
   ],
   [
     "POST",
@@ -929,19 +489,7 @@
   ],
   [
     "POST",
-    "/api/admin/memory/self-review"
-  ],
-  [
-    "POST",
     "/api/admin/memory/subject-fix"
-  ],
-  [
-    "POST",
-    "/api/admin/memory/subject-fix"
-  ],
-  [
-    "POST",
-    "/api/admin/memory/sync-archive"
   ],
   [
     "POST",
@@ -953,19 +501,7 @@
   ],
   [
     "POST",
-    "/api/admin/memory/sync-summaries"
-  ],
-  [
-    "POST",
     "/api/admin/memory/variants"
-  ],
-  [
-    "POST",
-    "/api/admin/memory/variants"
-  ],
-  [
-    "POST",
-    "/api/admin/memory/variants/:id/decide"
   ],
   [
     "POST",
@@ -977,27 +513,11 @@
   ],
   [
     "POST",
-    "/api/admin/memory/variants/:id/rollback"
-  ],
-  [
-    "POST",
-    "/api/admin/ops/prune-r2"
-  ],
-  [
-    "POST",
     "/api/admin/ops/prune-r2"
   ],
   [
     "POST",
     "/api/admin/pair-code"
-  ],
-  [
-    "POST",
-    "/api/admin/pair-code"
-  ],
-  [
-    "POST",
-    "/api/admin/persona/preview"
   ],
   [
     "POST",
@@ -1017,19 +537,7 @@
   ],
   [
     "POST",
-    "/api/admin/rearchive-logs"
-  ],
-  [
-    "POST",
     "/api/admin/reset-chat"
-  ],
-  [
-    "POST",
-    "/api/admin/reset-chat"
-  ],
-  [
-    "POST",
-    "/api/admin/run-context"
   ],
   [
     "POST",
@@ -1041,19 +549,7 @@
   ],
   [
     "POST",
-    "/api/admin/run-daily"
-  ],
-  [
-    "POST",
     "/api/admin/run-monthly"
-  ],
-  [
-    "POST",
-    "/api/admin/run-monthly"
-  ],
-  [
-    "POST",
-    "/api/admin/settings"
   ],
   [
     "POST",
@@ -1065,19 +561,7 @@
   ],
   [
     "POST",
-    "/api/admin/test-mood"
-  ],
-  [
-    "POST",
     "/api/admin/topics/backfill"
-  ],
-  [
-    "POST",
-    "/api/admin/topics/backfill"
-  ],
-  [
-    "POST",
-    "/api/admin/trigger-proactive"
   ],
   [
     "POST",
@@ -1089,19 +573,7 @@
   ],
   [
     "POST",
-    "/api/admin/wipe-data"
-  ],
-  [
-    "POST",
     "/api/app/ai-diary/ask"
-  ],
-  [
-    "POST",
-    "/api/app/ai-diary/ask"
-  ],
-  [
-    "POST",
-    "/api/app/bili-meta"
   ],
   [
     "POST",
@@ -1113,14 +585,6 @@
   ],
   [
     "POST",
-    "/api/app/bili-vision"
-  ],
-  [
-    "POST",
-    "/api/app/flush"
-  ],
-  [
-    "POST",
     "/api/app/flush"
   ],
   [
@@ -1129,19 +593,7 @@
   ],
   [
     "POST",
-    "/api/app/heartbeat"
-  ],
-  [
-    "POST",
     "/api/app/location"
-  ],
-  [
-    "POST",
-    "/api/app/location"
-  ],
-  [
-    "POST",
-    "/api/app/memory/correct"
   ],
   [
     "POST",
@@ -1157,19 +609,7 @@
   ],
   [
     "POST",
-    "/api/app/tts"
-  ],
-  [
-    "POST",
     "/api/app/tts-config"
-  ],
-  [
-    "POST",
-    "/api/app/tts-config"
-  ],
-  [
-    "POST",
-    "/api/app/unpair"
   ],
   [
     "POST",
@@ -1181,27 +621,11 @@
   ],
   [
     "POST",
-    "/api/app/upload/video"
-  ],
-  [
-    "POST",
-    "/api/app/video-asr"
-  ],
-  [
-    "POST",
     "/api/app/video-asr"
   ],
   [
     "POST",
     "/api/app/video-vision"
-  ],
-  [
-    "POST",
-    "/api/app/video-vision"
-  ],
-  [
-    "POST",
-    "/api/chat"
   ],
   [
     "POST",
@@ -1229,10 +653,6 @@
   ],
   [
     "POST",
-    "/api/tts"
-  ],
-  [
-    "POST",
     "/api/tts/ack"
   ],
   [
@@ -1241,15 +661,7 @@
   ],
   [
     "POST",
-    "/api/tts/jobs/:id/fallback"
-  ],
-  [
-    "POST",
     "/api/tts/nack"
-  ],
-  [
-    "POST",
-    "/api/tts/speak"
   ],
   [
     "POST",
@@ -1266,10 +678,6 @@
   [
     "POST",
     "/v1/chat/completions"
-  ],
-  [
-    "PUT",
-    "/api/admin/persona"
   ],
   [
     "PUT",

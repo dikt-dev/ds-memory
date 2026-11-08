@@ -8,6 +8,7 @@ import type { Env } from './types';
 import { getObject, putObject } from './storage';
 import { assertAllowed, type Actor } from './policy';
 import { logError, logWarn } from './error-log';
+import { refreshChunksCache } from './memory-context-store';
 
 export const MEMORY_R2_KEY = 'memory.md';
 export const MEMORY_KV_KEY = 'memory:cache';
@@ -95,6 +96,14 @@ export async function putMemory(
   // 2.5) 上下文快照里也存了一份 memory：记忆变了必须让它失效，
   //      否则最长 10 分钟里提示词用的还是旧记忆（2026-11-08 踩到）。
   await env.KV.delete('ctx:snapshot:v1').catch(() => {});
+  await env.KV.delete('ctx:snapshot:v2').catch(() => {});
+
+  // 2.6) 召回用的 chunk 缓存是从 memory.md 派生的：不一起失效，
+  //      会出现「提示词里是新的、召回里是旧的」——同一轮给模型两套说法（2026-11-08）。
+  //      用新文本重建（纯 JS 解析 + 一次 KV 写），不调 embedding、不走 D1。
+  await refreshChunksCache(env, text).catch((e: unknown) => {
+    logWarn('[memory] chunk cache refresh failed (kept old cache):', e);
+  });
 
   // 3) 校验通过才刷新缓存；KV 失败就删缓存，下次回源 R2 读到的是新内容。
   try {

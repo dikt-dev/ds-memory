@@ -71,6 +71,34 @@ export function recallTier(
 export const RECALL_MAX_ITEMS = 5;
 export const RECALL_ITEM_CHARS = 200;
 
+/**
+ * 覆盖率短路：候选正文已经在本轮注入的记忆里时，不算「没有想起来」。
+ *
+ * 为什么要有：chunk 的语料就是 memory.md 本身（见 memory-context-store.ts）。
+ * 全量/分层注入时同一句话已经在提示词里，召回只可能把它再说一遍，
+ * 却要付一次选择器模型往返（实测 1.3 s）。
+ *
+ * 关掉：RECALL_SKIP_COVERED=off（回退到旧行为，用于对比与救急）。
+ */
+const COVER_MIN_CHARS = 8;
+const COVER_ANCHOR_CHARS = 24;
+
+/** 这条候选是不是已经逐字（或按首句锚点）出现在本轮注入的记忆里。 */
+export function isCovered(chunk: { content: string }, injected: string): boolean {
+  const body = (chunk.content ?? '').trim();
+  if (!injected || body.length < COVER_MIN_CHARS) return false;
+  if (injected.includes(body)) return true;
+  const anchor = body.slice(0, COVER_ANCHOR_CHARS);
+  return anchor.length >= 12 && injected.includes(anchor);
+}
+
+/** 选择器的最小候选数：小于它时确定性排序已经够用。默认 4，可用 env 覆盖。 */
+export const RECALL_SELECT_MIN_POOL = 4;
+export function selectMinPool(env: { RECALL_SELECT_MIN_POOL?: string }): number {
+  const raw = Number(env.RECALL_SELECT_MIN_POOL);
+  return Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : RECALL_SELECT_MIN_POOL;
+}
+
 export type RecallMode = 'legacy' | 'shadow' | 'next';
 
 export interface RecallOptions {
@@ -83,6 +111,8 @@ export interface RecallOptions {
   requestId?: string;
   kind?: 'memory' | 'proactive';
   skipMemorySource?: boolean;
+  /** 本轮将要注入提示词的核心记忆：已经在这里出现的候选不再召回 */
+  injectedText?: string;
   nowMs?: number;
   deadlineMs?: number;
 }
@@ -95,6 +125,10 @@ export interface RecallResult {
   skipped: boolean;
   timedOut: boolean;
   ms: number;
+  /** 覆盖率诊断：候选总数里有多少已经被提示词覆盖、多少真的参与了召回 */
+  covered?: number;
+  uncovered?: number;
+  selectorSkipped?: boolean;
   /** 本轮真正注入的 chunks id（复习计数用；legacy 链路拿不到，返回空）。 */
   ids: string[];
 }
@@ -155,6 +189,9 @@ export function capRecallText(
 export interface NextStageMs {
   load: number;
   rank: number;
+  /** 选择器：一次蒸馏模型往返。
+   *  以前这段被累加进 rank，于是「排序要 1.3 秒」成了误判（2026-11-08 复盘）。 */
+  select: number;
   embed: number;
   expand: number;
   /** rank 区间内子阶段实测之和（核对口径用） */
@@ -166,8 +203,11 @@ async function runNextEngine(
   env: Env,
   query: string,
   focus: string,
-  onStage?: (name: string, ms: number) => void,
+  opts: { injectedText?: string; onStage?: (name: string, ms: number) => void } = {},
 ): Promise<{
+  covered: number;
+  uncovered: number;
+  selectorSkipped: boolean;
   text: string;
   items: number;
   dropped: number;
@@ -179,14 +219,24 @@ async function runNextEngine(
   tier: 'full' | 'recent' | 'summary';
   ids: string[];
 }> {
-  const stages: NextStageMs = { load: 0, rank: 0, embed: 0, expand: 0, rankInner: 0 };
+  const onStage = opts.onStage;
+  const stages: NextStageMs = { load: 0, rank: 0, select: 0, embed: 0, expand: 0, rankInner: 0 };
   const started = performance.now();
 
   // 分段计时：延迟要按段优化，先得知道哪段贵（见 recall-samples.ts）。
   let t = performance.now();
-  const chunks = await loadMemoryChunks(env);
+  const allChunks = await loadMemoryChunks(env);
   stages.load = performance.now() - t;
-  if (chunks.length === 0) {
+
+  // ★ 覆盖率短路（2026-11-08）：这一轮要注入的记忆里已经有的条目，不需要再「想起来」。
+  //   现在的 chunk 语料就是 memory.md 本身，不短路等于把同一句话发两遍，还多付一次模型往返。
+  const injected = (opts.injectedText ?? '').trim();
+  const chunks = injected ? allChunks.filter((chunk) => !isCovered(chunk, injected)) : allChunks;
+  const covered = allChunks.length - chunks.length;
+  if (allChunks.length === 0 || (injected && allChunks.length > 0 && chunks.length === 0)) {
+    if (injected && allChunks.length > 0) {
+      logTrace('memory.recall.covered', { covered, uncovered: 0, skipped: true, loadMs: Math.round(stages.load) });
+    }
     return {
       text: '',
       items: 0,
@@ -198,6 +248,9 @@ async function runNextEngine(
       stages,
       tier: 'full' as const,
       ids: [],
+      covered,
+      uncovered: 0,
+      selectorSkipped: injected.length > 0 && allChunks.length > 0,
     };
   }
 
@@ -219,6 +272,9 @@ async function runNextEngine(
       stages,
       tier,
       ids: floor.chunks.map((c) => c.id),
+      covered,
+      uncovered: chunks.length,
+      selectorSkipped: false,
     };
   }
 
@@ -259,17 +315,20 @@ async function runNextEngine(
   t = performance.now();
   let picked = pool.slice(0, RECALL_MAX_ITEMS);
   let selection: Awaited<ReturnType<typeof selectRecall>> = null;
-  if (tier === 'full') selection = await selectRecall(env, {
-    query,
-    focus,
-    candidates: pool.map((chunk) => ({
-      id: chunk.id,
-      date: chunk.date,
-      content: chunk.content,
-      section: chunk.section,
-    })),
-    maxPick: RECALL_MAX_ITEMS,
-  }).catch(() => null);
+  // 候选太少时确定性排序已经够用；只有真的要「挑」的时候才值得付一次模型往返。
+  if (tier === 'full' && chunks.length >= selectMinPool(env)) {
+    selection = await selectRecall(env, {
+      query,
+      focus,
+      candidates: pool.map((chunk) => ({
+        id: chunk.id,
+        date: chunk.date,
+        content: chunk.content,
+        section: chunk.section,
+      })),
+      maxPick: RECALL_MAX_ITEMS,
+    }).catch(() => null);
+  }
   if (selection) {
     const byId = new Map(pool.map((chunk) => [chunk.id, chunk]));
     const chosen = selection.pickedIds
@@ -285,7 +344,8 @@ async function runNextEngine(
       backend: selection.backend,
     });
   }
-  stages.rank += performance.now() - t;
+  // 这一段是选择器的往返时间，单独记，别混进排序
+  stages.select += performance.now() - t;
 
   // 保底：候选里若有「进行中的事」且已选中至少一条，就保证它进上下文。
   // 她答应过的事被忘了，是用户最不能接受的一类遗忘。
@@ -313,6 +373,10 @@ async function runNextEngine(
     stages,
     tier,
     ids: packed.chunks.map((c) => c.id),
+    covered,
+    uncovered: chunks.length,
+    // 走到这里说明没有因为覆盖率短路；候选太少没调选择器是另一回事，别混成一个指标
+    selectorSkipped: false,
   };
 }
 
@@ -327,10 +391,10 @@ async function runNextEngineSafe(
   focus: string,
   deadlineMs: number,
   onTimeout: () => void,
-  onStage?: (name: string, ms: number) => void,
+  opts: { injectedText?: string; onStage?: (name: string, ms: number) => void } = {},
 ): Promise<Awaited<ReturnType<typeof runNextEngine>>> {
   const empty = emptyNext();
-  return withDeadline(runNextEngine(env, query, focus, onStage), deadlineMs, empty, onTimeout).catch(
+  return withDeadline(runNextEngine(env, query, focus, opts), deadlineMs, empty, onTimeout).catch(
     () => empty,
   );
 }
@@ -345,9 +409,12 @@ function emptyNext(): Awaited<ReturnType<typeof runNextEngine>> {
     hasVector: false,
     intents: [],
     picked: 0,
-    stages: { load: 0, rank: 0, embed: 0, expand: 0 },
+    stages: { load: 0, rank: 0, select: 0, embed: 0, expand: 0 },
     tier: 'full' as const,
     ids: [],
+    covered: 0,
+    uncovered: 0,
+    selectorSkipped: false,
   };
 }
 
@@ -430,13 +497,18 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
   // ★ 两段并行。串行时延迟是 legacy + next（实测 708ms + 482ms = 1190ms），
   //   并行后是 max(legacy, next)。shadow / next 都要跑两套，必须并行。
   const engineQuery = (opts.nextQuery ?? '').trim() || query;
+  // 覆盖率短路默认开；RECALL_SKIP_COVERED=off 可一键回退（对比、救急都用它）
+  const injectedText = env.RECALL_SKIP_COVERED === 'off' ? undefined : opts.injectedText;
   const [legacyRaw, next] = await Promise.all([
     legacyPromise,
     runNextEngineSafe(env, engineQuery, focus, deadlineMs, () => {
       result.timedOut = true;
-    }, (name, ms) => {
-      // 子阶段耗时：排查 rank 到底花在哪（rank_kw / rank_vec / rank_mmr）
-      void recordCpuSample(env, opts.channel, name, ms).catch(() => {});
+    }, {
+      injectedText,
+      onStage: (name, ms) => {
+        // 子阶段耗时：排查 rank 到底花在哪（rank_kw / rank_vec / rank_mmr）
+        void recordCpuSample(env, opts.channel, name, ms).catch(() => {});
+      },
     }),
   ]);
   // next 模式不跑 legacy：这里必须记 0，否则会因为 Promise.all 等到 next 结束
@@ -445,7 +517,7 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
   result.legacyText = capRecallText(legacyRaw);
 
   let nextRaw = '';
-  let stages: NextStageMs = { load: 0, rank: 0, embed: 0, expand: 0 };
+  let stages: NextStageMs = { load: 0, rank: 0, select: 0, embed: 0, expand: 0 };
   let nextItems = 0;
   let nextLinked = 0;
   let nextHasVector = false;
@@ -461,6 +533,11 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
     nextLinked = next.linked;
     nextHasVector = next.hasVector;
     nextPicked = next.picked;
+    result.covered = next.covered;
+    result.uncovered = next.uncovered;
+    result.selectorSkipped = next.selectorSkipped;
+    // 选择器耗时单独上报：它才是召回里最贵的一段
+    void recordCpuSample(env, opts.channel, 'select_ms', stages.select).catch(() => {});
 
     const oldItems = result.legacyText.split('\n').filter((l) => l.startsWith('- ')).length;
     logTrace('memory.engine', {
@@ -474,6 +551,7 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
       linkedItems: next.linked,
       hasVector: next.hasVector,
       shadowMs: Math.round(performance.now() - started),
+      selectMs: Math.round(stages.select),
       timedOut: result.timedOut,
       tier: next.tier,
     });
@@ -497,6 +575,7 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
       loadMs: stages.load,
       rankMs: stages.rank,
       rankInnerMs: stages.rankInner ?? 0,
+      selectMs: stages.select,
       embedMs: stages.embed,
       expandMs: stages.expand,
       totalMs: performance.now() - started,
@@ -510,6 +589,9 @@ export async function resolveRecall(env: Env, opts: RecallOptions): Promise<Reca
       legacySkipped: opts.skipMemorySource === true && result.legacyText.trim() === '',
       intents: next.intents,
       picked: nextPicked,
+      covered: next.covered,
+      uncovered: next.uncovered,
+      selectorSkipped: next.selectorSkipped,
     }, nowMs);
   } catch (e) {
     logTrace('memory.engine.error', {

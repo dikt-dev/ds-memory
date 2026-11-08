@@ -68,6 +68,10 @@ export interface Env {
   /** 鉴权模式：signed（默认）| kv（回滚用）。 */
   AUTH_MODE?: string;
   /** 记忆引擎：legacy（默认）| shadow（只记录）| next（使用新召回）。 */
+  /** 召回覆盖率短路：off = 回退旧行为（默认开） */
+  RECALL_SKIP_COVERED?: string;
+  /** 选择器最小候选数（默认 4；0 = 只要有候选就调选择器） */
+  RECALL_SELECT_MIN_POOL?: string;
   MEMORY_ENGINE?: string;
   /** 态度引擎：legacy（默认）| shadow（只记录）| next（使用 attitude policy）。 */
   AFFECT_ENGINE?: string;

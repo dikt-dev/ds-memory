@@ -394,3 +394,72 @@ CREATE TABLE IF NOT EXISTS pair_limits (
   window_start INTEGER NOT NULL,
   count        INTEGER NOT NULL
 );
+
+-- ---------- 客户端消息去重（原 KV app:cmid:*，2026-11-08 迁到 D1） ----------
+-- 免费版 KV 每天只有 1000 次写，手机每发一条就写一次，很容易打满；D1 每天 10 万行写。
+CREATE TABLE IF NOT EXISTS cmid_cache (
+  client_message_id   TEXT PRIMARY KEY,
+  content             TEXT NOT NULL,
+  user_message_id     INTEGER,
+  assistant_message_id INTEGER,
+  created_at          INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cmid_cache_at ON cmid_cache(created_at);
+
+-- ---------- 请求日志（原来只在代码里建，新环境部署后查不到表） ----------
+CREATE TABLE IF NOT EXISTS request_log (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  at         INTEGER NOT NULL,
+  request_id TEXT NOT NULL DEFAULT 'none',
+  kind       TEXT NOT NULL,
+  method     TEXT NOT NULL DEFAULT '',
+  path       TEXT NOT NULL,
+  status     INTEGER NOT NULL DEFAULT 0,
+  ms         INTEGER NOT NULL DEFAULT 0,
+  channel    TEXT NOT NULL DEFAULT '',
+  ok         INTEGER NOT NULL DEFAULT 1,
+  detail     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_request_log_at ON request_log(at);
+CREATE INDEX IF NOT EXISTS idx_request_log_path ON request_log(path, at);
+
+-- ---------- 召回分段采样（延迟要看 p50/p95，聚合表会把长尾抹平） ----------
+CREATE TABLE IF NOT EXISTS recall_samples (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  day_key          TEXT NOT NULL,
+  channel          TEXT NOT NULL,
+  mode             TEXT NOT NULL,
+  kind             TEXT NOT NULL,
+  legacy_ms        INTEGER NOT NULL DEFAULT 0,
+  load_ms          INTEGER NOT NULL DEFAULT 0,
+  rank_ms          INTEGER NOT NULL DEFAULT 0,
+  rank_inner_ms    INTEGER NOT NULL DEFAULT 0,
+  select_ms        INTEGER NOT NULL DEFAULT 0,
+  embed_ms         INTEGER NOT NULL DEFAULT 0,
+  expand_ms        INTEGER NOT NULL DEFAULT 0,
+  total_ms         INTEGER NOT NULL DEFAULT 0,
+  items            INTEGER NOT NULL DEFAULT 0,
+  linked           INTEGER NOT NULL DEFAULT 0,
+  has_vector       INTEGER NOT NULL DEFAULT 0,
+  timed_out        INTEGER NOT NULL DEFAULT 0,
+  legacy_skipped   INTEGER NOT NULL DEFAULT 0,
+  covered          INTEGER NOT NULL DEFAULT 0,
+  uncovered        INTEGER NOT NULL DEFAULT 0,
+  selector_skipped INTEGER NOT NULL DEFAULT 0,
+  intents          TEXT,
+  picked           INTEGER NOT NULL DEFAULT 0,
+  created_at       INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_recall_samples_day ON recall_samples(day_key, mode);
+
+-- ---------- CPU 采样（请求路径上的纯 JS 段；与 engine_metrics 分开，µs 口径） ----------
+CREATE TABLE IF NOT EXISTS engine_cpu (
+  day_key    TEXT NOT NULL,
+  channel    TEXT NOT NULL,
+  mode       TEXT NOT NULL,
+  requests   INTEGER NOT NULL DEFAULT 0,
+  us_sum     INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (day_key, channel, mode)
+);
+CREATE INDEX IF NOT EXISTS idx_engine_cpu_day ON engine_cpu(day_key);

@@ -57,7 +57,9 @@ import { loadMemoryChunks } from './memory-context-store';
 import { expandLinkedChunks } from './memory-links';
 import { formatMemoryChunks, rankMemoryChunks, shouldRecallMemory } from './memory-domain';
 import { normalizeAssistantText } from './openai';
-import { budgetContext, formatBudgetManifest } from './context-budget';
+import { budgetContext, clipCore, formatBudgetManifest } from './context-budget';
+import { promisesBlock } from './memory-promises';
+import { isMemoryQuestion, memoryAnswerHint } from './query-expand';
 import { buildAttitudePolicy } from './attitude-policy';
 import { packMemoryChunks } from './context-packer';
 import { affectEngineFor, memoryEngineFor } from './engine-flags';
@@ -105,7 +107,7 @@ export async function streamChat(
   // 会话历史与记忆包互不依赖：并行取。
   const [session, pack] = await Promise.all([
     loadSessionHistory(env, now),
-    buildMemoryPack(env, now, { channel }),
+    buildMemoryPack(env, now, { channel, memoMaxItems: MEMO_MAX_ITEMS }),
   ]);
   timing.packMs = Date.now() - tStart;
   // 短期记忆 = 本次会话全部（只追加不滑窗，缓存才命得中）；超出上限才有提要
@@ -130,9 +132,10 @@ export async function streamChat(
   const avoidPhrases = recentPhrases(assistantTexts);
   // ★ 中期记忆（最近 24 小时）优先：它存在时就不再注入今日摘要，避免同一段内容发两遍。
   // 落在本会话时间范围内的条目不再注入——历史原文里已经有了（O4 去重）。
-  const sessionStartMs = history[0]?.created_ms;
-  const recentMemo = formatRecentMemoBlock(pack.recentMemoRaw, MEMO_MAX_ITEMS, sessionStartMs);
-  const todaySummary = recentMemo ? null : pack.todaySummary;
+  // 打包层已经按会话起点和条数上限格式化好了（快照路径也保留原始 items，2026-11-08）；
+  // 这里再 format 一次会在快照路径上把中期记忆清空。
+  const recentMemo = pack.recentMemo;
+  const todaySummary = pack.todaySummary;
 
   // ★ 按需检索：用当前消息 + 最近几条用户消息去档案里找相关往事（不命中就不占字节）
   const recallQuery = [
@@ -164,6 +167,8 @@ export async function streamChat(
     requestId,
     // 全量记忆已经带上所有 memory 条目，召回只补档案层的旧事
     skipMemorySource: shouldSkipMemoryRecall(pack),
+    // 已经注入的记忆：召回只在「提示词里没有」的候选上跑（2026-11-08）
+    injectedText: clipCore(pack.promptMemory.text),
     nowMs: now.getTime(),
   });
   timing.recallMs = Date.now() - tStart;
@@ -192,7 +197,7 @@ export async function streamChat(
 
   const recalled = stripDuplicateRecall(
     recalledRaw,
-    [...history.map((m) => m.content), recentMemo, promptMemory.text].filter(Boolean),
+    [...history.map((m) => m.content), recentMemo ?? '', promptMemory.text],
   );
 
   const affectEngine = affectEngineFor(env, channel);
@@ -351,6 +356,29 @@ export async function streamChat(
       { type: 'text', text: content || '请看看这张图片。' },
       ...(loaded ? [{ type: 'image_url' as const, image_url: { url: loaded.dataUrl } }] : []),
     ];
+  }
+
+  // ★ 贴在用户消息最前面的几块（注意力最强）：记忆题直答 → 未完成的约定 → 召回往事。
+  //   原来这些只在 App/QQ 那条路径上有，网页端一句都没有——同一套记忆，两个渠道两种记性（2026-11-08）。
+  const userPrefixParts: string[] = [];
+  if (isMemoryQuestion(content)) {
+    userPrefixParts.push(memoryAnswerHint(Boolean(contextBudget.recall.trim())));
+  }
+  const promiseText = promisesBlock(memory ?? '').trim();
+  if (promiseText) userPrefixParts.push(promiseText);
+  if (contextBudget.recall.trim()) {
+    userPrefixParts.push(
+      '你记得这些（他以前说过的、一起经历过的，可能和这轮有关）：\n' +
+        contextBudget.recall.trim() +
+        '\n（自然地用，不要逐条念出来；这轮用不上也不用硬提）',
+    );
+  }
+  if (userPrefixParts.length > 0) {
+    const prefix = `${userPrefixParts.join('\n\n')}\n\n`;
+    userContent =
+      typeof userContent === 'string'
+        ? prefix + userContent
+        : [{ type: 'text', text: prefix }, ...userContent];
   }
 
   // 实时类问题才贴准确事实（不写入 D1）；语气不再每轮提醒
