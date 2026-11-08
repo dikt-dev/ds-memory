@@ -92,6 +92,10 @@ export async function putMemory(
     return false;
   }
 
+  // 2.5) 上下文快照里也存了一份 memory：记忆变了必须让它失效，
+  //      否则最长 10 分钟里提示词用的还是旧记忆（2026-11-08 踩到）。
+  await env.KV.delete('ctx:snapshot:v1').catch(() => {});
+
   // 3) 校验通过才刷新缓存；KV 失败就删缓存，下次回源 R2 读到的是新内容。
   try {
     await env.KV.put(MEMORY_KV_KEY, text, { expirationTtl: MEMORY_KV_TTL_SECONDS });

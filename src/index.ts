@@ -769,9 +769,19 @@ export default {
       ctx.waitUntil(
         (async () => {
           const target = addDays(dateKeyInBeijing(now), -1);
+          // 已经写过就别再 claim：claim 过再 return 会把它标成 failed，
+          // cron_runs 看起来像"天天失败"，掩盖真正的故障（2026-11-08）。
+          const existing = await env.DB.prepare('SELECT date_key FROM ai_diary WHERE date_key = ?')
+            .bind(target)
+            .first<{ date_key: string }>()
+            .catch(() => null);
+          if (existing) {
+            await finishJob(env, 'daily_diary', target, '跳过：已存在', true).catch(() => {});
+            return;
+          }
           const claimed = await claimJob(env, 'daily_diary', target).catch(() => false);
           if (!claimed) {
-            logWarn(`[life] 日记 ${target} 已有记录，跳过`);
+            logWarn(`[life] 日记 ${target} 已有任务在跑，跳过`);
             return;
           }
           const r = await runLifeDiary(env, now).catch((e) => {
