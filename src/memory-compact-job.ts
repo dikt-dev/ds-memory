@@ -5,6 +5,7 @@
  * 复用别的记忆写入同一套安全顺序：备份 → 校验（宪法节未变）→ putMemory。
  */
 import type { Env } from './types';
+import { dateKeyInBeijing } from './date';
 import { getMemory, putMemory } from './memory';
 import { putObject } from './storage';
 import { recordAction } from './memory-actions';
@@ -72,4 +73,31 @@ export async function compactMemoryCrossSection(env: Env): Promise<CompactOutcom
     beforeBytes: byteLength(before),
     afterBytes: byteLength(result.text),
   };
+}
+
+/** 每日只跑一次的标记（KV，读多写少）。 */
+const MARKER_PREFIX = 'compact:at:';
+
+/**
+ * 每天跑一次跨分区去重。
+ *
+ * 为什么不是只在 04:00 cron 跑：那条链路一旦失败（或那天归档卡住），
+ * 折叠就要等到明天。挂在白天/夜间 tick 上、用 KV 标记保证一天只跑一次，
+ * 54000ms 内就能生效，也让「今天该做的维护」不依赖单一路径。
+ */
+export async function maybeCompactMemoryOnceDaily(
+  env: Env,
+  now: Date = new Date(),
+): Promise<CompactOutcome | null> {
+  if ((env.MEMORY_COMPACT ?? '').toLowerCase() === 'off') return null;
+  const day = dateKeyInBeijing(now);
+  const marker = MARKER_PREFIX + day;
+  const done = await env.KV.get(marker).catch(() => null);
+  if (done) return null;
+  const out = await compactMemoryCrossSection(env);
+  // 只有真的跑过（含「没有重复」）才打标记；写失败/宪法校验失败下次重试
+  if (!out.skipped || out.skipped === 'unchanged') {
+    await env.KV.put(marker, String(Date.now()), { expirationTtl: 3 * 24 * 3600 }).catch(() => {});
+  }
+  return out;
 }

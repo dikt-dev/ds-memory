@@ -144,7 +144,7 @@ import { recordDualStats } from './memory-dual';
 import { flushHeldMessages } from './life/flush';
 import { maybeNightWake } from './life/night';
 import { collapseOngoingItems } from './memory-ongoing-job';
-import { compactMemoryCrossSection } from './memory-compact-job';
+import { compactMemoryCrossSection, maybeCompactMemoryOnceDaily } from './memory-compact-job';
 import { maybeSendPostcard } from './life/postcard';
 import { pruneRequestLog, readPathStats, readRecentRequests, recordRequest } from './request-log';
 import { deleteRuntimeState, getRuntimeState, putRuntimeState } from './runtime-store';
@@ -840,6 +840,8 @@ export default {
       ctx.waitUntil(ensureContextSnapshot(env, now).catch(() => false));
       // 增量提炼：今晚聊的今晚进记忆，不用等次日 04:00（30 分钟一次）
       ctx.waitUntil(incrementalDistill(env, now).catch(() => ({ ok: false })));
+      // 记忆折叠：一天一次（KV 标记），不依赖 04:00 那条链是否成功
+      ctx.waitUntil(maybeCompactMemoryOnceDaily(env, now).catch(() => null));
       logCron(env, ctx, cron, startedAt);
       return;
     }
