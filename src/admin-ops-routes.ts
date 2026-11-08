@@ -65,6 +65,7 @@ import { buildEmotionSnapshot, describeEmotionState } from './emotion-snapshot';
 import { readAmbient } from './emotion-ambient';
 import { ensureDayTopics } from './topics';
 import { incrementalDistill } from './incremental-distill';
+import { backfillNextDay } from './memory-backfill';
 import { getRuntimeState } from './runtime-store';
 import { refreshChunksCache } from './memory-context-store';
 import { readContextSnapshot, rebuildContextSnapshot, ensureContextSnapshot } from './context-snapshot';
@@ -420,6 +421,12 @@ app.post('/api/admin/test-mood', requireAuth, async (c) => {
     model: c.env.DISTILL_MODEL,
     final: merged,
   });
+});
+
+/** 历史回填：一次补一天，反复调用直到 nothing_left。 */
+app.post('/api/admin/distill/backfill', requireAuth, async (c) => {
+  const r = await backfillNextDay(c.env, new Date());
+  return c.json(r);
 });
 
 /** 手动跑一次增量提炼（排查/验证用）。 */
