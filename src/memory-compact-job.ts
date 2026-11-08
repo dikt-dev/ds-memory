@@ -34,7 +34,8 @@ export async function compactMemoryCrossSection(env: Env): Promise<CompactOutcom
     return { removed: 0, promiseDuplicates: 0, recentDuplicates: 0, beforeBytes: 0, afterBytes: 0, skipped: 'unchanged' };
   }
   const result = crossSectionPass(before);
-  if (result.removed.length === 0) {
+  // 用「文本是否变化」判断，而不是「有没有删行」：加锚点不删行，但也需要写回。
+  if (result.text === before) {
     return {
       removed: 0, promiseDuplicates: 0, recentDuplicates: 0,
       beforeBytes: byteLength(before), afterBytes: byteLength(before), skipped: 'unchanged',
