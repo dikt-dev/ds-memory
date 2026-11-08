@@ -144,6 +144,7 @@ import { recordDualStats } from './memory-dual';
 import { flushHeldMessages } from './life/flush';
 import { maybeNightWake } from './life/night';
 import { collapseOngoingItems } from './memory-ongoing-job';
+import { compactMemoryCrossSection } from './memory-compact-job';
 import { maybeSendPostcard } from './life/postcard';
 import { pruneRequestLog, readPathStats, readRecentRequests, recordRequest } from './request-log';
 import { deleteRuntimeState, getRuntimeState, putRuntimeState } from './runtime-store';
@@ -752,6 +753,8 @@ export default {
           await runDailyArchive(env, now);
           // 记忆维护：同一件事的旧状态行并掉（不然她会一直追问早就做完的事）
           await collapseOngoingItems(env).catch(() => {});
+          // 跨分区去重：承诺只留一处、近期动态让位给共同经历（2026-11-08）
+          await compactMemoryCrossSection(env).catch(() => {});
           const dayOfMonth = Number(
             new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', day: '2-digit' }).format(now),
           );

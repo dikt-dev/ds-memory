@@ -21,7 +21,7 @@ import {
   rebuildContextSnapshot,
   type ContextSnapshot,
 } from './context-snapshot';
-import { getRecentMemo, formatRecentMemoBlock } from './recent-memory';
+import { dropMemoDuplicates, getRecentMemo, formatRecentMemoBlock } from './recent-memory';
 import { getTodaySummary } from './summary';
 import { loadPersonaState, buildPersonaDriftLine, type PersonaState } from './persona-drift';
 import { buildPromptMemoryFor } from './memory-index';
@@ -113,7 +113,8 @@ export async function buildMemoryPack(
 
   const promptMemory = buildPromptMemoryFor(memory, env);
   const weather = fetchedWeather ?? dayCtxFile.weather ?? null;
-  const memoBlock = formatRecentMemoBlock(recentMemoRaw, opts.memoMaxItems, opts.sessionStartMs);
+  const memoSource = dropMemoDuplicates(recentMemoRaw, promptMemory.text);
+  const memoBlock = formatRecentMemoBlock(memoSource, opts.memoMaxItems, opts.sessionStartMs);
   const recentMemo = memoBlock ? memoBlock : null;
 
   return {
@@ -148,7 +149,8 @@ function packFromSnapshot(
   dateKey: string,
 ): MemoryPack {
   const promptMemory = buildPromptMemoryFor(snap.memory, env);
-  const recentMemoRaw = snap.memoRaw ?? null;
+  // 已经写进长期记忆的中期条目不再重复注入（同一段时间两种粒度，她会讲两遍）
+  const recentMemoRaw = dropMemoDuplicates(snap.memoRaw ?? null, promptMemory.text);
   const memoBlock = formatRecentMemoBlock(recentMemoRaw, opts.memoMaxItems, opts.sessionStartMs);
   const recentMemo = memoBlock ? memoBlock : null;
   return {

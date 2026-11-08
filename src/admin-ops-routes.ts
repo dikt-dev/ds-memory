@@ -50,6 +50,8 @@ import { parseMemoryContext } from './memory-domain';
 import { applySubjectFixes } from './subject-fix';
 import { recordAction } from './memory-actions';
 import { dateKeyInBeijing , addDays} from './date';
+import { crossSectionPass } from './memory-compact';
+import { compactMemoryCrossSection } from './memory-compact-job';
 import { backfillEvents, readEventStats } from './memory-events';
 import { insertKeepsake, loadKeepsakes, refreshKeepsakesBlock, setKeepsakePinned, setKeepsakeStatus } from './keepsakes';
 import { readUsageStats, summarizeUsage } from './usage-stats';
@@ -476,6 +478,25 @@ app.post('/api/admin/cache/prewarm', requireAuth, async (c) => {
   return c.json({ ok: chunks >= 0, chunks, snapshot_rebuilt: snapshot });
 });
 
+/** 跨分区去重：先看会删哪些（只读，不动记忆）。 */
+app.post('/api/admin/memory/compact/preview', requireAuth, async (c) => {
+  const memory = await getMemory(c.env);
+  const result = crossSectionPass(memory);
+  return c.json({
+    ok: true,
+    before_bytes: byteLength(memory),
+    after_bytes: byteLength(result.text),
+    promise_duplicates: result.promiseDuplicates,
+    recent_duplicates: result.recentDuplicates,
+    removed: result.removed,
+  });
+});
+
+/** 执行跨分区去重（备份 → 校验宪法节 → 写回 → 重建派生）。 */
+app.post('/api/admin/memory/compact', requireAuth, async (c) => {
+  const outcome = await compactMemoryCrossSection(c.env);
+  return c.json({ ok: !outcome.skipped || outcome.skipped === 'unchanged', ...outcome });
+});
 /** 立即重建上下文快照（排查/上线后用）。 */
 app.post('/api/admin/context-snapshot/rebuild', requireAuth, async (c) => {
   const ok = await rebuildContextSnapshot(c.env, new Date());

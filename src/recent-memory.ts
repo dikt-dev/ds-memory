@@ -18,6 +18,7 @@
  *   O4 注入：落在当前会话时间范围内的条目不重复注入（历史原文里已经有）。
  */
 import type { Env } from './types';
+import { sameEvent } from './memory-compact';
 import { distillText } from './distill';
 import { addLlmCost } from './llm-cost';
 import { dateKeyInBeijing } from './date';
@@ -355,4 +356,31 @@ export async function maybeRefreshRecentMemo(env: Env, now: Date = new Date()): 
 function hhmmOfMs(ms: number): string {
   const d = new Date(ms + 8 * 3600_000);
   return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+}
+
+/**
+ * 去掉「已经写进长期记忆」的中期条目（2026-11-08）。
+ *
+ * 中期记忆（最近三天）与 memory.md 的「近期动态 / 共同经历」覆盖同一段时间，
+ * 只是粒度不同：同一件事会以「他说了 X」和「X 落地了」两种说法各出现一次。
+ * 两份都注入时她会把同一件事讲两遍，或挑到更流水的那一份。
+ *
+ * 这里按内容判重（不按时间戳）：增量提炼每 30 分钟就把今天的事写进 memory.md，
+ * 用时间截断会把「刚发生但还没提炼」的事一起砍掉。
+ */
+function isSameEventAs(text: string, memoryLines: string[]): boolean {
+  return memoryLines.some((line) => sameEvent(line, text));
+}
+
+export function dropMemoDuplicates(memo: RecentMemo | null, memoryText: string): RecentMemo | null {
+  if (!memo || memo.items.length === 0) return memo;
+  if (!memoryText.trim()) return memo;
+  const memoryLines = memoryText
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith('- '));
+  if (memoryLines.length === 0) return memo;
+  const kept = memo.items.filter((item) => !isSameEventAs(item.text, memoryLines));
+  if (kept.length === memo.items.length) return memo;
+  return { ...memo, items: kept };
 }

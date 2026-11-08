@@ -12,6 +12,8 @@
  * 只动「进行中的事」这一节，别的不碰。
  */
 
+import { clusterByEntity } from './memory-compact';
+
 /** 状态优先级：越靠后越「新」。 */
 const STATUS_RANK: Array<[RegExp, number]> = [
   [/\[已完成\]/, 4],
@@ -129,6 +131,13 @@ export function collapseOngoing(text: string, opts: { maxRemove?: number } = {})
       if (sameTopic(entries[i], entries[j])) union(i, j);
     }
   }
+  // ★ 再按「实体」归一次（2026-11-08）：标题前缀判据对真实措辞常常一个都不命中，
+  //   例如「他填完转正自评表」和「他的转正流程」只共 2 个字，恒不成立。
+  //   entityClusters 用的是「本节里真实重复出现的片段」，能把同一件事的几个版本收拢。
+  const entity = clusterByEntity(entries);
+  for (const cluster of entity.clusters) {
+    for (let i = 1; i < cluster.length; i += 1) union(cluster[0], cluster[i]);
+  }
 
   const buckets = new Map<number, number[]>();
   entries.forEach((_, i) => {
@@ -143,17 +152,21 @@ export function collapseOngoing(text: string, opts: { maxRemove?: number } = {})
   for (const list of buckets.values()) {
     if (list.length < 2) continue;
     groups.push(list.map((i) => entries[i]));
-    const keep = [...list].sort((a, b) => {
+    const sorted = [...list].sort((a, b) => {
       const d = lineDate(entries[b]).localeCompare(lineDate(entries[a]));
       if (d !== 0) return d;
       return statusRank(entries[b]) - statusRank(entries[a]);
-    })[0];
+    });
+    const keep = sorted[0];
     for (const i of list) {
       if (i === keep) continue;
       // 已经标了 [已完成] 的旧行不删：它是结论，留着比删掉安全
       if (/\[已完成\]/.test(entries[i])) continue;
       drop.add(i);
     }
+    // 不把旧版本的细节拼回保留条：进行中的事本来就是「状态」，
+    // 旧版本的进展（用户多次拖延、催了几轮）留着只会让她反复追问。
+    // 被并掉的行由调用方归档到 R2，需要时还能查。
   }
 
   const maxRemove = opts.maxRemove ?? 5;

@@ -68,6 +68,8 @@ export interface Env {
   /** 鉴权模式：signed（默认）| kv（回滚用）。 */
   AUTH_MODE?: string;
   /** 记忆引擎：legacy（默认）| shadow（只记录）| next（使用新召回）。 */
+  /** 跨分区去重（承诺优先/近期动态让位）：off 关闭，shadow 只统计不改文件 */
+  MEMORY_COMPACT?: string;
   /** 召回覆盖率短路：off = 回退旧行为（默认开） */
   RECALL_SKIP_COVERED?: string;
   /** 选择器最小候选数（默认 4；0 = 只要有候选就调选择器） */

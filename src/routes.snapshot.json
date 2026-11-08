@@ -393,6 +393,14 @@
   ],
   [
     "POST",
+    "/api/admin/memory/compact"
+  ],
+  [
+    "POST",
+    "/api/admin/memory/compact/preview"
+  ],
+  [
+    "POST",
     "/api/admin/memory/embed"
   ],
   [
