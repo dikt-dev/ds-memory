@@ -776,7 +776,11 @@ openaiApp.post('/chat/completions', async (c) => {
     //   放在系统提示词中部时，隔着几千字，模型经常"看见了但没用"（2026-11-08）
     // 记忆题：先直答、别反问——否则同一题三发里两次"你说哪个"，像记不住
     if (isMemoryQuestion(lastUserCleaned)) {
-      parts.push(memoryAnswerHint(Boolean(contextBudget.recall.trim())));
+      parts.push(memoryAnswerHint(
+      // 覆盖率短路之后 recall 经常是空的，但长期记忆整段在提示词里——
+      // 用「召回」判断会误伤成「记忆里没有」，于是她每句都先认怂（2026-11-08 实测）
+      Boolean(contextBudget.recall.trim() || contextBudget.core.trim()),
+    ));
     }
     // 未完成的约定每轮都带上：它不靠关键词命中，忘了就是忘了
     const promiseText = promisesBlock(pack.memory ?? '').trim();

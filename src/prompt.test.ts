@@ -2,6 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { buildDayContext } from './holidays';
 import { buildSystemPrompt, buildSystemPromptSplit, isSilentEnd, normalizeChannel, stripSilentEndToken } from './prompt';
 
+import { memoryAnswerHint } from './query-expand';
+
+describe(
+  '记忆题提示',
+  () => {
+    it('有材料时要求直答', () => {
+      expect(memoryAnswerHint(true)).toContain('先直接回答');
+    });
+    it('没材料时才允许说记不清', () => {
+      expect(memoryAnswerHint(false)).toContain('记不清');
+    });
+  },
+);
+
 describe('buildSystemPrompt', () => {
   const ctx = buildDayContext('2026-10-21');
 

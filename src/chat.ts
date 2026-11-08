@@ -362,7 +362,11 @@ export async function streamChat(
   //   原来这些只在 App/QQ 那条路径上有，网页端一句都没有——同一套记忆，两个渠道两种记性（2026-11-08）。
   const userPrefixParts: string[] = [];
   if (isMemoryQuestion(content)) {
-    userPrefixParts.push(memoryAnswerHint(Boolean(contextBudget.recall.trim())));
+    userPrefixParts.push(memoryAnswerHint(
+      // 覆盖率短路之后 recall 经常是空的，但长期记忆整段在提示词里——
+      // 用「召回」判断会误伤成「记忆里没有」，于是她每句都先认怂（2026-11-08 实测）
+      Boolean(contextBudget.recall.trim() || contextBudget.core.trim()),
+    ));
   }
   const promiseText = promisesBlock(memory ?? '').trim();
   if (promiseText) userPrefixParts.push(promiseText);
