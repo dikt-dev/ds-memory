@@ -1054,3 +1054,19 @@ daily_archive 2026-11-07  done
 正是这类判据失效的表现——不是没有重复，是没认出来。
 
 费用影响：无（纯 JS）；提炼提示词多了约 60 字。
+
+### 25.14 指标写盘移出请求路径（2026-11-08 16:5x）
+
+接上一节第 1 条：召回 total 74~88ms，可 load 只有 2~6ms，排序和选择器都是 0。
+剩下的 70ms 是 `await recordEngineMetric(...)` + `await recordRecallSample(...)` 两次 D1 写，
+卡在首字路径上。
+
+改法：`resolveRecall` 增加 `waitUntil` 选项，chat/openai 路由传 `c.executionCtx.waitUntil`；
+没有 ctx 的主动消息退化成 fire-and-forget（指标可以丢，回复不能被卡）。
+
+```text
+召回 total  74~88 ms -> 4~7 ms（部署后新样本 1396/1397）
+      其中 load 4~7 ms、rank 0、select 0、items 0
+```
+
+新测试：让假 D1 的写永远不 resolve，断言召回仍然按时返回、且指标被提交到 waitUntil。
