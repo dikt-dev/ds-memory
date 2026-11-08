@@ -11,6 +11,7 @@ import { putObject } from './storage';
 import { recordAction } from './memory-actions';
 import { byteLength } from './memory-maintenance';
 import { constitutionBlocks, crossSectionPass } from './memory-compact';
+import { collapseOngoingItems } from './memory-ongoing-job';
 import { replaceMemoryContext } from './memory-context-store';
 
 export interface CompactOutcome {
@@ -94,6 +95,9 @@ export async function maybeCompactMemoryOnceDaily(
   const marker = MARKER_PREFIX + day;
   const done = await env.KV.get(marker).catch(() => null);
   if (done) return null;
+  // 先把「进行中的事」里的同实体多版本并掉（原来只在 04:00 跑，一条链路失败就拖一天），
+  // 再做跨分区去重：顺序反了会把刚并掉的行又当成重复删一遍。
+  await collapseOngoingItems(env).catch(() => null);
   const out = await compactMemoryCrossSection(env);
   // 只有真的跑过（含「没有重复」）才打标记；写失败/宪法校验失败下次重试
   if (!out.skipped || out.skipped === 'unchanged') {
