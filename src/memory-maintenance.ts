@@ -463,6 +463,32 @@ function normalizeBullets(lines: string[], fallbackDate?: string): string[] {
  * 同分类下完全相同的条目不重复追加；新分类追加到文件末尾。
  * 返回合并后的全文（无法解析出任何条目时原样返回）。
  */
+/**
+ * 近似重复：同一件事被不同日期/引号重述时，归一化后仍高度重合。
+ * 用字符 bigram 的 Jaccard 近似，阈值取 0.75（保守：宁可留两条，不误删不同事）。
+ */
+export function isNearDuplicate(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const grams = (s: string): Set<string> => {
+    const out = new Set<string>();
+    const t = s.replace(/\s+/g, '');
+    for (let i = 0; i + 1 < t.length; i += 1) out.add(t.slice(i, i + 2));
+    if (t.length === 1) out.add(t);
+    return out;
+  };
+  const ga = grams(a);
+  const gb = grams(b);
+  if (ga.size === 0 || gb.size === 0) return false;
+  let inter = 0;
+  for (const g of ga) if (gb.has(g)) inter += 1;
+  const union = ga.size + gb.size - inter;
+  if (union > 0 && inter / union >= 0.75) return true;
+  // 包含关系也算重复：一条是另一条加上补充说明（「…你嫌电灯泡」→「…还说了拉别人进来别扭」）
+  const smaller = Math.min(ga.size, gb.size);
+  return smaller > 0 && inter / smaller >= 0.85;
+}
+
 export function mergeMemoryEntry(
   current: string,
   distilled: string,
@@ -521,14 +547,19 @@ export function mergeMemoryEntry(
             }
           }
         }
-        // 归一化去重：忽略标点/空白差异，避免同一条事实被反复追加
+        // 归一化去重：忽略标点/空白差异；近似重复（同一件事被重述）也只留一条，
+        // 但保留更详细的那条——否则 11-07 和 11-08 会各存一份同一件事（2026-11-08）
         const key = normalizeForCompare(b.replace(ENTRY_PREFIX_RE, ''));
-        const dup = existing.lines.some((l) => {
+        const dupIdx = existing.lines.findIndex((l) => {
           if (!ENTRY_RE.test(l)) return false;
-          return normalizeForCompare(l.replace(ENTRY_PREFIX_RE, '')) === key;
+          const old = normalizeForCompare(l.replace(ENTRY_PREFIX_RE, ''));
+          return old === key || isNearDuplicate(old, key);
         });
-        if (!dup) {
+        if (dupIdx < 0) {
           existing.lines.push(b);
+          changed = true;
+        } else if (b.length > existing.lines[dupIdx].length + 8) {
+          existing.lines[dupIdx] = b; // 新的更详细：替换掉旧的那条
           changed = true;
         }
       }
