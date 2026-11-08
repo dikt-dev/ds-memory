@@ -819,6 +819,8 @@ export default {
       ctx.waitUntil(maybeSendPostcard(env, now));
       // 这条 cron 实际覆盖 UTC 8 点 → 北京 16:00 的 context 刷新
       ctx.waitUntil(maybeRefreshContext(env, now));
+      // 记忆折叠：白天也挂一份（KV 标记保证一天一次），不用等到夜间 tick
+      ctx.waitUntil(maybeCompactMemoryOnceDaily(env, now).catch(() => null));
       // ★ 保底：09:00 补一次归档/提炼。runDailyArchive 内部只处理 failed/卡死的日期，
       //   已经 done 的会跳过，所以不会重复烧钱；这样前一天失败的提炼不用等到第二天 04:00。
       if (Number(isoInBeijing(now).slice(11, 13)) === 9) {
