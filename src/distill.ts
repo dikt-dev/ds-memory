@@ -259,6 +259,7 @@ export async function distillDay(
   dateKey: string,
   conversation: string,
   memory: string,
+  opts: { fast?: boolean } = {},
 ): Promise<DistillResult> {
   const segments = splitDistillSegments(conversation, distillSegmentChars(memory.length));
   const buildUser = (body: string, index: number): string => `日期：${dateKey}
@@ -272,10 +273,11 @@ ${body}
 请对照当前记忆，只输出需要新增或修正的条目（不要重复已有内容），格式 "- [YY-MM-DD] 内容"。`;
 
   if (segments.length === 1) {
-    // 每日归档是一天只跑一次的重活：开思考模式，并给思维链留出额度（4096 会被推理吃掉）
-    return distillText(env, DAY_DISTILL_SYSTEM, buildUser(segments[0], 0), 8192, {
-      thinking: true,
-      kind: 'distill',
+    // 每日归档是一天只跑一次的重活：开思考模式，并给思维链留出额度（4096 会被推理吃掉）。
+    // 增量提炼（每 30 分钟一次）用 fast：换成便宜快模型、关思考，否则一次要 2 分钟以上。
+    return distillText(env, DAY_DISTILL_SYSTEM, buildUser(segments[0], 0), opts.fast ? 1200 : 8192, {
+      thinking: opts.fast ? false : true,
+      kind: opts.fast ? 'summary' : 'distill',
     });
   }
 

@@ -565,6 +565,14 @@
   ],
   [
     "POST",
+    "/api/admin/distill/incremental"
+  ],
+  [
+    "POST",
+    "/api/admin/distill/incremental"
+  ],
+  [
+    "POST",
     "/api/admin/emotion/simulate"
   ],
   [

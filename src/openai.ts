@@ -48,6 +48,7 @@ import { recentTopicsBlock } from './topics';
 import { getCachedTurn, putCachedTurn } from './cmid-cache';
 import { recordCpuSample } from './engine-metrics';
 import { maybePrewarmCaches } from './cache-warm';
+import { expandVagueQuery } from './query-expand';
 import { loadImageDataUrl, saveImageFromSource } from './media';
 import { byteLength, parseRelationValues } from './memory-maintenance';
 import { markProfileDirty } from './profile-cache';
@@ -654,8 +655,10 @@ openaiApp.post('/chat/completions', async (c) => {
   ].join(' ');
   const memoryEngine = memoryEngineFor(c.env, channel);
   const recallT0 = performance.now();
+  // 模糊指代先展开（「那个项目」→ 具体那件事的关键词），只在有指代时才多读一次记忆
+  const expanded = await expandVagueQuery(c.env, lastUserCleaned, recallQuery).catch(() => ({ query: recallQuery }));
   const recall = await resolveRecall(c.env, {
-    query: recallQuery,
+    query: expanded.query,
     focus,
     mode: memoryEngine,
     channel,

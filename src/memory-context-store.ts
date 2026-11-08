@@ -5,6 +5,7 @@
  * 旧表 memory_entries / 旧召回路径完全不动，便于影子对比与回滚。
  */
 import type { Env } from './types';
+import { hashId, parseMemoryEntries, sectionImportance, topKeywords } from './memory-index';
 import { assertAllowed } from './policy';
 import { dedupeIdenticalFacts, expireSupersededFacts } from './fact-expiry';
 import { confidenceForSource, mergeConfidence } from './fact-confidence';
@@ -15,6 +16,7 @@ import { linkFactToNeighbors } from './memory-links';
 import {
   buildMemoryChunks,
   canonicalizeFacts,
+  inferMemorySubject,
   parseArchiveContext,
   parseMemoryContext,
   stableHash,
@@ -295,6 +297,45 @@ export async function replaceMemoryContext(
 export const CHUNKS_CACHE_KEY = 'mem:chunks:v1';
 export const CHUNKS_CACHE_TTL_SECONDS = 24 * 3600;
 
+/**
+ * 用 memory.md 文本直接重建 chunk 缓存，**不调 embedding、不写 D1**。
+ *
+ * 增量提炼用它：只需要新条目进召回，全量 reindex 会重算所有向量（实测 145s → 目标 10s）。
+ * 新条目 vec 留空（关键词召回照样命中），旧条目按内容 hash 复用已有向量。
+ */
+export async function refreshChunksCacheFromMemory(env: Env, memory: string): Promise<number> {
+  const prev = await env.KV.get<MemoryChunk[]>(CHUNKS_CACHE_KEY, 'json').catch(() => null);
+  const prevByContent = new Map<string, MemoryChunk>();
+  for (const c of prev ?? []) prevByContent.set(c.content, c);
+  const entries = parseMemoryEntries(memory, 'memory');
+  const now = Date.now();
+  const chunks: MemoryChunk[] = entries.map((p) => {
+    const old = prevByContent.get(p.content);
+    return {
+      id: hashId(p.section, p.date, p.content),
+      source: 'fact' as const,
+      sourceId: p.content,
+      section: p.section,
+      content: p.content,
+      date: p.date,
+      keywords: topKeywords(p.content, 24),
+      tags: old?.tags ?? [],
+      importance: sectionImportance(p.section),
+      contentHash: old?.contentHash ?? String(hashId(p.section, p.date, p.content)),
+      updatedAt: now,
+      useCount: old?.useCount ?? 0,
+      lastUsedAt: old?.lastUsedAt ?? null,
+      pinned: old?.pinned ?? false,
+      vec: old?.vec ?? null,
+      subject: inferMemorySubject(p.content),
+    };
+  });
+  await env.KV.put(CHUNKS_CACHE_KEY, JSON.stringify(chunks), {
+    expirationTtl: CHUNKS_CACHE_TTL_SECONDS,
+  }).catch(() => undefined);
+  return chunks.length;
+}
+
 /** 强制刷新 chunk 缓存（归档/记忆变更后调用）。 */
 export async function refreshChunksCache(env: Env): Promise<number> {
   const rows = await loadMemoryChunks(env, 1000, { skipCache: true });
@@ -358,6 +399,7 @@ export async function loadMemoryChunks(
     lastUsedAt: r.last_used_at ?? null,
     confirmedCount: Number(r.confirmed_count) || 0,
     pinned: Number(r.pinned) === 1,
+    subject: inferMemorySubject(r.content),
   }));
 }
 

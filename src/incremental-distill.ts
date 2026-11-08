@@ -13,8 +13,7 @@ import { getMemory, putMemory } from './memory';
 import { distillDay } from './distill';
 import { buildDistillConversation } from './distill-view';
 import { mergeMemoryEntry } from './memory-maintenance';
-import { reindexMemory } from './memory-index';
-import { refreshChunksCache } from './memory-context-store';
+import { refreshChunksCacheFromMemory } from './memory-context-store';
 import { getRuntimeState, putRuntimeState } from './runtime-store';
 import { logError } from './error-log';
 
@@ -67,7 +66,7 @@ export async function incrementalDistill(env: Env, now: Date = new Date()): Prom
       })) as never,
     );
     const dateKey = dateKeyInBeijing(now);
-    const summary = await distillDay(env, dateKey, conversation, memory);
+    const summary = await distillDay(env, dateKey, conversation, memory, { fast: true });
     const text = summary.text?.trim() ?? '';
 
     let added = 0;
@@ -77,8 +76,11 @@ export async function incrementalDistill(env: Env, now: Date = new Date()): Prom
         const saved = await putMemory(env, merged).catch(() => false);
         if (saved) {
           added = 1;
-          await reindexMemory(env).catch((e: unknown) => logError('[inc-distill] reindex failed:', e));
-          await refreshChunksCache(env).catch(() => 0);
+          // ★ 只重建召回缓存，不跑全量 reindex：reindex 会给所有条目重算向量（实测 145s），
+          //   而增量只需要新条目进召回；新条目 vec 留空也能被关键词召回命中。
+          await refreshChunksCacheFromMemory(env, merged).catch((e: unknown) =>
+            logError('[inc-distill] chunk cache failed:', e),
+          );
         }
       }
     }

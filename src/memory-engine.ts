@@ -23,6 +23,7 @@ import {
   CORE_SECTIONS,
   formatMemoryChunks,
   rankMemoryChunks,
+  querySubjectBias,
   shouldRecallMemory,
 } from './memory-domain';
 import { CANDIDATE_TOP_K, embedTexts, recallMemoryForChat } from './memory-index';
@@ -223,6 +224,8 @@ async function runNextEngine(
 
   // recent 档：只在最近 7 天里排，池子小一个数量级，纯关键词也够用。
   const poolSource = tier === 'recent' ? recentChunks(chunks, 7) : chunks;
+  // 这一轮问的是谁的事：同主体的记忆排前面（「我那个项目」不该命中她的条目）
+  const subjectBias = querySubjectBias(query);
 
   t = performance.now();
   // 粗召回放宽到 20 条：选择器要在一个较大的池子里挑，而不是在 6 条里挑 5 条。
@@ -230,7 +233,7 @@ async function runNextEngine(
     stages.rankInner = (stages.rankInner ?? 0) + ms;
     onStage?.(name, ms);
   };
-  const keywordPicked = rankMemoryChunks(query, poolSource, CANDIDATE_TOP_K, focus, { onStage: innerStage });
+  const keywordPicked = rankMemoryChunks(query, poolSource, CANDIDATE_TOP_K, focus, { onStage: innerStage, subjectBias });
   stages.rank = performance.now() - t;
 
   // 关键词已经够强时不再付 query embedding 延迟；弱召回才走向量。
@@ -245,7 +248,7 @@ async function runNextEngine(
   t = performance.now();
   const pool =
     queryVec !== null
-      ? rankMemoryChunks(query, poolSource, CANDIDATE_TOP_K, focus, { queryVec, onStage: innerStage })
+      ? rankMemoryChunks(query, poolSource, CANDIDATE_TOP_K, focus, { queryVec, onStage: innerStage, subjectBias })
       : keywordPicked;
   stages.rank += performance.now() - t;
 

@@ -74,6 +74,11 @@ export interface MemoryChunk {
   /** 铭记锁：永不淡忘。 */
   pinned?: boolean;
   vec?: string | null;
+  /**
+   * 这条记忆是谁的事：'用户' | '她' | '双方' | null（派生字段，不入库）。
+   * 召回时用它把「他的项目」和「她的事」区分开。
+   */
+  subject?: string | null;
 }
 
 export interface ParsedMemoryContext {
@@ -148,7 +153,7 @@ export function eventId(section: string, date: string, content: string): string 
  * 从条目文本推断主体（用户/她）。只做粗判，判不出就留 null——
  * 留空比判错安全：facts 的 subject 只用于展示与检索，不参与事实有效性。
  */
-function inferSubject(content: string): string | null {
+export function inferMemorySubject(content: string): string | null {
   const user = /用户|你/.test(content);
   const self = /(^|[^用])她|我|助手/.test(content);
   if (user && self) return '双方';
@@ -206,7 +211,7 @@ export function parseMemoryContext(text: string, now = Date.now()): ParsedMemory
         id: factId(section, date, content),
         section,
         content,
-        subject: kv ? kv.key : inferSubject(content),
+        subject: kv ? kv.key : inferMemorySubject(content),
         predicate: kv ? kv.key : null,
         object: kv ? kv.value : null,
         validFrom: date,
@@ -394,6 +399,34 @@ export function projectMemoryContext(pinnedText: string, parsed: ParsedMemoryCon
   return parts.join('\n').trim() + '\n';
 }
 
+
+/**
+ * 这一轮问的是谁的事。
+ *
+ * - 出现「我/我的/他/他的」→ him（对应 subject='用户'）
+ * - 出现「你/你的」→ her（对应 subject='她'）
+ * - 同时出现 → null：像「我叫你什么外号」这种两边都提到的句子，
+ *   强行偏袒任何一边都会把另一半证据压掉。
+ */
+export function querySubjectBias(text: string): 'him' | 'her' | null {
+  const t = text || '';
+  const him = /(我|他)/.test(t);
+  const her = /你/.test(t);
+  if (him && !her) return 'him';
+  if (her && !him) return 'her';
+  return null;
+}
+
+/** 主体一致就加权、相反就压一点；'双方' 与 null 中性。 */
+export function subjectFactor(chunkSubject: string | null | undefined, bias: 'him' | 'her' | null | undefined): number {
+  if (!bias || !chunkSubject) return 1;
+  if (chunkSubject === '双方') return 1;
+  const same = (bias === 'him' && chunkSubject === '用户') || (bias === 'her' && chunkSubject === '她');
+  if (same) return 1.25;
+  const opposite = (bias === 'him' && chunkSubject === '她') || (bias === 'her' && chunkSubject === '用户');
+  return opposite ? 0.7 : 1;
+}
+
 export interface RankOptions {
   /** 子阶段耗时回调（排查用） */
   onStage?: (name: string, ms: number) => void;
@@ -401,6 +434,8 @@ export interface RankOptions {
   queryVec?: number[] | null;
   /** MMR 多样性系数，0=纯分数，1=强去冗余。 */
   mmrLambda?: number;
+  /** 这一轮问的是谁的事：'him'=他的, 'her'=她的, null=不偏。 */
+  subjectBias?: 'him' | 'her' | null;
 }
 
 interface ScoredChunk {
@@ -596,7 +631,8 @@ export function rankMemoryChunks(
         keywordScore(q, chunk, focus) *
         recallDecay(chunk) *
         importanceFactor(chunk.importance) *
-        (chunk.pinned ? PINNED_RECALL_BOOST : 1),
+        (chunk.pinned ? PINNED_RECALL_BOOST : 1) *
+        subjectFactor(chunk.subject, options.subjectBias),
     }))
     .filter((x) => x.score > 0)
     .sort(
@@ -621,7 +657,7 @@ export function rankMemoryChunks(
     .map((chunk) => {
       const vec = decodeVec(chunk.vec ?? null);
       const sim = vec ? Math.max(0, cosineSimilarity(qVec, vec)) : 0;
-      return { chunk, score: sim * recallDecay(chunk) };
+      return { chunk, score: sim * recallDecay(chunk) * subjectFactor(chunk.subject, options.subjectBias) };
     })
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score);

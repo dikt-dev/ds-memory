@@ -200,7 +200,7 @@ export function topKeywords(text: string, max = 24): string[] {
     .map(([g]) => g);
 }
 
-function hashId(section: string, date: string | null, content: string): string {
+export function hashId(section: string, date: string | null, content: string): string {
   let h = 0x811c9dc5;
   const s = `${section}|${date ?? ''}|${content}`;
   for (let i = 0; i < s.length; i++) {
