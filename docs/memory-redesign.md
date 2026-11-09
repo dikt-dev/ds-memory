@@ -1180,3 +1180,71 @@ voice.ts  改：先看清图上有什么：认得出的字照实读；糊了就�
 
 - 已经存在 R2 的老图（1024/q70）不会变清楚，只有新上传的才走新策略。
 - 单图 token 约 ×2.2（1M → 2.4M 像素），个人用量下可接受；真要省就把 `MAX_IMAGE_SIDE` 调回 1280。
+
+---
+
+## 28. 归档后验收 + 2026-11-09 复盘
+
+### 28.1 昨晚（11-08 → 11-09 04:04）
+
+```text
+daily_archive 2026-11-08  done
+  归档 136 条消息；记忆 10549→7354 字节；提炼 ¥0.0261
+  去重=0；分层=0；裁剪=false；快照=写入
+```
+
+表面全绿，但 detail 里**没有「降级」这一项**，而正是它把 8 条共同经历搬进了档案。
+
+### 28.2 两个连环 bug
+
+| # | 问题 | 后果 |
+|---|---|---|
+| 1 | `refreshChunksCache` 合并档案时写 `source='archive'`，而档案行是 `source='event', origin='archive'` | 档案条目永远取 0 条 → 降级等于**静默删除** |
+| 2 | `## 共同经历` 分区预算 3000 字节 | 11-06~11-08 的共同经历被整批搬走，包括「因为我们是朋友」这句台词 |
+
+实测定位：
+
+```text
+召回样本  covered=49  uncovered=0  selector_skipped=1   ← 池子里只有 memory.md
+memory_chunks  event 64 / fact 21 / summary 1          ← 档案明明在库里
+archive.md     1657 字符，砂锅粥×4、因为我们是朋友×1     ← 数据没丢，只是没有入口
+```
+
+### 28.3 改动
+
+```text
+memory-context-store.ts  WHERE source='archive' -> WHERE origin='archive'
+memory-maintenance.ts    共同经历预算 3000 -> 4500 -> 9000
+                         KEEP_WORTHY 去掉【锚点】（每条都有锚点，没有区分度），只认书名号/引号
+jobs.ts                  detail 增加「降级=N」；降级时日志写出被搬走的前 3 条
+```
+
+### 28.4 数据修复
+
+从 `memory/archive.md` 里把 11-06~11-08 被降级的 26 条补回「共同经历」（去重后写入），
+memory 3,174 → 4,567 字符（UTF-8 约 11.5KB，仍低于 16KB 内联上限）。
+
+验证：
+
+```text
+「视频结局是什么」→ 「结局是「因为我们是朋友」——你伸手，小克回头了」  ✅
+「砂锅粥是哪家」  → 「你云请客点的，我这边也点了一份，加的双份虾」        ✅
+召回样本           covered=26 uncovered=60 selector_skipped=0 items=5   ← 选择器复工
+探针 10 题         9/10（唯一失败是判据没收录「不是滋味」这种说法）
+```
+
+### 28.5 归档后验收清单（以后每天都看）
+
+```text
+1. cron_runs.detail：提炼=true / 去重 / 分层 / 降级 / 裁剪 五个数
+   降级>0 就要看是哪几条（现在日志会写出前 3 条）
+2. 召回样本：selector_skipped=1 且 uncovered=0 才是「真的没东西可召回」；
+   若 memory_chunks 有档案行而 uncovered=0，说明合并条件又写错了
+3. 探针 10 题：npm run eval:probes（SHOTS=3），掉 2 题以上人工看
+```
+
+### 28.6 还没做的（不影响线上）
+
+- `context-budget` 的 `rollup` 参数改名 `recentMemo`（纯命名）。
+- 人物底色仍空：设计上允许 distill 追加自我认识，但昨晚模型没写（`他的雷区` 倒是自己长出了第一条）。
+- `memory-rollups` / `memory-summaries` / `memory-dual` 仅标了 `@deprecated`。
