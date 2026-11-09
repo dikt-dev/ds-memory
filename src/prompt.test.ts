@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildDayContext } from './holidays';
-import { buildSystemPrompt, buildSystemPromptSplit, isSilentEnd, normalizeChannel, stripSilentEndToken } from './prompt';
+import { buildBaseSystemPrompt, buildSystemPrompt, buildSystemPromptSplit, isSilentEnd, normalizeChannel, stripSilentEndToken } from './prompt';
 
 import { memoryAnswerHint } from './query-expand';
 
@@ -424,5 +424,26 @@ describe('身份骨架 + 记忆分级（A 方案）', () => {
     const b = buildSystemPromptSplit({ ...args, memory: MEM.replace('十点', '十一点') });
     expect(b.stable).toBe(a.stable);
     expect(b.volatile).not.toBe(a.volatile);
+  });
+});
+
+describe('人物底色为空时的措辞（2026-11-09 修）', () => {
+  const base = {
+    now: new Date('2026-11-09T12:00:00Z'),
+    ctx: { date: '26-11-09', weekday: '周日', is_holiday: false, holiday_note: '周末' },
+    channel: 'mobile' as const,
+  };
+
+  it('后面分区有条目时，空的人物底色不再被误判成「有内容」', () => {
+    const mem = ['## 人物底色', '<!-- 固定设定，永不删改 -->', '', '## 他的雷区', '- [26-11-08] 雷区=被误认成作者'].join(String.fromCharCode(10));
+    const out = buildBaseSystemPrompt({ ...base, memory: mem });
+    expect(out).not.toContain('就是你本人');
+    expect(out).toContain('以你自己那份设定为准');
+  });
+
+  it('人物底色真有条目时才说「就是你本人」', () => {
+    const mem = ['## 人物底色', '- [26-11-09] 你发现自己先心软再嘴硬'].join(String.fromCharCode(10));
+    const out = buildBaseSystemPrompt({ ...base, memory: mem });
+    expect(out).toContain('就是你本人');
   });
 });

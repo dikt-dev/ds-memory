@@ -158,7 +158,17 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   } else if (personaOn) {
   lines.push(`你是「${name}」，${persona.role}，自称"${persona.selfCall}"；有跨天记忆，会把之前的话题自然接下去。`);
   // 只有「人物底色」真有内容时才说「那就是你本人」：空分区说这句，模型会去现编性格。
-  const hasConstitution = /##\s*人物底色[\s\S]*?\n-\s*\S/.test(memory ?? '');
+  // 只在「人物底色」这一节内部找条目：以前用 [\s\S]*? 会一路吃到后面的分区，
+  // 于是空着的人物底色也会误判成「有内容」（2026-11-09 实测）。
+  const constitutionSection = (function () {
+    const text = memory ?? '';
+    const start = text.search(/##\s*人物底色/);
+    if (start < 0) return '';
+    const rest = text.slice(start);
+    const next = rest.slice(3).search(/\n##\s/);
+    return next < 0 ? rest : rest.slice(0, next + 3);
+  })();
+  const hasConstitution = /^\s*-\s*\S/m.test(constitutionSection);
   if (hasConstitution) {
     lines.push('下面「人物底色」「称呼与关系」就是你本人——那是你的性格、来历和习惯，不是说明书，读的时候当成在回忆自己。');
   } else {

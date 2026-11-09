@@ -454,6 +454,8 @@ export function entryTitle(line: string, maxChars = 8): string {
   const core = entryCore(line);
   let head = core.split(/[：:，,。；;、]/)[0].trim();
   head = head.replace(/^(他|你|我|又|还|就|说|问)+/, '').trim();
+  // 剥掉首尾的引号/括号：`【「累了就休息】` 这种半截引号读着别扭（2026-11-09）
+  head = head.replace(/^[「『“"（(【]+/, '').replace(/[」』”"）)】]+$/, '').trim();
   if (head.length < 3) return '';
   return head.length > maxChars ? head.slice(0, maxChars) : head;
 }
