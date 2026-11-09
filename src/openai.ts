@@ -703,8 +703,11 @@ openaiApp.post('/chat/completions', async (c) => {
   c.executionCtx.waitUntil(recordCpuSample(c.env, channel, 'recall_ms', performance.now() - recallT0).catch(() => {}));
   const recalledRaw = recall.text;
 
-  void recordRecallUsage(c.env, recall.ids, now.getTime()).catch(() => {});
-  void rememberPendingRecall(c.env, recall.ids, now.getTime()).catch(() => {});
+  // 探针/回归（record=false）不该产生"待确认"状态：跑一次 10 题就是 10 次 KV 写
+  if (!noRecord) {
+    void recordRecallUsage(c.env, recall.ids, now.getTime()).catch(() => {});
+    void rememberPendingRecall(c.env, recall.ids, now.getTime()).catch(() => {});
+  }
   const { recalled, budget: contextBudget } = budgetFromPack(
     pack,
     recalledRaw,

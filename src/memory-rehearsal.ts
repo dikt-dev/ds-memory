@@ -79,7 +79,20 @@ export async function rememberPendingRecall(
 ): Promise<void> {
   if (ids.length === 0) return;
   try {
-    await env.KV.put(PENDING_KEY, JSON.stringify({ ids: ids.slice(0, RECALL_USAGE_MAX_IDS), at: nowMs }), {
+    // 只在"待确认的那批"真的变了才写：以前每轮无条件写，一次调用就吃掉一次 KV 写额度
+    // （2026-11-09 查出 11-08 写了 1,041 次，超过免费额度 1,000）。
+    const next = ids.slice(0, RECALL_USAGE_MAX_IDS);
+    const prevRaw = await env.KV.get(PENDING_KEY).catch(() => null);
+    if (prevRaw) {
+      try {
+        const prev = JSON.parse(prevRaw) as { ids?: unknown };
+        const prevIds = Array.isArray(prev.ids) ? prev.ids : [];
+        if (prevIds.length === next.length && prevIds.every((v, i) => v === next[i])) return;
+      } catch {
+        /* 旧值坏了就当变了，重写一次 */
+      }
+    }
+    await env.KV.put(PENDING_KEY, JSON.stringify({ ids: next, at: nowMs }), {
       expirationTtl: 3600,
     });
   } catch {

@@ -269,7 +269,8 @@ app.get('/api/day', async (c) => {
   const cfg = await getCityConfig(c.env);
   const weather = await fetchWeather(c.env);
   const payload = { ...ctx, city: cfg.city, weather };
-  await c.env.KV.put(cacheKey, JSON.stringify(payload), { expirationTtl: 600 }).catch(() => {});
+  // TTL 从 10 分钟拉到 1 小时：天气本身 30 分钟缓存，页面首屏不需要 10 分钟一刷
+  await c.env.KV.put(cacheKey, JSON.stringify(payload), { expirationTtl: 3600 }).catch(() => {});
   return c.json(payload, 200, {
     'cache-control': 'private, max-age=60',
   });
@@ -309,7 +310,8 @@ app.get('/api/balance', requireAuth, async (c) => {
       granted: Number(info?.granted_balance ?? 0),
       topped_up: Number(info?.topped_up_balance ?? 0),
     };
-    await c.env.KV.put('balance:snapshot', JSON.stringify(snapshot), { expirationTtl: 300 }).catch(() => {});
+    // 余额 5 分钟一写太浪费（免费额度 1,000 写/天）；30 分钟足够
+    await c.env.KV.put('balance:snapshot', JSON.stringify(snapshot), { expirationTtl: 1800 }).catch(() => {});
     return c.json({ ...snapshot, qwen }, 200, {
       'cache-control': 'private, max-age=60',
     });
