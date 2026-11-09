@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  actionDensityNote,
   buildVoiceDirective,
   recentActions,
   selfRepeatScore,
@@ -135,6 +136,48 @@ describe('看图与复读（2026-11-09 聊天记录驱动的两条规则）', ()
 
   it('他说「我」是他，你说「我」是你', () => {
     expect(d).toContain('他说「我」是他');
+  });
+});
+
+describe('读意图与翻篇（2026-11-09 14:45 那次误读驱动的四条规则）', () => {
+  const d = buildVoiceDirective(900);
+
+  it('先判断这句是逗你还是正话', () => {
+    expect(d).toContain('先看这句是什么');
+    expect(d).toContain('逗你的就顺着逗回去');
+  });
+
+  it('被逗了要把球打回去，不是辩解', () => {
+    expect(d).toContain('把球打回去');
+  });
+
+  it('拿不准就问一句，比猜错强', () => {
+    expect(d).toContain('你这是损我还是夸我');
+  });
+
+  it('他说是开玩笑，就翻篇，不复盘自责', () => {
+    expect(d).toContain('笑一句就翻篇');
+  });
+});
+
+describe('括号动作疲劳（2026-11-09：67/68、23/23 每条都带动作）', () => {
+  const withAction = (n: number) => Array.from({ length: n }, (_, i) => '（尾巴拍了下地板）第' + i + '句');
+
+  it('最近 6 条每条都带括号，就提醒这一条去掉动作', () => {
+    expect(actionDensityNote(withAction(6))).toContain('把动作去掉');
+  });
+
+  it('有一条没带就不提醒（别把正常用法也按掉）', () => {
+    const mixed = [...withAction(5), '就说人话'];
+    expect(actionDensityNote(mixed)).toBeNull();
+  });
+
+  it('不足 6 条不下结论', () => {
+    expect(actionDensityNote(withAction(3))).toBeNull();
+  });
+
+  it('空串不算带动作', () => {
+    expect(actionDensityNote([...withAction(5), '  '])).toBeNull();
   });
 });
 

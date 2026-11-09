@@ -55,7 +55,7 @@ import { recentPainEvent } from './emotion-events';
 import { loadKeepsakesBlock } from './keepsakes';
 import { moodFromVector } from './emotion-vector';
 import { readSessionFacts } from './session-facts';
-import { buildVoiceDirective, recentActions, recentOpeners, recentPhrases } from './voice';
+import { actionDensityNote, buildVoiceDirective, recentActions, recentOpeners, recentPhrases } from './voice';
 import { formatRecentMemoBlock, getRecentMemo, MEMO_MAX_ITEMS } from './recent-memory';
 import { embedTexts, extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 import { loadMemoryChunks } from './memory-context-store';
@@ -487,7 +487,10 @@ export async function streamChat(
         residents: lifeBlocks.residents,
         location: lifeBlocks.location,
         persona: resolvePersona(env),
-        life: [lifeBlocks.life, tic, selfNoteFinal, diaryAskNote].filter(Boolean).join('\n\n') || null,
+        life:
+          [lifeBlocks.life, tic, selfNoteFinal, diaryAskNote, actionDensityNote(recentReplies)]
+            .filter(Boolean)
+            .join('\n\n') || null,
   });
   // 站队这条放在**最后一条 system 的末尾**：他难受时这是最该压过他惯性的一句，
   // 埋在时间/天气那一段中间时，模型会先去描述他的处境。

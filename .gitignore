@@ -34,6 +34,9 @@ output.txt
 # 本地检查临时目录
 /.tmp-check/
 
+# 接梗探针读取的真实人设/记忆快照（含真实对话，绝不入仓）
+/.tmp-banter/
+
 # 本地真实绑定（含账号/资源 id，绝不提交）
 wrangler.local.toml
 
