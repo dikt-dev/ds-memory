@@ -1054,6 +1054,7 @@ function refreshTimeDividers() {
     let prev = null;
     let msgCount = 0;
     let inserted = 0;
+    const insertedTexts = [];
     for (const el of [...messagesEl.children]) {
       if (!el.classList.contains('msg')) continue;
       msgCount += 1;
@@ -1065,13 +1066,15 @@ function refreshTimeDividers() {
         line.textContent = dividerText(ms);
         messagesEl.insertBefore(line, el);
         inserted += 1;
+        if (insertedTexts.length < 8) insertedTexts.push(line.textContent);
       }
       prev = ms;
     }
     // 只在第一次拿到消息时报一次，方便确认"到底跑没跑、有没有数据"
     if (!dividerLogged && msgCount > 0) {
       dividerLogged = true;
-      console.info('[ds-memory] 消息 ' + msgCount + ' 条，时间线 ' + inserted + ' 条');
+      console.info('[ds-memory] 消息 ' + msgCount + ' 条，时间线 ' + inserted + ' 条' +
+        (inserted ? '：' + insertedTexts.join(' / ') : '（这一段间隔都不到 10 分钟）'));
     }
   } catch (e) {
     // 以前异常会被 loadMoreHistory 的 catch 静默吞掉，出问题连日志都没有
@@ -1080,8 +1083,8 @@ function refreshTimeDividers() {
 }
 
 // 版本自证：控制台有这一行，说明跑的是新页面（没有就是没回源）
-document.body.dataset.build = '2026-11-09T16:10';
-console.info('[ds-memory] build 2026-11-09T16:10 · 时间线已启用');
+document.body.dataset.build = '2026-11-09T16:30';
+console.info('[ds-memory] build 2026-11-09T16:30 · 时间线已启用');
 
 // 幂等：多跑几次没有副作用。整页加载完、切回标签页都再算一次，
 // 即使初始那一次没走到（页面从 bfcache 恢复之类）也能自愈。
