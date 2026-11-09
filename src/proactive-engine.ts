@@ -93,6 +93,9 @@ const LEVEL_CONFIG = {
 
 /** 静默期：用户最近 N 分钟内有互动就不发。 */
 export const SILENCE_MINUTES = 30;
+
+/** 刚聊完多久之内，没有具体事由就不主动搭话（2026-11-09）。 */
+export const RECENT_CHAT_QUIET_MINUTES = 120;
 /** 基础冷却：距上次主动消息至少 N 分钟。 */
 export const BASE_COOLDOWN_MINUTES = 180;
 /** 未回复时冷却翻倍的上限倍数。 */
@@ -266,6 +269,12 @@ export function decideProactive(input: DecisionInput): Decision {
     reasons.push('上次主动消息未得到回复');
   }
 
+  // 2026-11-09：这次 13:38 的消息距上次对话 91 分钟、事由为空，读起来像"没头没尾"。
+  // 两个约束：① 刚聊完两小时内、又没有具体事由 → 不发；② 无事由时门槛再抬 15 分。
+  const noTopic = topics.length === 0;
+  if (!fixedSlot && noTopic && profile.minutesSinceLastUserMsg !== null && profile.minutesSinceLastUserMsg < RECENT_CHAT_QUIET_MINUTES) {
+    return { shouldSend: false, score, reasons: [`距上次对话 ${Math.round(profile.minutesSinceLastUserMsg)} 分钟，且没有具体事由`], topics: [] };
+  }
   const shouldSend = score >= cfg.threshold;
   return { shouldSend, score, reasons, topics };
 }

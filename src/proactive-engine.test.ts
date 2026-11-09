@@ -145,6 +145,18 @@ describe('decideProactive —— 打分', () => {
     expect(active.shouldSend).toBe(true);
   });
 
+
+  it('刚聊完两小时内、又没有事由 → 不发（2026-11-09 那条「没头没尾」的消息）', () => {
+    const decision = decideProactive({
+      profile: baseProfile({ minutesSinceLastUserMsg: 91 }),
+      env: { hour: 13, isRestDay: false, weatherChanged: false, isSpecialDay: false },
+      pendingTopics: [],
+      level: 'normal',
+      slot: 'random',
+    });
+    expect(decision.shouldSend).toBe(false);
+    expect(decision.reasons.join(' ')).toContain('没有具体事由');
+  });
   it('随机时段：没什么事由、只是半天没聊，也能过 normal 阈值', () => {
     // 线上回归：以前只有早晚固定问候能发出来，白天永远凑不够 50 分
     const decision = decideProactive({
