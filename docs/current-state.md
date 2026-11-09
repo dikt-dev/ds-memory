@@ -1,28 +1,42 @@
 # 当前状态
 
-> **本次核对：2026-10-31**。下面第 0 节是现在的事实；第 1 节往后是 Phase 0 基线原文（10-24），
-> 路线、模型、测试数量等已被后续实现取代，与代码冲突时以代码为准。
+> **本次核对：2026-11-09 10:50**（上一版是 10-31，数字已全部重测）。
+> 第 0 节是现在的事实；第 1 节往后是 Phase 0 基线原文（10-24），路线/模型/测试数量已被后续实现取代，冲突时以代码为准。
 
-## 0. 现状速览（2026-10-31 核对）
+## 0. 现状速览（2026-11-09 核对）
 
 | 项 | 现在 |
 |---|---|
-| 线上版本 | Version `91a0ed0b-1ebf-4dec-a183-b4249d96710d`（10-31 03:26 部署），代码等同提交 `eaf3c5b` |
-| 仓库 HEAD | `581bc79`（request_log / 事件表改名 / 死导出清理 / 本地环境）；网页改动已随 03:26 那次部署上线 |
-| 观察期 | **已结束**（原定 11-01 12:00，实际 10-31 凌晨提前全量部署） |
-| 开关 | **全部 legacy**：`MEMORY_ENGINE*`=legacy、`AFFECT_ENGINE*`=legacy、`PROACTIVE_ENGINE`=shadow、`PROACTIVE_DELIVERY`=queue（10-31 03:47 用 `/api/admin/readiness` 核对）。shadow 对比数据因此**没有在积累** |
-| 模型分工 | 对话 `deepseek-flash`；每日提炼 `deepseek-v4-pro`（带思考）；滚动摘要 `deepseek-flash`；兜底 Workers AI |
-| 测试 | **77 个文件 / 881 个用例**通过，`tsc --noEmit` 干净（10-31 03:30 实跑） |
-| 记忆规模（10-29 归档后未再变） | facts 40 / events 45 / entries 84 / **chunks 87** / links 227；`no_vec=0`；memory.md 11,700 字节 |
-| 召回（shadow） | 10-25 69ms → 10-26 143 → 10-27 171 → 10-28 345 → **10-29 503ms**（77 次，平均 8.0 条，已顶封顶 8 条） |
-| 部署后流量 | 最后一条消息 `2026-10-30 23:54:52`；**部署后还没有对话** |
-| 惰性建表 | `recall_samples` / `memory_keepsakes` / `chat_usage` 在线上**还不存在**。注意：legacy 模式下 `resolveRecall` 提前 return，所以 `recall_samples` 不只是「没数据」，而是**永远不会被创建** |
-| 已知缺口 | 召回仍是 O(全部数据)，倒排索引未做；`putMemory` 只校验写入不校验语义 |
+| 线上版本 | Version `4a67789b`（11-09 10:06 部署），`/api/health` 200 |
+| 仓库 HEAD | `f634ce5`；**ahead 421，未 push** |
+| 引擎开关 | `MEMORY_ENGINE*`=**next**（全渠道）、`MEMORY_PROMPT_MODE`=tiered、`AFFECT_ENGINE*`=shadow、`PROACTIVE_ENGINE`=shadow |
+| 测试 | **151 个文件 / 1,468 个用例**全绿，`tsc --noEmit` 干净（11-09 10:05 实跑） |
+| 记忆规模 | `memory.md` **4,567 字符**（共同经历 44 条 / 近期动态 6 条 / 进行中的事 4 条）；`memory_chunks` 86 行（event 64 / fact 21 / summary 1） |
+| 召回 | 覆盖率短路生效：排序 0 ms、选择器只在有未覆盖条目时跑；实测 total **4~7 ms**（快照前提是 chunk 缓存命中），冷读约 440 ms |
+| 探针 | 10 题：**9/10**（11-09 实测）；归档后自动跑（平日 1 发 / 周日 3 发取多数），历史在 `probe_runs` |
+| 模型分工 | 对话 `deepseek-flash`（关思考）；提炼 `qwen3.8-max`；摘要 `deepseek-v4.1-flash-1017`；日记 `deepseek-flash`；兜底 Workers AI |
+| 成本 | 每日归档提炼 ≈ ¥0.026；探针 ≈ ¥0.14/天（含周日 3 发） |
+| 已知问题 | ① `ChatUi.kt` 1,909 行 / `ApiClient.kt` 1,422 行待拆；② 两个仓库 421 / 57 个提交只在本地；③ `memory-rollups` / `memory-summaries` / `memory-dual` 未接线（已标 @deprecated） |
 
-入口文档：`pending-work.md`（待办）、`handover-2026-10-29.md`（交接）、`memory-system-walkthrough.md`（实现细节）。
+### 0.1 10-31 之后做完的（按主题）
 
----
+```text
+上下文快照 ctx:snapshot:v2   7 次跨区读 → 1 次 KV 读；memo 保留原始 items
+召回覆盖率短路               已注入的条目不重复召回；召回 1,306 ms → 4~7 ms
+实体折叠 + 跨分区去重        进行中的事 6→2、剥虾三处→一处；预算 3000→9000
+档案召回修复                 origin 列写错导致「降级=静默删除」，已补回 26 条
+归档后自动探针               平日 1 发 / 周日 3 发；历史落 probe_runs
+看图与复读                   1568px / PNG 无损；「看不清就说看不清」「回一句他没说过的」
+```
 
+### 0.2 记忆链路的读数从哪来
+
+```text
+engine_metrics / engine_cpu   D1，按天聚合（请求侧只提交不阻塞）
+recall_samples                D1，逐条分段：load / rank / select / covered / uncovered
+probe_runs                    D1，探针历史；eval:probe:last 只存最后一次
+cron_runs                     D1，每日归档 detail：去重 / 分层 / 降级 / 探针 四个数
+```
 ## 1. 代码与运行形态（Phase 0 基线，10-24 原文）
 |---|---|
 | Cloudflare Worker | `ds-memory`，Hono + TypeScript |
