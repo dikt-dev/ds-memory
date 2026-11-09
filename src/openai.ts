@@ -284,6 +284,27 @@ export function buildLastUserContent(
 }
 
 /**
+ * 语音标记写了开头引号却没写收尾时补上。
+ *
+ * 2026-11-09：模型发过「…不许得寸进尺[语音]「我好想你行了吧。……别笑，本小姐就这一次。」
+ * 少了收尾的「」」，网页端要求成对，于是整条退化成裸文本（App 有兜底，所以只有网页露馅）。
+ * 这里按行处理：语音块本来就不跨行，补在行尾即可。
+ */
+export function repairVoiceQuote(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => {
+      const m = /[\[【［]\s*(?:语音消息|语音|voice)\s*[\]】］]\s*[「“]/.exec(line);
+      if (!m) return line;
+      const at = m.index + m[0].length;
+      const close = line[at - 1] === '「' ? '」' : '”';
+      if (line.indexOf(close, at) >= 0) return line;
+      return line.replace(/\s+$/, '') + close;
+    })
+    .join('\n');
+}
+
+/**
  * 落库前归一化助手的回复文本。
  *
  * 客户端靠 `[语音]` / `[face:名字]` 这些纯文本标记决定「发语音 / 发表情」，
@@ -294,7 +315,7 @@ export function buildLastUserContent(
  * （实时回复仍然带标记，客户端要拿它去合成语音。）
  */
 export function normalizeAssistantText(text: string): string {
-  let out = text
+  let out = repairVoiceQuote(text)
     .replace(/^\s*\[(?:语音|voice)\]\s*/i, '（语音）')
     // 表情标记换成 emoji 再入库（[face:敲打] 和直接写 [敲打] 两种都处理）
     .replace(/\[face[:：][^\]]{1,12}\]/g, (m) => replaceFaceMarkers(m));

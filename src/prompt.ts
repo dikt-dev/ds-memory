@@ -259,6 +259,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   // 怎么发：格式约束集中一处，别再混进"时间与环境"
   const voiceRule =
     '想发语音时，把 [语音]「要说的话」放在整条消息的最后；引号里是这一段完整要说的话，不是摘一句。' +
+    '标记和引号成对写全——少了收尾的「」」，客户端只能把它当普通文字。' +
     '标记前面的文字照常显示，但不会被念出来——想让人听见的话，放在标记后面。' +
     '语音里可以用？！……～帮 TTS 停顿；要不要发语音、说多长，都由你判断。';
   if (channel === 'astrobot' || channel === 'mobile' || voiceReply) {

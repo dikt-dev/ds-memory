@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   cleanUserText,
   normalizeAssistantText,
+  repairVoiceQuote,
   extractText,
   isProactiveRequest,
   parseContentParts,
@@ -237,6 +238,32 @@ describe('normalizeAssistantText（落库前归一化）', () => {
 
   it('只有标记时剩下「（语音）」', () => {
     expect(normalizeAssistantText('[语音]')).toBe('（语音）');
+  });
+
+  it('语音块漏了收尾引号时补上（2026-11-09 网页端露馅的那条）', () => {
+    const raw = '你好会挑啊……行吧，就一句听完不许得寸进尺[语音]「我好想你行了吧。……别笑，本小姐就这一次。';
+    expect(repairVoiceQuote(raw).endsWith('」')).toBe(true);
+    // 落库后仍然是「[语音]「…」」的可解析形态（标记不在开头就不转（语音））
+    expect(normalizeAssistantText(raw)).toContain('[语音]「我好想你行了吧');
+    expect(normalizeAssistantText(raw).trim().endsWith('」')).toBe(true);
+  });
+
+  it('已经成对的语音块原样不动（不会多补一个引号）', () => {
+    const raw = '……行吧 [语音]「晚安，早点睡。」后面还有话';
+    expect(repairVoiceQuote(raw)).toBe(raw);
+  });
+
+  it('句首 [语音] 仍转成「（语音）」，不带多余引号', () => {
+    expect(repairVoiceQuote('[语音]晚安')).toBe('[语音]晚安');
+    expect(normalizeAssistantText('[语音]晚安')).toBe('（语音）晚安');
+  });
+
+  it('只修缺引号的那一行，其他行不受影响', () => {
+    const raw = '第一行没事\n第二行[语音]「没写完\n第三行没事';
+    const fixed = repairVoiceQuote(raw);
+    expect(fixed.split('\n')[0]).toBe('第一行没事');
+    expect(fixed.split('\n')[1].endsWith('」')).toBe(true);
+    expect(fixed.split('\n')[2]).toBe('第三行没事');
   });
 
   it('删掉模型模仿的历史时间标签（有/无空格都处理）', () => {
