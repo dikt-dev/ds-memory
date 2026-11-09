@@ -8,7 +8,7 @@
 | 项 | 现在 |
 |---|---|
 | 线上版本 | Version `4a67789b`（11-09 10:06 部署），`/api/health` 200 |
-| 仓库 HEAD | `f634ce5`；**ahead 421，未 push** |
+| 仓库 HEAD | `73851b2`（11-09 11:15 push 完成，与 `origin/main` 齐平） |
 | 引擎开关 | `MEMORY_ENGINE*`=**next**（全渠道）、`MEMORY_PROMPT_MODE`=tiered、`AFFECT_ENGINE*`=shadow、`PROACTIVE_ENGINE`=shadow |
 | 测试 | **151 个文件 / 1,468 个用例**全绿，`tsc --noEmit` 干净（11-09 10:05 实跑） |
 | 记忆规模 | `memory.md` **4,567 字符**（共同经历 44 条 / 近期动态 6 条 / 进行中的事 4 条）；`memory_chunks` 86 行（event 64 / fact 21 / summary 1） |
