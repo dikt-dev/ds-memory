@@ -10,10 +10,13 @@ import UPNG from 'upng-js';
 import { getObject, headObject, putObject } from './storage';
 
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 单图上限（压缩前）
-export const MAX_IMAGE_SIDE = 1024; // 压缩后最长边
-export const IMAGE_QUALITY = 0.7; // JPEG 质量
+// 2026-11-09：1024 太小——聊天里的插画气泡字缩完就读不出来，她只能编内容。
+export const MAX_IMAGE_SIDE = 1568; // 压缩后最长边
+export const IMAGE_QUALITY = 0.82; // JPEG 质量（文字边缘要留得住）
 /** 已足够小的 JPEG 跳过重压缩（避免二次损失） */
 export const COMPRESS_MIN_BYTES = 120 * 1024;
+/** PNG（截图类）原样保留的上限：文字无损，别再转 JPEG。 */
+export const KEEP_PNG_MAX_BYTES = 2 * 1024 * 1024;
 
 const DATA_URL_RE = /^data:(image\/(?:png|jpeg|jpg|webp|gif));base64,([A-Za-z0-9+/=\s]+)$/i;
 
@@ -103,6 +106,7 @@ export function compressImageBytes(
   mime: string,
 ): { bytes: Uint8Array; ext: string; mime: string } | null {
   const isJpeg = mime === 'image/jpeg' || mime === 'image/jpg';
+  const isPng = mime === 'image/png';
   if (isJpeg && bytes.length <= COMPRESS_MIN_BYTES) return null;
   try {
     let width = 0;
@@ -122,6 +126,11 @@ export function compressImageBytes(
     } else {
       return null;
     }
+    // ★ 截图类（PNG）原样保留：JPEG 会把文字边缘糊掉，而文字正是她读图时最需要的东西。
+    //   只有超出尺寸或体积才处理，且处理时仍然保持 PNG（无损），不转 JPEG。
+    if (isPng && bytes.length <= KEEP_PNG_MAX_BYTES && Math.max(width, height) <= MAX_IMAGE_SIDE) {
+      return null;
+    }
     const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(width, height));
     if (scale < 1) {
       const nw = Math.max(1, Math.round(width * scale));
@@ -129,6 +138,15 @@ export function compressImageBytes(
       rgba = downscaleRGBA(rgba, width, height, nw, nh);
       width = nw;
       height = nh;
+    }
+    if (isPng) {
+      // cnum=0：无损 RGBA。截图里的细字经得起这个，体积换清晰度值得。
+      const out = UPNG.encode([rgba.buffer.slice(0) as ArrayBuffer], width, height, 0) as ArrayBuffer;
+      const pngBytes = new Uint8Array(out);
+      if (pngBytes.length <= 3 * 1024 * 1024) {
+        return { bytes: pngBytes, ext: 'png', mime: 'image/png' };
+      }
+      // 太大才退回 JPEG（极少见：超 3MB 的截图）
     }
     const encoded = jpeg.encode({ data: rgba, width, height }, Math.round(IMAGE_QUALITY * 100)) as {
       data: Uint8Array;

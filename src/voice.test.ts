@@ -116,3 +116,21 @@ describe('ticWarning（口癖硬提醒）', () => {
     expect(ticWarning(['本鲸鱼娘来了', '本鲸鱼娘', '本鲸鱼娘', '本鲸鱼娘'], '本鲸鱼娘')).toContain('本鲸鱼娘');
   });
 });
+
+describe('看图与复读（2026-11-09 聊天记录驱动的两条规则）', () => {
+  const d = buildVoiceDirective(900);
+
+  it('先看清图上有什么，读不出就说看不清（不再「用反应带过去」）', () => {
+    expect(d).toContain('先看清图上有什么');
+    expect(d).toContain('看不清');
+    expect(d).not.toContain('用你自己的反应带过去');
+  });
+
+  it('整句照搬会像复读机', () => {
+    expect(d).toContain('复读机');
+  });
+
+  it('他说「我」是他，你说「我」是你', () => {
+    expect(d).toContain('他说「我」是他');
+  });
+});

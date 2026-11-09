@@ -45,15 +45,11 @@ describe('buildImageKey', () => {
 });
 
 describe('compressImageBytes', () => {
-  it('PNG 转成 JPEG（输出 FFD8 开头）', () => {
+  // 2026-11-09：截图类是 PNG，转 JPEG 会把气泡里的字糊掉（聊天记录 929/930 她读不出字只能编）。
+  it('小 PNG 原样保留（返回 null 表示用原图，文字无损）', () => {
     const parsed = parseDataUrl(`data:image/png;base64,${PNG_B64}`);
     expect(parsed).not.toBeNull();
-    const out = compressImageBytes(parsed!.bytes, 'image/png');
-    expect(out).not.toBeNull();
-    expect(out!.mime).toBe('image/jpeg');
-    expect(out!.ext).toBe('jpg');
-    expect(out!.bytes[0]).toBe(0xff);
-    expect(out!.bytes[1]).toBe(0xd8);
+    expect(compressImageBytes(parsed!.bytes, 'image/png')).toBeNull();
   });
 
   it('小 JPEG 跳过压缩（返回 null 表示用原图）', () => {
@@ -62,8 +58,8 @@ describe('compressImageBytes', () => {
     expect(out).toBeNull();
   });
 
-  it('压缩参数', () => {
-    expect(MAX_IMAGE_SIDE).toBe(1024);
-    expect(IMAGE_QUALITY).toBe(0.7);
+  it('压缩参数（1024/0.70 下气泡字读不出来，已调到 1568/0.82）', () => {
+    expect(MAX_IMAGE_SIDE).toBe(1568);
+    expect(IMAGE_QUALITY).toBe(0.82);
   });
 });

@@ -13,6 +13,8 @@ declare module 'upng-js' {
   const UPNG: {
     decode(buf: ArrayBuffer | Uint8Array): UPNGImage;
     toRGBA8(img: UPNGImage): ArrayBuffer[];
+    /** 编码成 PNG；cnum=0 表示无损 RGBA。 */
+    encode(bufs: ArrayBuffer[], w: number, h: number, cnum: number): ArrayBuffer;
   };
   export default UPNG;
 }
