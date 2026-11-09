@@ -1,4 +1,5 @@
 import { applyGradualChange, applyInactivityDecay } from './relation-growth';
+import { logWarn } from './error-log';
 import {
   applyAffinityChange,
   applyIntimacyChange,
@@ -307,6 +308,19 @@ export function overwriteKeyOf(line: string): string | null {
 /** 不可变区块："人物底色"——AI 的固定设定，永不修改/删除。 */
 export const IMMUTABLE_HEADER = '## 人物底色';
 
+/**
+ * 人物底色的软上限：20 条 / 1,600 字节。
+ *
+ * 它是只追加的分区（她学到的自我认识），所以需要一个天花板：
+ * - 10 条：按现在 1~3 条/周的速度，两三周就满，之后这条链路等于停了；
+ * - 20 条 ≈ 1.6KB，和「关于他 / 他的偏好」同量级（那些分区预算 1.2~2KB），不挤别人；
+ * - 30 条以上开始像清单，她也容易出现互相矛盾的认识（2026-11-09 评估）。
+ *
+ * 满了只停止追加，不删除任何已有条目。
+ */
+export const CONSTITUTION_MAX_LINES = 20;
+export const CONSTITUTION_MAX_BYTES = 1600;
+
 /** 永不自动删除的区块（即使超容量也保留）。 */
 export const PROTECTED_HEADERS: string[] = ['## 人物底色', '## 称呼与关系', '## 他的雷区'];
 
@@ -544,6 +558,13 @@ export function mergeMemoryEntry(
             return old === key || isNearDuplicate(old, key);
           });
           if (dup) continue;
+          // 软上限：条目数或字节数到顶就停，不删已有条目（2026-11-09）
+          const entryCount = target.lines.filter((l) => ENTRY_RE.test(l)).length;
+          const sectionBytes = byteLength([IMMUTABLE_HEADER, ...target.lines].join('\n'));
+          if (entryCount >= CONSTITUTION_MAX_LINES || sectionBytes + byteLength(b) > CONSTITUTION_MAX_BYTES) {
+            logWarn('[memory] 人物底色已满（' + entryCount + ' 条 / ' + sectionBytes + ' 字节），这条不写了：' + b.slice(0, 40));
+            break;
+          }
           target.lines.push(b);
           changed = true;
         }

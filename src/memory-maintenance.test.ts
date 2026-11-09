@@ -645,3 +645,27 @@ describe('分区降级：台词/作品名优先留在常驻层', () => {
     expect(r.text).toContain('《终将成为鱼》');
   });
 });
+
+describe('人物底色软上限（20 条 / 1,600 字节）', () => {
+  const mk = function (n: number) {
+    const lines = ['# 长期记忆', '', '## 人物底色', ''];
+    for (let i = 1; i <= n; i++) lines.push('- [26-11-0' + ((i % 8) + 1) + '] 你发现自己第 ' + i + ' 条认识，关于自己在乎什么');
+    lines.push('', '## 关于他', '- 城市=杭州');
+    return lines.join(String.fromCharCode(10));
+  };
+
+  it('没满时可以继续追加', () => {
+    const distilled = ['## 人物底色', '- [26-11-09] 你发现自己会先心软再嘴硬'].join(String.fromCharCode(10));
+    const out = mergeMemoryEntry(mk(5), distilled, '26-11-09');
+    expect(out).toContain('先心软再嘴硬');
+  });
+
+  it('满 20 条后不再追加，已有的一条不少', () => {
+    const before = mk(20);
+    const distilled = ['## 人物底色', '- [26-11-09] 你发现自己其实很怕被丢下'].join(String.fromCharCode(10));
+    const out = mergeMemoryEntry(before, distilled, '26-11-09');
+    expect(out).not.toContain('很怕被丢下');
+    expect(out).toContain('第 20 条认识');
+    expect(out).toContain('第 1 条认识');
+  });
+});
