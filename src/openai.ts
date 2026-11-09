@@ -725,7 +725,7 @@ openaiApp.post('/chat/completions', async (c) => {
       memoryMode: promptMemory.mode,
       weather,
       todaySummary: contextBudget.recent,
-      recentMemo: contextBudget.rollup,
+      recentMemo: contextBudget.recentMemo,
       recentTopics: topicsBlock,
       recalled: '',
       personaDrift,

@@ -6,12 +6,13 @@
  * 超预算时先裁召回，再裁 rollup，最后裁近期摘要。
  */
 
-export type ContextBlockName = 'core' | 'recent' | 'rollup' | 'recall';
+export type ContextBlockName = 'core' | 'recent' | 'recentMemo' | 'recall';
 
 export interface ContextBudgetInput {
   core: string;
   recent?: string;
-  rollup?: string;
+  /** 中期记忆（最近几天）。以前叫 rollup，但它装的从来不是周/月汇总 */
+  recentMemo?: string;
   recall?: string;
   /** 非核心块总预算；核心记忆不计入这个预算。 */
   maxChars?: number;
@@ -30,7 +31,7 @@ export interface ContextBlockManifest {
 export interface ContextBudgetResult {
   core: string;
   recent: string;
-  rollup: string;
+  recentMemo: string;
   recall: string;
   totalChars: number;
   maxChars: number;
@@ -82,7 +83,7 @@ function block(
 export function budgetContext(input: ContextBudgetInput): ContextBudgetResult {
   const coreRaw = clean(input.core);
   const recentRaw = clean(input.recent);
-  const rollupRaw = clean(input.rollup);
+  const recentMemoRaw = clean(input.recentMemo);
   const recallRaw = clean(input.recall);
   const maxChars = Math.max(0, Math.floor(input.maxChars ?? DEFAULT_MAX_CHARS));
   const coreMaxChars = Math.max(
@@ -102,10 +103,10 @@ export function budgetContext(input: ContextBudgetInput): ContextBudgetResult {
   entries.push(block('recent', recentRaw, recent.text, recent.truncated));
   remaining = Math.max(0, remaining - recent.text.length);
 
-  const rollupTake = Math.min(rollupRaw.length, ROLLUP_CAP, remaining);
-  const rollup = clip(rollupRaw, rollupTake);
-  entries.push(block('rollup', rollupRaw, rollup.text, rollup.truncated));
-  remaining = Math.max(0, remaining - rollup.text.length);
+  const memoTake = Math.min(recentMemoRaw.length, ROLLUP_CAP, remaining);
+  const recentMemo = clip(recentMemoRaw, memoTake);
+  entries.push(block('recentMemo', recentMemoRaw, recentMemo.text, recentMemo.truncated));
+  remaining = Math.max(0, remaining - recentMemo.text.length);
 
   const recallTake = Math.min(recallRaw.length, RECALL_CAP, remaining);
   const recall = clip(recallRaw, recallTake);
@@ -114,7 +115,7 @@ export function budgetContext(input: ContextBudgetInput): ContextBudgetResult {
   return {
     core,
     recent: recent.text,
-    rollup: rollup.text,
+    recentMemo: recentMemo.text,
     recall: recall.text,
     totalChars: entries.reduce((sum, e) => sum + e.includedChars, 0),
     maxChars,

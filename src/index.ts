@@ -766,8 +766,11 @@ export default {
           await pruneRequestLog(env);
           // 生活系统：生成「今天」的日程。P0 阶段只写库，聊天行为不变。
           await runLifeMorning(env, now);
-          // 两套记忆索引的行数对账：每天一条，才能看出趋势（开关关着时什么都不做）
-          await recordDualStats(env, now).catch(() => {});
+          // 两套记忆索引的对账默认关：engine=next 后 legacy 索引已停维护，这份账本没有意义。
+          // 要恢复：MEMORY_DUAL=on。
+          if ((env.MEMORY_DUAL ?? '').toLowerCase() === 'on') {
+            await recordDualStats(env, now).catch(() => {});
+          }
         })(),
       );
       logCron(env, ctx, cron, startedAt);

@@ -54,7 +54,7 @@ describe('budgetFromPack', () => {
 
   it('中期记忆存在时进 rollup，今日摘要为空', () => {
     const { budget } = budgetFromPack(pack({ recentMemo: '- 中午吃了面', todaySummary: null }), '', []);
-    expect(budget.rollup).toContain('面');
+    expect(budget.recentMemo).toContain('面');
     expect(budget.recent).toBe('');
   });
 });

@@ -188,7 +188,7 @@ export function budgetFromPack(
   const budget = budgetContext({
     core: pack.promptMemory.text,
     recent: pack.todaySummary ?? '',
-    rollup: pack.recentMemo ?? '',
+    recentMemo: pack.recentMemo ?? '',
     recall: recalled,
   });
   return { recalled, budget };

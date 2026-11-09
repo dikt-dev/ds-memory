@@ -667,8 +667,9 @@ export async function archiveOneDay(
     } catch (e) {
       logError('[daily] chunk cache refresh failed:', e);
     }
-    // 时间金字塔：周一滚上周摘要、每月 1 日滚上月摘要（幂等，失败不影响归档）
-    try {
+    // 时间金字塔（周/月滚动摘要）默认先关：memory_summaries / memory_rollups 长期 0 行，
+    // 这条链路没有消费者，停了省一次模型调用。要恢复：MEMORY_ROLLUPS=on。
+    if ((env.MEMORY_ROLLUPS ?? '').toLowerCase() === 'on') try {
       const rl = await maybeGenerateRollups(env, now);
       if (rl.generated.length) logInfo(`[daily] 记忆摘要滚动：${rl.generated.join('、')}`);
       if (rl.errors.length) logError('[daily] rollup errors:', rl.errors.join(';'));

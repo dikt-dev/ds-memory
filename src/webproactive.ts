@@ -317,7 +317,7 @@ async function generateProactive(
     memoryMode: promptMemory.mode,
     weather,
     todaySummary: contextBudget.recent,
-    recentMemo: contextBudget.rollup,
+    recentMemo: contextBudget.recentMemo,
     recalled: contextBudget.recall,
     personaDrift,
     channel: 'web',

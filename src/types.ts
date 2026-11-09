@@ -68,6 +68,10 @@ export interface Env {
   /** 鉴权模式：signed（默认）| kv（回滚用）。 */
   AUTH_MODE?: string;
   /** 记忆引擎：legacy（默认）| shadow（只记录）| next（使用新召回）。 */
+  /** 周/月滚动摘要：on 才跑（默认关，表长期空转） */
+  MEMORY_ROLLUPS?: string;
+  /** 双引擎行数对账：on 才跑（engine=next 后 legacy 索引已停维护） */
+  MEMORY_DUAL?: string;
   /** 跨分区去重（承诺优先/近期动态让位）：off 关闭，shadow 只统计不改文件 */
   MEMORY_COMPACT?: string;
   /** 召回覆盖率短路：off = 回退旧行为（默认开） */

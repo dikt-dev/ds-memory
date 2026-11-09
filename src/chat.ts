@@ -206,7 +206,7 @@ export async function streamChat(
   const contextBudget = budgetContext({
     core: promptMemory.text,
     recent: todaySummary ?? '',
-    rollup: recentMemo ?? '',
+    recentMemo: recentMemo ?? '',
     recall: recalled,
   });
   // Phase 0 trace：只记录元信息，不记录正文/记忆内容。
@@ -448,7 +448,7 @@ export async function streamChat(
         memoryMode: promptMemory.mode,
         weather,
         todaySummary: contextBudget.recent,
-        recentMemo: contextBudget.rollup,
+        recentMemo: contextBudget.recentMemo,
         recalled: contextBudget.recall,
         personaDrift,
         channel,
