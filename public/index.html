@@ -301,12 +301,16 @@
     padding: .12rem .5rem; border-radius: 8px; margin-top: .3rem;
   }
 
-  /* 时间分隔线：居中的小药丸，说明"这里隔了一段时间" */
+  /* 时间分隔线：文字两侧各拉一条细线，浅色主题下也不会看漏 */
   .time-divider {
-    align-self: center; margin: 8px 0 -2px;
-    padding: 2px 10px; border-radius: 999px;
-    font-size: .7rem; color: var(--ink-3); background: var(--surface-muted);
-    user-select: none;
+    align-self: center; margin: 10px 0 -2px;
+    padding: 0 8px; border-radius: 999px;
+    font-size: .7rem; color: var(--ink-2); background: var(--canvas);
+    position: relative; user-select: none; z-index: 1;
+  }
+  .time-divider::before {
+    content: ''; position: absolute; left: -56px; right: -56px; top: 50%;
+    height: 1px; background: var(--hairline); z-index: -1;
   }
 
   /* 主动消息的标记：一直显示（不是悬停才出现）——它说明"是她先开口的" */
@@ -1040,21 +1044,40 @@ function dividerText(ms) {
  * 只重建分隔线，不动气泡——不重绘、不重放动画。
  */
 function refreshTimeDividers() {
-  messagesEl.querySelectorAll(':scope > .time-divider').forEach((el) => el.remove());
-  let prev = null;
-  for (const el of [...messagesEl.children]) {
-    if (!el.classList.contains('msg')) continue;
-    const ms = Number(el.dataset.ms || '');
-    if (!Number.isFinite(ms) || ms <= 0) { prev = null; continue; }
-    if (prev === null || ms - prev > TIME_DIVIDER_GAP_MS) {
-      const line = document.createElement('div');
-      line.className = 'time-divider';
-      line.textContent = dividerText(ms);
-      messagesEl.insertBefore(line, el);
+  try {
+    // 不用 :scope —— 老 WebView 上它是唯一可能直接抛错的地方
+    for (const el of [...messagesEl.children]) {
+      if (el.classList.contains('time-divider')) el.remove();
     }
-    prev = ms;
+    let prev = null;
+    for (const el of [...messagesEl.children]) {
+      if (!el.classList.contains('msg')) continue;
+      const ms = Number(el.dataset.ms || '');
+      if (!Number.isFinite(ms) || ms <= 0) { prev = null; continue; }
+      if (prev === null || ms - prev > TIME_DIVIDER_GAP_MS) {
+        const line = document.createElement('div');
+        line.className = 'time-divider';
+        line.textContent = dividerText(ms);
+        messagesEl.insertBefore(line, el);
+      }
+      prev = ms;
+    }
+  } catch (e) {
+    // 以前异常会被 loadMoreHistory 的 catch 静默吞掉，出问题连日志都没有
+    console.warn('[ds-memory] 时间线渲染失败', e);
   }
 }
+
+// 版本自证：控制台有这一行，说明跑的是新页面（没有就是没回源）
+document.body.dataset.build = '2026-11-09T16:10';
+console.info('[ds-memory] build 2026-11-09T16:10 · 时间线已启用');
+
+// 幂等：多跑几次没有副作用。整页加载完、切回标签页都再算一次，
+// 即使初始那一次没走到（页面从 bfcache 恢复之类）也能自愈。
+window.addEventListener('load', refreshTimeDividers);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') refreshTimeDividers();
+});
 
 /* 用户消息渲染：处理 [图片:images/…] 标记与换行；无路径的 [图片] 显示占位提示 */
 function renderUserContent(content) {
@@ -1412,7 +1435,7 @@ async function loadMoreHistory(jumpToBottom) {
           m.role === 'user' ? 'user' : 'assistant',
           m.role === 'user' ? renderUserContent(m.content) : renderMarkdown(stripLeadTime(m.content)),
           m.content,
-          { proactive: !!(m.proactive_kind || m.turn_type === 'proactive'), time: hhmm(m.created_at), ms: Number(m.created_ms) },
+          { proactive: !!(m.proactive_kind || m.turn_type === 'proactive'), time: hhmm(m.created_at), ms: Number(m.created_ms) || Date.parse(m.created_at) || 0 },
         ));
       } catch (e) {
         console.warn('skip history message', m && m.id, e);
@@ -1475,7 +1498,7 @@ async function pollNewMessages() {
             m.role === 'user' ? 'user' : 'assistant',
             m.role === 'user' ? renderUserContent(m.content) : renderMarkdown(stripLeadTime(m.content)),
             m.content,
-            { proactive: !!(m.proactive_kind || m.turn_type === 'proactive'), time: hhmm(m.created_at), ms: Number(m.created_ms) },
+            { proactive: !!(m.proactive_kind || m.turn_type === 'proactive'), time: hhmm(m.created_at), ms: Number(m.created_ms) || Date.parse(m.created_at) || 0 },
           ));
         } catch (e) {
           console.warn('skip live message', m && m.id, e);
