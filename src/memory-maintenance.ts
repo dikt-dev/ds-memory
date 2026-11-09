@@ -684,6 +684,18 @@ export function demoteSectionEntries(
  * 这里是"这一节太胖"，用来提前拦住 16KB 的分界线——超过它记忆会从全量注入
  * 掉成 compact，共同经历/进行中的事会整段退出提示词。
  */
+/**
+ * 降级时优先保留的条目特征：作品名、台词、里程碑锚点。
+ *
+ * 2026-11-09：预算把「黑化视频结尾『因为我们是朋友』」搬走后，她答不出那句台词了。
+ * 这类内容是「重建不出来」的，宁可多占几十字节，也要留在常驻层。
+ */
+const KEEP_WORTHY = [/《[^》]+》/, /「[^」]{2,}」/, /“[^”]{2,}”/, /【[^】]+】/];
+
+function isKeepWorthy(line: string): boolean {
+  return KEEP_WORTHY.some((re) => re.test(line));
+}
+
 export function demoteSectionToBudget(
   text: string,
   header: string,
@@ -698,9 +710,14 @@ export function demoteSectionToBudget(
 
   const sizeOf = (): number => byteLength([sec.header, ...sec.lines].join('\n'));
   const entryIdx = sec.lines.map((l, i) => (ENTRY_RE.test(l) ? i : -1)).filter((i) => i >= 0);
+  // 台词/作品名/锚点这些「重建不出来的」排在最后再搬，且至少留 keepWorthyFloor 条。
+  const worthy = entryIdx.filter((i) => isKeepWorthy(sec.lines[i]));
+  const plain = entryIdx.filter((i) => !isKeepWorthy(sec.lines[i]));
+  const keepWorthyFloor = Math.min(6, worthy.length);
+  const removable = [...plain, ...worthy.slice(0, Math.max(0, worthy.length - keepWorthyFloor))];
   const removed: string[] = [];
-  while (sizeOf() > budgetBytes && entryIdx.length > keepAtLeast) {
-    const idx = entryIdx.shift() as number;
+  while (sizeOf() > budgetBytes && removable.length > keepAtLeast) {
+    const idx = removable.shift() as number;
     removed.push(sec.lines[idx]);
     sec.lines[idx] = '';
   }

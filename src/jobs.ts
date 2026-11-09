@@ -560,6 +560,7 @@ export async function archiveOneDay(
     //      不加这一步，memory.md 会线性涨到 16KB 然后静默掉成 compact 模式。
     try {
       let demoted = 0;
+      const demotedLines: string[] = [];
       for (const b of reportSectionBudgets(memory)) {
         if (!b.over) continue;
         const r = demoteSectionToBudget(memory, b.header, b.budget);
@@ -569,12 +570,16 @@ export async function archiveOneDay(
         if (r.removed.every((line) => archiveHasLine(archive, line))) {
           memory = r.text;
           demoted += r.removed.length;
+          demotedLines.push(...r.removed);
         } else {
           logError(`[daily] 分区降级中止：${b.header} 档案未确认写入`);
         }
       }
       maintenance.demoted = demoted;
       if (demoted > 0) logInfo(`[daily] 分区预算：把 ${demoted} 条最旧条目搬进档案`);
+      if (demotedLines.length > 0) {
+        logInfo('[daily] 搬走的是：' + demotedLines.slice(0, 3).map((l) => l.slice(0, 40)).join(' | '));
+      }
     } catch (e) {
       logError('[daily] demote sections failed:', e);
     }
@@ -753,7 +758,9 @@ export async function archiveOneDay(
           : '';
     const errorInfo = distillError ? `；提炼错误=${distillError.slice(0, 160)}` : '';
     const snapInfo = snap.written ? '；快照=写入' : snap.skipped === 'exists' ? '；快照=已存在' : snap.skipped === 'disabled' ? '' : '；快照=失败';
-    const detail = `归档 ${rows.length} 条消息；记忆 ${before}→${after} 字节；提炼=${distilled}${costInfo}；去重=${compactedRemoved}；分层=${archivedCount}；裁剪=${trimmed}${snapInfo}${errorInfo}`;
+    // 降级也要露出来：它会把共同经历里的台词/作品名搬进档案，以前 detail 里根本没有这个数（2026-11-09）。
+    const demoteInfo = maintenance.demoted > 0 ? `；降级=${maintenance.demoted}` : '';
+    const detail = `归档 ${rows.length} 条消息；记忆 ${before}→${after} 字节；提炼=${distilled}${costInfo}；去重=${compactedRemoved}；分层=${archivedCount}；裁剪=${trimmed}${demoteInfo}${snapInfo}${errorInfo}`;
     // 提炼失败时不把任务标 done：runDailyArchive 下次会把它当 failed 补跑
     // 话题索引：给「哪天聊过什么」留一份清单，跨天回指靠它
   await ensureDayTopics(env, target).catch((e: unknown) => logError('[topics] 生成失败:', e));

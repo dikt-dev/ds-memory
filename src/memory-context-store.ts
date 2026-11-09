@@ -345,7 +345,7 @@ export async function refreshChunksCache(env: Env, memoryText?: string): Promise
     `SELECT id, source, source_id, section, content, date, keywords, tags,
             importance, vec, content_hash, updated_at, use_count, last_used_at,
             confirmed_count, pinned
-     FROM memory_chunks WHERE source = 'archive' LIMIT 4000`,
+     FROM memory_chunks WHERE origin = 'archive' LIMIT 4000`,
   )
     .all<Record<string, unknown>>()
     .catch(() => null);

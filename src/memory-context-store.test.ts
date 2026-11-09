@@ -17,3 +17,40 @@ describe('provenanceSearchTerm', () => {
     expect(term.length).toBeLessThanOrEqual(30);
   });
 });
+
+describe('refreshChunksCache：档案条目要能被合并进来', () => {
+  it('查档案用的是 origin 列（不是 source）', async () => {
+    const { refreshChunksCache } = await import('./memory-context-store');
+    const sqls: string[] = [];
+    const env = {
+      KV: {
+        get: async () => null,
+        put: async () => undefined,
+        delete: async () => undefined,
+      },
+      DB: {
+        prepare: function (sql: string) {
+          sqls.push(String(sql));
+          return {
+            bind: function () {
+              return {
+                run: async function () { return { meta: { changes: 0 } }; },
+                first: async function () { return null; },
+                all: async function () { return { results: [] }; },
+              };
+            },
+            run: async function () { return { meta: { changes: 0 } }; },
+            first: async function () { return null; },
+            all: async function () { return { results: [] }; },
+          };
+        },
+      },
+    };
+    await refreshChunksCache(env as never, '## 共同经历\n- [26-11-08] 测试条目');
+    const archiveSql = sqls.find(function (s) { return s.indexOf('memory_chunks') >= 0; });
+    expect(archiveSql).toBeTruthy();
+    // 2026-11-09：写成 source='archive' 时永远 0 条，档案条目进不了召回池
+    expect(archiveSql).toContain("origin = 'archive'");
+    expect(archiveSql).not.toContain("source = 'archive'");
+  });
+});

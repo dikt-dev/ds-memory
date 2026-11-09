@@ -626,3 +626,22 @@ describe('人物底色只追加', () => {
     expect(out).toContain('你嘴上凶其实先心软');
   });
 });
+
+describe('分区降级：台词/作品名优先留在常驻层', () => {
+  const section = function (n: number) {
+    const lines = ['# 长期记忆', '', '## 共同经历', ''];
+    for (let i = 0; i < n; i++) {
+      lines.push('- [26-11-0' + ((i % 8) + 1) + '] 老事件第 ' + i + ' 条，没什么特别的流水');
+    }
+    lines.push('- [26-11-08] 他发黑化视频，结尾说「因为我们是朋友」');
+    lines.push('- [26-11-08] 他发《终将成为鱼》二创，画的是铁道口黄昏');
+    return lines.join(String.fromCharCode(10));
+  };
+
+  it('降级先搬普通条目，台词与书名号留下', () => {
+    const r = demoteSectionToBudget(section(20), '## 共同经历', 900, 3);
+    expect(r.removed.length).toBeGreaterThan(0);
+    expect(r.text).toContain('因为我们是朋友');
+    expect(r.text).toContain('《终将成为鱼》');
+  });
+});
