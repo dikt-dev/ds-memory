@@ -29,7 +29,12 @@ import {
   HISTORY_FILE_MAX_CHARS,
   HISTORY_MESSAGE_MAX_CHARS,
 } from './db';
-import { conversationGapNote, loadSessionHistory, trimHistoryToBudget } from './recent-context';
+import {
+  buildHistorySlice,
+  CHAT_FULL_TURNS,
+  conversationGapNote,
+  loadSessionHistory,
+} from './recent-context';
 import { calcCost, loadPricing } from './pricing';
 import { recordChatUsage } from './usage-stats';
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -121,8 +126,12 @@ export async function streamChat(
         (m.content === recordContentEarly || m.content === content)
       ),
   );
-  // 按字符预算裁历史（轮数上限之外再加一道体积闸）
-  const history = trimHistoryToBudget(deduped);
+  // ★ 切成「原文 + 提要」：30 轮以内在原文里，更早的压成提要跟着易变段注入。
+  //   以前超限是从数组里直接删，模型不知道自己少了一段——"刚聊过的"就这么消失了。
+  const historySlice = buildHistorySlice(deduped, { fullTurns: CHAT_FULL_TURNS });
+  const history = historySlice.rows;
+  // 这场会话一共几轮、其中几轮只以提要形式在场
+  const briefRounds = historySlice.rounds - historySlice.fullRounds;
   const { memory, dayCtxFile, weather, ctx, promptMemory, personaState, personaDrift } = pack;
   if (pack.weather) await attachWeather(env, dateKey, pack.weather, dayCtxFile);
   // 最近几条回复的开头：避免连续几轮用同一句开场白
@@ -220,6 +229,9 @@ export async function streamChat(
     affectEngine,
     promptBytes: byteLength(promptMemory.text),
     historyRounds: groupTurns(history).length,
+    sessionRounds: historySlice.rounds,
+    briefRounds,
+    briefChars: historySlice.brief.length,
     recalledItems: recalled.split('\n').filter((line) => line.startsWith('- ')).length,
     hasMemo: Boolean(recentMemo),
     hasSummary: Boolean(todaySummary),
@@ -240,6 +252,9 @@ export async function streamChat(
       memoryEngine,
       promptBytes: byteLength(promptMemory.text),
       historyRounds: groupTurns(history).length,
+      sessionRounds: historySlice.rounds,
+      briefRounds,
+      briefChars: historySlice.brief.length,
       recalledItems: recalled.split('\n').filter((line) => line.startsWith('- ')).length,
       hasMemo: Boolean(recentMemo),
       hasSummary: Boolean(todaySummary),
@@ -406,7 +421,10 @@ export async function streamChat(
     lastRow && lastRow.role === 'user' && lastRow.created_ms && !content.includes('现在才看到')
       ? `\n\n【他等的时间】他上一条发出到现在已经 ${formatWait(now.getTime() - lastRow.created_ms)}，你一直没回（在忙或睡着了）。回的时候先随口带一句，别装作刚才发生，也不要报时间点；别老用同一个说法带过。`
       : '';
-  const historyNote = [historyRangeNote(history, now), conversationGapNote(history, now)]
+  const historyNote = [
+    historyRangeNote(history, now, briefRounds),
+    conversationGapNote(history, now),
+  ]
     .filter(Boolean)
     .join('\n');
   // ★ 稳定段（人设+长期记忆）单独作为第一条 system，每轮字节一致才能吃到缓存命中价；
@@ -476,7 +494,14 @@ export async function streamChat(
   const actionNote = recentActs.length > 0
     ? '这一轮换个动作或干脆不写动作——这几个你刚连用过：' + recentActs.map(function (a) { return '「' + a + '」'; }).join('、')
     : '';
-  const volatileBlock = [promptSplit.volatile, historyNote + pendingWait, comfort, actionNote]
+  const volatileBlock = [
+    promptSplit.volatile,
+    historyNote + pendingWait,
+    // 更早的轮次：只给提要。放在易变段（历史之后）→ 前缀缓存不受影响。
+    historySlice.brief,
+    comfort,
+    actionNote,
+  ]
     .filter(Boolean)
     .join('\n\n');
   const messages: DeepSeekMessage[] = [
@@ -484,8 +509,6 @@ export async function streamChat(
       role: 'system',
       content: promptSplit.stable + silentEndRule(channel),
     },
-    // 会话太长被压掉的那段：一次提要，之后不再变（变了会打断前缀缓存）
-    ...(session.brief ? [{ role: 'system' as const, content: session.brief }] : []),
     // 会话内全部历史按时间从旧到新排列；每条带发送时间，模型才能判断上一句/上上句。
     // 单条只做超长保护（默认 2400 字，带文件 4200 字），不做过去那种 400 字过度压缩。
     ...history.map((m) => ({

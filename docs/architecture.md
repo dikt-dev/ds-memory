@@ -518,7 +518,7 @@ ds_memory/
 │   ├── memory-extract.ts   # 从对话抽取显式事实
 │   ├── memory-projection.ts # facts → memory.md 投影（手动、需 confirm）
 │   ├── recent-memory.ts    # 中期记忆：最近 24 小时纪要
-│   ├── recent-context.ts   # 短期记忆：自适应 15/30/50 轮 + R2 回补
+│   ├── recent-context.ts   # 短期记忆：会话切片 + 原文/提要分层 + R2 回补
 │   ├── summary.ts          # 当日滚动摘要（中期记忆的兜底）
 │   ├── context-packer.ts   # 召回结果字节预算装包
 │   ├── runtime-store.ts    # D1 runtime_state（KV 兜底）+ 原子锁

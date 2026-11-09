@@ -6,7 +6,13 @@
  * - 只读归档，不写回 D1，也不改变归档数据。
  */
 import type { Env } from './types';
-import { groupTurns, recentRoundMessages, takeLastRounds, type MessageRow } from './db';
+import {
+  groupTurns,
+  recentRoundMessages,
+  takeLastRounds,
+  MAX_HISTORY_ROUNDS,
+  type MessageRow,
+} from './db';
 import { addDays, dateKeyInBeijing } from './date';
 import { getObject } from './storage';
 
@@ -15,7 +21,7 @@ import { getObject } from './storage';
 // 18 轮仍然覆盖一次连续对话，但自我模仿的素材少了一半。
 export const RECENT_ROUNDS = 18;
 /** 单次请求的硬上限；只有明确“接着刚才/前面”才取 50。 */
-export const MAX_RECENT_ROUNDS = 120;
+export const MAX_RECENT_ROUNDS = MAX_HISTORY_ROUNDS;
 /** 主动消息不需要占用聊天级的长历史。 */
 export const PROACTIVE_RECENT_ROUNDS = 10;
 
@@ -113,12 +119,6 @@ export async function loadRecentRounds(
 
 /** 会话边界：距上一条消息超过 6 小时就算新会话。 */
 export const SESSION_GAP_MS = 6 * 60 * 60 * 1000;
-/** 一次最多往回取多少轮（只为找会话起点，不直接注入）。 */
-export const SESSION_FETCH_ROUNDS = 200;
-/** 单会话注入硬上限；超了才启用提要（缓存会断，但属极端情况）。 */
-export const SESSION_MAX_ROUNDS = 120;
-/** 超限时保留的尾部轮数。 */
-export const SESSION_KEEP_ROUNDS = 40;
 
 /**
  * 历史的字符预算（≈ 9,600 tokens）。
@@ -128,27 +128,74 @@ export const SESSION_KEEP_ROUNDS = 40;
  */
 export const HISTORY_BUDGET_CHARS = 12_000;
 
-export function trimHistoryToBudget(rows: MessageRow[], maxChars = HISTORY_BUDGET_CHARS): MessageRow[] {
-  if (rows.length === 0) return rows;
+export interface HistorySlice {
+  /** 注入用的原文（时间升序、整轮）。 */
+  rows: MessageRow[];
+  /** 没进原文那一段的提要；全都进了原文时是空串。 */
+  brief: string;
+  /** 本会话总轮数。 */
+  rounds: number;
+  /** 其中以原文形式注入的轮数。 */
+  fullRounds: number;
+}
+
+export interface HistorySliceOptions {
+  /** 原文最多带多少轮；更早的进提要。 */
+  fullTurns?: number;
+  /** 原文的字符预算；超了继续从旧往新挪进提要。 */
+  maxChars?: number;
+  briefMaxLines?: number;
+  briefMaxChars?: number;
+  briefHeader?: string;
+}
+
+/**
+ * 会话历史切成「原文 + 提要」。
+ *
+ * 以前超限是直接从数组里删掉，模型不知道自己少了一段，于是"刚聊过的"凭空消失
+ * （2026-11-09：11-08 那场 41 轮的会话，从第 32 轮起开头 11 轮就不在提示词里了）。
+ * 现在被挤掉的轮次压成一行一条的提要，跟易变段一起注入，一段会话始终接得上。
+ */
+export function buildHistorySlice(
+  rows: MessageRow[],
+  opts: HistorySliceOptions = {},
+): HistorySlice {
+  const fullTurns = Math.max(1, Math.floor(opts.fullTurns ?? CHAT_FULL_TURNS));
+  const maxChars = Math.max(0, Math.floor(opts.maxChars ?? HISTORY_BUDGET_CHARS));
   const turns = groupTurns(rows);
-  if (turns.length <= 1) return rows;
+  if (turns.length === 0) return { rows: [], brief: "", rounds: 0, fullRounds: 0 };
+  const older = turns.slice(0, Math.max(0, turns.length - fullTurns));
+  const tail = turns.slice(older.length);
   let used = 0;
-  let keepFrom = turns.length;
-  for (let i = turns.length - 1; i >= 0; i -= 1) {
-    const size = turns[i].reduce((sum, m) => sum + (m.content?.length ?? 0), 0);
-    // 至少留一轮：第一轮再大也带
-    if (keepFrom < turns.length && used + size > maxChars) break;
+  let keepFrom = tail.length;
+  for (let i = tail.length - 1; i >= 0; i -= 1) {
+    const size = tail[i].reduce((sum, m) => sum + (m.content?.length ?? 0), 0);
+    // 至少留一轮：最后一轮再大也带
+    if (keepFrom < tail.length && used + size > maxChars) break;
     used += size;
     keepFrom = i;
   }
-  return turns.slice(keepFrom).flat();
+  const dropped = [...older, ...tail.slice(0, keepFrom)].flat();
+  const kept = tail.slice(keepFrom).flat();
+  const brief =
+    dropped.length === 0
+      ? ""
+      : buildSessionDigest(dropped, {
+          maxLines: opts.briefMaxLines ?? BRIEF_MAX_LINES,
+          maxChars: opts.briefMaxChars ?? BRIEF_MAX_CHARS,
+          header: opts.briefHeader ?? CHAT_BRIEF_HEADER,
+        });
+  return { rows: kept, brief, rounds: turns.length, fullRounds: tail.length - keepFrom };
+}
+
+/** 只要原文、不要提要的旧接口（保留给其它调用点与测试）。 */
+export function trimHistoryToBudget(rows: MessageRow[], maxChars = HISTORY_BUDGET_CHARS): MessageRow[] {
+  return buildHistorySlice(rows, { fullTurns: Number.MAX_SAFE_INTEGER, maxChars }).rows;
 }
 
 export interface SessionHistory {
-  /** 注入用的历史消息（时间升序）。 */
+  /** 整段会话的消息（时间升序，还没按体积切）。 */
   rows: MessageRow[];
-  /** 被压掉那段的提要；没有超限时为空串。 */
-  brief: string;
   /** 本会话总轮数。 */
   rounds: number;
 }
@@ -167,11 +214,26 @@ function shortClock(createdAt: string): string {
   return m ? m[1] : "";
 }
 
+export interface SessionDigestOptions {
+  maxLines?: number;
+  maxChars?: number;
+  /** 头一行；{n} 会替换成轮数。传空串表示只要条目。 */
+  header?: string;
+}
+
+const DIGEST_HEADER = "## 本会话更早的（提要，原文已不在上下文）";
+
 /**
- * 把被挤出去的那段压成提要（确定性函数：不调模型、不落库）。
+ * 把「原文进不了上下文」的那段压成提要（确定性函数：不调模型、不落库）。
  * 均匀抽样到最多 maxLines 行，越长抽样越稀，字数可控。
  */
-export function buildSessionBrief(rows: MessageRow[], maxLines = 12, maxChars = 700): string {
+export function buildSessionDigest(
+  rows: MessageRow[],
+  opts: SessionDigestOptions = {},
+): string {
+  const maxLines = Math.max(1, Math.floor(opts.maxLines ?? 12));
+  const maxChars = Math.max(0, Math.floor(opts.maxChars ?? 700));
+  const header = opts.header ?? DIGEST_HEADER;
   const turns = groupTurns(rows);
   if (turns.length === 0) return "";
   const step = Math.max(1, Math.ceil(turns.length / maxLines));
@@ -184,22 +246,38 @@ export function buildSessionBrief(rows: MessageRow[], maxLines = 12, maxChars = 
     const clock = shortClock((user?.created_at ?? bot?.created_at) || "");
     return "- " + clock + " " + u + (b ? " → " + b : "");
   });
-  const text = "## 本会话更早的（提要，原文已不在上下文）\n" + lines.join("\n");
+  const head = header ? header.replace("{n}", String(turns.length)) + "\n" : "";
+  const text = head + lines.join("\n");
   return text.length > maxChars ? text.slice(0, maxChars) : text;
 }
 
+/** 旧名保留：兜底场景（会话超长）用的默认参数。 */
+export function buildSessionBrief(rows: MessageRow[], maxLines = 12, maxChars = 700): string {
+  return buildSessionDigest(rows, { maxLines, maxChars });
+}
+
+/**
+ * 一场会话里「原文」给多少轮。
+ *
+ * 不往上加了：30 轮已经能让模型照着她自己的句式写（2026-11-09 围巾动作连用 6 条）。
+ * 更早的轮次用提要补上——她要的是"刚才聊过什么"，不是逐字复读她自己。
+ */
+export const CHAT_FULL_TURNS = 30;
+/** 提要最多多少行（一场 200 轮的会话也只有这么多）。 */
+export const BRIEF_MAX_LINES = 40;
+/** 提要的字符上限。 */
+export const BRIEF_MAX_CHARS = 1_400;
+/** 聊天链路的提要抬头：让她明确这是提要、不是原话。 */
+export const CHAT_BRIEF_HEADER = "【本会话更早的（原文已不在上下文，只有提要）】共 {n} 轮：";
+
 /**
  * 会话级短期记忆：同一段会话里只追加、不滑窗——这是前缀缓存能命中的前提。
- * 只有超过 SESSION_MAX_ROUNDS 才退化成「提要 + 尾部原文」。
+ *
+ * 这里只负责「切出这段会话」，「切成原文+提要」交给 buildHistorySlice：
+ * 它必须先去掉本轮刚写进 D1 的那条用户消息，轮数才不会多算一轮。
  */
 export async function loadSessionHistory(env: Env, now: Date = new Date()): Promise<SessionHistory> {
-  const fetched = await recentRoundMessages(env, SESSION_FETCH_ROUNDS);
+  const fetched = await recentRoundMessages(env, MAX_RECENT_ROUNDS);
   const sessionRows = sliceCurrentSession(fetched);
-  const turns = groupTurns(sessionRows);
-  if (turns.length <= SESSION_MAX_ROUNDS) {
-    return { rows: sessionRows, brief: "", rounds: turns.length };
-  }
-  const dropped = turns.slice(0, turns.length - SESSION_KEEP_ROUNDS).flat();
-  const kept = turns.slice(-SESSION_KEEP_ROUNDS).flat();
-  return { rows: kept, brief: buildSessionBrief(dropped), rounds: turns.length };
+  return { rows: sessionRows, rounds: groupTurns(sessionRows).length };
 }

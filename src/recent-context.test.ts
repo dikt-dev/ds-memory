@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  clampRounds,
   compactHistoryMessage,
   groupTurns,
   historyRangeNote,
@@ -9,6 +10,7 @@ import {
 } from './db';
 import {
   trimHistoryToBudget,
+  buildHistorySlice,
   buildSessionBrief,
   conversationGapNote,
   resolveRecentRounds,
@@ -210,5 +212,78 @@ describe('trimHistoryToBudget —— 按体积裁历史', () => {
   it('预算足够时原样返回', () => {
     const rows = [row(1, 1, 'user', '在吗'), row(2, 1, 'assistant', '在')];
     expect(trimHistoryToBudget(rows, 1000)).toHaveLength(2);
+  });
+});
+
+/** 造 N 轮完整会话（每轮：他说 + 她回）。 */
+function turnsOf(n: number, pad = 0): MessageRow[] {
+  const rows: MessageRow[] = [];
+  const clock = '2026-11-08T09:54:00+08:00';
+  for (let i = 1; i <= n; i++) {
+    rows.push(mk(i * 2 - 1, i, 'user', '第' + i + '轮他说的话' + 'a'.repeat(pad), clock));
+    rows.push(mk(i * 2, i, 'assistant', '第' + i + '轮她回的话' + 'b'.repeat(pad), clock));
+  }
+  return rows;
+}
+
+describe('buildHistorySlice —— 原文 + 提要，一轮都不丢', () => {
+  it('41 轮的会话：原文留最近 30 轮，更早的 11 轮变成提要', () => {
+    const slice = buildHistorySlice(turnsOf(41));
+    expect(slice.rounds).toBe(41);
+    expect(slice.fullRounds).toBe(30);
+    expect(groupTurns(slice.rows)).toHaveLength(30);
+    expect(groupTurns(slice.rows)[0][0].content).toContain('第12轮');
+    expect(slice.brief).toContain('第1轮');
+    expect(slice.brief).toContain('共 11 轮');
+  });
+
+  it('15 轮以内：不提要，注入的内容和以前完全一样', () => {
+    const rows = turnsOf(15);
+    const slice = buildHistorySlice(rows);
+    expect(slice.brief).toBe('');
+    expect(slice.fullRounds).toBe(15);
+    expect(slice.rows.map((m) => m.id)).toEqual(rows.map((m) => m.id));
+  });
+
+  it('原文超字符预算时按整轮挪进提要', () => {
+    const slice = buildHistorySlice(turnsOf(4, 300), { maxChars: 1300 });
+    expect(slice.fullRounds).toBe(2);
+    expect(slice.brief).toContain('第1轮');
+    expect(slice.brief).toContain('第2轮');
+    expect(slice.brief).not.toContain('第4轮');
+  });
+
+  it('整轮切：原文里不会出现只有一半的轮次', () => {
+    const slice = buildHistorySlice(turnsOf(20, 200), { maxChars: 900 });
+    for (const turn of groupTurns(slice.rows)) expect(turn).toHaveLength(2);
+    expect(slice.rows.length % 2).toBe(0);
+  });
+
+  it('200 轮的会话提要也有上限（40 行 / 1400 字）', () => {
+    const slice = buildHistorySlice(turnsOf(200, 10));
+    expect(slice.brief.length).toBeLessThanOrEqual(1400);
+    expect(slice.brief.split('\n').length).toBeLessThanOrEqual(41);
+    expect(slice.brief).toContain('共 170 轮');
+  });
+
+  it('空输入不炸', () => {
+    expect(buildHistorySlice([])).toEqual({ rows: [], brief: '', rounds: 0, fullRounds: 0 });
+  });
+});
+
+describe('clampRounds —— 轮数不再被暗限在 30', () => {
+  it('请求 200 轮就拿到 200 轮', () => {
+    expect(clampRounds(200)).toBe(200);
+    expect(clampRounds(1000)).toBe(200);
+    expect(clampRounds(0)).toBe(1);
+    expect(clampRounds(Number.NaN)).toBe(1);
+  });
+});
+
+describe('historyRangeNote —— 提要轮数进说明', () => {
+  it('有提要时点明更早几轮在提要里，没有时措辞不变', () => {
+    const rows = turnsOf(3);
+    expect(historyRangeNote(rows, new Date(), 7)).toContain('更早的 7 轮');
+    expect(historyRangeNote(rows, new Date(), 0)).not.toContain('提要');
   });
 });

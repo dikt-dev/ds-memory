@@ -80,7 +80,8 @@ import { logError, logWarn } from './error-log';
 import { loadPersonaDoc } from './persona-doc';
 import { loadLifeBlocks } from './chat-blocks';
 import { buildSystemPromptSplit, silentEndRule } from './prompt';
-import { loadSessionHistory } from './recent-context';
+import { buildHistorySlice, loadSessionHistory } from './recent-context';
+import { withHistoryTimestamp } from './db';
 import { resolvePersona } from './persona';
 import { getOrCreateDayContext } from './context';
 
@@ -142,9 +143,11 @@ export function registerAdminOpsRoutes(app: Hono<AppEnv>): void {
     const messages: { role: string; content: string }[] = [
       { role: 'system', content: parts.stable + silentEndRule('web') },
     ];
-    const hist = await loadSessionHistory(c.env, now).catch(() => ({ rows: [], brief: '', rounds: 0 }));
-    if (hist.brief) messages.push({ role: 'system', content: hist.brief });
-    for (const m of hist.rows) messages.push({ role: m.role, content: m.content });
+    const hist = await loadSessionHistory(c.env, now).catch(() => ({ rows: [], rounds: 0 }));
+    // 和 chat.ts 一样切成原文 + 提要：预览要能看出「更早的轮次已经降级成提要」
+    const histSlice = buildHistorySlice(hist.rows);
+    if (histSlice.brief) messages.push({ role: 'system', content: histSlice.brief });
+    for (const m of histSlice.rows) messages.push({ role: m.role, content: withHistoryTimestamp(m.content, m.created_at) });
     if (parts.volatile) messages.push({ role: 'system', content: parts.volatile });
     messages.push({ role: 'user', content: text });
     return c.json({

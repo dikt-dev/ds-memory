@@ -40,7 +40,12 @@ import {
   HISTORY_MESSAGE_MAX_CHARS,
   type MessageRow,
 } from './db';
-import { conversationGapNote, loadRecentRounds, resolveRecentRounds } from './recent-context';
+import {
+  buildHistorySlice,
+  conversationGapNote,
+  loadRecentRounds,
+  resolveRecentRounds,
+} from './recent-context';
 import { calcCost, loadPricing, type TokenUsage } from './pricing';
 import { completeDeepSeek, streamDeepSeek, type DeepSeekMessage } from './deepseek';
 import { getTodaySummary, maybeSummarizeToday } from './summary';
@@ -608,17 +613,33 @@ openaiApp.post('/chat/completions', async (c) => {
     historyRaw = await loadRecentRounds(c.env, historyRounds, now);
     // 当前这条已经先落库了：历史统计和注入都要把它排除，否则会出现「最近 1 轮」但数组是空的
     if (userMessageId) historyRaw = historyRaw.filter((m) => m.id !== userMessageId);
+    // 再兜一层：客户端这次发的话如果已经在 D1 里，注入时去掉最后一次
+    const historyRows = historyRaw.filter(
+      (m, i) =>
+        !(i === historyRaw.length - 1 && m.role === 'user' && m.content === lastUserCleaned),
+    );
+    // 按轮数之外再加字符预算，防止 50 轮里塞进大段 B 站资料/文件。
+    // 30 轮短句大约 6~9k 字符；以前超预算按「单条消息」shift，会把一轮拆成半轮，
+    // 现在整轮切：原文保留最近的，更早的压成提要（一行一轮）跟着历史说明一起注入。
+    const historyBudget =
+      historyRounds >= 60 ? 20_000 : historyRounds >= 30 ? 14_000 : 10_000;
+    const slice = buildHistorySlice(historyRows, {
+      fullTurns: historyRounds,
+      maxChars: historyBudget,
+    });
+    historyRaw = slice.rows;
     // ★ 同一条链接/内容他又发了一次：明确告诉她「你看过」，否则她会把同一段视频当新的、
     //   再演一遍「整个人凑到屏幕前」，看起来就像完全不记得刚才聊过（2026-11-07）。
     const repeatNote = repeatedContentNote(historyRaw, lastUserCleaned, now);
-    historyNote = [repeatNote, historyRangeNote(historyRaw, now), conversationGapNote(historyRaw, now)]
+    historyNote = [
+      repeatNote,
+      historyRangeNote(historyRaw, now, slice.rounds - slice.fullRounds),
+      conversationGapNote(historyRaw, now),
+      slice.brief,
+    ]
       .filter(Boolean)
       .join('\n');
     historyMessages = historyRaw
-      .filter(
-        (m, i) =>
-          !(i === historyRaw.length - 1 && m.role === 'user' && m.content === lastUserCleaned),
-      )
       .filter((m) => m.content.trim())
       .map((m) => ({
         role: m.role === 'assistant' ? ('assistant' as const) : ('user' as const),
@@ -627,19 +648,6 @@ openaiApp.post('/chat/completions', async (c) => {
           ),
           m.created_at),
       }));
-    // 按轮数之外再加字符预算，防止 50 轮里塞进大段 B 站资料/文件。
-    // 30 轮短句大约 6~9k 字符；原来 7k 的预算会把最早几轮直接挤掉
-    const historyBudget =
-      historyRounds >= 60 ? 20_000 : historyRounds >= 30 ? 14_000 : 10_000;
-    let historyChars = historyMessages.reduce(
-      (sum, m) => sum + (typeof m.content === 'string' ? m.content.length : 0),
-      0,
-    );
-    while (historyMessages.length > 2 && historyChars > historyBudget) {
-      const removed = historyMessages.shift();
-      if (!removed) break;
-      historyChars -= typeof removed.content === 'string' ? removed.content.length : 0;
-    }
   }
   // 召回 query：当前消息 + 最近 3 条用户历史（按时间从旧到新）
   const recallQuery = [

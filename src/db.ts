@@ -187,9 +187,24 @@ export function takeLastRounds(rows: MessageRow[], rounds: number): MessageRow[]
   return groupTurns(rows).slice(-n).flat();
 }
 
+/**
+ * 一次最多取多少轮历史。
+ *
+ * 以前这里写死 30：调用方要 200 轮也只拿回 30，一场 41 轮的连续聊天从第 32 轮起
+ * 就悄悄丢掉开头 11 轮（2026-11-09 实测：11-08 09:54~10:29 那场就是 41 轮）。
+ * 轮数不再当暗闸，交给调用方按会话切，再按字符预算收口。
+ */
+export const MAX_HISTORY_ROUNDS = 200;
+
+/** 把调用方要的轮数收进合法区间。 */
+export function clampRounds(rounds: number, ceiling = MAX_HISTORY_ROUNDS): number {
+  const n = Math.floor(Number.isFinite(rounds) ? rounds : 1);
+  return Math.max(1, Math.min(n, ceiling));
+}
+
 /** 从 D1 取最近 N 轮消息（按 turn_id 分组，时间升序）。 */
 export async function recentRoundMessages(env: Env, rounds: number): Promise<MessageRow[]> {
-  const limit = Math.max(1, Math.min(Math.floor(rounds), 30));
+  const limit = clampRounds(rounds);
   // turn_id=0 的旧数据按单条消息自成一轮，避免把很多无 turn 的消息合成一轮
   const turnExpr = '(CASE WHEN turn_id > 0 THEN turn_id ELSE id END)';
   const ids = await env.DB.prepare(
@@ -210,7 +225,7 @@ export async function recentRoundMessages(env: Env, rounds: number): Promise<Mes
     `SELECT ${SELECT_COLS} FROM messages
      WHERE ${turnExpr} IN (${placeholders})
      ORDER BY created_ms ASC, id ASC
-     LIMIT 500`,
+     LIMIT 2000`,
   )
     .bind(...turnIds)
     .all<MessageRow>();
@@ -389,7 +404,11 @@ export function withHistoryTimestamp(content: string, createdAt: string): string
  * 时间戳逐条放在消息开头，模型才能明确“上一句/上上句”；
  * 同时提醒它这些标签只是元信息，回复里不要模仿输出。
  */
-export function historyRangeNote(rows: MessageRow[], now: Date): string | null {
+export function historyRangeNote(
+  rows: MessageRow[],
+  now: Date,
+  briefRounds = 0,
+): string | null {
   if (rows.length === 0) return null;
   const groups = groupTurns(rows);
   const first = rows[0];
@@ -397,7 +416,9 @@ export function historyRangeNote(rows: MessageRow[], now: Date): string | null {
   const hours = Math.max(0, Math.round((now.getTime() - last.created_ms) / 3600000));
   const gap = Math.max(0, Math.round((last.created_ms - first.created_ms) / 3600000));
   return (
-    `【历史顺序】接下来是最近 ${groups.length} 轮聊天记录，按时间从旧到新排列；` +
+    `【历史顺序】接下来是最近 ${groups.length} 轮聊天记录` +
+    (briefRounds > 0 ? `（这场会话更早的 ${briefRounds} 轮放在下面的提要里）` : '') +
+    `，按时间从旧到新排列；` +
     `每条开头的 [MM-DD HH:mm] 只是发送时间，谁说的由消息角色决定；回复时不要输出时间、不要写「他：」「你：」，也不要替他把话说出来。` +
     `最后一条是最近一条历史消息，当前用户消息在它之后。` +
     `最早 ${historyTimeLabel(first.created_at)}，最近 ${historyTimeLabel(last.created_at)}；` +

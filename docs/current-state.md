@@ -212,7 +212,10 @@ KV auth / memory cache / memo / summary / emotion / heartbeat / ...
 1. 鉴权（Cookie/KV 或 Bearer）；
 2. `getMemory`（KV→R2）；
 3. `extractPromptMemory`（≤16KB 全量；否则核心+稳定画像）；
-4. `loadRecentRounds`（默认 15 轮，技术类 30、指代前文 50、上限 60；D1 + R2 补）；
+4. 短期历史：`/api/chat` 用 `loadSessionHistory`（整段会话，6 小时间隔为界，最多 200 轮）→
+   `buildHistorySlice` 切成「最近 30 轮原文 + 更早的提要」；
+   `/v1/chat/completions` 用 `loadRecentRounds`（默认 18 轮，技术类 60；D1 + R2 补）；
+   两条链路都不再按 30 轮暗限截断，被挤掉的轮次压成提要注入，不再静默消失（2026-11-09）；
 5. `getRecentMemo` / 今日摘要；
 6. `recallMemoryForChat`（关键词优先，必要时向量）；
 7. `processEmotionTurn`（读 KV `emotion:state`，可能写回）；
