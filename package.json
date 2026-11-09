@@ -20,7 +20,8 @@
     "dead-code": "node scripts/dead-code.mjs",
     "style-audit": "node scripts/style-audit.mjs",
     "gen:pool": "node scripts/gen-pool.mjs",
-    "eval:probes": "node scripts/eval-probes.mjs"
+    "eval:probes": "node scripts/eval-probes.mjs",
+    "docs:links": "node scripts/check-doc-links.mjs docs ../docs ../ds-mobile/docs"
   },
   "dependencies": {
     "@types/spark-md5": "^3.0.5",

@@ -256,15 +256,15 @@ src/
 网页端与手机端（DS-Mobile）共用一套「**纸墨**」视觉：暖纸底、近黑字、只有一个靛紫强调色，
 靠 1px 发丝线和留白分层，不用渐变、毛玻璃和投影。
 
-令牌、版面规则和验收清单见 [docs/WEB_UI.md](docs/WEB_UI.md)。
+令牌、版面规则和验收清单见 [docs/design/web-ui.md](docs/design/web-ui.md)。
 
 | 聊天 · 浅色 | 聊天 · 深色 |
 |---|---|
-| ![聊天浅色](docs/ui-web-light.png) | ![聊天深色](docs/ui-web-dark.png) |
+| ![聊天浅色](docs/design/screenshots/ui-web-light.png) | ![聊天深色](docs/design/screenshots/ui-web-dark.png) |
 
 | 登录 | 修改记录 |
 |---|---|
-| ![登录](docs/ui-web-login.png) | ![修改记录](docs/ui-web-changes.png) |
+| ![登录](docs/design/screenshots/ui-web-login.png) | ![修改记录](docs/design/screenshots/ui-web-changes.png) |
 
 ## 测试
 

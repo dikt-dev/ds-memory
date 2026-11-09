@@ -2,7 +2,7 @@
 
 > 状态：**模板**，2026-11-01 12:00 冻结后填写（10-30 由 21:10 提前，实际窗口 6 天 14 小时 50 分）  
 > 冻结规则：冻结后不改 prompt、不改记忆、不切 flag，只记录  
-> 关联：[post-observation-plan.md](../../plans/post-observation-plan.md)、[handover-2026-10-29.md](../../handover-2026-10-29.md)
+> 关联：[post-observation-plan.md](../../plans/post-observation-plan.md)、[handover-2026-10-29.md](../../archive/handoffs/handover-2026-10-29.md)
 
 ---
 

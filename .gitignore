@@ -48,3 +48,10 @@ tmp/
 # test/local artifacts
 context/
 memory/emotion-history/
+
+# one-off debug scripts (cleaned 2026-11-09)
+.r2-usage*.mjs
+.r2-buckets.mjs
+.scan-time.cjs
+# docs link check output
+doc-link-report.txt

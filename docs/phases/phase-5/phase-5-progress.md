@@ -83,7 +83,7 @@ affect shadow: 3 requests, new_bytes=585, avg_ms=0
 
 ### 1.1 渠道级开关
 
-新增 [engine-flags.ts](ds-memory/src/engine-flags.ts)：
+新增 [engine-flags.ts](../../../src/engine-flags.ts)：
 
 - `MEMORY_ENGINE_QQ` / `MEMORY_ENGINE_WEB`；
 - `AFFECT_ENGINE_QQ` / `AFFECT_ENGINE_WEB`；

@@ -363,7 +363,7 @@ Phase 2 目标：Memory Context 抽离。
 
 #### 1.1 领域模型
 
-新增 [memory-domain.ts](ds-memory/src/memory-domain.ts)：
+新增 [memory-domain.ts](../../src/memory-domain.ts)：
 
 - `MemoryFact`：section/content/subject/predicate/object/valid_from/valid_to/confidence/source/tags/hash；
 - `MemoryEvent`：section/date/summary/participants/emotions/source/hash；
@@ -378,15 +378,15 @@ Phase 2 目标：Memory Context 抽离。
 
 #### 1.2 Schema / 迁移
 
-- [004-memory-context.sql](ds-memory/migrations/004-memory-context.sql)
+- [004-memory-context.sql](../../migrations/004-memory-context.sql)
   - `memory_facts`、`memory_events`、`memory_summaries`、`memory_chunks`
-- [005-memory-jobs.sql](ds-memory/migrations/005-memory-jobs.sql)
+- [005-memory-jobs.sql](../../migrations/005-memory-jobs.sql)
   - `memory_jobs`
 - 全部 `IF NOT EXISTS`，不改旧表。
 
 #### 1.3 D1 存储与任务
 
-[memory-context-store.ts](ds-memory/src/memory-context-store.ts)：
+[memory-context-store.ts](../../src/memory-context-store.ts)：
 
 - `replaceMemoryContext`：upsert facts/events/chunks，再删除旧行；
 - `loadMemoryChunks`；
@@ -395,7 +395,7 @@ Phase 2 目标：Memory Context 抽离。
 - `backfillMemoryProvenance`：用对象/内容回填 `source_message_ids`（最多 5 条/事实）；
 - `memoryJobStats`。
 
-[memory-jobs.ts](ds-memory/src/memory-jobs.ts)：
+[memory-jobs.ts](../../src/memory-jobs.ts)：
 
 - `queued → running → done/failed`；
 - 类型：`rebuild_context`、`sync_summaries`、`backfill_provenance`；
@@ -572,13 +572,13 @@ context-stats → events=5, chunks=13
 
 #### 2.2 D1 账本
 
-新增 [006-affect-context.sql](ds-memory/migrations/006-affect-context.sql)：
+新增 [006-affect-context.sql](../../migrations/006-affect-context.sql)：
 
 - `affect_events(kind=emotion|relationship, type, evidence, delta_json, confidence, created_at, resolved_at)`；
 - `attitude_snapshots(archetype, attitude, directives_json, facets_json, emotion_json, policy_version, created_at)`；
 - 只追加；`INSERT OR IGNORE` 防重复。
 
-[affect-store.ts](ds-memory/src/affect-store.ts)：
+[affect-store.ts](../../src/affect-store.ts)：
 
 - `recordEmotionEvents`：情绪事件入账；
 - `recordFacetDelta`：每轮 5 轴增量入账；
@@ -589,7 +589,7 @@ context-stats → events=5, chunks=13
 
 #### 2.3 态度策略
 
-新增 [attitude-policy.ts](ds-memory/src/attitude-policy.ts)：
+新增 [attitude-policy.ts](../../src/attitude-policy.ts)：
 
 - `buildAttitudePolicy`：
   - 关系原型 → 基调；
@@ -748,7 +748,7 @@ GET /api/admin/relation
 
 #### 1.3 Context Packer
 
-新增 [context-packer.ts](ds-memory/src/context-packer.ts)：
+新增 [context-packer.ts](../../src/context-packer.ts)：
 
 - 召回层 2400 字节预算；
 - 按 contentHash 去重；
