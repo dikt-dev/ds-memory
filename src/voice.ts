@@ -118,6 +118,30 @@ export const KAOMOJI = {
  *
  * 跨轮重复是 AI 味最明显的一种：连着几轮都「诶？」「哈哈」开头，一听就是模板。
  */
+/**
+ * 从最近几条回复里抽出「括号动作」（（把围巾往上拉了拉）这类）。
+ *
+ * 为什么要它：2026-11-09 的聊天里，她连续六条都用「把围巾往上拉」，
+ * 而 avoidOpeners 只看句首、avoidPhrases 只看短词，都管不住括号。
+ * 返回出现 ≥2 次的动作，按次数降序。
+ */
+export function recentActions(texts: string[], limit = 6, top = 3): string[] {
+  const counts = new Map<string, number>();
+  for (const t of texts.slice(-limit)) {
+    const re = /（([^）]{2,16})）/g;
+    let m;
+    while ((m = re.exec(t ?? ''))) {
+      const body = m[1].replace(/[「」『』“”"'，。、；：！？…\s]/g, '').trim();
+      if (body.length < 2) continue;
+      counts.set(body, (counts.get(body) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .filter(function (e) { return e[1] >= 2; })
+    .sort(function (a, b) { return b[1] - a[1]; })
+    .slice(0, top)
+    .map(function (e) { return e[0]; });
+}
 export function recentOpeners(texts: string[], limit = 3, chars = 6): string[] {
   const out: string[] = [];
   for (const t of texts.slice(-limit)) {
@@ -142,12 +166,7 @@ export function buildVoiceDirective(intimacy: number): string {
 
   lines.push('## 说话');
   lines.push('- 你就是记忆里那个人：性格、口癖、脾气以记忆为准。');
-  lines.push('- 想到哪说到哪：先一个反应（半个词、一声「啧」、一句答非所问），再补一句具体的；话可以停在半路，让他接着问。');
-  lines.push('- 嘴上和心里各说各的：在意就嘴硬，被戳中就岔开——半句里露一点真的（一个动作、一次改口、一句没说完的话）。');
-  lines.push('- 情绪上来时话会变短、变冲、变跳；情绪靠内容和停顿。');
   lines.push('- 标点也说话：一个「？」是疑问，连在一起是逼问；「……」是拖长、没说完；「～」是软下来；「！」留给真气着或真高兴的那一句，一条里用一两次就够。');
-  lines.push('- 他示好就先接一句，再接一句嘴硬；他问什么先答什么，吐槽跟在后面。');
-  lines.push('- 他提到之前的事，先用一句「你上次说的那个……」把话接上，再说新的；记不清就说记不清，编的细节他当场就能拆穿。');
   lines.push('- 他说「我」是在说他自己（你用「你」称他）；只有「你」才是你，他的感受归他。');
   // 2026-11-09：原句是「用你自己的反应带过去」，等于教她别读图——结果她读不出气泡字就编作者（聊天记录 929/930）。
   lines.push('- 先看清图上有什么：认得出的字照实读；糊了就说「看不清」——图是谁做的、为什么做，等他说。');
@@ -156,8 +175,6 @@ export function buildVoiceDirective(intimacy: number): string {
   // 主语：他说的「我」是他，她说的「我」是她；转述时要把主语说出来，否则两个「我」会糊在一起。
   lines.push('- 回答前先定谁做了什么：他说「我」是他，你说「我」是你；转述时把主语说出来。');
   lines.push('- 说的是你自己：说「我有点困了」「我手上还沾着面粉」，比「这个点人容易犯困」更像你在说话。');
-  lines.push('- 情绪要真的上来：高兴就笑出声、尾巴乱晃、语气软下来；不爽就变短、变冲、晾他半句；这一轮的情绪和上一轮可以不一样。');
-  lines.push('- 位置在话里带过就好：换地方了、他问了，再细说。');
   lines.push('- 括号里放一个小动作（尾巴拍地板、伸个懒腰）；情绪上来时可以有，动作是陪衬，说清楚靠句子本身。');
   lines.push('- 「本小姐」留给生气、得意、嘴硬的时候；平时说「我」。');
   return lines.join('\n');
@@ -254,4 +271,31 @@ export function ticWarning(
   const hits = slice.filter((t) => (t ?? '').includes(call)).length;
   if (hits <= max) return null;
   return `最近 ${slice.length} 条里你自称「${call}」${hits} 次了。这几条换成「我」，别每句都自报家门。`;
+}
+/**
+ * 「自我重复率」：相邻两条回复的 3-gram Jaccard 最大值（0~1）。
+ *
+ * 用来量化「她是不是在照着自己的上一句写」——2026-11-09 的围巾动作连用，
+ * 这个值会很高。只做观测，不参与生成。
+ */
+export function selfRepeatScore(texts: string[]): number {
+  const grams = function (s: string): Set<string> {
+    const t = (s || '').replace(/（[^）]*）/g, '').replace(/[\s\u3000]/g, '');
+    const out = new Set<string>();
+    for (let i = 0; i + 3 <= t.length; i += 1) out.add(t.slice(i, i + 3));
+    return out;
+  };
+  const list = (texts || []).filter(function (x) { return x && x.trim().length > 0; }).slice(-6);
+  if (list.length < 2) return 0;
+  let best = 0;
+  for (let i = 1; i < list.length; i += 1) {
+    const a = grams(list[i - 1]);
+    const b = grams(list[i]);
+    if (a.size === 0 || b.size === 0) continue;
+    let inter = 0;
+    for (const g of a) if (b.has(g)) inter += 1;
+    const score = inter / (a.size + b.size - inter);
+    if (score > best) best = score;
+  }
+  return Math.round(best * 100) / 100;
 }

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildVoiceDirective,
+  recentActions,
+  selfRepeatScore,
   casualness,
   recentOpeners,
   recentPhrases,
@@ -33,13 +35,14 @@ describe('buildVoiceDirective —— 指向人设，同时给四条机械约束'
     // 2026-11-06：说话段从"禁止清单"改成正向引导
     const ruleLines = d.split('\n').filter((l) => l.startsWith('- '));
     expect(ruleLines.length).toBeGreaterThanOrEqual(6);
+    // 2026-11-09 瘦身：16 条 → 9 条，删掉与 persona.md 重复的那些
     for (const line of ruleLines) {
       expect(line).not.toMatch(/(别|不要|不准|不许|禁止)/);
     }
-    expect(d).toContain('想到哪说到哪');
+    expect(d).toContain('标点也说话');
     expect(d).toContain('标点也说话');
     expect(d).toContain('括号里放一个小动作');
-    expect(d).toContain('他示好就先接一句');
+    expect(d).toContain('回一句他没说过的');
   });
 
   it('不再有禁用词/颜文字频率/口头禅/断句/情绪清单', () => {
@@ -132,5 +135,25 @@ describe('看图与复读（2026-11-09 聊天记录驱动的两条规则）', ()
 
   it('他说「我」是他，你说「我」是你', () => {
     expect(d).toContain('他说「我」是他');
+  });
+});
+
+describe('重复抑制的两把尺子（2026-11-09）', () => {
+  it('recentActions 抽出连用两次以上的括号动作', () => {
+    const replies = [
+      '（把围巾往上拉了拉）行吧',
+      '（把围巾往上拉了拉）谁说要到你身边',
+      '（把下巴往围巾里埋了埋）行',
+    ];
+    const acts = recentActions(replies);
+    expect(acts[0]).toContain('围巾');
+    expect(acts.length).toBeLessThanOrEqual(3);
+  });
+
+  it('selfRepeatScore：逐字复述时接近 1，完全不同时接近 0', () => {
+    const same = selfRepeatScore(['今天中午吃砂锅粥还加了双份虾', '今天中午吃砂锅粥还加了双份虾']);
+    const diff = selfRepeatScore(['今天吃砂锅粥', '明天下雨记得带伞']);
+    expect(same).toBeGreaterThan(0.8);
+    expect(diff).toBeLessThan(0.1);
   });
 });

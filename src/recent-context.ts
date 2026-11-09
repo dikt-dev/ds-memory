@@ -11,7 +11,9 @@ import { addDays, dateKeyInBeijing } from './date';
 import { getObject } from './storage';
 
 /** 默认携带的最近轮数。一轮 = 用户消息 + 它的回复，或一条主动消息。 */
-export const RECENT_ROUNDS = 30;
+// 2026-11-09：30 轮里全是她自己的旧回复，模型会照着自己的句式写（围巾动作连用 6 条）。
+// 18 轮仍然覆盖一次连续对话，但自我模仿的素材少了一半。
+export const RECENT_ROUNDS = 18;
 /** 单次请求的硬上限；只有明确“接着刚才/前面”才取 50。 */
 export const MAX_RECENT_ROUNDS = 120;
 /** 主动消息不需要占用聊天级的长历史。 */

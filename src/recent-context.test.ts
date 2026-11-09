@@ -117,8 +117,8 @@ describe('resolveRecentRounds', () => {
     expect(resolveRecentRounds('继续实现项目的日志接口')).toBe(60);
   });
 
-  it('普通聊天默认 15 轮', () => {
-    expect(resolveRecentRounds('在吗')).toBe(30);
+  it('普通聊天默认 18 轮', () => {
+    expect(resolveRecentRounds('在吗')).toBe(18);
   });
 });
 

@@ -57,7 +57,7 @@ import { readSessionFacts } from './session-facts';
 import { buildCharacterCard } from './character-card';
 import { facetsOf, processEmotionTurn } from './emotion-context';
 import { moodFromVector } from './emotion-vector';
-import { buildVoiceDirective, recentOpeners, recentPhrases } from './voice';
+import { buildVoiceDirective, recentActions, recentOpeners, recentPhrases, selfRepeatScore } from './voice';
 import { formatRecentMemoBlock, getRecentMemo, maybeRefreshRecentMemo } from './recent-memory';
 import { embedTexts, extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 import { loadMemoryChunks } from './memory-context-store';
@@ -697,15 +697,17 @@ openaiApp.post('/chat/completions', async (c) => {
     stream: body?.stream === true,
   });
   const astrbotSystems = textMessages.filter((m) => m.role === 'system').map((m) => m.content);
-  // 最近几条回复的开头：避免连续几轮用同一句开场白
-  const avoidOpeners = recentOpeners([
+  // 最近几条回复的开头 / 口癖 / 括号动作：避免连续几轮用同一种写法
+  const recentAssistantTexts = [
     ...historyRaw.filter((m) => m.role === 'assistant').map((m) => m.content),
     ...textMessages.filter((m) => m.role === 'assistant').map((m) => contentToText(m.content)),
-  ]);
-  const avoidPhrases = recentPhrases([
-    ...historyRaw.filter((m) => m.role === 'assistant').map((m) => m.content),
-    ...textMessages.filter((m) => m.role === 'assistant').map((m) => contentToText(m.content)),
-  ]);
+  ];
+  const avoidOpeners = recentOpeners(recentAssistantTexts);
+  const avoidPhrases = recentPhrases(recentAssistantTexts);
+  // 括号动作连用（围巾那条连续 6 次）是「看起来不专心」的主要来源（2026-11-09）
+  const recentActs = recentActions(recentAssistantTexts);
+  // 观测：相邻回复的 3-gram 相似度（自我重复率），只记录不干预
+  void recordCpuSample(c.env, channel, 'self_repeat_x100', selfRepeatScore(recentAssistantTexts) * 100).catch(function () { return undefined; });
   const personaDrift = buildPersonaDriftLine(personaState);
   const lifeBlocks = await loadLifeBlocks(c.env, now, lastUserCleaned, historyRaw.slice(-6));
   const personaDoc = await loadPersonaDoc(c.env);
@@ -786,6 +788,10 @@ openaiApp.post('/chat/completions', async (c) => {
     // 未完成的约定每轮都带上：它不靠关键词命中，忘了就是忘了
     const promiseText = promisesBlock(pack.memory ?? '').trim();
     if (promiseText) parts.push(promiseText);
+    // 这一轮别再用这些括号动作：连着用同一个小动作，看起来像没在听（2026-11-09）
+    if (recentActs.length > 0) {
+      parts.push('这一轮换个动作或干脆不写动作——这几个你刚连用过：' + recentActs.map(function (a) { return '「' + a + '」'; }).join('、'));
+    }
     if (contextBudget.recall.trim()) {
       parts.push(
         '你记得这些（他以前说过的、一起经历过的，可能和这轮有关）：\n' +

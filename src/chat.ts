@@ -50,7 +50,7 @@ import { recentPainEvent } from './emotion-events';
 import { loadKeepsakesBlock } from './keepsakes';
 import { moodFromVector } from './emotion-vector';
 import { readSessionFacts } from './session-facts';
-import { buildVoiceDirective, recentOpeners, recentPhrases } from './voice';
+import { buildVoiceDirective, recentActions, recentOpeners, recentPhrases } from './voice';
 import { formatRecentMemoBlock, getRecentMemo, MEMO_MAX_ITEMS } from './recent-memory';
 import { embedTexts, extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 import { loadMemoryChunks } from './memory-context-store';
@@ -130,6 +130,8 @@ export async function streamChat(
   const avoidOpeners = recentOpeners(assistantTexts);
   // 最近反复出现的口癖：连着说同一个词，是比开头重复更明显的模板感
   const avoidPhrases = recentPhrases(assistantTexts);
+  // 括号动作连用（2026-11-09：围巾那条连续 6 次）
+  const recentActs = recentActions(assistantTexts);
   // ★ 中期记忆（最近 24 小时）优先：它存在时就不再注入今日摘要，避免同一段内容发两遍。
   // 落在本会话时间范围内的条目不再注入——历史原文里已经有了（O4 去重）。
   // 打包层已经按会话起点和条数上限格式化好了（快照路径也保留原始 items，2026-11-08）；
@@ -471,7 +473,10 @@ export async function streamChat(
   });
   // 站队这条放在**最后一条 system 的末尾**：他难受时这是最该压过他惯性的一句，
   // 埋在时间/天气那一段中间时，模型会先去描述他的处境。
-  const volatileBlock = [promptSplit.volatile, historyNote + pendingWait, comfort]
+  const actionNote = recentActs.length > 0
+    ? '这一轮换个动作或干脆不写动作——这几个你刚连用过：' + recentActs.map(function (a) { return '「' + a + '」'; }).join('、')
+    : '';
+  const volatileBlock = [promptSplit.volatile, historyNote + pendingWait, comfort, actionNote]
     .filter(Boolean)
     .join('\n\n');
   const messages: DeepSeekMessage[] = [
