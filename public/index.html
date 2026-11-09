@@ -301,6 +301,12 @@
     padding: .12rem .5rem; border-radius: 8px; margin-top: .3rem;
   }
 
+  /* 主动消息的标记：一直显示（不是悬停才出现）——它说明"是她先开口的" */
+  .msg-meta {
+    font-size: .72rem; color: var(--ink-3); letter-spacing: .02em;
+    margin: 0 0 4px 2px; user-select: none;
+  }
+
   /* 费用/复制这类元信息默认不占版面，悬停才浮出来，长对话不被小字打断 */
   .msg-body { position: relative; }
   .msg-foot {
@@ -926,7 +932,13 @@ function avatarEl() {
   return a;
 }
 
-function buildBubbleEl(role, html, raw) {
+/** 从 ISO 串里取 HH:mm（created_at 本身就是北京时间，不做时区换算）。 */
+function hhmm(createdAt) {
+  const m = /T(\d{2}:\d{2})/.exec(String(createdAt || ''));
+  return m ? m[1] : '';
+}
+
+function buildBubbleEl(role, html, raw, meta) {
   const wrap = document.createElement('div');
   wrap.className = 'msg ' + role;
 
@@ -950,6 +962,14 @@ function buildBubbleEl(role, html, raw) {
 
   const body = document.createElement('div');
   body.className = 'msg-body';
+
+  // 主动消息要能一眼看出来：她不是回你，是她自己找过来的（App 里也是这么标的）
+  if (role !== 'user' && meta && meta.proactive) {
+    const tag = document.createElement('div');
+    tag.className = 'msg-meta';
+    tag.textContent = meta.time ? '主动 · ' + meta.time : '主动';
+    body.appendChild(tag);
+  }
 
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
@@ -1348,6 +1368,7 @@ async function loadMoreHistory(jumpToBottom) {
           m.role === 'user' ? 'user' : 'assistant',
           m.role === 'user' ? renderUserContent(m.content) : renderMarkdown(stripLeadTime(m.content)),
           m.content,
+          { proactive: !!(m.proactive_kind || m.turn_type === 'proactive'), time: hhmm(m.created_at) },
         ));
       } catch (e) {
         console.warn('skip history message', m && m.id, e);
@@ -1410,6 +1431,7 @@ async function pollNewMessages() {
             m.role === 'user' ? 'user' : 'assistant',
             m.role === 'user' ? renderUserContent(m.content) : renderMarkdown(stripLeadTime(m.content)),
             m.content,
+            { proactive: !!(m.proactive_kind || m.turn_type === 'proactive'), time: hhmm(m.created_at) },
           ));
         } catch (e) {
           console.warn('skip live message', m && m.id, e);
