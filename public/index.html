@@ -1043,6 +1043,8 @@ function dividerText(ms) {
  * 全量重算，不增量插：上滑加载是 prepend，跨页边界的间隔只有两端都在 DOM 里才看得见。
  * 只重建分隔线，不动气泡——不重绘、不重放动画。
  */
+let dividerLogged = false;
+
 function refreshTimeDividers() {
   try {
     // 不用 :scope —— 老 WebView 上它是唯一可能直接抛错的地方
@@ -1050,8 +1052,11 @@ function refreshTimeDividers() {
       if (el.classList.contains('time-divider')) el.remove();
     }
     let prev = null;
+    let msgCount = 0;
+    let inserted = 0;
     for (const el of [...messagesEl.children]) {
       if (!el.classList.contains('msg')) continue;
+      msgCount += 1;
       const ms = Number(el.dataset.ms || '');
       if (!Number.isFinite(ms) || ms <= 0) { prev = null; continue; }
       if (prev === null || ms - prev > TIME_DIVIDER_GAP_MS) {
@@ -1059,8 +1064,14 @@ function refreshTimeDividers() {
         line.className = 'time-divider';
         line.textContent = dividerText(ms);
         messagesEl.insertBefore(line, el);
+        inserted += 1;
       }
       prev = ms;
+    }
+    // 只在第一次拿到消息时报一次，方便确认"到底跑没跑、有没有数据"
+    if (!dividerLogged && msgCount > 0) {
+      dividerLogged = true;
+      console.info('[ds-memory] 消息 ' + msgCount + ' 条，时间线 ' + inserted + ' 条');
     }
   } catch (e) {
     // 以前异常会被 loadMoreHistory 的 catch 静默吞掉，出问题连日志都没有
