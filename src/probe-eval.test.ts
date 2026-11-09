@@ -20,3 +20,37 @@ describe('探针判分', () => {
     expect(PROBES.length).toBe(10);
   });
 });
+
+describe('多发表决与历史', () => {
+  it('三发里过半数才算过', async () => {
+    const { scoreProbeAnswers } = await import('./probe-eval');
+    const env = {
+      KV: { put: async function () { return undefined; } },
+      DB: { prepare: function () { return { bind: function () { return { run: async function () { return { meta: { changes: 1 } }; } }; } }; } },
+    };
+    const answers = [];
+    for (const p of PROBES) {
+      answers.push({ id: p.id, answer: '完全不相干的回答' });
+      answers.push({ id: p.id, answer: '完全不相干的回答' });
+      answers.push({ id: p.id, answer: '完全不相干的回答' });
+    }
+    const card = await scoreProbeAnswers(env as never, answers);
+    expect(card.hits).toBe(0);
+    expect(card.total).toBe(10);
+  });
+
+  it('两发一过一不过 → 过（过半数）', async () => {
+    const { scoreProbeAnswers } = await import('./probe-eval');
+    const env = {
+      KV: { put: async function () { return undefined; } },
+      DB: { prepare: function () { return { bind: function () { return { run: async function () { return { meta: { changes: 1 } }; } }; } }; } },
+    };
+    const answers = [
+      { id: 'video_end', answer: '结尾是「因为我们是朋友」' },
+      { id: 'video_end', answer: '不记得了' },
+    ];
+    const card = await scoreProbeAnswers(env as never, answers);
+    const hit = card.results.find(function (r) { return r.id === 'video_end'; });
+    expect(hit?.hit).toBe(true);
+  });
+});

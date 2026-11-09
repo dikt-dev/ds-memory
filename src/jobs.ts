@@ -25,6 +25,7 @@ import {
   refreshKeepsakesBlock,
 } from './keepsakes';
 import { reindexMemory } from './memory-index';
+import { runProbeEval } from './probe-eval';
 import { memoryEngineFor } from './engine-flags';
 import { refreshChunksCache } from './memory-context-store';
 import { backfillMemoryProvenance, embedMemoryChunks, replaceMemoryContext, syncRollupSummaries } from './memory-context-store';
@@ -760,12 +761,32 @@ export async function archiveOneDay(
     const snapInfo = snap.written ? '；快照=写入' : snap.skipped === 'exists' ? '；快照=已存在' : snap.skipped === 'disabled' ? '' : '；快照=失败';
     // 降级也要露出来：它会把共同经历里的台词/作品名搬进档案，以前 detail 里根本没有这个数（2026-11-09）。
     const demoteInfo = maintenance.demoted > 0 ? `；降级=${maintenance.demoted}` : '';
-    const detail = `归档 ${rows.length} 条消息；记忆 ${before}→${after} 字节；提炼=${distilled}${costInfo}；去重=${compactedRemoved}；分层=${archivedCount}；裁剪=${trimmed}${demoteInfo}${snapInfo}${errorInfo}`;
+    // ★ 归档后验收：记忆真的变了才跑探针（平日 1 发、周日 3 发取多数）。
+    //   昨天「降级把台词搬进档案」这种事，探针从 PASS 掉到 FAIL 当天就能看见。
+    //   失败/超时都不影响归档状态——探针是体检，不是流程环节。
+    let probeInfo = '';
+    if (memoryChanged) {
+      let probeToken = '';
+      try {
+        probeToken = 'eval-probe-' + crypto.randomUUID();
+        await env.KV.put('app:device:' + probeToken, 'probe', { expirationTtl: 300 });
+        const weekday = new Intl.DateTimeFormat('en-GB', { weekday: 'short', timeZone: 'Asia/Shanghai' }).format(new Date());
+        const shots = weekday === 'Sun' ? 3 : 1;
+        const card = await runProbeEval(env, new Date(), { shots: shots, token: probeToken });
+        if (card) probeInfo = `；探针=${card.hits}/${card.total}（${shots} 发）`;
+      } catch (e) {
+        logError('[daily] probe eval failed:', e);
+      } finally {
+        if (probeToken) await env.KV.delete('app:device:' + probeToken).catch(function () { return undefined; });
+      }
+    }
+    const detail = `归档 ${rows.length} 条消息；记忆 ${before}→${after} 字节；提炼=${distilled}${costInfo}；去重=${compactedRemoved}；分层=${archivedCount}；裁剪=${trimmed}${demoteInfo}${snapInfo}${probeInfo}${errorInfo}`;
     // 提炼失败时不把任务标 done：runDailyArchive 下次会把它当 failed 补跑
     // 话题索引：给「哪天聊过什么」留一份清单，跨天回指靠它
   await ensureDayTopics(env, target).catch((e: unknown) => logError('[topics] 生成失败:', e));
   // 记忆变了就刷新召回缓存，别让请求侧为了拿 chunk 再跑一次全表
   await refreshChunksCache(env).catch((e: unknown) => logError('[chunks] 缓存刷新失败:', e));
+
   await finishJob(env, 'daily_archive', target, detail, !distillError);
     return {
       target,

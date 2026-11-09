@@ -51,6 +51,7 @@ import { applySubjectFixes } from './subject-fix';
 import { recordAction } from './memory-actions';
 import { dateKeyInBeijing , addDays} from './date';
 import { crossSectionPass } from './memory-compact';
+import { readProbeHistory } from './probe-eval';
 import { compactMemoryCrossSection } from './memory-compact-job';
 import { backfillEvents, readEventStats } from './memory-events';
 import { insertKeepsake, loadKeepsakes, refreshKeepsakesBlock, setKeepsakePinned, setKeepsakeStatus } from './keepsakes';
@@ -478,6 +479,12 @@ app.post('/api/admin/cache/prewarm', requireAuth, async (c) => {
   return c.json({ ok: chunks >= 0, chunks, snapshot_rebuilt: snapshot });
 });
 
+/** 探针历史（每天一条）：看趋势，而不是只看最后一次。 */
+app.get('/api/admin/eval/probes/history', requireAuth, async (c) => {
+  const limit = Math.min(90, Math.max(1, Number(c.req.query('limit') ?? 30) || 30));
+  const rows = await readProbeHistory(c.env, limit);
+  return c.json({ ok: true, rows });
+});
 /** 跨分区去重：先看会删哪些（只读，不动记忆）。 */
 app.post('/api/admin/memory/compact/preview', requireAuth, async (c) => {
   const memory = await getMemory(c.env);

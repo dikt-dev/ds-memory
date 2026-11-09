@@ -25,6 +25,10 @@
   ],
   [
     "GET",
+    "/api/admin/eval/probes/history"
+  ],
+  [
+    "GET",
     "/api/admin/health"
   ],
   [
