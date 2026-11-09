@@ -569,6 +569,8 @@ openaiApp.post('/chat/completions', async (c) => {
       month: envMonth,
     },
     wasIgnored: facts.wasIgnored,
+    // 探针/回归不记账：11-08 有 31 条同样的「我最近在焦虑什么」把关系值刷高了一大截
+    noPersist: noRecord,
   });
   // Phase 3：态度策略影子/新引擎。默认 legacy，不改变回复。
   const affectEngine = affectEngineFor(c.env, channel);

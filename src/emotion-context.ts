@@ -177,6 +177,8 @@ export interface EmotionTurnInput {
   allowAiReview?: boolean;
   /** 规则没抽出事件时也调 AI 复核（每日归档任务用；聊天路径不开，否则每条消息都调） */
   reviewEmpty?: boolean;
+  /** 只算不记账：探针/回归（record=false）用，避免同一条测试语料反复给关系加分 */
+  noPersist?: boolean;
 }
 
 export interface EmotionTurnResult {
@@ -220,6 +222,8 @@ const EMOTION_LOCK = 'emotion:lock';
 const EMOTION_LOCK_TTL = 10;
 
 export async function processEmotionTurn(input: EmotionTurnInput): Promise<EmotionTurnResult> {
+  // 探针/回归：照常算情绪（回复语气不变），但不写事件、不写增量、不存状态
+  if (input.noPersist) return processEmotionTurnUnlocked(input, false);
   // 只有「这一轮可能真的产生事件」时才加锁：普通闲聊不加锁，
   // 否则每条消息都要额外两次 KV 写（锁 + 解锁），免费额度扛不住。
   const mayWrite =
@@ -310,9 +314,11 @@ async function processEmotionTurnUnlocked(
   if (newEvents.length > 0) {
     const turnDelta = sumFacetDelta(newEvents);
     addFacetDelta(facetDelta, turnDelta);
-    // Phase 3：事件与关系增量写入 D1 账本；失败不影响聊天。
-    await recordEmotionEvents(input.env, newEvents);
-    await recordFacetDelta(input.env, turnDelta, newEvents[0]?.evidence ?? '', now);
+    if (!input.noPersist) {
+      // Phase 3：事件与关系增量写入 D1 账本；失败不影响聊天。
+      await recordEmotionEvents(input.env, newEvents);
+      await recordFacetDelta(input.env, turnDelta, newEvents[0]?.evidence ?? '', now);
+    }
   }
 
   const nextState: EmotionState = {
