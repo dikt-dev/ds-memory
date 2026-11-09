@@ -301,6 +301,14 @@
     padding: .12rem .5rem; border-radius: 8px; margin-top: .3rem;
   }
 
+  /* 时间分隔线：居中的小药丸，说明"这里隔了一段时间" */
+  .time-divider {
+    align-self: center; margin: 8px 0 -2px;
+    padding: 2px 10px; border-radius: 999px;
+    font-size: .7rem; color: var(--ink-3); background: var(--surface-muted);
+    user-select: none;
+  }
+
   /* 主动消息的标记：一直显示（不是悬停才出现）——它说明"是她先开口的" */
   .msg-meta {
     font-size: .72rem; color: var(--ink-3); letter-spacing: .02em;
@@ -941,6 +949,8 @@ function hhmm(createdAt) {
 function buildBubbleEl(role, html, raw, meta) {
   const wrap = document.createElement('div');
   wrap.className = 'msg ' + role;
+  // 时间分隔线靠它排序/判断间隔（epoch 毫秒）
+  if (meta && Number.isFinite(meta.ms) && meta.ms > 0) wrap.dataset.ms = String(meta.ms);
 
   // 头像：助手 = 小忆，用户 = 像素风头像
   const av = document.createElement('div');
@@ -1005,12 +1015,46 @@ function buildBubbleEl(role, html, raw, meta) {
 }
 
 function addBubble(role, html, raw) {
-  const el = buildBubbleEl(role, html, raw);
+  const el = buildBubbleEl(role, html, raw, { ms: Date.now() });
   messagesEl.appendChild(el);
+  refreshTimeDividers();
   scrollToBottom();
   return el.querySelector('.bubble');
 }
 function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
+
+/* ---------- 时间分隔线：相邻两条超过 10 分钟就断一次 ---------- */
+const TIME_DIVIDER_GAP_MS = 10 * 60 * 1000; // 与 App 的 GROUP_BREAK_MINUTES 一致
+
+function dividerText(ms) {
+  const d = new Date(ms);
+  const now = new Date();
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const sameDay = d.toDateString() === now.toDateString();
+  return sameDay ? hh + ':' + mm : (d.getMonth() + 1) + '月' + d.getDate() + '日 ' + hh + ':' + mm;
+}
+
+/**
+ * 全量重算，不增量插：上滑加载是 prepend，跨页边界的间隔只有两端都在 DOM 里才看得见。
+ * 只重建分隔线，不动气泡——不重绘、不重放动画。
+ */
+function refreshTimeDividers() {
+  messagesEl.querySelectorAll(':scope > .time-divider').forEach((el) => el.remove());
+  let prev = null;
+  for (const el of [...messagesEl.children]) {
+    if (!el.classList.contains('msg')) continue;
+    const ms = Number(el.dataset.ms || '');
+    if (!Number.isFinite(ms) || ms <= 0) { prev = null; continue; }
+    if (prev === null || ms - prev > TIME_DIVIDER_GAP_MS) {
+      const line = document.createElement('div');
+      line.className = 'time-divider';
+      line.textContent = dividerText(ms);
+      messagesEl.insertBefore(line, el);
+    }
+    prev = ms;
+  }
+}
 
 /* 用户消息渲染：处理 [图片:images/…] 标记与换行；无路径的 [图片] 显示占位提示 */
 function renderUserContent(content) {
@@ -1368,7 +1412,7 @@ async function loadMoreHistory(jumpToBottom) {
           m.role === 'user' ? 'user' : 'assistant',
           m.role === 'user' ? renderUserContent(m.content) : renderMarkdown(stripLeadTime(m.content)),
           m.content,
-          { proactive: !!(m.proactive_kind || m.turn_type === 'proactive'), time: hhmm(m.created_at) },
+          { proactive: !!(m.proactive_kind || m.turn_type === 'proactive'), time: hhmm(m.created_at), ms: Number(m.created_ms) },
         ));
       } catch (e) {
         console.warn('skip history message', m && m.id, e);
@@ -1431,13 +1475,14 @@ async function pollNewMessages() {
             m.role === 'user' ? 'user' : 'assistant',
             m.role === 'user' ? renderUserContent(m.content) : renderMarkdown(stripLeadTime(m.content)),
             m.content,
-            { proactive: !!(m.proactive_kind || m.turn_type === 'proactive'), time: hhmm(m.created_at) },
+            { proactive: !!(m.proactive_kind || m.turn_type === 'proactive'), time: hhmm(m.created_at), ms: Number(m.created_ms) },
           ));
         } catch (e) {
           console.warn('skip live message', m && m.id, e);
         }
       }
       appended = true;
+      refreshTimeDividers();
       if (!data.has_more) break;
     }
     if (appended && nearBottom) scrollToBottom();
