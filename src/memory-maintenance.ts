@@ -690,7 +690,7 @@ export function demoteSectionEntries(
  * 2026-11-09：预算把「黑化视频结尾『因为我们是朋友』」搬走后，她答不出那句台词了。
  * 这类内容是「重建不出来」的，宁可多占几十字节，也要留在常驻层。
  */
-const KEEP_WORTHY = [/《[^》]+》/, /「[^」]{2,}」/, /“[^”]{2,}”/, /【[^】]+】/];
+const KEEP_WORTHY = [/《[^》]+》/, /「[^」]{2,}」/, /“[^”]{2,}”/];
 
 function isKeepWorthy(line: string): boolean {
   return KEEP_WORTHY.some((re) => re.test(line));
