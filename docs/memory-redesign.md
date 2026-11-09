@@ -1248,3 +1248,31 @@ memory 3,174 → 4,567 字符（UTF-8 约 11.5KB，仍低于 16KB 内联上限�
 - `context-budget` 的 `rollup` 参数改名 `recentMemo`（纯命名）。
 - 人物底色仍空：设计上允许 distill 追加自我认识，但昨晚模型没写（`他的雷区` 倒是自己长出了第一条）。
 - `memory-rollups` / `memory-summaries` / `memory-dual` 仅标了 `@deprecated`。
+
+### 28.7 归档后自动跑探针（2026-11-09 接入）
+
+**为什么要接**：昨天「降级把台词搬进档案」这件事，探针从 PASS 掉到 FAIL 本该当天就被看见，
+实际是我手动比对才发现。
+
+**怎么接的**：
+
+```text
+触发   归档末尾、且记忆真的变了（memoryChanged）才跑
+频次   平日 1 发；周日 3 发（过半数算过），避开单发 ±1~2 题的抖动
+令牌   临时设备令牌 app:device:eval-probe-<uuid>，TTL 300s，用完立刻删
+落库   probe_runs（day_key/at/shots/hits/total/memory_bytes），保留最近 90 天可查
+展示   cron detail 增加「探针=X/10（N 发）」；GET /api/admin/eval/probes/history 看趋势
+失败   try/catch 包住，探针出错不影响归档状态
+```
+
+**成本**（按实测）：单发 10 题 ≈ ¥0.14、约 40~60 s 墙钟；含着走一年 ≈ ¥51。
+对比每天归档提炼 ¥0.026，探针是大头但仍在「可以不管」的量级。
+
+**顺带修了判据的两种误报**（真实说法并不罕见）：
+
+```text
+「bug 修得差不多了」→ 原来不含「修 bug」，判 FAIL
+「心里不是滋味」  → 原来不含「堵/不高兴」，判 FAIL
+```
+
+现在判据里补了 `bug 修`、`修得差不多`、`不是滋味`、`别扭`——这是补真实说法，不是放宽标准。
