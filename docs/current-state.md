@@ -10,7 +10,7 @@
 | 线上版本 | Version `e7a97c10`（11-09 14:33 部署），`/api/health` 200 |
 | 仓库 HEAD | `6b809fe`（11-10，动作疲劳兜底那次；本地领先 origin，未 push） |
 | 引擎开关 | `MEMORY_ENGINE*`=**next**（全渠道）、`MEMORY_PROMPT_MODE`=tiered、`AFFECT_ENGINE*`=shadow、`PROACTIVE_ENGINE`=shadow、`VOICE_MODE`=**lite**（三档：bare 6 条 / lite 11 条 / full 17 条，一行配置切） |
-| 测试 | **151 个文件 / 1,508 个用例**全绿，`tsc --noEmit` 干净（11-10 11:38 实跑） |
+| 测试 | **151 个文件 / 1,509 个用例**全绿，`tsc --noEmit` 干净（11-10 11:43 实跑） |
 | 记忆规模 | `memory.md` **3,260 字符**（11-10 实测，压缩后）；`memory_chunks` 99 行（档案 39 / 共同经历 26 / 近期动态 11 / 他的偏好 9 / 关于他 4 / 你的生活 4 / 进行中的事 3 / 答应过的事 2 / 摘要 1） |
 | 记忆空分区 | 「人物底色」1 条（上限 20；distill 已改成「每天至少一条」，11-10 上线，次日 04:00 归档后见效）；「他的雷区」0 条——aversion 阈值 2 次、由每日归档写入，**空=还没踩到，不是没接线** |
 | 已知冗余 | `memory_links`（`memory-links.ts` 标 `@unwired`）没有写入方，但 `memory-jobs` 每天仍在删过期行、`self-check` 仍在统计断链；接线或清理二选一，暂未动 |

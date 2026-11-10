@@ -258,6 +258,9 @@ function summarize(rows: Row[]) {
     repeatRate: withReply.filter((r) => r.m.repeatSelf >= 0.5 || r.m.repeatUser >= 0.5).length / n,
     banterAvg: judged.length ? judged.reduce((a, r) => a + r.score, 0) / judged.length : 0,
     flags: rows.filter((r) => r.flags.length > 0).length,
+    // 2026-11-10：她是不是只会关心他的吃睡？两组关键词统计，用来验证「你的生活」素材够不够
+    careRate: withReply.filter((r) => /泡面|鸡蛋|吃|饭|火锅|胃|早点睡|别熬|熬夜|降温|穿短裤/.test(r.reply)).length / n,
+    selfRate: withReply.filter((r) => /我(这边|手上|刚|这|在|还)|本小姐|尾|呆毛/.test(r.reply)).length / n,
   };
 }
 
@@ -293,6 +296,7 @@ describe.skipIf(!ENABLED)('口语体检探针', () => {
         '| ' + mode + ' | ' + s.n + ' | ' + s.chars.toFixed(1) + ' | ' + (s.parenRate * 100).toFixed(0) + '% | ' +
           (s.leadRate * 100).toFixed(0) + '% | ' + (s.shortRate * 100).toFixed(0) + '% | ' +
           (s.adviceRate * 100).toFixed(0) + '% | ' + (s.repeatRate * 100).toFixed(0) + '% | ' +
+          (s.careRate * 100).toFixed(0) + '% | ' + (s.selfRate * 100).toFixed(0) + '% | ' +
           (s.banterAvg ? s.banterAvg.toFixed(1) : '-') + ' | ' + s.flags + ' |',
       );
     }
@@ -300,8 +304,8 @@ describe.skipIf(!ENABLED)('口语体检探针', () => {
     const md = [
       '# 口语体检（' + new Date().toISOString().slice(0, 16) + '，' + MODEL + '）',
       '',
-      '| 档 | 有效回复 | 平均字数 | 含括号 | 括号开头 | ≤12字 | 建议味 | 复述 | 接梗均分 | 命中规则 |',
-      '|---|---|---|---|---|---|---|---|---|---|',
+      '| 档 | 有效回复 | 平均字数 | 含括号 | 括号开头 | ≤12字 | 建议味 | 复述 | 谈他生活 | 谈她自己 | 接梗均分 | 命中规则 |',
+      '|---|---|---|---|---|---|---|---|---|---|---|---|',
       ...summary,
       '',
       '| 类型 | 他说的 | ' + MODES.join(' | ') + ' |',
