@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createStreamScrubber, fixParticlePunctuation, isMeaninglessResidue, limitStageDirections, looksActionHeavy, scrubAiFlavor, stripLeadingStageDirection, stripLeadingTimeLabels } from './anti-ai-flavor';
+import { createStreamScrubber, fixParticlePunctuation, isMeaninglessResidue, limitStageDirections, scrubAiFlavor, stripLeadingStageDirection, stripLeadingTimeLabels } from './anti-ai-flavor';
 
 describe('scrubAiFlavor —— AI 味兜底清洗', () => {
   it('删除客服套话', () => {
@@ -259,25 +259,5 @@ describe('报幕句清洗（从提示词搬到后处理）', () => {
   it('正常的「不过」不误伤', () => {
     const r = scrubAiFlavor('不过我还是觉得，你这个想法有点冒险。');
     expect(r.text).toContain('不过我还是觉得');
-  });
-});
-
-describe('looksActionHeavy —— 动作疲劳（2026-11-10）', () => {
-  const act = (n: number) => Array.from({ length: n }, (_, i) => '（尾巴拍了下地板）第' + i + '句');
-
-  it('最近 4 条里 3 条以（动作）开头 → 疲劳', () => {
-    expect(looksActionHeavy([...act(3), '就说人话'])).toBe(true);
-  });
-
-  it('2/4 不算（正常偶尔写动作）', () => {
-    expect(looksActionHeavy([...act(2), '就说人话', '行'])).toBe(false);
-  });
-
-  it('不足 4 条不下结论', () => {
-    expect(looksActionHeavy(act(3))).toBe(false);
-  });
-
-  it('动作在句中不算（只盯句首）', () => {
-    expect(looksActionHeavy(['我这边（拍了拍手）扫完了', '扫完了，行吧', '那我歇会儿', '好'])).toBe(false);
   });
 });

@@ -17,7 +17,7 @@ import { loadPersonaDoc } from './persona-doc';
 import { buildSystemPromptSplit, normalizeChannel, buildLiveFacts, isNowFactQuestion, isSilentEnd, silentEndRule, stripSilentEndToken } from './prompt';
 import { resolvePersona } from './persona';
 import { ticWarning } from './voice';
-import { looksActionHeavy, stripLeadingTimeLabels } from './anti-ai-flavor';
+import { stripLeadingTimeLabels } from './anti-ai-flavor';
 import { hasEmoji, replaceFaceMarkers, stripEmoji } from './faces';
 import { facetsFromValues, stageFor } from './relation-facets';
 import { readRelationStageLevel } from './relation-stage';
@@ -1093,13 +1093,7 @@ openaiApp.post('/chat/completions', async (c) => {
 
   // 4) 流式 / 非流式
   if (body?.stream !== false) {
-    return streamDeepSeek(c.env, upstream, {
-    appendUsageEvent: false,
-    maxTokens,
-    onFinish,
-    // 最近几条都以（动作）开头时，这一条从显示到落库都不带句首动作
-    trimLeadingAction: looksActionHeavy(recentAssistant),
-  });
+    return streamDeepSeek(c.env, upstream, { appendUsageEvent: false, maxTokens, onFinish });
   }
 
   c.executionCtx.waitUntil(recordCpuSample(c.env, channel, 'prep', performance.now() - prepT0).catch(() => {}));

@@ -56,7 +56,6 @@ import { loadKeepsakesBlock } from './keepsakes';
 import { moodFromVector } from './emotion-vector';
 import { readSessionFacts } from './session-facts';
 import { actionDensityNote, buildVoiceDirective, naggingComplaintNote, recentActions, recentOpeners, recentPhrases, selfRepeatScore, voiceModeOf } from './voice';
-import { looksActionHeavy } from './anti-ai-flavor';
 import { formatRecentMemoBlock, getRecentMemo, MEMO_MAX_ITEMS } from './recent-memory';
 import { embedTexts, extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 import { loadMemoryChunks } from './memory-context-store';
@@ -537,8 +536,6 @@ export async function streamChat(
   // 4) 流式转发；流结束落库 + 计费
   timing.buildMs = Date.now() - tStart;
   return streamDeepSeek(env, messages, {
-    // 最近几条都以（动作）开头时，这一条从显示到落库都不带句首动作
-    trimLeadingAction: looksActionHeavy(assistantTexts),
     appendUsageEvent: true,
     timing,
     // ★ 不限制回复长度（8192 = 模型输出上限）

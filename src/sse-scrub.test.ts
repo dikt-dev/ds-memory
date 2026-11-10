@@ -141,21 +141,7 @@ describe('说话人标记泄漏', () => {
     expect(out.join('')).toContain('我在的');
   });
 
-  it('trimLeadingAction：显示层去掉句首动作，落库文本跟着一起去掉（两层一致）', () => {
-    const r = createSseRewriter(undefined, { trimLeadingAction: true });
-    const out = [
-      ...r.rewrite(frame('（把抹布搭回桶边）')),
-      ...r.rewrite(frame('我这边扫完了')),
-      ...r.flush(),
-    ];
-    const shown = textOf(out);
-    expect(shown).not.toContain('抹布');
-    expect(shown).toContain('我这边扫完了');
-    // 落库用的是 text()：必须和用户看到的一致，否则又会「看到的和存的不一样」
-    expect(r.text()).toBe(shown);
-  });
-
-  it('trimLeadingAction 关掉时，句首动作原样保留', () => {
+  it('句首括号动作原样保留（后处理不删动作，2026-11-06 的结论）', () => {
     const r = createSseRewriter();
     const out = [...r.rewrite(frame('（把抹布搭回桶边）行吧')), ...r.flush()];
     expect(textOf(out)).toContain('抹布');
