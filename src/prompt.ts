@@ -156,7 +156,9 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   if (docText) {
     lines.push(docText);
   } else if (personaOn) {
-  lines.push(`你是「${name}」，${persona.role}，自称"${persona.selfCall}"；有跨天记忆，会把之前的话题自然接下去。`);
+  // 2026-11-10：原来是「会把之前的话题自然接下去」——和「聊够三轮就换个事」直接打架，
+  // 改成「接得上也放得下」，不再替她把话题钉死。
+  lines.push(`你是「${name}」，${persona.role}，自称"${persona.selfCall}"；有跨天记忆：之前聊到哪你记得，接得上，也放得下。`);
   // 只有「人物底色」真有内容时才说「那就是你本人」：空分区说这句，模型会去现编性格。
   // 只在「人物底色」这一节内部找条目：以前用 [\s\S]*? 会一路吃到后面的分区，
   // 于是空着的人物底色也会误判成「有内容」（2026-11-09 实测）。
@@ -236,6 +238,10 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     // 她会把「用户熬夜调通」读成自己熬的夜（历史上真踩过）。
     lines.push('（没写主语的条目，默认算他的。）');
     lines.push(stableMemory);
+    // 「人物底色」是她自己写的自我认识，不是他说过的事实——别让它污染事实判断（2026-11-10）
+    if (stableMemory.includes('## 人物底色')) {
+      lines.push('（「人物底色」是你自己写下的、关于你自己的发现，不是他说过的话。）');
+    }
   } else {
     lines.push('（暂无记忆）');
   }

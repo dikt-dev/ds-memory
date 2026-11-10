@@ -9,6 +9,8 @@ import {
   recentPhrases,
   signatureFor,
   ticWarning,
+  naggingComplaintNote,
+  voiceModeOf,
 } from './voice';
 
 describe('casualness', () => {
@@ -215,5 +217,37 @@ describe('说话规则：治绕圈与「不像活人」（2026-11-10）', () => 
   it('给长短留余地，不要求每条都写动作', () => {
     expect(dir).toContain('长短由你');
     expect(dir).toContain('不用每条都写');
+  });
+});
+
+describe('VOICE_MODE 两档（2026-11-10）', () => {
+  it('缺省/未知值都是 full，线上行为不变', () => {
+    expect(voiceModeOf(undefined)).toBe('full');
+    expect(voiceModeOf({})).toBe('full');
+    expect(voiceModeOf({ VOICE_MODE: 'whatever' })).toBe('full');
+    expect(voiceModeOf({ VOICE_MODE: 'LITE' })).toBe('lite');
+  });
+
+  it('lite 档只留物理法则，去掉行为补丁', () => {
+    const full = buildVoiceDirective(600, 'full');
+    const lite = buildVoiceDirective(600, 'lite');
+    expect(lite.length).toBeLessThan(full.length);
+    // 留：身份 / 主语归属 / 反绕圈 / 长短
+    expect(lite).toContain('你就是记忆里那个人');
+    expect(lite).toContain('只有「你」才是你');
+    expect(lite).toContain('三轮');
+    expect(lite).toContain('长短由你');
+    // 去：标点语气课、逗回去的花样、本小姐
+    expect(lite).not.toContain('标点也说话');
+    expect(lite).not.toContain('本小姐');
+  });
+});
+
+describe('naggingComplaintNote', () => {
+  it('他嫌管太宽时才插一句，并只影响这一轮', () => {
+    expect(naggingComplaintNote('你像我妈一样烦')).toContain('认个错');
+    expect(naggingComplaintNote('别管我了')).not.toBeNull();
+    expect(naggingComplaintNote('今天上班好累')).toBeNull();
+    expect(naggingComplaintNote('')).toBeNull();
   });
 });

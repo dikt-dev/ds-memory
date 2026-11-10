@@ -55,7 +55,7 @@ import { recentPainEvent } from './emotion-events';
 import { loadKeepsakesBlock } from './keepsakes';
 import { moodFromVector } from './emotion-vector';
 import { readSessionFacts } from './session-facts';
-import { actionDensityNote, buildVoiceDirective, recentActions, recentOpeners, recentPhrases, selfRepeatScore } from './voice';
+import { actionDensityNote, buildVoiceDirective, naggingComplaintNote, recentActions, recentOpeners, recentPhrases, selfRepeatScore, voiceModeOf } from './voice';
 import { formatRecentMemoBlock, getRecentMemo, MEMO_MAX_ITEMS } from './recent-memory';
 import { embedTexts, extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 import { loadMemoryChunks } from './memory-context-store';
@@ -474,7 +474,7 @@ export async function streamChat(
         personaDrift,
         channel,
         characterCard: cardTextWithMood,
-        voice: buildVoiceDirective(relationVals.intimacy),
+        voice: buildVoiceDirective(relationVals.intimacy, voiceModeOf(env)),
         // 网页端已用浏览器 speechSynthesis 播放，允许模型输出 [语音] 段
         voiceReply: true,
         avoidOpeners,
@@ -506,6 +506,8 @@ export async function streamChat(
     historySlice.brief,
     comfort,
     actionNote,
+    // 他当场嫌她管太宽：只影响这一轮（memory.md 要到明天 04:00 才更新）
+    naggingComplaintNote(content),
   ]
     .filter(Boolean)
     .join('\n\n');

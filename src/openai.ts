@@ -64,7 +64,7 @@ import { readSessionFacts } from './session-facts';
 import { buildCharacterCard } from './character-card';
 import { facetsOf, processEmotionTurn } from './emotion-context';
 import { moodFromVector } from './emotion-vector';
-import { buildVoiceDirective, recentActions, recentOpeners, recentPhrases, selfRepeatScore } from './voice';
+import { buildVoiceDirective, naggingComplaintNote, recentActions, recentOpeners, recentPhrases, selfRepeatScore, voiceModeOf } from './voice';
 import { formatRecentMemoBlock, getRecentMemo, maybeRefreshRecentMemo } from './recent-memory';
 import { embedTexts, extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 import { loadMemoryChunks } from './memory-context-store';
@@ -771,7 +771,7 @@ openaiApp.post('/chat/completions', async (c) => {
       voiceReply,
       channel,
       characterCard: cardTextWithMood,
-      voice: buildVoiceDirective(relation.intimacy),
+      voice: buildVoiceDirective(relation.intimacy, voiceModeOf(c.env)),
       avoidOpeners,
       avoidPhrases,
       attitude,
@@ -828,6 +828,9 @@ openaiApp.post('/chat/completions', async (c) => {
     if (recentActs.length > 0) {
       parts.push('这一轮换个动作，或者干脆不写动作——连着几条都是同一个动作，像剧本。');
     }
+    // 他当场嫌她管太宽：只影响这一轮（memory.md 要到明天 04:00 才更新）
+    const naggingNote = naggingComplaintNote(lastUserCleaned);
+    if (naggingNote) parts.push(naggingNote);
     if (contextBudget.recall.trim()) {
       parts.push(
         '你记得这些（他以前说过的、一起经历过的，可能和这轮有关）：\n' +

@@ -446,6 +446,12 @@ describe('人物底色为空时的措辞（2026-11-09 修）', () => {
     const out = buildBaseSystemPrompt({ ...base, memory: mem });
     expect(out).toContain('就是你本人');
   });
+
+  it('人物底色标注成「她自己写的」，别被当成事实（2026-11-10）', () => {
+    const mem = ['## 人物底色', '- [26-11-09] 你发现他装可怜你就心软'].join(String.fromCharCode(10));
+    const out = buildBaseSystemPrompt({ ...base, memory: mem });
+    expect(out).toContain('你自己写下的');
+  });
 });
 describe('反重复：不把她的原话再念一遍（2026-11-10）', () => {
   it('avoidPhrases 有值时也不出现引文，只给方向', () => {

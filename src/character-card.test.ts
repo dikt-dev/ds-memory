@@ -214,7 +214,7 @@ describe('voice —— 语言层', () => {
     expect(v).not.toContain('绝对不要出现');
   });
 
-  // 注意：小癖好/小脾气已移到 memory.md「人物底色」，voice 不再重复，
+  // 注意：小癖好/小脾气由 persona.md 管（memory.md「人物底色」现在只放她自己的自我认识），voice 不再重复，
   // 避免同一性格设定在 prompt 里出现两次（占 token 且易不一致）。
 });
 
