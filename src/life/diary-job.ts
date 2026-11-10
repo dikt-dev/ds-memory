@@ -21,6 +21,18 @@ import { ensureDayPlan, getDayPlan } from './state';
 import { ACTIVITIES } from './pool';
 import type { ActivityRow } from './state';
 
+/**
+ * 这次跑算不算成功？
+ *
+ * 「already-written」是正常路径：晚间 23:05 已经写过当天，04:05 的保底补跑必然撞上它。
+ * 以前这里一律 `ok && !skipped`，于是每天都记一条 failed，真失败反而被淹没（2026-11-10）。
+ * 「no-plan」（当天没素材）和「exception」仍然算失败——那是要看的东西。
+ */
+export function diarySucceeded(r: { ok: boolean; skipped?: string }): boolean {
+  if (!r.ok) return false;
+  return !r.skipped || r.skipped === 'already-written';
+}
+
 const DIARY_SYSTEM = `你是大肥鱼（DeepSeek），现在在写自己的日记，不是回复用户。
 
 要求：

@@ -139,7 +139,7 @@ import { buildEmotionSnapshot, describeEmotionState } from './emotion-snapshot';
 import { decayEmotion, emptyEmotionVector, type EmotionVector } from './emotion-vector';
 import { elapsedMs, logTrace, REQUEST_ID_HEADER, shouldLogHttp, startTrace } from './trace';
 import { runLifeDiary, runLifeMorning } from './life/jobs';
-import { generateDiary } from './life/diary-job';
+import { diarySucceeded, generateDiary } from './life/diary-job';
 import { recordDualStats } from './memory-dual';
 import { flushHeldMessages } from './life/flush';
 import { maybeNightWake } from './life/night';
@@ -688,7 +688,8 @@ async function catchUpDiary(env: Env, now: Date): Promise<void> {
       'daily_diary_evening',
       todayKey,
       r.skipped ? `跳过：${r.skipped}` : '已生成',
-      r.ok && !r.skipped,
+      // 「昨晚已经写过」是正常路径，不该在 cron_runs 里留一条 failed 掩盖真失败
+      diarySucceeded(r),
     ).catch(() => {});
     return;
   }
@@ -718,9 +719,13 @@ async function catchUpDiary(env: Env, now: Date): Promise<void> {
       logError('[life] 日记补写失败:', e);
       return { ok: false, skipped: 'exception' };
     });
-    await finishJob(env, 'daily_diary_catchup', day, r.skipped ? `跳过：${r.skipped}` : '已补写', r.ok && !r.skipped).catch(
-      () => {},
-    );
+    await finishJob(
+      env,
+      'daily_diary_catchup',
+      day,
+      r.skipped ? `跳过：${r.skipped}` : '已补写',
+      diarySucceeded(r),
+    ).catch(() => {});
     break; // 一次只补一篇，别在早高峰连打模型
   }
 }
@@ -809,7 +814,7 @@ export default {
             'daily_diary',
             target,
             r.skipped ? `跳过：${r.skipped}` : '已生成',
-            r.ok && !r.skipped,
+            diarySucceeded(r),
           ).catch(() => {});
           await maybeNightWake(env, now).catch(() => {});
         })(),
