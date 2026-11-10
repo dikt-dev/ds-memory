@@ -81,13 +81,20 @@ describe('writeDailySnapshot', () => {
 describe('pruneSnapshots', () => {
   const day = (i: number) => `2026-10-${String(i).padStart(2, '0')}`;
 
-  it('只保留最近 keep 份', async () => {
+  it('热目录只留最近 keep 份，其余搬去冷存而不是删除（2026-11-10）', async () => {
     const initial: Record<string, string> = {};
     for (let i = 1; i <= 10; i++) initial[snapshotKey(day(i))] = 'x';
     const { env, store } = fakeEnv(initial);
     const removed = await pruneSnapshots(env, 3);
     expect(removed).toHaveLength(7);
-    expect([...store.keys()].sort()).toEqual([day(8), day(9), day(10)].map(snapshotKey).sort());
+    // 热目录只剩最近 3 份
+    expect(
+      [...store.keys()].filter((k) => k.startsWith('memory/snapshots/')).sort(),
+    ).toEqual([day(8), day(9), day(10)].map(snapshotKey).sort());
+    // 被搬走的 7 份仍在冷存里——记忆不删除，只是更难被召回
+    const cold = [...store.keys()].filter((k) => k.startsWith('memory/snapshots-cold/'));
+    expect(cold).toHaveLength(7);
+    expect(store.get('memory/snapshots-cold/2026-10-01.md')).toBe('x');
   });
 
   it('数量不足时不删任何东西', async () => {

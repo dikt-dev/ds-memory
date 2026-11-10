@@ -67,14 +67,37 @@ export async function listSnapshots(env: Env): Promise<Array<{ date: string; key
     .sort((a, b) => b.date.localeCompare(a.date));
 }
 
-/** 只保留最近 keep 份；只会删严格匹配命名规则的 key。 */
+/** 冷存目录：超期快照搬到这里，不删（2026-11-10）。 */
+export const SNAPSHOT_COLD_PREFIX = 'memory/snapshots-cold/';
+
+/**
+ * 只保留最近 keep 份在热目录；更早的**搬去冷目录**，不再删除。
+ *
+ * 为什么改：记忆的红线是「不清除，只是更难被召回」。原来超期快照直接 delete，
+ * 一年前的记忆版本就真没了。现在 `memory/snapshots-cold/` 里永久留着（每天十几 KB）。
+ * 只会动严格匹配命名规则的 key。
+ */
 export async function pruneSnapshots(env: Env, keep = SNAPSHOT_KEEP): Promise<string[]> {
   const keys = (await listKeys(env, SNAPSHOT_PREFIX))
     .filter((k) => SNAPSHOT_KEY_RE.test(k))
     .sort();
   const stale = keys.slice(0, Math.max(0, keys.length - Math.max(1, keep)));
-  for (const key of stale) await deleteObject(env, key);
-  return stale;
+  const moved: string[] = [];
+  for (const key of stale) {
+    try {
+      const obj = await getObject(env, key);
+      const text = obj ? await obj.text() : '';
+      if (!text) continue; // 读不到就不动它，宁可留着
+      // 冷存按「月目录」平铺：memory/snapshots-cold/YYYY-MM/YYYY-MM-DD.md
+      const coldKey = SNAPSHOT_COLD_PREFIX + key.slice(SNAPSHOT_PREFIX.length);
+      await putObject(env, coldKey, text);
+      await deleteObject(env, key);
+      moved.push(key);
+    } catch (e) {
+      logWarn('[snapshot] 搬去冷存失败，保留原快照:', key, e);
+    }
+  }
+  return moved;
 }
 export interface RestoreResult {
   restored: boolean;

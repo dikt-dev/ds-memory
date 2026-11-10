@@ -31,7 +31,7 @@ import { listSnapshots, restoreSnapshot } from './memory-snapshot';
 import { deleteObject, getObject, headObject, listKeys, putObject } from './storage';
 import { MemoryContextStats, MemoryJobStats, backfillMemoryProvenance, embedMemoryChunks, loadMemoryChunks, memoryContextStats, memoryJobStats, replaceMemoryContext, syncArchiveContext, syncRollupSummaries } from './memory-context-store';
 import { expandLinkedChunks, expansionBudget, linkAllFacts, linksForMemory } from './memory-links';
-import { rankMemoryChunks } from './memory-domain';
+import { rankMemoryChunks, recallDecay } from './memory-domain';
 import { resolveRecall } from './memory-engine';
 import { readEngineMetrics } from './engine-metrics';
 import { readRecallSamples, summarizeSamples } from './recall-samples';
@@ -93,6 +93,62 @@ import { getOrCreateDayContext } from './context';
  * 搬动是纯机械的：路由清单快照（routes.snapshot.json）保证一条不多一条不少。
  */
 export function registerAdminOpsRoutes(app: Hono<AppEnv>): void {
+
+  /**
+   * 「这条记忆还在不在、现在有多难被想起」（2026-11-10）。
+   *
+   * 记忆的红线是「不删除，只是更难被召回」。这个接口就是那条红线的验收口：
+   * 给一个关键词，同时查三处——常驻的 memory.md、沉底的 archive.md、
+   * 以及索引层 memory_chunks（带当前衰减分数），证明它没消失，只是分数低了。
+   */
+  app.get('/api/admin/memory/find', requireAuth, async (c) => {
+    const q = (c.req.query('q') || '').trim();
+    if (!q) return c.json({ error: 'q 必填' }, 400);
+    const [memory, archive] = await Promise.all([
+      getMemory(c.env).catch(() => ''),
+      getArchiveLines(c.env).catch(() => [] as string[]),
+    ]);
+    const hit = (lines: string[]) => lines.filter((l) => l.includes(q)).slice(0, 40);
+    const hot = hit(String(memory || '').split('\n'));
+    const cold = hit(archive);
+
+    const rows = await c.env.DB.prepare(
+      `SELECT id, section, content, date, source, origin, importance, use_count, last_used_at, confirmed_count, pinned
+       FROM memory_chunks WHERE content LIKE ? ORDER BY updated_at DESC LIMIT 40`,
+    )
+      .bind('%' + q + '%')
+      .all<Record<string, unknown>>();
+    const now = Date.now();
+    const chunks = (rows.results ?? []).map((r) => ({
+      id: r.id,
+      section: r.section,
+      content: r.content,
+      date: r.date,
+      source: r.source,
+      origin: r.origin,
+      useCount: Number(r.use_count) || 0,
+      // 「现在有多难被想起」：1 = 永不淡忘，0.15 = 衰减地板（再老也留 15%）
+      decay: recallDecay(
+        {
+          source: String(r.source) as never,
+          section: String(r.section),
+          date: (r.date ?? null) as string | null,
+          useCount: Number(r.use_count) || 0,
+          importance: Number(r.importance) || 3,
+          confirmedCount: Number(r.confirmed_count) || 0,
+          pinned: Boolean(r.pinned),
+        },
+        now,
+      ),
+    }));
+
+    return c.json({
+      q,
+      hot: { count: hot.length, lines: hot },
+      archive: { count: cold.length, lines: cold },
+      chunks: { count: chunks.length, rows: chunks },
+    });
+  });
 
   /**
    * 看一眼这一轮真正会发出去的东西：人设、名录、记忆、时间。

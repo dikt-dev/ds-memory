@@ -77,6 +77,10 @@
   ],
   [
     "GET",
+    "/api/admin/memory/find"
+  ],
+  [
+    "GET",
     "/api/admin/memory/health"
   ],
   [
