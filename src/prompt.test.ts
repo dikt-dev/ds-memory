@@ -47,7 +47,9 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('他生活在杭州；你说你会去');
     expect(prompt).toContain('你煮了泡面');
     expect(prompt).not.toMatch(/用户生活在|助手说/);
-    expect(prompt).toContain('（没写主语的条目，默认算他的。）');
+    // 2026-11-10：主语缺省 + 多来源优先级合成一句，不再分两处各写一遍
+    expect(prompt).toContain('（没写主语的条目算他的；');
+    expect(prompt).toContain('当前对话 > 刚才 > 今天 > 长期记忆');
   });
 
   it('保留安全边界，但不再写死傲娇配比与口癖模板', () => {

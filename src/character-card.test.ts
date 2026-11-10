@@ -191,7 +191,8 @@ describe('dispositionFor —— 人格倾向与三维关系绑定（阶段 3）'
 describe('CONVERSATION_BEHAVIORS —— 对话行为指令', () => {
   it('包含反问、主动提及、拒绝、带情绪等关键指令', () => {
     expect(CONVERSATION_BEHAVIORS).toContain('反问');
-    expect(CONVERSATION_BEHAVIORS).toContain('主动提到');
+    // 2026-11-10：删掉「主动提到之前聊过」「带情绪不是纯功能输出」——与 voice / persona 重复
+    expect(CONVERSATION_BEHAVIORS).not.toContain('主动提到');
     expect(CONVERSATION_BEHAVIORS).toContain('不太想聊');
     expect(CONVERSATION_BEHAVIORS).not.toContain('长篇大论');
   });

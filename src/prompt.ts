@@ -236,7 +236,9 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   if (stableMemory) {
     // 记忆条目是「用户」「她」「助手」混着写的：不点明谁是谁，
     // 她会把「用户熬夜调通」读成自己熬的夜（历史上真踩过）。
-    lines.push('（没写主语的条目，默认算他的。）');
+    // 2026-11-10：两句说明合成一句（主语归属 + 多来源打架时的优先级），
+    // 原来分散在记忆段和「最近发生的事」各一处，模型要读两遍才知道听谁的
+    lines.push('（没写主语的条目算他的；同一件事几种说法打架时，当前对话 > 刚才 > 今天 > 长期记忆。）');
     lines.push(stableMemory);
     // 「人物底色」是她自己写的自我认识，不是他说过的事实——别让它污染事实判断（2026-11-10）
     if (stableMemory.includes('## 人物底色')) {
@@ -314,7 +316,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
   if (recent.length > 0) {
     lines.push('');
     lines.push('## 最近发生的事');
-    lines.push('（同一件事几种说法打架时：当前对话 > 刚才 > 今天 > 长期记忆。）');
+    // 优先级说明已并入记忆段那一句（2026-11-10），这里不再重复
     lines.push('');
     lines.push(recent.join('\n\n'));
   }

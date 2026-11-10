@@ -223,12 +223,36 @@ describe('说话规则：治绕圈与「不像活人」（2026-11-10）', () => 
   });
 });
 
-describe('VOICE_MODE 两档（2026-11-10）', () => {
+describe('VOICE_MODE 三档（2026-11-10）', () => {
   it('缺省/未知值都是 full，线上行为不变', () => {
     expect(voiceModeOf(undefined)).toBe('full');
     expect(voiceModeOf({})).toBe('full');
     expect(voiceModeOf({ VOICE_MODE: 'whatever' })).toBe('full');
     expect(voiceModeOf({ VOICE_MODE: 'LITE' })).toBe('lite');
+    expect(voiceModeOf({ VOICE_MODE: 'Bare' })).toBe('bare');
+  });
+
+  it('三档条数：full 17 / lite 11 / bare 6', () => {
+    const countOf = (m: 'bare' | 'lite' | 'full') =>
+      buildVoiceDirective(600, m).split('\n').filter((l) => l.startsWith('- ')).length;
+    expect(countOf('full')).toBe(17);
+    expect(countOf('lite')).toBe(11);
+    expect(countOf('bare')).toBe(6);
+  });
+
+  it('bare 只留「删了就会复发」的六条', () => {
+    const bare = buildVoiceDirective(600, 'bare');
+    expect(bare).toContain('你就是记忆里那个人');
+    expect(bare).toContain('只有「你」才是你');
+    expect(bare).toContain('先看清图上有什么');
+    expect(bare).toContain('回一句他没说过的');
+    expect(bare).toContain('三轮');
+    expect(bare).toContain('长短由你');
+    expect(bare).not.toContain('先看这句是什么');
+    expect(bare).not.toContain('状态要往前走');
+    expect(bare).not.toContain('转述时把主语');
+    expect(bare).not.toContain('括号里放一个小动作');
+    expect(bare).not.toContain('他不是来讨建议的');
   });
 
   it('lite 档只留物理法则，去掉行为补丁', () => {
