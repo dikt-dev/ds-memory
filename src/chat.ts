@@ -55,7 +55,7 @@ import { recentPainEvent } from './emotion-events';
 import { loadKeepsakesBlock } from './keepsakes';
 import { moodFromVector } from './emotion-vector';
 import { readSessionFacts } from './session-facts';
-import { actionDensityNote, buildVoiceDirective, recentActions, recentOpeners, recentPhrases } from './voice';
+import { actionDensityNote, buildVoiceDirective, recentActions, recentOpeners, recentPhrases, selfRepeatScore } from './voice';
 import { formatRecentMemoBlock, getRecentMemo, MEMO_MAX_ITEMS } from './recent-memory';
 import { embedTexts, extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 import { loadMemoryChunks } from './memory-context-store';
@@ -495,8 +495,9 @@ export async function streamChat(
   });
   // 站队这条放在**最后一条 system 的末尾**：他难受时这是最该压过他惯性的一句，
   // 埋在时间/天气那一段中间时，模型会先去描述他的处境。
+  // 2026-11-10：不再把动作原文念给她（「把抹布搭回桶边」）——念一遍她下一轮照样用。
   const actionNote = recentActs.length > 0
-    ? '这一轮换个动作或干脆不写动作——这几个你刚连用过：' + recentActs.map(function (a) { return '「' + a + '」'; }).join('、')
+    ? '这一轮换个动作，或者干脆不写动作——连着几条都是同一个动作，像剧本。'
     : '';
   const volatileBlock = [
     promptSplit.volatile,
@@ -553,6 +554,8 @@ export async function streamChat(
           promptHash: promptFingerprint(messages).hash,
           promptChars: promptFingerprint(messages).chars,
           tailIds: [...history.slice(-3).map((m) => m.id), userId ?? 0],
+          // 复读观测：相邻两条她自己回复的 3-gram 相似度（只记录，不参与生成）
+          selfRepeat: selfRepeatScore(assistantTexts),
         }),
       }).catch(() => {});
       let cost = 0;

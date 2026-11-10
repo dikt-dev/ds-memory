@@ -447,3 +447,20 @@ describe('人物底色为空时的措辞（2026-11-09 修）', () => {
     expect(out).toContain('就是你本人');
   });
 });
+describe('反重复：不把她的原话再念一遍（2026-11-10）', () => {
+  it('avoidPhrases 有值时也不出现引文，只给方向', () => {
+    const prompt = buildSystemPrompt({
+      now: new Date('2026-11-10T02:30:00Z'),
+      ctx: buildDayContext('2026-11-10'),
+      memory: '- [2026-11-09] 他这两天只吃泡面。',
+      channel: 'web',
+      avoidPhrases: ['老板不在', '大扫除', '猪脚饭'],
+      avoidOpeners: ['早什么早啊'],
+    });
+    expect(prompt).toContain('这一轮要是又绕回同一件事');
+    // 引文本身就是注意力锚点：她照着念，话题原地打转
+    expect(prompt).not.toContain('老板不在');
+    expect(prompt).not.toContain('大扫除');
+    expect(prompt).not.toContain('猪脚饭');
+  });
+});

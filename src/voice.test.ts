@@ -200,3 +200,20 @@ describe('重复抑制的两把尺子（2026-11-09）', () => {
     expect(diff).toBeLessThan(0.1);
   });
 });
+describe('说话规则：治绕圈与「不像活人」（2026-11-10）', () => {
+  const dir = buildVoiceDirective(500);
+
+  it('不再让她把上一条的状态原地复述', () => {
+    expect(dir).not.toContain('顺着它往下说');
+    expect(dir).toContain('状态要往前走一格');
+  });
+
+  it('同一件事聊够三轮就换个事', () => {
+    expect(dir).toContain('三轮');
+  });
+
+  it('给长短留余地，不要求每条都写动作', () => {
+    expect(dir).toContain('长短由你');
+    expect(dir).toContain('不用每条都写');
+  });
+});

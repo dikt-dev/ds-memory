@@ -326,7 +326,9 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     lines.push(`- 这次换个起法——这几句刚用过：${avoidOpeners.map((s) => `"${s}"`).join('、')}`);
   }
   if (avoidPhrases && avoidPhrases.length > 0) {
-    lines.push(`- 这些词你最近反复在用，这一轮尽量换种说法：${avoidPhrases.map((s) => `"${s}"`).join('、')}`);
+    // 2026-11-10：以前把词表原文列出来（"老板不在"/"大扫除"/"猪脚饭"），实测她只换措辞、
+    // 话题照旧——引号里的词本身就是注意力锚点。现在只给方向，不再复述那些词。
+    lines.push('- 这一轮要是又绕回同一件事，就换件事说；他不是来听复盘的。');
   }
 
   // ══ F 此刻的事实 + 怎么发（易变，永远最后）══════════════════

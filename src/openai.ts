@@ -826,7 +826,7 @@ openaiApp.post('/chat/completions', async (c) => {
     if (promiseText) parts.push(promiseText);
     // 这一轮别再用这些括号动作：连着用同一个小动作，看起来像没在听（2026-11-09）
     if (recentActs.length > 0) {
-      parts.push('这一轮换个动作或干脆不写动作——这几个你刚连用过：' + recentActs.map(function (a) { return '「' + a + '」'; }).join('、'));
+      parts.push('这一轮换个动作，或者干脆不写动作——连着几条都是同一个动作，像剧本。');
     }
     if (contextBudget.recall.trim()) {
       parts.push(
