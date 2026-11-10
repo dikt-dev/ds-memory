@@ -122,6 +122,16 @@ function sanitizeFacetDelta(raw: unknown): FacetAccum {
   return out;
 }
 
+/**
+ * 委屈的每日退速（2026-11-10）。
+ *
+ * 还有没过去的疙瘩：4%/天，等人哄；
+ * 都已经过去了：15%/天，一句话的小摩擦不该记一个月。
+ */
+export function grievanceDailyRate(events: EmotionEvent[], now: number): number {
+  return unresolvedEvents(events, now, 7 * 86400_000, 2).length > 0 ? 0.04 : 0.15;
+}
+
 /** 读取状态，并按「距上次多久」做时间衰减。 */
 export async function loadEmotionState(env: Env, now: number): Promise<EmotionState> {
   try {
@@ -132,11 +142,14 @@ export async function loadEmotionState(env: Env, now: number): Promise<EmotionSt
     const elapsedMin = Math.max(0, (now - at) / 60000);
     // 每日结算没跑（漏了几天）时也温和退一点芥蒂：昨天的气不带进今天
     const missedDays = Math.floor(elapsedMin / (60 * 24));
+    const events = sanitizeEvents(parsed.events);
     let vector = decayEmotion(parseEmotionVector(parsed.vector), elapsedMin);
-    if (missedDays >= 1) vector = decayGrievanceDaily(vector, Math.min(0.2, 0.04 * missedDays));
+    if (missedDays >= 1) {
+      vector = decayGrievanceDaily(vector, Math.min(0.24, grievanceDailyRate(events, now) * missedDays));
+    }
     return {
       vector,
-      events: sanitizeEvents(parsed.events),
+      events,
       facetDelta: sanitizeFacetDelta(parsed.facetDelta),
       at,
     };
@@ -431,8 +444,10 @@ export async function commitEmotionSettle(
 ): Promise<number> {
   const now = Date.now();
   const rounds = opts.catchUp ? 1 + missedSettleRounds(state.at, now) : 1;
+  // 疙瘩全化解了就退得快：4%/天太慢，35 分要挂一个多月（2026-11-10）
+  const rate = grievanceDailyRate(state.events, now);
   let vector = state.vector;
-  for (let i = 0; i < rounds; i++) vector = decayGrievanceDaily(vector);
+  for (let i = 0; i < rounds; i++) vector = decayGrievanceDaily(vector, rate);
   await saveEmotionState(env, {
     vector,
     events: trimEvents(state.events),

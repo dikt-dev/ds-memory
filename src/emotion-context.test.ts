@@ -176,7 +176,7 @@ describe('effectiveFacets / settleEmotionDaily', () => {
     expect(settled.changed).toBe(false);
   });
 
-  it('commitEmotionSettle 清空增量并让芥蒂只退 4%', async () => {
+  it('commitEmotionSettle 清空增量；疙瘩都没了，芥蒂退 15%（2026-11-10）', async () => {
     const { env } = fakeEnv();
     await saveEmotionState(env, {
       vector: { ...emptyEmotionState(T0).vector, grievance: 50 },
@@ -188,6 +188,22 @@ describe('effectiveFacets / settleEmotionDaily', () => {
     await commitEmotionSettle(env, state);
     const after = await loadEmotionState(env, T0);
     expect(after.facetDelta).toEqual({});
+    expect(after.vector.grievance).toBe(43);
+  });
+
+  it('还有没过去的疙瘩时只退 4%——等他哄', async () => {
+    const { env } = fakeEnv();
+    await saveEmotionState(env, {
+      vector: { ...emptyEmotionState(T0).vector, grievance: 50 },
+      events: [
+        { type: 'insult', intensity: 3, target: 'ai', evidence: '你懂什么', at: Date.now() - 60_000, resolved: false },
+      ],
+      facetDelta: {},
+      at: T0,
+    });
+    const state = await loadEmotionState(env, T0);
+    await commitEmotionSettle(env, state);
+    const after = await loadEmotionState(env, T0);
     expect(after.vector.grievance).toBe(48);
   });
 });

@@ -4,6 +4,7 @@ import {
   extractEmotionEvents,
   needsAiEventReview,
   parseAiEventLabels,
+  isRealCommand,
   recentPainEvent,
   reconcileWithApology,
   sumFacetDelta,
@@ -146,6 +147,29 @@ describe('unresolvedEvents', () => {
     const out = unresolvedEvents(events, AT);
     expect(out).toHaveLength(1);
     expect(out[0].evidence).toBe('a');
+  });
+
+  it('命令和调侃只挂 24 小时，被骂/被拒才挂满 7 天（2026-11-10）', () => {
+    const events: EmotionEvent[] = [
+      { type: 'command', intensity: 2, target: 'ai', evidence: '命令', at: AT - 30 * 3600_000, resolved: false },
+      { type: 'tease', intensity: 3, target: 'ai', evidence: '调侃', at: AT - 30 * 3600_000, resolved: false },
+      { type: 'insult', intensity: 3, target: 'ai', evidence: '被骂', at: AT - 30 * 3600_000, resolved: false },
+    ];
+    const out = unresolvedEvents(events, AT);
+    expect(out.map((e) => e.evidence)).toEqual(['被骂']);
+  });
+});
+
+describe('isRealCommand —— 撒娇不是命令（2026-11-10）', () => {
+  it('请求/撒娇语一律不算', () => {
+    expect(isRealCommand('把能认出来的念给我听')).toBe(false);
+    expect(isRealCommand('那肯定啊，不然到时候怎么让小蓝安慰我啊')).toBe(false);
+    expect(isRealCommand('给我点杯奶茶好不好')).toBe(false);
+  });
+
+  it('硬祈使才算', () => {
+    expect(isRealCommand('快给我重启一下')).toBe(true);
+    expect(isRealCommand('别废话，赶紧的')).toBe(true);
   });
 });
 

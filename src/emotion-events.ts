@@ -163,6 +163,19 @@ const RULES: Rule[] = [
   },
 ];
 
+/**
+ * 「给我」是中式命令里最大的误伤来源（2026-11-10）：
+ * 「念给我听」「给我点杯奶茶」「怎么让小蓝安慰我啊」句句含"给我"，全都不是命令。
+ * 真命令是硬的：祈使句，没有请求语、没有撒娇。
+ */
+const SOFT_REQUEST =
+  /(吗|好吗|好不好|行不行|能不能|可不可以|呗|求你|求求|拜托|大人|帮我|听|安慰|想听|要不要|一起)/;
+
+/** 这条消息算不算真的在使唤她。 */
+export function isRealCommand(text: string): boolean {
+  return !SOFT_REQUEST.test(text);
+}
+
 /** 否定词：命中时词典结果大概率是反的。 */
 const NEGATION_WORDS = ['不', '没', '别', '无', '非', '未'];
 
@@ -291,6 +304,9 @@ export function extractEmotionEvents(text: string, at: number, target: EventTarg
       if (!rule.strong && isNegatedAt(trimmed, word)) continue;
       if (isLeiCompound(trimmed, word)) continue;
       if (isCompoundWord(trimmed, word)) continue;
+
+      // 命令要过"这不是求她"这一关，否则委屈就会为一句撒娇买单
+      if (rule.type === 'command' && !isRealCommand(trimmed)) continue;
 
       seen.add(rule.type);
       events.push({
@@ -491,11 +507,24 @@ export function sumFacetDelta(events: EmotionEvent[]): Required<FacetDelta> {
   return total;
 }
 
+/**
+ * 轻微事件（命令、调侃）只挂一天（2026-11-10）。
+ *
+ * 原来一律挂 7 天，于是「给我重启一下」这种一句话的小摩擦能让提示词连着一周
+ * 念叨「心里还记着这件事还没过去」。真正该留 7 天的是被拒绝、被骂、爽约。
+ */
+const MINOR_GRIEVANCE_TTL_MS = 24 * 3600_000;
+
 /** 未化解的负向事件（强度 ≥ min 且未超龄）。 */
 export function unresolvedEvents(events: EmotionEvent[], now: number, maxAgeMs = 7 * 86400_000, min = 2): EmotionEvent[] {
-  return events.filter(
-    (e) => isNegativeEvent(e.type) && !e.resolved && e.intensity >= min && now - e.at <= maxAgeMs,
-  );
+  return events.filter((e) => {
+    if (!isNegativeEvent(e.type) || e.resolved || e.intensity < min) return false;
+    const ttl =
+      e.type === 'command' || e.type === 'tease'
+        ? Math.min(MINOR_GRIEVANCE_TTL_MS, maxAgeMs)
+        : maxAgeMs;
+    return now - e.at <= ttl;
+  });
 }
 
 /**
@@ -598,7 +627,8 @@ function normalizeLabel(raw: string): EmotionEventType | null {
     share_pain: 'share_pain',
     deep_talk: 'deep_talk',
     tease: 'tease',
-    complaint: 'command',
+    // complaint 是抱怨/撒娇，不是命令：原来记成 command 会平白加委屈（2026-11-10）
+    complaint: 'comfort_seek',
     iguess: 'ignored',
   };
   return map[t] ?? null;
