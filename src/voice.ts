@@ -301,8 +301,11 @@ export function comfortNote(userText: string): string | null {
 export function actionDensityNote(recent: string[], window = 6): string | null {
   const slice = recent.slice(-window).filter((t) => (t ?? '').trim());
   if (slice.length < window) return null;
-  if (!slice.every((t) => /[（(]/.test(t))) return null;
-  return `最近 ${slice.length} 条你每条都先写一个括号动作。这一条直接开口说话，把动作去掉。`;
+  // 2026-11-10：原来是「最近 6 条**全部**带括号」才提醒，实测密度 91% 时几乎每轮都响，
+  // 提醒本身变成了背景噪声。改成 4/6 就提醒，且措辞不再要求「去掉」，只说换一种。
+  const hits = slice.filter((t) => /[（(]/.test(t)).length;
+  if (hits < window - 2) return null;
+  return `最近 ${slice.length} 条里有 ${hits} 条你都写了括号动作。这一条直接开口说话，也可以留一个动作。`;
 }
 
 /**

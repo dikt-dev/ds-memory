@@ -196,6 +196,8 @@ export async function streamDeepSeek(
     onFinish: (text: string, usage: TokenUsage | null) => Promise<FinishResult>;
     /** 分段耗时埋点：传入对象会被填上 upstreamMs（发请求 → 收到响应头） */
     timing?: Record<string, number>;
+    /** 最近几条都在用（动作）开头时，这一条把句首动作去掉（2026-11-10） */
+    trimLeadingAction?: boolean;
   },
 ): Promise<Response> {
   const apiKey = env.DEEPSEEK_API_KEY ?? '';
@@ -243,7 +245,7 @@ export async function streamDeepSeek(
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
   // ★ 流式清洗：用户看到的这一层也要干净（以前只清洗了落库文本）
-  const rewriter = createSseRewriter();
+  const rewriter = createSseRewriter(undefined, { trimLeadingAction: opts.trimLeadingAction });
 
   const transform = new TransformStream<Uint8Array, Uint8Array>({
     transform(chunk, controller) {

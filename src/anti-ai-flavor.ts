@@ -214,6 +214,25 @@ export function stripLeadingStageDirection(text: string): string {
   return rest.trim() ? rest : text;
 }
 
+/**
+ * 「她最近是不是每条都在写括号动作」（2026-11-10）。
+ *
+ * 为什么要有：style-audit 实测 91% 的回复带括号、32% 以括号开头，而提示词层面的
+ * 「不用每条都写」已经加过——模型不看。所以在**显示层与落库层**做同一件确定的事：
+ * 密度高的时候，把这一条的句首动作去掉。两条路径用同一个判断，避免 11-06 那次
+ * 「用户看到的」和「落库的」不是同一句。
+ *
+ * @param recent 最近的回复（时间升序，通常是 assistantTexts）
+ * @param window 看最近几条
+ * @param minHits 其中至少几条带动作才算「疲劳」
+ */
+export function looksActionHeavy(recent: string[], window = 4, minHits = 3): boolean {
+  const slice = (recent ?? []).slice(-window).filter((t) => (t ?? '').trim());
+  if (slice.length < window) return false;
+  const hits = slice.filter((t) => /^\s*[（(]/.test(t)).length;
+  return hits >= minHits;
+}
+
 export function scrubAiFlavor(raw: string): { text: string; cleaned: boolean } {
   // 主动消息的收尾清理收进这里：以前是两份实现，一份线上、一份只有测试
   const source = sanitizeProactiveText(raw);

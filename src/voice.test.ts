@@ -165,13 +165,16 @@ describe('读意图与翻篇（2026-11-09 14:45 那次误读驱动的四条规�
 describe('括号动作疲劳（2026-11-09：67/68、23/23 每条都带动作）', () => {
   const withAction = (n: number) => Array.from({ length: n }, (_, i) => '（尾巴拍了下地板）第' + i + '句');
 
-  it('最近 6 条每条都带括号，就提醒这一条去掉动作', () => {
-    expect(actionDensityNote(withAction(6))).toContain('把动作去掉');
+  it('最近 6 条每条都带括号，就提醒（2026-11-10：改成按比例）', () => {
+    expect(actionDensityNote(withAction(6))).toContain('括号动作');
   });
 
-  it('有一条没带就不提醒（别把正常用法也按掉）', () => {
-    const mixed = [...withAction(5), '就说人话'];
-    expect(actionDensityNote(mixed)).toBeNull();
+  it('4/6 就提醒（以前要 6/6，实际密度 91% 时等于每轮都响）', () => {
+    expect(actionDensityNote([...withAction(4), '就说人话', '好'])).toContain('括号动作');
+  });
+
+  it('3/6 不提醒：正常用法不按掉', () => {
+    expect(actionDensityNote([...withAction(3), '就说人话', '好', '行'])).toBeNull();
   });
 
   it('不足 6 条不下结论', () => {
