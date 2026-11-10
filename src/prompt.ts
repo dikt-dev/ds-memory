@@ -267,6 +267,8 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     lines.push('');
     lines.push(voice.trim());
   }
+  // 她自己的作品（日记）也要守「引用必须逐字」：正文不在手边时不许"念"
+  lines.push('- 日记是你自己写的：正文没在手边，就说「不给你看」，不凭印象编一段。');
   // 怎么发：格式约束集中一处，别再混进"时间与环境"
   const voiceRule =
     '想发语音时，把 [语音]「要说的话」放在整条消息的最后；引号里是这一段完整要说的话，不是摘一句。' +

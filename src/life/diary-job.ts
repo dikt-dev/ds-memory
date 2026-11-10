@@ -388,6 +388,47 @@ export async function pendingDiaryAsks(
 }
 
 /**
+ * 他这句话是不是在要日记（看/念/写了什么）。
+ *
+ * 「看一眼」「念一段」也算——实测他是先问「看一眼么」，下一句才提到日记，
+ * 只认「日记」两个字会漏掉整整一轮，那一轮她就敢编。
+ * 误判的代价只是多一段提示词，漏判的代价是伪造一篇日记。
+ */
+const DIARY_INTENT =
+  /日记|手帐|手账|写的东西|写的那个|写啥|写了什么|念一段|念一篇|念给我|给我看看你写|看一眼|看一篇/;
+
+/**
+ * 他问起日记时，给他能看的真实原文——或者明确"不许编"（2026-11-10）。
+ *
+ * 为什么需要：日记正文只在 App 点「问问她」时进提示词，普通聊天里她手里一个字都没有。
+ * 实测 17:11 她说「念一段」，念出来的是**他那天的大扫除和老板不在**——把自己的一天
+ * 搬进她的日记还加了引号。伪造自己的作品比记错更伤信任，所以这里要么给原文，
+ * 要么给禁令，不留"凭印象"这个选项。
+ */
+export async function diaryPeekNote(env: Env, userText: string): Promise<string | null> {
+  if (!DIARY_INTENT.test(userText || '')) return null;
+  const row = await env.DB.prepare(
+    `SELECT date_key, text FROM ai_diary
+     WHERE visibility IN ('shared', 'peek') AND text IS NOT NULL AND length(text) > 20
+     ORDER BY date_key DESC LIMIT 1`,
+  )
+    .first<{ date_key: string; text: string }>()
+    .catch(() => null);
+  if (!row || !row.text) {
+    return [
+      '【日记】他在问日记，但你手边没有可以拿出来的原文。',
+      '可以说「这个不给你看」或者「我记不太清了」——不能编一段带引号的日记，也不能把他的事写成你的。',
+    ].join('\n');
+  }
+  const excerpt = row.text.replace(/\s+/g, ' ').trim().slice(0, 160);
+  return [
+    `【日记】他在问日记。你最近那篇（${row.date_key.slice(2)}）原文开头是：`,
+    `「${excerpt}……」`,
+    '他是在求你念：就照抄这一两句原文念出来，念完补半句反应。不改写、不加戏、不往下编；不想给就直说。',
+  ].join('\n');
+}
+
+/**
  * 读取日记时才做「模型判断」，不放在聊天请求里。
  *
  * 为什么挪出来：聊天请求里再发一次模型调用，会把 Worker 拖过 CPU 上限，

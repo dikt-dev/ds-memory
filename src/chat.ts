@@ -72,7 +72,7 @@ import { recordEngineMetric } from './engine-metrics';
 import { logTrace } from './trace';
 import { recordRequest } from './request-log';
 import { promptFingerprint } from './prompt-fingerprint';
-import { pendingDiaryAsks, settleDiaryConsent } from './life/diary-job';
+import { diaryPeekNote, pendingDiaryAsks, settleDiaryConsent } from './life/diary-job';
 
 export interface ChatImage {
   key: string; // R2 对象键（images/日期/时间戳.jpg）
@@ -449,6 +449,10 @@ export async function streamChat(
   // 所以这里给的是**事实**加约束，不是提问。
   // ★ 被问的每一篇都要带上她自己写的备忘摘要：没有内容依据，
   //   她只能凭印象赌一篇，「答应看」和「其实写了什么」就对不上。
+  // 他嘴上一句「看一眼」也算问：手边没有原文时给禁令，有原文时给原文（2026-11-10）。
+  // 带上最近几句用户原话——实测要日记的请求常常是「看一眼么」，"日记"两个字在前面那一轮。
+  const diaryContext = [content, ...history.filter((m) => m.role === 'user').slice(-3).map((m) => m.content)].join(' ');
+  const diaryPeek = await diaryPeekNote(env, diaryContext).catch(() => null);
   const diaryAskNote = asks.length
     ? [
         `【日记】用户在问能不能看：${asks.map((a) => a.date.slice(2)).join('、')}。`,
@@ -490,7 +494,7 @@ export async function streamChat(
         location: lifeBlocks.location,
         persona: resolvePersona(env),
         life:
-          [lifeBlocks.life, tic, selfNoteFinal, diaryAskNote, actionDensityNote(recentReplies)]
+          [lifeBlocks.life, tic, selfNoteFinal, diaryAskNote, diaryPeek, actionDensityNote(recentReplies)]
             .filter(Boolean)
             .join('\n\n') || null,
   });
