@@ -71,6 +71,7 @@ import { affectEngineFor, memoryEngineFor } from './engine-flags';
 import { recordEngineMetric } from './engine-metrics';
 import { logTrace } from './trace';
 import { recordRequest } from './request-log';
+import { promptFingerprint } from './prompt-fingerprint';
 import { pendingDiaryAsks, settleDiaryConsent } from './life/diary-job';
 
 export interface ChatImage {
@@ -545,7 +546,14 @@ export async function streamChat(
         ms: Date.now() - tStart,
         channel,
         ok: true,
-        detail: JSON.stringify({ ...timing, totalMs: Date.now() - tStart }),
+        detail: JSON.stringify({
+          ...timing,
+          totalMs: Date.now() - tStart,
+          // 输入指纹：逐字复读排查用（2026-11-10）
+          promptHash: promptFingerprint(messages).hash,
+          promptChars: promptFingerprint(messages).chars,
+          tailIds: [...history.slice(-3).map((m) => m.id), userId ?? 0],
+        }),
       }).catch(() => {});
       let cost = 0;
       let assistantId: number | undefined;

@@ -40,6 +40,8 @@ import {
   HISTORY_MESSAGE_MAX_CHARS,
   type MessageRow,
 } from './db';
+import { promptFingerprint } from './prompt-fingerprint';
+import { recordRequest } from './request-log';
 import {
   buildHistorySlice,
   conversationGapNote,
@@ -1060,6 +1062,31 @@ openaiApp.post('/chat/completions', async (c) => {
   // 默认 2048 约 1300 汉字：正常聊天够用，生成时间可控（手机端 120s 读超时的主要风险源）。
     // 要写长文时由客户端在 body.max_tokens 里显式要更多。
     const maxTokens = requested ?? 2048;
+
+  // 输入指纹：事后能从 D1 认出"哪两轮的 prompt 撞了"（2026-11-10 逐字复读排查）
+  try {
+    const fp = promptFingerprint(upstream);
+    c.executionCtx.waitUntil(
+      recordRequest(c.env, {
+        requestId,
+        kind: 'chat',
+        path: '/v1/chat#prompt',
+        ms: 0,
+        channel,
+        ok: true,
+        detail: JSON.stringify({
+          promptHash: fp.hash,
+          promptChars: fp.chars,
+          historyRounds: groupTurns(historyRaw).length,
+          tailIds: historyRaw.slice(-4).map((m) => m.id),
+          // 最后三条的角色：正常应该是 "u"（以用户消息结尾）。
+          // 出现 "a"/"s" 结尾就说明这轮用户的话没进提示词——那正是"复读上一句"的成因。
+          tailRoles: upstream.slice(-3).map((m) => (m.role || '?').slice(0, 1)).join(''),
+          userLen: lastUserCleaned.length,
+        }),
+      }).catch(() => {}),
+    );
+  } catch { /* 埋点失败不影响回复 */ }
 
   // 4) 流式 / 非流式
   if (body?.stream !== false) {

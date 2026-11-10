@@ -107,10 +107,15 @@ export async function insertAssistantReply(
   const date_key = dateKeyInBeijing(at);
   const channel = opts.channel ?? 'web';
 
+  // 同一个 turn 只允许一条回复：重试/闸门补发都不该再多插一条
+  // （2026-11-10 出现过同一句话被写两次，界面上看起来就是"复读"）。
   const row = await env.DB.prepare(
     `INSERT INTO messages (role, content, turn_id, turn_type, reply_to_id, channel,
        cost_rmb, prompt_tokens, completion_tokens, date_key, created_at, created_ms)
-     VALUES ('assistant', ?, ?, 'chat', ?, ?, ?, ?, ?, ?, ?, ?)
+     SELECT 'assistant', ?, ?, 'chat', ?, ?, ?, ?, ?, ?, ?, ?
+     WHERE NOT EXISTS (
+       SELECT 1 FROM messages WHERE turn_id = ? AND role = 'assistant'
+     )
      RETURNING ${SELECT_COLS}`,
   )
     .bind(
@@ -124,9 +129,19 @@ export async function insertAssistantReply(
       date_key,
       created_at,
       created_ms,
+      replyToId,
     )
     .first<MessageRow>();
-  if (!row) throw new Error('insert assistant reply failed');
+  if (!row) {
+    // 已经有回复了：把那条读回来当结果（调用方还要用它的 id）
+    const existing = await env.DB.prepare(
+      `SELECT ${SELECT_COLS} FROM messages WHERE turn_id = ? AND role = 'assistant' ORDER BY id LIMIT 1`,
+    )
+      .bind(replyToId)
+      .first<MessageRow>();
+    if (existing) return existing;
+    throw new Error('insert assistant reply failed');
+  }
   return row;
 }
 
