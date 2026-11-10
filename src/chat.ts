@@ -55,7 +55,7 @@ import { recentPainEvent } from './emotion-events';
 import { loadKeepsakesBlock } from './keepsakes';
 import { moodFromVector } from './emotion-vector';
 import { readSessionFacts } from './session-facts';
-import { actionDensityNote, buildVoiceDirective, naggingComplaintNote, recentActions, recentOpeners, recentPhrases, selfRepeatScore, voiceModeOf } from './voice';
+import { actionDensityNote, buildVoiceDirective, buildVoiceTail, naggingComplaintNote, recentActions, recentOpeners, recentPhrases, selfRepeatScore, voiceModeOf } from './voice';
 import { formatRecentMemoBlock, getRecentMemo, MEMO_MAX_ITEMS } from './recent-memory';
 import { embedTexts, extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 import { loadMemoryChunks } from './memory-context-store';
@@ -475,6 +475,7 @@ export async function streamChat(
         channel,
         characterCard: cardTextWithMood,
         voice: buildVoiceDirective(relationVals.intimacy, voiceModeOf(env)),
+    voiceTail: buildVoiceTail(voiceModeOf(env)),
         // 网页端已用浏览器 speechSynthesis 播放，允许模型输出 [语音] 段
         voiceReply: true,
         avoidOpeners,

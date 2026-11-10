@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   actionDensityNote,
   buildVoiceDirective,
+  buildVoiceTail,
   recentActions,
   selfRepeatScore,
   casualness,
@@ -213,12 +214,12 @@ describe('说话规则：治绕圈与「不像活人」（2026-11-10）', () => 
     expect(dir).toContain('状态要往前走一格');
   });
 
-  it('同一件事聊够三轮就换个事', () => {
-    expect(dir).toContain('三轮');
+  it('同一件事聊够三轮就换个事（在易变段末尾）', () => {
+    expect(buildVoiceTail('full')).toContain('三轮');
   });
 
-  it('给长短留余地，不要求每条都写动作', () => {
-    expect(dir).toContain('长短由你');
+  it('给长短留余地（末尾），动作不用每条都写（开头）', () => {
+    expect(buildVoiceTail('full')).toContain('长短由你');
     expect(dir).toContain('不用每条都写');
   });
 });
@@ -232,12 +233,23 @@ describe('VOICE_MODE 三档（2026-11-10）', () => {
     expect(voiceModeOf({ VOICE_MODE: 'Bare' })).toBe('bare');
   });
 
-  it('三档条数：full 17 / lite 11 / bare 6', () => {
+  it('三档条数：full 15 / lite 9 / bare 4（另有 2 条挪到易变段末尾）', () => {
     const countOf = (m: 'bare' | 'lite' | 'full') =>
       buildVoiceDirective(600, m).split('\n').filter((l) => l.startsWith('- ')).length;
-    expect(countOf('full')).toBe(17);
-    expect(countOf('lite')).toBe(11);
-    expect(countOf('bare')).toBe(6);
+    expect(countOf('full')).toBe(15);
+    expect(countOf('lite')).toBe(9);
+    expect(countOf('bare')).toBe(4);
+  });
+
+  it('「长短由你」「三轮换事」三档都在，但位置挪到了提示词末尾', () => {
+    for (const m of ['bare', 'lite', 'full'] as const) {
+      const head = buildVoiceDirective(600, m);
+      expect(head).not.toContain('长短由你');
+      expect(head).not.toContain('三轮');
+      const tail = buildVoiceTail(m);
+      expect(tail).toContain('长短由你');
+      expect(tail).toContain('三轮');
+    }
   });
 
   it('bare 只留「删了就会复发」的六条', () => {
@@ -246,8 +258,7 @@ describe('VOICE_MODE 三档（2026-11-10）', () => {
     expect(bare).toContain('只有「你」才是你');
     expect(bare).toContain('先看清图上有什么');
     expect(bare).toContain('回一句他没说过的');
-    expect(bare).toContain('三轮');
-    expect(bare).toContain('长短由你');
+    // 「三轮换事」「长短由你」在 buildVoiceTail 里，不在 ## 说话 里
     expect(bare).not.toContain('先看这句是什么');
     expect(bare).not.toContain('状态要往前走');
     expect(bare).not.toContain('转述时把主语');
@@ -259,11 +270,10 @@ describe('VOICE_MODE 三档（2026-11-10）', () => {
     const full = buildVoiceDirective(600, 'full');
     const lite = buildVoiceDirective(600, 'lite');
     expect(lite.length).toBeLessThan(full.length);
-    // 留：身份 / 主语归属 / 反绕圈 / 长短
+    // 留：身份 / 主语归属 / 读意图 / 状态
     expect(lite).toContain('你就是记忆里那个人');
     expect(lite).toContain('只有「你」才是你');
-    expect(lite).toContain('三轮');
-    expect(lite).toContain('长短由你');
+    // 反绕圈与长短已挪到 buildVoiceTail（易变段末尾），见上面那条用例
     // 去：标点语气课、逗回去的花样、本小姐
     expect(lite).not.toContain('标点也说话');
     expect(lite).not.toContain('本小姐');

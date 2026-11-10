@@ -60,7 +60,7 @@ import {
 } from './proactive';
 import { resolvePersona } from './persona';
 import { buildCharacterCard } from './character-card';
-import { buildVoiceDirective, voiceModeOf } from './voice';
+import { buildVoiceDirective, buildVoiceTail, voiceModeOf } from './voice';
 import { formatRecentMemoBlock, getRecentMemo } from './recent-memory';
 import { extractPromptMemory, buildPromptMemoryFor, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 import { buildMemoryPack, budgetFromPack } from './context-pack';
@@ -323,6 +323,7 @@ async function generateProactive(
     channel: 'web',
     characterCard: cardText,
     voice: buildVoiceDirective(relation.intimacy, voiceModeOf(env)),
+    voiceTail: buildVoiceTail(voiceModeOf(env)),
     attitude: useNextProactive && nextAttitude ? nextAttitude : emotion.snapshot,
   });
 

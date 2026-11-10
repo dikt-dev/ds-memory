@@ -64,7 +64,7 @@ import { readSessionFacts } from './session-facts';
 import { buildCharacterCard } from './character-card';
 import { facetsOf, processEmotionTurn } from './emotion-context';
 import { moodFromVector } from './emotion-vector';
-import { buildVoiceDirective, naggingComplaintNote, recentActions, recentOpeners, recentPhrases, selfRepeatScore, voiceModeOf } from './voice';
+import { buildVoiceDirective, buildVoiceTail, naggingComplaintNote, recentActions, recentOpeners, recentPhrases, selfRepeatScore, voiceModeOf } from './voice';
 import { formatRecentMemoBlock, getRecentMemo, maybeRefreshRecentMemo } from './recent-memory';
 import { embedTexts, extractPromptMemory, recallMemoryForChat, stripDuplicateRecall } from './memory-index';
 import { loadMemoryChunks } from './memory-context-store';
@@ -772,6 +772,7 @@ openaiApp.post('/chat/completions', async (c) => {
       channel,
       characterCard: cardTextWithMood,
       voice: buildVoiceDirective(relation.intimacy, voiceModeOf(c.env)),
+    voiceTail: buildVoiceTail(voiceModeOf(c.env)),
       avoidOpeners,
       avoidPhrases,
       attitude,

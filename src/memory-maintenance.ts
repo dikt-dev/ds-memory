@@ -199,12 +199,33 @@ export function slimMemoryForPrompt(text: string, now: Date = new Date()): strin
     sectionHasBody = true;
   };
 
+  // 2026-11-10：共同经历只注入「最早的 4 条 + 最近的 20 条」。
+  // 原来 1,110 字流水账全量进提示词，把「此刻该怎么回」挤出了注意力；memory.md 正文
+  // 一个字不动，被跳过的条目仍走召回（memory_chunks），只是不进每轮固定前缀。
+  const SHARED_HEAD_KEEP = 4;
+  const SHARED_TAIL_KEEP = 20;
+  let sharedTotal = 0;
+  {
+    let scanSection: string | null = null;
+    for (const raw of lines) {
+      if (/^##\s/.test(raw)) {
+        scanSection = raw.replace(/^##\s+/, '').trim();
+        continue;
+      }
+      if (scanSection === '共同经历' && raw.trimStart().startsWith('- [')) sharedTotal += 1;
+    }
+  }
+  const sharedSkipUntil = Math.max(SHARED_HEAD_KEEP, sharedTotal - SHARED_TAIL_KEEP);
+  let sharedSeen = 0;
+  let dropShared = false;
+
   for (const rawLine of lines) {
     const line = rawLine.replace(/[ \t]+$/g, '');
     if (/^##\s/.test(line)) {
       flush();
       pendingHeader = line;
       pendingSection = line.replace(/^##\s+/, '').trim();
+      dropShared = false;
       continue;
     }
     // 一级标题和提示词里的标题重复
@@ -228,6 +249,12 @@ export function slimMemoryForPrompt(text: string, now: Date = new Date()): strin
         },
       );
     }
+    // 共同经历：头 4 条 + 尾 20 条之外的，不进提示词（正文与召回都不动）
+    if ((pendingSection ?? section) === '共同经历' && line.trimStart().startsWith('- [')) {
+      sharedSeen += 1;
+      dropShared = sharedSeen > sharedSkipUntil;
+    }
+    if (dropShared && (pendingSection ?? section) === '共同经历') continue;
     emit(rendered);
   }
   flush();

@@ -70,6 +70,8 @@ export interface BasePromptArgs {
   characterCard?: string | null;
   /** 口语化风格指令（按亲密度变化） */
   voice?: string | null;
+  /** 「生成那一刻才要记住」的两条（长度、换事）：放在易变段末尾，紧贴用户消息 */
+  voiceTail?: string | null;
   /** 最近一天的中期记忆（已格式化的 markdown 块，见 recent-memory.ts） */
   recentMemo?: string | null;
   /** 最近几天聊过的话题标题（跨天回指用） */
@@ -125,6 +127,7 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     channel,
     characterCard,
     voice,
+  voiceTail,
     recentMemo,
   recentTopics,
     recalled,
@@ -337,6 +340,13 @@ export function buildBaseSystemPrompt(args: BasePromptArgs): string {
     // 2026-11-10：以前把词表原文列出来（"老板不在"/"大扫除"/"猪脚饭"），实测她只换措辞、
     // 话题照旧——引号里的词本身就是注意力锚点。现在只给方向，不再复述那些词。
     lines.push('- 这一轮要是又绕回同一件事，就换件事说；他不是来听复盘的。');
+  }
+
+  // ★ 2026-11-10：这两条规则放到最末（此刻之前）——前面隔着 3,000 多字记忆，
+  //   放在「## 说话」里等于说在 lost-in-the-middle 的中间。
+  if (voiceTail?.trim()) {
+    lines.push('');
+    lines.push(voiceTail.trim());
   }
 
   // ══ F 此刻的事实 + 怎么发（易变，永远最后）══════════════════
