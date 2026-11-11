@@ -64,6 +64,30 @@ export async function recordFacetDelta(
 }
 
 /**
+ * 把账本里这几条事件标成已翻篇（2026-11-11 判定纠正用）。
+ *
+ * 不删除，只写 resolved_at——和「记忆不删除、只是更难召回」同一个规矩。
+ */
+export async function markEventsResolved(env: Env, events: EmotionEvent[], now = Date.now()): Promise<number> {
+  if (events.length === 0) return 0;
+  try {
+    let n = 0;
+    for (const e of events) {
+      const id = `affect_${stableHash(`${e.type}|${e.at}|${e.evidence}|${e.intensity}`)}`;
+      const res = await env.DB.prepare(
+        'UPDATE affect_events SET resolved_at = ? WHERE id = ? AND resolved_at IS NULL',
+      )
+        .bind(now, id)
+        .run();
+      n += res.meta.changes ?? 0;
+    }
+    return n;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * 对账用：账本里「上次结算之后」累积的关系增量。
  *
  * 运行时状态存在 KV，账本存在 D1：KV 写失败时两边就会不一致（她会"记着"

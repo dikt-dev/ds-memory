@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Env } from './types';
 import {
   commitEmotionSettle,
+  correctTurnEvents,
   effectiveFacets,
   emptyEmotionState,
   loadEmotionState,
@@ -35,6 +36,38 @@ function fakeEnv(): { env: Env; kv: FakeKV } {
 
 const T0 = Date.UTC(2026, 9, 23, 12, 0, 0);
 const base: RelationFacets = { ...FACET_DEFAULTS };
+
+describe('correctTurnEvents —— 回复之后撤回误判（2026-11-11）', () => {
+  it('判定模型说没有 → 事件翻篇、委屈扣回去', async () => {
+    const { env } = fakeEnv();
+    const event = {
+      type: 'insult' as const,
+      intensity: 3 as const,
+      target: 'ai' as const,
+      evidence: '孤独摇滚',
+      at: T0,
+    };
+    await saveEmotionState(env, {
+      vector: { ...emptyEmotionState(T0).vector, grievance: 24 },
+      events: [event],
+      facetDelta: { trust: -2 },
+      at: T0,
+    });
+    // 假 env 没有 AI/KV key：判定一路失败返回 []，等于「模型说没事」
+    const ok = await correctTurnEvents({ env, now: T0, userText: '孤独摇滚', events: [event] });
+    expect(ok).toBe(true);
+    const after = await loadEmotionState(env, T0);
+    expect(after.events[0].resolved).toBe(true);
+    expect(after.vector.grievance).toBeLessThan(24);
+  });
+
+  it('没有可疑事件就不写盘', async () => {
+    const { env, kv } = fakeEnv();
+    const ok = await correctTurnEvents({ env, now: T0, userText: '在吗', events: [] });
+    expect(ok).toBe(false);
+    expect(kv.puts).toBe(0);
+  });
+});
 
 describe('loadEmotionState / saveEmotionState', () => {
   it('空 KV 返回中性状态', async () => {

@@ -47,7 +47,7 @@ import { loadImageDataUrl } from './media';
 import { byteLength, parseRelationValues } from './memory-maintenance';
 import { markProfileDirty } from './profile-cache';
 import { buildCharacterCard } from './character-card';
-import { facetsOf, processEmotionTurn } from './emotion-context';
+import { correctTurnEvents, facetsOf, processEmotionTurn } from './emotion-context';
 import { stageFor } from './relation-facets';
 import { readRelationStageLevel } from './relation-stage';
 import { computeTemper } from './temper';
@@ -289,12 +289,25 @@ export async function streamChat(
       month: beijingMonth(now),
     },
     wasIgnored: facts.wasIgnored,
-    // 只在规则判出负向事件时才会真的调 AI（见 processEmotionTurn）
-    allowAiReview: true,
+    // 关键路径不调 AI：多等 0.8 秒换「这一句判得更准」不划算。
+    // 误判改由 correctTurnEvents 在回复之后异步撤回（几秒内纠正，用户看不见延迟）。
+    allowAiReview: false,
+    reviewSharePain: false,
     judgeContext,
-  // share_pain 也要复核：词典把问句和转述也记成「他在诉苦」，生效后她会莫名其妙心疼
-  reviewSharePain: true,
   });
+
+  // 判定纠正：回复已经发出去了，再把这一轮误判的事件撤回（不卡首字延迟）
+  if (opts.waitUntil) {
+    opts.waitUntil(
+      correctTurnEvents({
+        env,
+        now: now.getTime(),
+        userText: content,
+        context: judgeContext,
+        events: emotion.state.events.filter((e) => e.at >= now.getTime()),
+      }).catch(() => {}),
+    );
+  }
 
   // ★ 铭记：常驻注入，不参与召回。KV 缓存，避免每轮查 D1。
   const keepsakesBlock = await keepsakesPromise;

@@ -20,7 +20,7 @@ import {
   putRuntimeState,
   releaseRuntimeLock,
 } from './runtime-store';
-import { recordEmotionEvents, recordFacetDelta } from './affect-store';
+import { markEventsResolved, recordEmotionEvents, recordFacetDelta } from './affect-store';
 import {
   applyEmotionDelta,
   applyEnvironmentToEmotion,
@@ -32,6 +32,7 @@ import {
 } from './emotion-vector';
 import {
   applyEventsToVector,
+  eventEmotionDelta,
   extractEmotionEvents,
   isNegativeEvent,
   needsAiEventReview,
@@ -520,6 +521,81 @@ export async function reviewDayEvents(
     const ai = await reviewEventsWithAI(env, t, at, ctx);
     for (const e of ai) out.push({ ...e, evidence: t.slice(0, 80) });
   }
+  return out;
+}
+
+/**
+ * 判定纠正：把这一轮词典判出、但判定模型不认的事件撤回（2026-11-11）。
+ *
+ * 为什么是「先记后撤」而不是「先问再记」：
+ * 先问再记意味着回复要等 0.5~0.8 秒——她当场没脾气。
+ * 先记后撤等于「说完话回头一想，好像是我误会了」：延迟为零，误判活不过几秒。
+ *
+ * 撤回动作：状态里标 resolved、向量里扣回增量、账本里写一条反向关系增量。
+ * 都不删，只翻篇。
+ */
+export async function correctTurnEvents(input: {
+  env: Env;
+  now: number;
+  userText: string;
+  events: EmotionEvent[];
+  context?: string;
+}): Promise<boolean> {
+  const suspect = input.events.filter((e) => isNegativeEvent(e.type) || e.type === 'share_pain');
+  if (suspect.length === 0) return false;
+  if (!(input.userText ?? '').trim()) return false;
+
+  let judged: EmotionEvent[] = [];
+  try {
+    judged = await reviewEventsWithAI(input.env, input.userText, input.now, input.context ?? '');
+  } catch {
+    return false; // 判不了就别动，宁可留着
+  }
+  if (judged.some((j) => suspect.some((s) => s.type === j.type))) return false;
+
+  const locked = await acquireRuntimeLock(input.env, EMOTION_LOCK, EMOTION_LOCK_TTL);
+  if (!locked) return false;
+  try {
+    const state = await loadEmotionState(input.env, input.now);
+    const keys = new Set(suspect.map((s) => `${s.type}|${s.at}|${s.evidence}`));
+    const kept = state.events.map((e) =>
+      keys.has(`${e.type}|${e.at}|${e.evidence}`) && !e.resolved ? { ...e, resolved: true } : e,
+    );
+    if (!kept.some((e, i) => e !== state.events[i])) return false;
+
+    // 向量扣回：加过的减回去，最低 0
+    const vector = { ...state.vector };
+    for (const e of suspect) {
+      const delta = eventEmotionDelta(e);
+      for (const [k, v] of Object.entries(delta) as Array<[keyof EmotionVector, number]>) {
+        vector[k] = Math.max(0, Math.round(vector[k] - (v ?? 0)));
+      }
+    }
+    const facetReverse = sumFacetDelta(suspect);
+    const facetDelta = { ...state.facetDelta };
+    for (const [k, v] of Object.entries(facetReverse) as Array<[FacetKey, number]>) {
+      facetDelta[k] = (facetDelta[k] ?? 0) - v;
+    }
+
+    await saveEmotionState(input.env, { ...state, vector, events: kept, facetDelta });
+    await recordFacetDelta(input.env, negateFacet(facetReverse), '判定纠正：撤回误判', input.now);
+    await markEventsResolved(input.env, suspect, input.now);
+    logTrace('emotion.correct', {
+      msg: '撤回误判 ' + suspect.map((e) => e.type).join(',') + ' → ' + (judged.map((e) => e.type).join(',') || 'none'),
+    });
+    return true;
+  } catch (e) {
+    logWarn('[emotion] 撤回误判失败：', e);
+    return false;
+  } finally {
+    await releaseRuntimeLock(input.env, EMOTION_LOCK).catch(() => {});
+  }
+}
+
+/** 关系增量取反：用于把误判加分扣回去。 */
+function negateFacet(delta: Partial<Record<FacetKey, number>>): Record<FacetKey, number> {
+  const out = {} as Record<FacetKey, number>;
+  for (const key of FACET_KEYS) out[key] = -(Number(delta[key]) || 0);
   return out;
 }
 
