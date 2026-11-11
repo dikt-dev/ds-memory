@@ -22,6 +22,7 @@ import type { Env } from './types';
 import { analyzeMood, type MoodLabel, type MoodResult } from './mood';
 import { getRuntimeState, putRuntimeState } from './runtime-store';
 import { logError, logWarn } from './error-log';
+import { callLlmOnce } from './llm';
 
 /** 歧义缓存键前缀。 */
 const MOOD_AI_CACHE_PREFIX = 'mood:ai:';
@@ -118,7 +119,7 @@ const VERIFY_SYSTEM = `你是一个情绪分类器。判断用户这段话当前
 注意：如果句子里有否定（如"不难过了"）或转折（如"累但是开心"），要以**最终真实情绪**为准。`;
 
 /**
- * 调用 Workers AI 复核情绪。
+ * 用判定模型复核情绪（主办方优先，失败退回 Workers AI）。
  *
  * 失败时返回 null，由调用方回退到关键词结果。
  */
@@ -139,6 +140,20 @@ export async function verifyMoodWithAI(
     // KV 读失败不影响主流程
   }
 
+  // ① 主办方模型（qwen3.8-max 档）：3B 的 llama 会把「疲惫」判成「难过」，
+  //    而这条标签是她一整天语气的底色（2026-11-11）。
+  try {
+    const raw = await callLlmOnce(env as never, 'judge', VERIFY_SYSTEM, text.slice(-800), { maxTokens: 10 });
+    const label = extractLabel(raw);
+    if (label) {
+      await putRuntimeState(env, cacheKey, label, CACHE_TTL_SECONDS).catch(() => {});
+      return label;
+    }
+  } catch (e) {
+    logWarn('[mood] 主办方判定失败，退回 Workers AI：', e);
+  }
+
+  // ② 兜底：Workers AI（判不准，但链路不断）
   try {
     const res = await env.AI.run(env.DISTILL_MODEL, {
       messages: [

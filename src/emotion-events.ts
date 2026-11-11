@@ -23,7 +23,7 @@ import type { Env } from './types';
 import { EMOTION_MAX_STEP_PER_TURN, applyEmotionDelta, type EmotionVector } from './emotion-vector';
 import { logError, logWarn } from './error-log';
 import { logTrace } from './trace';
-import { buildBody, llmTargets } from './llm';
+import { callLlmOnce } from './llm';
 
 export type EmotionEventType =
   | 'praise'
@@ -743,34 +743,7 @@ export async function reviewEventsWithAI(
 
 /** 调主办方模型做一次判定；没有任何 key 时返回空串，让调用方走兜底。 */
 async function judgeWithLlm(env: Env, userContent: string): Promise<string> {
-  const targets = llmTargets(env as never, 'judge');
-  for (const target of targets) {
-    if (!target.apiKey) continue;
-    const res = await fetch(target.url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${target.apiKey}` },
-      body: JSON.stringify(
-        buildBody(
-          target,
-          [
-            { role: 'system', content: EVENT_VERIFY_SYSTEM },
-            { role: 'user', content: userContent },
-          ],
-          // 只要一行判定，关思考；温度 0 保证同一句判得一样
-          { maxTokens: 40, thinking: false, temperature: 0 },
-        ),
-      ),
-    });
-    if (!res.ok) {
-      await res.body?.cancel().catch(() => {});
-      continue;
-    }
-    const data = (await res.json()) as { choices?: { message?: { content?: unknown } }[] };
-    const content = data.choices?.[0]?.message?.content;
-    if (typeof content === 'string' && content.trim()) {
-      logTrace('emotion.judge', { msg: 'model=' + target.model + ' → ' + content.trim().slice(0, 40) });
-      return content;
-    }
-  }
-  return '';
+  const raw = await callLlmOnce(env as never, 'judge', EVENT_VERIFY_SYSTEM, userContent, { maxTokens: 40 });
+  if (raw) logTrace('emotion.judge', { msg: raw.slice(0, 40) });
+  return raw;
 }

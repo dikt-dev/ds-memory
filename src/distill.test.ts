@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { distillDay, distillText } from './distill';
+import { distillDay, distillText, looksLikeMemoryLines } from './distill';
 import type { Env } from './types';
 
 const env = {
@@ -7,6 +7,25 @@ const env = {
   DEEPSEEK_MODEL: 'deepseek-v4-flash',
   DISTILL_DEEPSEEK_MODEL: 'deepseek-v4-pro',
 } as unknown as Env;
+
+describe('兜底模型只写「像记忆」的内容（2026-11-11）', () => {
+  it('记忆条目格式通过，散文/空内容不过', () => {
+    expect(looksLikeMemoryLines('- [26-11-11] 他去修了 bug')).toBe(true);
+    expect(looksLikeMemoryLines('今天聊了很多','x' as never)).toBe(false);
+    expect(looksLikeMemoryLines('')).toBe(false);
+  });
+
+  it('主办方与 Workers AI 都挂 → backend=none，不产出可写记忆的文本', async () => {
+    const dead = {
+      DEEPSEEK_API_KEY: '',
+      DASHSCOPE_API_KEY: '',
+      AI: { run: async () => { throw new Error('all models down'); } },
+    } as unknown as Env;
+    const r = await distillText(dead, 'system', 'user', 64);
+    expect(r.backend).toBe('none');
+    expect(r.text).toBe('');
+  });
+});
 
 function mockFetch() {
   const calls: any[] = [];
@@ -42,15 +61,25 @@ describe('每日归档使用 v4-pro + 思考模式', () => {
     expect(calls[0].thinking).toEqual({ type: 'disabled' });
   });
 
-  it('空内容时报出 finish_reason，便于判断是不是被 length 截断', async () => {
+  it('空内容时回退 Workers AI；兜底是记忆条目才采用', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,
       json: async () => ({ choices: [{ message: { content: '' }, finish_reason: 'length' }] }),
     })));
-    const withAi = { ...env, AI: { run: async () => ({ response: '兜底文本' }) } } as unknown as Env;
-    const r = await distillDay(withAi, '2026-10-30', 'x', 'y');
-    // 思维链把额度吃光时不能静默返回空：必须回退 Workers AI，且结果可用
+    const good = { ...env, AI: { run: async () => ({ response: '- [26-10-30] 他去修了 bug' }) } } as unknown as Env;
+    const r = await distillDay(good, '2026-10-30', 'x', 'y');
     expect(r.backend).toBe('workers-ai');
-    expect(r.text).toBe('兜底文本');
+    expect(r.text).toContain('修了 bug');
+  });
+
+  it('兜底返回散文（不是记忆条目）→ 不写记忆，标成待补', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: '' }, finish_reason: 'length' }] }),
+    })));
+    const bad = { ...env, AI: { run: async () => ({ response: '兜底文本' }) } } as unknown as Env;
+    const r = await distillDay(bad, '2026-10-30', 'x', 'y');
+    expect(r.backend).toBe('none');
+    expect(r.text).toBe('');
   });
 });

@@ -162,6 +162,50 @@ export function thinkingParams(vendor: LlmVendor, thinking: boolean | undefined)
   return { thinking: { type: on ? 'enabled' : 'disabled' } };
 }
 
+/**
+ * 单轮判定调用（2026-11-11）：情绪事件、心情标签这类「判断题」共用。
+ *
+ * 按 kind 取供应商（judge → LLM_JUDGE_MODEL），关思考、温度 0、输出很短。
+ * 全部供应商都失败时返回空串，调用方自己决定退回 Workers AI 还是保持原样。
+ */
+export async function callLlmOnce(
+  env: LlmEnv,
+  kind: LlmKind,
+  system: string,
+  user: string,
+  opts: { maxTokens?: number; temperature?: number } = {},
+): Promise<string> {
+  for (const target of llmTargets(env, kind)) {
+    if (!target.apiKey) continue;
+    try {
+      const res = await fetch(target.url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${target.apiKey}` },
+        body: JSON.stringify(
+          buildBody(
+            target,
+            [
+              { role: 'system', content: system },
+              { role: 'user', content: user },
+            ],
+            { maxTokens: opts.maxTokens ?? 40, thinking: false, temperature: opts.temperature ?? 0 },
+          ),
+        ),
+      });
+      if (!res.ok) {
+        await res.body?.cancel().catch(() => {});
+        continue;
+      }
+      const data = (await res.json()) as { choices?: { message?: { content?: unknown } }[] };
+      const content = data.choices?.[0]?.message?.content;
+      if (typeof content === 'string' && content.trim()) return content.trim();
+    } catch {
+      // 这家失败换下一家
+    }
+  }
+  return '';
+}
+
 /** 拼请求体：两家都认 OpenAI 兼容字段，差异只在思考参数。 */
 export function buildBody(
   target: LlmTarget,

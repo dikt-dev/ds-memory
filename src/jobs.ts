@@ -36,6 +36,7 @@ import { rebuildFactsDoc } from './memory-doc';
 import { maybeGenerateRollups } from './memory-rollups';
 import { buildRelationStatus } from './attitude';
 import { distillDay } from './distill';
+import { clearDistillPending, listDistillPending, markDistillPending } from './distill-pending';
 import { ensureDayTopics } from './topics';
 import { pruneCmidCache } from './cmid-cache';
 import {
@@ -293,8 +294,37 @@ export async function archiveOneDay(
       logError('[daily] read back archive for distill failed, use in-memory rows:', e);
     }
 
-    // 4) AI 提炼当天对话 → 合并进 memory.md（失败不阻断归档）
     let memory = await getMemory(env);
+
+    // ★ 补提炼：上次归档两个模型都挂了、没写进记忆的日子（2026-11-11）
+    //   一次最多补两天，成本可控；补成功才从清单里移除。
+    let backfillText = '';
+    try {
+      const pending = (await listDistillPending(env)).filter((d) => d !== target);
+      for (const dateKey of pending.slice(0, 2)) {
+        const archived = await getObject(env, `chat_logs/${dateKey}.log`);
+        if (!archived) {
+          await clearDistillPending(env, dateKey);
+          continue;
+        }
+        const parsed = JSON.parse(await archived.text()) as { messages?: MessageRow[] };
+        const pastRows = parsed.messages ?? [];
+        if (pastRows.length === 0) {
+          await clearDistillPending(env, dateKey);
+          continue;
+        }
+        const retried = await distillDay(env, dateKey, buildDistillConversation(pastRows), memory);
+        if (retried.text.trim()) {
+          backfillText += (backfillText ? '\n' : '') + retried.text.trim();
+          await clearDistillPending(env, dateKey);
+          logInfo(`[daily] 补提炼 ${dateKey} 成功（${retried.text.length} 字）`);
+        }
+      }
+    } catch (e) {
+      logWarn('[daily] 补提炼失败（下次再补）：', e);
+    }
+
+    // 4) AI 提炼当天对话 → 合并进 memory.md（失败不阻断归档）
     const memoryBefore = memory;
     const before = byteLength(memory);
     let distilled = false;
@@ -313,9 +343,15 @@ export async function archiveOneDay(
           buildDistillConversation(distilledRows) +
           (daySummary?.text ? `\n\n今日摘要（滚动提炼）：${daySummary.text}` : '');
         const summary = await distillDay(env, target, conversation, memory);
-        if (!summary.text.trim() && summary.backend === 'workers-ai') {
-          // 兜底模型返回空内容 → 视为失败，任务标 failed，下次补提炼
-          distillError = 'Workers AI 兜底返回空内容';
+        // 两个模型都挂了（backend=none）或兜底返回空：不写记忆，进待补清单
+        if (summary.backend === 'none' || !summary.text.trim()) {
+          if (summary.backend === 'none') {
+            distillError = '主办方与 Workers AI 兜底都失败，已记入待补清单';
+            await markDistillPending(env, target);
+          } else {
+            distillError = 'Workers AI 兜底返回空内容';
+            await markDistillPending(env, target);
+          }
         }
         // 铭记：规则先跑（零成本、确定性强），再让 v4-pro 挑候选（进待审核，不直接注入）。
         // 任何失败都只记日志，绝不影响当天记忆归档。
@@ -338,7 +374,8 @@ export async function archiveOneDay(
         const beforeEntries = countMemoryEntries(memory);
 
         // 先合并一次（不含关系驱动）以统计新增记忆条目数
-        const mergedForCount = mergeMemoryEntry(memory, summary.text, target, {
+        const distillTextAll = [summary.text.trim(), backfillText].filter(Boolean).join('\n');
+        const mergedForCount = mergeMemoryEntry(memory, distillTextAll, target, {
           streakDays,
           daysSinceInteraction,
         });
@@ -349,7 +386,7 @@ export async function archiveOneDay(
           streakDays,
           daysSinceInteraction,
         }).catch(() => null);
-        const merged = mergeMemoryEntry(memory, summary.text, target, {
+        const merged = mergeMemoryEntry(memory, distillTextAll, target, {
           streakDays,
           daysSinceInteraction,
           ...(stats ? { intimacy: stats.intimacy, affinity: stats.affinity } : {}),
