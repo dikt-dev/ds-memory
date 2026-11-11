@@ -138,6 +138,8 @@ export async function biliVisionDirect(
       timeoutMs: 120_000,
     });
     if (cacheKey) await env.KV.put(cacheKey, obs.text, { expirationTtl: 30 * 24 * 3600 }).catch(() => {});
+    // 成功时间留痕：聊天侧靠它判断「最近那条到底看没看成」
+    await env.KV.put('bili:vision:last_ok', JSON.stringify({ at: Date.now(), title: input.title ?? '' }), { expirationTtl: 3 * 86400 }).catch(() => {});
     return {
       title: input.title ?? '',
       duration: input.duration ?? 0,
@@ -150,6 +152,27 @@ export async function biliVisionDirect(
     await env.KV.put('bili:vision:last_error', JSON.stringify({ at: Date.now(), error: String(e).slice(0, 300), host }), { expirationTtl: 7 * 86400 }).catch(() => {});
     return null;
   }
+}
+
+/**
+ * 「最近那条视频没看成」——当成一条事实给她（2026-11-11）。
+ *
+ * 失败以前只写进 KV 的 last_error，聊天侧看不到；她拿到标题和简介，
+ * 就会自己补一个「我看过了」。这里把缺口补成一句明确的旁白。
+ */
+export async function videoFailNote(
+  env: { KV: KVNamespace },
+): Promise<string | null> {
+  const [failRaw, okRaw] = await Promise.all([
+    env.KV.get('bili:vision:last_error').catch(() => null),
+    env.KV.get('bili:vision:last_ok').catch(() => null),
+  ]);
+  if (!failRaw) return null;
+  const fail = (() => { try { return JSON.parse(failRaw) as { at?: number; host?: string } } catch { return null } })();
+  if (!fail?.at || Date.now() - fail.at > 24 * 3600_000) return null;
+  const ok = (() => { try { return JSON.parse(okRaw ?? 'null') as { at?: number } | null } catch { return null } })();
+  if (ok?.at && ok.at > fail.at) return null; // 之后已经看成了，别再提醒
+  return '【视频】最近那条视频你没解析出画面，只看得到标题和简介。别描述里面的镜头和结尾，说没点开看就行。';
 }
 
 /** 供 App 拼卡片：把画面过程写成 [BILI_META] 里的一段。 */

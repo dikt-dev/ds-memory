@@ -198,15 +198,13 @@ describe('trimHistoryToBudget —— 按体积裁历史', () => {
     id, turn_id: turn, role, content, created_at: '', created_ms: id, date_key: '2026-11-06',
   }) as never;
 
-  it('超预算时丢掉更早的整轮，至少留一轮', () => {
-    const rows = [
-      row(1, 1, 'user', 'a'.repeat(400)),
-      row(2, 1, 'assistant', 'b'.repeat(400)),
-      row(3, 2, 'user', 'c'.repeat(400)),
-      row(4, 2, 'assistant', 'd'.repeat(400)),
-    ];
+  it('超预算时只裁「保底 6 轮」之外的轮次（2026-11-11）', () => {
+    // 最近 6 轮无条件保留：预算再小也不动它们，只往前裁
+    const rows = Array.from({ length: 20 }, (_, i) =>
+      row(i + 1, Math.floor(i / 2) + 1, i % 2 === 0 ? 'user' : 'assistant', 'x'.repeat(400)),
+    );
     const out = trimHistoryToBudget(rows, 900);
-    expect(out.map((m: any) => m.id)).toEqual([3, 4]);
+    expect(out.map((m: any) => m.id)).toEqual([9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
   });
 
   it('预算足够时原样返回', () => {
@@ -245,12 +243,12 @@ describe('buildHistorySlice —— 原文 + 提要，一轮都不丢', () => {
     expect(slice.rows.map((m) => m.id)).toEqual(rows.map((m) => m.id));
   });
 
-  it('原文超字符预算时按整轮挪进提要', () => {
-    const slice = buildHistorySlice(turnsOf(4, 300), { maxChars: 1300 });
-    expect(slice.fullRounds).toBe(2);
+  it('原文超字符预算时：最近 6 轮留下，更早的按整轮挪进提要', () => {
+    const slice = buildHistorySlice(turnsOf(10, 300), { maxChars: 1300 });
+    // 保底 6 轮不受预算影响
+    expect(slice.fullRounds).toBe(6);
     expect(slice.brief).toContain('第1轮');
-    expect(slice.brief).toContain('第2轮');
-    expect(slice.brief).not.toContain('第4轮');
+    expect(slice.brief).not.toContain('第10轮');
   });
 
   it('整轮切：原文里不会出现只有一半的轮次', () => {
@@ -259,10 +257,10 @@ describe('buildHistorySlice —— 原文 + 提要，一轮都不丢', () => {
     expect(slice.rows.length % 2).toBe(0);
   });
 
-  it('200 轮的会话提要也有上限（40 行 / 1400 字）', () => {
+  it('200 轮的会话提要也有上限（60 行 / 3000 字）', () => {
     const slice = buildHistorySlice(turnsOf(200, 10));
-    expect(slice.brief.length).toBeLessThanOrEqual(1400);
-    expect(slice.brief.split('\n').length).toBeLessThanOrEqual(41);
+    expect(slice.brief.length).toBeLessThanOrEqual(3000);
+    expect(slice.brief.split('\n').length).toBeLessThanOrEqual(61);
     expect(slice.brief).toContain('共 170 轮');
   });
 

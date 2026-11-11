@@ -73,6 +73,7 @@ import { logTrace } from './trace';
 import { recordRequest } from './request-log';
 import { promptFingerprint } from './prompt-fingerprint';
 import { diaryPeekNote, pendingDiaryAsks, settleDiaryConsent } from './life/diary-job';
+import { videoFailNote } from './media/bili-vision';
 
 export interface ChatImage {
   key: string; // R2 对象键（images/日期/时间戳.jpg）
@@ -453,6 +454,9 @@ export async function streamChat(
   // 带上最近几句用户原话——实测要日记的请求常常是「看一眼么」，"日记"两个字在前面那一轮。
   const diaryContext = [content, ...history.filter((m) => m.role === 'user').slice(-3).map((m) => m.content)].join(' ');
   const diaryPeek = await diaryPeekNote(env, diaryContext).catch(() => null);
+  // 视频没解析出来时，把「没看成」当成事实告诉她（2026-11-11）。
+  // 否则那条失败只留在 KV 里，她只能靠常识推断——实测推断出「昨晚看完了」。
+  const videoFail = await videoFailNote(env).catch(() => null);
   const diaryAskNote = asks.length
     ? [
         `【日记】用户在问能不能看：${asks.map((a) => a.date.slice(2)).join('、')}。`,
@@ -494,7 +498,7 @@ export async function streamChat(
         location: lifeBlocks.location,
         persona: resolvePersona(env),
         life:
-          [lifeBlocks.life, tic, selfNoteFinal, diaryAskNote, diaryPeek, actionDensityNote(recentReplies)]
+          [lifeBlocks.life, tic, selfNoteFinal, diaryAskNote, diaryPeek, videoFail, actionDensityNote(recentReplies)]
             .filter(Boolean)
             .join('\n\n') || null,
   });

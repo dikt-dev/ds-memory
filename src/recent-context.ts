@@ -126,7 +126,15 @@ export const SESSION_GAP_MS = 6 * 60 * 60 * 1000;
  * 原来只按轮数（120 轮）切，实测 76 轮就 11.5k tokens——轮数和体积脱钩。
  * 这里从最新往回按「整轮」累加，超预算就丢更早的轮，至少留一轮。
  */
-export const HISTORY_BUDGET_CHARS = 12_000;
+export const HISTORY_BUDGET_CHARS = 24_000;
+
+/**
+ * 最近多少轮必须给原文，不受字符预算约束（2026-11-11）。
+ *
+ * 实测（logic-probe）：事实一旦被压进提要，便宜档模型就答不出来；
+ * 而这 6 轮通常是「他刚说的那件事」——最不该被压缩的部分。
+ */
+export const MIN_FULL_TURNS = 6;
 
 export interface HistorySlice {
   /** 注入用的原文（时间升序、整轮）。 */
@@ -166,12 +174,14 @@ export function buildHistorySlice(
   if (turns.length === 0) return { rows: [], brief: "", rounds: 0, fullRounds: 0 };
   const older = turns.slice(0, Math.max(0, turns.length - fullTurns));
   const tail = turns.slice(older.length);
-  let used = 0;
-  let keepFrom = tail.length;
-  for (let i = tail.length - 1; i >= 0; i -= 1) {
+  // 最近 MIN_FULL_TURNS 轮**无条件**给原文，不参与预算（2026-11-11）。
+  // 「刚说过的」几乎都发生在最近几轮；预算把它们挤进提要，等于让她当场失忆。
+  const guaranteed = Math.min(MIN_FULL_TURNS, tail.length);
+  let keepFrom = tail.length - guaranteed;
+  let used = tail.slice(keepFrom).reduce((sum, turn) => sum + turn.reduce((s, m) => s + (m.content?.length ?? 0), 0), 0);
+  for (let i = keepFrom - 1; i >= 0; i -= 1) {
     const size = tail[i].reduce((sum, m) => sum + (m.content?.length ?? 0), 0);
-    // 至少留一轮：最后一轮再大也带
-    if (keepFrom < tail.length && used + size > maxChars) break;
+    if (used + size > maxChars) break;
     used += size;
     keepFrom = i;
   }
@@ -241,8 +251,9 @@ export function buildSessionDigest(
   const lines = picked.map((turn) => {
     const user = turn.find((m) => m.role === "user");
     const bot = turn.find((m) => m.role !== "user");
-    const u = (user?.content ?? "").replace(/\s+/g, " ").slice(0, 28);
-    const b = (bot?.content ?? "").replace(/\s+/g, " ").slice(0, 20);
+    // 28/20 字太短：只剩「有过这件事」，具体条件全丢（2026-11-11 提到 60/40）
+    const u = (user?.content ?? "").replace(/\s+/g, " ").slice(0, 60);
+    const b = (bot?.content ?? "").replace(/\s+/g, " ").slice(0, 40);
     const clock = shortClock((user?.created_at ?? bot?.created_at) || "");
     return "- " + clock + " " + u + (b ? " → " + b : "");
   });
@@ -264,9 +275,9 @@ export function buildSessionBrief(rows: MessageRow[], maxLines = 12, maxChars = 
  */
 export const CHAT_FULL_TURNS = 30;
 /** 提要最多多少行（一场 200 轮的会话也只有这么多）。 */
-export const BRIEF_MAX_LINES = 40;
+export const BRIEF_MAX_LINES = 60;
 /** 提要的字符上限。 */
-export const BRIEF_MAX_CHARS = 1_400;
+export const BRIEF_MAX_CHARS = 3_000;
 /** 聊天链路的提要抬头：让她明确这是提要、不是原话。 */
 export const CHAT_BRIEF_HEADER = "【本会话更早的（原文已不在上下文，只有提要）】共 {n} 轮：";
 
