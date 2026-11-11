@@ -9,7 +9,8 @@ import { buildBody, llmTargets, shouldFallbackStatus } from './llm';
 import { dateKeyInBeijing } from './date';
 
 /** none = 两个模型都挂了：不写记忆，等下一次归档补（2026-11-11）。 */
-export type DistillBackend = 'deepseek' | 'workers-ai' | 'none';
+/** none = 主备两家官方供应商都挂了：不写记忆，等下一次归档补（2026-11-11）。 */
+export type DistillBackend = 'deepseek' | 'none';
 
 export interface DistillResult {
   text: string;
@@ -190,55 +191,15 @@ async function deepseekDistill(
   };
 }
 
+/** 兜底已改为「另一个官方供应商」（见 distillText）；Workers AI 不再参与记忆提炼。 */
+
 /**
- * Workers AI 兜底（2026-11-11 换模型）。
+ * 提炼/压缩公共入口（2026-11-11 调整兜底顺序）。
  *
- * 原来是 llama-3.2-3b：主办方一挂，它就往 memory.md 里写一段三句读不通的摘要，
- * 记忆污染比「今天没提炼」贵得多。现在先用更强的模型（DISTILL_AI_MODEL，
- * 默认 llama-3.3-70b），实在不行才退回旧的小模型。
- */
-export const DISTILL_AI_MODEL_FALLBACK = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-
-/** 兜底模型的产出必须像记忆条目（「- [YY-MM-DD] …」），否则不写进 memory.md。 */
-export function looksLikeMemoryLines(text: string): boolean {
-  return /^\s*-\s*\[/m.test(text ?? '');
-}
-
-async function workersAiDistill(env: Env, system: string, user: string, maxTokens: number): Promise<string> {
-  const chain = [
-    (env as unknown as { DISTILL_AI_MODEL?: string }).DISTILL_AI_MODEL || DISTILL_AI_MODEL_FALLBACK,
-    env.DISTILL_MODEL,
-  ].filter((m, i, arr): m is string => Boolean(m) && arr.indexOf(m) === i);
-  let lastError: unknown = null;
-  for (const model of chain) {
-    try {
-      const res = await env.AI.run(model as never, {
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
-        ],
-        max_tokens: maxTokens,
-      });
-      const text = ((res as AiTextOut).response ?? '').trim();
-      // 兜底模型写的是长期记忆：格式不对就当作失败——宁可空一天，别写错一天
-      if (text && looksLikeMemoryLines(text)) {
-        if (model !== chain[0]) logWarn('[distill] 强模型不可用，已退回 ' + model);
-        return text;
-      }
-      lastError = new Error(model + (text ? ' 输出不是记忆条目格式' : ' 返回空内容'));
-      continue;
-      lastError = new Error(model + ' 返回空内容');
-    } catch (e) {
-      lastError = e;
-      logWarn('[distill] Workers AI ' + model + ' 调用失败：', e);
-    }
-  }
-  throw lastError ?? new Error('Workers AI 兜底全部失败');
-}
-
-/**
- * 提炼/压缩公共入口：DeepSeek 优先（费用返回），失败（欠费/限流/网络）自动回退 Workers AI（免费）。
- * 每日提炼、memory 压缩、当日滚动摘要共用；deepseekModel 决定质量/成本档位。
+ * 兜底不再用 Workers AI，而是**换个官方供应商**：llmTargets 已经把
+ * 主供应商（千问）+ 另一家（DeepSeek）串好了，两家都是能写好中文的正经模型；
+ * Workers AI 的小模型只会把记忆写脏。
+ * 两家都挂就返回 backend='none'，日期进待补清单，下次归档再补。
  */
 export async function distillText(
   env: Env,
@@ -251,16 +212,11 @@ export async function distillText(
     const { text, cost, usage } = await deepseekDistill(env, system, user, maxTokens, opts);
     return { text: normalizeMemoryDates(text), cost, backend: 'deepseek', usage };
   } catch (e) {
-    logWarn('[distill] DeepSeek 失败，回退 Workers AI：', e);
+    logWarn('[distill] 主供应商失败（已尝试备家）：', e);
   }
-  try {
-    const text = await workersAiDistill(env, system, user, maxTokens);
-    return { text, cost: 0, backend: 'workers-ai' };
-  } catch (e) {
-    // 全部挂了：不写记忆、标成待补，下一次归档再补这一天（见 markDistillPending）
-    logError('[distill] 兜底模型也失败，今天不写记忆：', e);
-    return { text: '', cost: 0, backend: 'none' };
-  }
+  // 两家官方供应商都挂了：不写记忆、标成待补，下一次归档再补这一天（见 markDistillPending）
+  logError('[distill] 主备供应商都失败，今天不写记忆');
+  return { text: '', cost: 0, backend: 'none' };
 }
 
 /** 提炼当天对话 → 结构化记忆条目（输入包含 memory.md 全文；默认 v4-pro 质量档；失败回退 Workers AI）。 */
@@ -359,7 +315,7 @@ ${body}
       });
       texts.push(r.text.trim());
       cost += r.cost;
-      if (r.backend === 'workers-ai') backend = 'workers-ai';
+      if (r.backend === 'none') backend = 'none';
       if (r.usage) {
         usage = {
           prompt_cache_hit_tokens: (usage?.prompt_cache_hit_tokens ?? 0) + r.usage.prompt_cache_hit_tokens,

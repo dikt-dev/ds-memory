@@ -408,7 +408,7 @@ export async function archiveOneDay(
           distillUsage.miss += summary.usage.prompt_cache_miss_tokens ?? 0;
           distillUsage.out += summary.usage.completion_tokens ?? 0;
         }
-        if (summary.backend === 'workers-ai') usedFallback = true;
+        if (summary.backend === 'none') usedFallback = true;
         // 把当天提炼结果写进 context/{date}.json（方便回溯当天要点；失败不影响归档）
         if (summary.text.trim()) {
           try {
