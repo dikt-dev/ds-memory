@@ -27,6 +27,23 @@ describe('情感事件抽取调优', () => {
     expect(extractEmotionEvents('回滚演练：在吗', T0)).toEqual([]);
   });
 
+  it('视频字幕/弹幕不算他说的话（2026-11-11 真实事故）', () => {
+    // 那条 B 站消息的画面过程里逐字写着这些，她凭空背了半天 45 分委屈
+    const withVideo = [
+      'https://b23.tv/FujQAYf',
+      '[BILI_META]',
+      '## 画面过程（按时间）',
+      '0:24 我说好的',
+      '0:41 还是他找到更聪明的AI了',
+      '大白龙表情无语',
+      '[/BILI_META]',
+    ].join('\n');
+    expect(extractEmotionEvents(withVideo, T0)).toEqual([]);
+    // 他在块外的原话照常抽
+    expect(extractEmotionEvents('你看完了吗 对不起我错了' + '\n[BILI_META]\n0:24 我说好的\n[/BILI_META]', T0)
+      .some((e) => e.type === 'apology')).toBe(true);
+  });
+
   it('真的说「滚」仍然是 insult', () => {
     expect(extractEmotionEvents('滚', T0).some((e) => e.type === 'insult')).toBe(true);
   });

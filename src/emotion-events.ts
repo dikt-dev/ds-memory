@@ -287,8 +287,24 @@ function softenPlayfulInsult(text: string, events: EmotionEvent[]): EmotionEvent
  * @param at   epoch 毫秒
  * @param target 这些话说的是谁（默认用户本人在说）
  */
+/**
+ * 引用块里的句子不是他说的（2026-11-11）。
+ *
+ * 实测事故：B 站那条 [BILI_META] 里的画面过程（视频字幕、弹幕、梗图配文）
+ * 被当成他的原话喂进抽取——「0:24 我说好的」被记成 broken_promise 3、
+ * 「大白龙表情无语」被记成 insult、「还是他找到更聪明的AI了」被记成 praise。
+ * 结果她凭空背着 45 分委屈过了半天。
+ */
+const QUOTED_MEDIA_RE = /\[BILI_META\][\s\S]*?(?:\[\/BILI_META\]|$)/gi;
+
+export function stripQuotedMedia(text: string): string {
+  return (text ?? '')
+    .replace(QUOTED_MEDIA_RE, ' ')
+    .replace(/##\s*画面过程[\s\S]*$/, ' ');
+}
+
 export function extractEmotionEvents(text: string, at: number, target: EventTarget = 'user'): EmotionEvent[] {
-  const trimmed = (text ?? '').trim();
+  const trimmed = stripQuotedMedia(text).trim();
   if (!trimmed) return [];
 
   const events: EmotionEvent[] = [];
@@ -641,7 +657,7 @@ function normalizeLabel(raw: string): EmotionEventType | null {
  * 不是「必须」；AI 挂了情感系统照样跑。
  */
 export async function reviewEventsWithAI(env: Env, text: string, at: number): Promise<EmotionEvent[]> {
-  const t = (text ?? '').trim();
+  const t = stripQuotedMedia(text).trim();
   if (!t) return [];
   try {
     const res = await env.AI.run(env.DISTILL_MODEL, {
