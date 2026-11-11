@@ -56,9 +56,9 @@ describe('buildVoiceDirective —— 指向人设，同时给四条机械约束'
     }
   });
 
-  it('体积控制在 1800 字节内（不是一张清单）', () => {
+  it('体积控制在 2700 字节内（不是一张清单；11-11 加三条活力许可后 2316）', () => {
     const bytes = new TextEncoder().encode(buildVoiceDirective(900)).length;
-    expect(bytes).toBeLessThan(2100);
+    expect(bytes).toBeLessThan(2700);
   });
 });
 
@@ -166,24 +166,25 @@ describe('读意图与翻篇（2026-11-09 14:45 那次误读驱动的四条规�
 describe('括号动作疲劳（2026-11-09：67/68、23/23 每条都带动作）', () => {
   const withAction = (n: number) => Array.from({ length: n }, (_, i) => '（尾巴拍了下地板）第' + i + '句');
 
-  it('最近 6 条每条都带括号，就提醒（2026-11-10：改成按比例）', () => {
-    expect(actionDensityNote(withAction(6))).toContain('括号动作');
+  it('最近 8 条每条都带括号，就提醒（2026-11-11：窗口 6→8）', () => {
+    expect(actionDensityNote(withAction(8))).toContain('括号动作');
   });
 
-  it('4/6 就提醒（以前要 6/6，实际密度 91% 时等于每轮都响）', () => {
-    expect(actionDensityNote([...withAction(4), '就说人话', '好'])).toContain('括号动作');
+  it('6/8 才提醒（4/6 不再响：原来几乎每三轮就压她一次外化）', () => {
+    expect(actionDensityNote([...withAction(6), '就说人话', '好'])).toContain('括号动作');
+    expect(actionDensityNote([...withAction(4), '就说人话', '好', '行', '嗯'])).toBeNull();
   });
 
-  it('3/6 不提醒：正常用法不按掉', () => {
-    expect(actionDensityNote([...withAction(3), '就说人话', '好', '行'])).toBeNull();
+  it('3/8 不提醒：正常用法不按掉', () => {
+    expect(actionDensityNote([...withAction(3), '就说人话', '好', '行', '嗯', '哦'])).toBeNull();
   });
 
-  it('不足 6 条不下结论', () => {
+  it('不足 8 条不下结论', () => {
     expect(actionDensityNote(withAction(3))).toBeNull();
   });
 
   it('空串不算带动作', () => {
-    expect(actionDensityNote([...withAction(5), '  '])).toBeNull();
+    expect(actionDensityNote([...withAction(7), '  '])).toBeNull();
   });
 });
 
@@ -233,11 +234,11 @@ describe('VOICE_MODE 三档（2026-11-10）', () => {
     expect(voiceModeOf({ VOICE_MODE: 'Bare' })).toBe('bare');
   });
 
-  it('三档条数：full 15 / lite 9 / bare 4（另有 2 条挪到易变段末尾）', () => {
+  it('三档条数：full 18 / lite 12 / bare 4（另有 2 条挪到易变段末尾）', () => {
     const countOf = (m: 'bare' | 'lite' | 'full') =>
       buildVoiceDirective(600, m).split('\n').filter((l) => l.startsWith('- ')).length;
-    expect(countOf('full')).toBe(15);
-    expect(countOf('lite')).toBe(9);
+    expect(countOf('full')).toBe(18);
+    expect(countOf('lite')).toBe(12);
     expect(countOf('bare')).toBe(4);
   });
 

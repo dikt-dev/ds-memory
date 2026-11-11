@@ -228,6 +228,13 @@ export function buildVoiceDirective(intimacy: number, mode: VoiceMode = 'full'):
     [0, '- 说的是你自己：说「我有点困了」「我手上还沾着面粉」，比「这个点人容易犯困」更像你在说话。'],
     // 动作密度：25 条回复 20 条带括号动作，像剧本
     [1, '- 括号里放一个小动作；不用每条都写，连着几条都是（把抹布搭回桶边），听着像剧本不像聊天。'],
+    // 活力引擎（2026-11-11）：上面全是「别这样」，她会越走越稳、越稳越死。
+    // 三条正向许可：主动进攻、该长就长、情绪外放——括号动作不是唯一出口。
+    // 实测位置很重要：放「说话」段里（这里）比放易变段末尾强一倍（长回复 3% vs 0%、情绪外放 20% vs 3%）。
+    [1, '- 每五六轮里至少有一句是你主动挑起来的：反问、赌气、提要求、翻旧账、损他一句。只接话的你会像个客服。'],
+    [1, '- 他踩到你的点——拿你去跟外人比、忘了说好的事、敷衍你——一段说完就再说两段：质问他、跟他算账、再问他一句。长不是罪，平才是。'],
+    [1, '- 情绪先出声，再动手：连问三句、直接喊他名字、赌气不说话、故意说反话；用「！」「～」「……」调音量，比多写一个括号动作更像在说话。'],
+
     [1, '- 他不是来讨建议的：先接一句，再说你自己的看法；劝多了像家长。'],
     [0, '- 「本小姐」留给生气、得意、嘴硬的时候；平时说「我」。'],
   ];
@@ -251,7 +258,7 @@ function floorOf(mode: VoiceMode): number {
  * 紧贴用户这句话。三档都保留——它们是「说话方式的地板」，不是行为补丁。
  */
 export const VOICE_TAIL: readonly string[] = [
-  '- 长短由你：一句「嗯」「真的假的」也是回话；想说的多就多说，不用每条都凑成完整一段。',
+  '- 长短由你：一句「嗯」「真的假的」也算回话；但他踩到你的事，一段不够就三段——别把该说的压成一句。',
   '- 上一句说过的话、说过的进度，换个说法；同一件事聊够三轮还没完，就换个事：说你自己的、把这事收个尾，或者问他一件新的事。',
 ];
 
@@ -283,7 +290,8 @@ export function recentPhrases(texts: string[], limit = 120, top = 6): string[] {
     }
   }
   const ranked = [...counts.entries()]
-    .filter(([, n]) => n >= 2)
+    // 2026-11-11：≥2 就提醒等于不许有口头禅；同一句用到第 3 次才算真的重复
+    .filter(([, n]) => n >= 3)
     .sort((a, b) => b[1] - a[1] || b[0].length - a[0].length);
   const out: string[] = [];
   for (const [w, n] of ranked) {
@@ -325,14 +333,16 @@ export function comfortNote(userText: string): string | null {
  * 为什么要代码数：人设写了「平常说话不加括号」，实测 11-08 是 67/68、11-09 是 23/23——
  * 每条都是「（一个动作）+ 一句话」，读起来像舞台提示，不像在跟你说话（2026-11-09）。
  */
-export function actionDensityNote(recent: string[], window = 6): string | null {
+export function actionDensityNote(recent: string[], window = 8): string | null {
   const slice = recent.slice(-window).filter((t) => (t ?? '').trim());
   if (slice.length < window) return null;
   // 2026-11-10：原来是「最近 6 条**全部**带括号」才提醒，实测密度 91% 时几乎每轮都响，
   // 提醒本身变成了背景噪声。改成 4/6 就提醒，且措辞不再要求「去掉」，只说换一种。
   const hits = slice.filter((t) => /[（(]/.test(t)).length;
+  // 2026-11-11：6/8 才提醒（原来 4/6 几乎每三轮响一次，等于持续压低她的外化）。
+  // 而且不再要求「别写动作」——让她换个出口（语气、反问、赌气），动作本身不是问题。
   if (hits < window - 2) return null;
-  return `最近 ${slice.length} 条里有 ${hits} 条你都写了括号动作。这一条直接开口说话，也可以留一个动作。`;
+  return `最近 ${slice.length} 条里有 ${hits} 条带括号动作。这一条换个方式把情绪放出来：语气、反问、赌气，也可以留一个动作。`;
 }
 
 /**
