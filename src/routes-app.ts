@@ -479,7 +479,7 @@ app.post('/api/app/pair', async (c) => {
    */
   app.post('/api/app/bili-vision', requireApp, async (c) => {
     const body = (await c.req.json().catch(() => null)) as
-      | { direct?: string; title?: string; duration?: number; cacheKey?: string }
+      | { direct?: string; title?: string; duration?: number; cacheKey?: string; bvid?: string; cid?: number }
       | null;
     // 机房 IP 拉 B 站接口会被 412，所以直链由手机端取好传上来，服务端只负责交给模型。
     const direct = (body?.direct ?? '').trim();
@@ -505,6 +505,9 @@ app.post('/api/app/pair', async (c) => {
         title: (body?.title ?? '').slice(0, 120),
         duration: Number(body?.duration ?? 0) || 0,
         cacheKey: (body?.cacheKey ?? '').slice(0, 120),
+        // 手机端带 Cookie 常拿到 PCDN 直链；兜底要靠这两个字段自己再要一条
+        bvid: (body?.bvid ?? '').slice(0, 20),
+        cid: Number(body?.cid ?? 0) || 0,
       }, castHint);
       if (!v) return c.json({ ok: false, error: '拿不到直链或模型失败' }, 502);
       // 留一份直链：他之后说「再看一眼」时，服务端要靠它重看（直链约两小时有效）

@@ -987,7 +987,7 @@ openaiApp.post('/chat/completions', async (c) => {
     !skipRecording &&
     contentToStore &&
     !contentToStore.includes('[BILI_META]') &&
-    /bilibili\.com\/video\//i.test(contentToStore)
+    /bilibili\.com\/video\/|b23\.tv\//i.test(contentToStore)
   ) {
     const biliUrl = findBiliUrl(contentToStore);
     if (biliUrl) {

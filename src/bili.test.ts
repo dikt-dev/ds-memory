@@ -7,8 +7,9 @@ describe('findBiliUrl', () => {
       'https://www.bilibili.com/video/BV1xx411c7mD',
     );
   });
-  it('短链/非视频页不认', () => {
-    expect(findBiliUrl('https://b23.tv/abc')).toBe(null);
+  it('短链认（2026-11-10 起），非视频页仍不认', () => {
+    // 分享出来的一般都是 b23.tv 短链，原来一个都补不上元数据
+    expect(findBiliUrl('【分享】 https://b23.tv/FujQAYf 看看这个')).toBe('https://b23.tv/FujQAYf');
     expect(findBiliUrl('https://space.bilibili.com/123')).toBe(null);
   });
 });

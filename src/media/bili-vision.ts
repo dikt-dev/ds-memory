@@ -89,7 +89,7 @@ export interface BiliVision {
  */
 export async function biliVisionDirect(
   env: { DASHSCOPE_API_KEY?: string; DASHSCOPE_VL_MODEL?: string; KV: KVNamespace },
-  input: { direct: string; title?: string; duration?: number; cacheKey?: string },
+  input: { direct: string; title?: string; duration?: number; cacheKey?: string; bvid?: string; cid?: number },
   castHint?: string,
 ): Promise<BiliVision | null> {
   if (!env.DASHSCOPE_API_KEY) return null;
@@ -100,17 +100,30 @@ export async function biliVisionDirect(
       return { title: input.title ?? '', duration: input.duration ?? 0, text: hit, ms: 0, cached: true };
     }
   }
-  // ★ 手机端用 qn=64 取直链时，B 站会返回 PCDN edge 节点（*.edge.mountaintoys.cn），
+  // ★ 手机端带 Cookie 取直链时，B 站会返回 PCDN 节点（*.solseed.cn / *.edge.mountaintoys.cn），
   //   千问 omni 拉不动，800ms 就报 "Failed to download multimodal content"。
-  //   直接判掉并留下原因，别再静默退回雪碧图（2026-11-06）。
-  const host = (() => { try { return new URL(input.direct).host; } catch { return ''; } })();
-  const isCdn = /\.bilivideo\.com$/.test(host) || /\.hdslb\.com$/.test(host);
-  if (!isCdn) {
-    await env.KV.put('bili:vision:last_error', JSON.stringify({ at: Date.now(), error: 'PCDN 直链模型拉不到', host }), { expirationTtl: 7 * 86400 }).catch(() => {});
-    throw new Error('PCDN 直链模型拉不到：' + host);
+  //   2026-11-10：不再直接判死——先让服务端自己按 html5 参数再要一条直链（那条一般落在
+  //   *.bilivideo.com），拿到就继续；实在拿不到才记错误返回。
+  const isCdnHost = (u: string) => {
+    const h = (() => { try { return new URL(u).host; } catch { return ''; } })();
+    return /\.bilivideo\.com$/.test(h) || /\.hdslb\.com$/.test(h);
+  };
+  let direct = input.direct;
+  if (!isCdnHost(direct)) {
+    const host = (() => { try { return new URL(direct).host; } catch { return ''; } })();
+    const bvid = (input.bvid ?? '').trim() || /\/video\/(BV[0-9A-Za-z]{10}|av\d+)/i.exec(input.cacheKey ?? '')?.[1] || '';
+    const cid = Number(input.cid ?? 0) || 0;
+    const fallback = bvid && cid > 0 ? await directUrl(bvid, cid).catch(() => null) : null;
+    if (fallback && isCdnHost(fallback)) {
+      direct = fallback;
+      await env.KV.put('bili:vision:fallback', JSON.stringify({ at: Date.now(), from: host, to: new URL(fallback).host }), { expirationTtl: 7 * 86400 }).catch(() => {});
+    } else {
+      await env.KV.put('bili:vision:last_error', JSON.stringify({ at: Date.now(), error: 'PCDN 直链模型拉不到，兜底也失败', host, bvid, cid }), { expirationTtl: 7 * 86400 }).catch(() => {});
+      throw new Error('PCDN 直链模型拉不到：' + host);
+    }
   }
   try {
-    const obs = await lookAtVideo(env, input.direct, {
+    const obs = await lookAtVideo(env, direct, {
       prompt: [
         PROMPT,
         castHint
@@ -133,6 +146,7 @@ export async function biliVisionDirect(
       cached: obs.cached,
     };
   } catch (e) {
+    const host = (() => { try { return new URL(direct).host; } catch { return ''; } })();
     await env.KV.put('bili:vision:last_error', JSON.stringify({ at: Date.now(), error: String(e).slice(0, 300), host }), { expirationTtl: 7 * 86400 }).catch(() => {});
     return null;
   }

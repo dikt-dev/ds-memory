@@ -16,13 +16,34 @@ export interface BiliMeta {
 }
 
 const BILI_URL_RE = /https?:\/\/(?:www\.)?bilibili\.com\/video\/(BV[0-9A-Za-z]{10}|av\d+)/i;
+/** App 和网页「分享」出来的基本都是短链：b23.tv/xxxxx（2026-11-10 补）。 */
+const BILI_SHORT_RE = /https?:\/\/b23\.tv\/[0-9A-Za-z]+/i;
 
-/** 从文本里找 B 站视频链接；找不到返回 null。 */
+/** 从文本里找 B 站视频链接；找不到返回 null。短链原样返回，由 fetchBiliMeta 去解析。 */
 export function findBiliUrl(text: string): string | null {
   const m = BILI_URL_RE.exec(text);
-  if (!m) return null;
-  // 统一成规范 URL：分享文案里常带 ?spm_id_from 之类的尾巴，留着没用
-  return `https://www.bilibili.com/video/${m[1]}`;
+  if (m) {
+    // 统一成规范 URL：分享文案里常带 ?spm_id_from 之类的尾巴，留着没用
+    return `https://www.bilibili.com/video/${m[1]}`;
+  }
+  return BILI_SHORT_RE.exec(text)?.[0] ?? null;
+}
+
+const UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36';
+
+/** 短链跟一次跳转，换成带 BV 号的规范地址；失败返回 null。 */
+async function resolveShortLink(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, {
+      redirect: 'follow',
+      headers: { 'user-agent': UA },
+    } as unknown as RequestInit);
+    const m = /\/video\/(BV[0-9A-Za-z]{10}|av\d+)/i.exec(res.url || '');
+    return m ? `https://www.bilibili.com/video/${m[1]}` : null;
+  } catch {
+    return null;
+  }
 }
 
 function formatDuration(seconds: number): string {
@@ -61,7 +82,10 @@ export function formatBiliMeta(meta: BiliMeta, url: string): string {
  * 但标题、UP 主、时长、封面、简介足够撑起一张卡片。
  */
 export async function fetchBiliMeta(url: string): Promise<BiliMeta | null> {
-  const m = /\/video\/(BV[0-9A-Za-z]{10}|av\d+)/i.exec(url);
+  // 短链（b23.tv）先解析成规范地址，否则拿不到 BV 号
+  const resolved = /\/video\/(BV[0-9A-Za-z]{10}|av\d+)/i.test(url) ? url : await resolveShortLink(url);
+  if (!resolved) return null;
+  const m = /\/video\/(BV[0-9A-Za-z]{10}|av\d+)/i.exec(resolved);
   if (!m) return null;
   const id = m[1];
   const api = id.toLowerCase().startsWith('av')
