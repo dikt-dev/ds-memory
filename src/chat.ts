@@ -271,6 +271,12 @@ export async function streamChat(
   const hourForCard = beijingHour(now);
 
   // ★ 情感系统：事件 → 情绪向量 → 5 轴微增量 → 情绪快照（先算，后面的状态卡要用它派生心情）
+  // 判定 AI 需要知道谁在说话：只给它「他/你」交替的最近两轮，**不含**当前这句（函数自己会拼）
+  const judgeContext = history
+    .filter((m) => m.content !== content)
+    .slice(-4)
+    .map((m) => (m.role === 'user' ? '他：' : '你：') + m.content.replace(/\s+/g, ' ').slice(0, 120))
+    .join('\n');
   const emotion = await processEmotionTurn({
     env,
     now: now.getTime(),
@@ -285,6 +291,7 @@ export async function streamChat(
     wasIgnored: facts.wasIgnored,
     // 只在规则判出负向事件时才会真的调 AI（见 processEmotionTurn）
     allowAiReview: true,
+    judgeContext,
   // share_pain 也要复核：词典把问句和转述也记成「他在诉苦」，生效后她会莫名其妙心疼
   reviewSharePain: true,
   });

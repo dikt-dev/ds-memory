@@ -14,7 +14,7 @@
  */
 
 export type LlmVendor = 'deepseek' | 'dashscope';
-export type LlmKind = 'chat' | 'distill' | 'summary' | 'diary';
+export type LlmKind = 'chat' | 'distill' | 'summary' | 'diary' | 'judge';
 
 export interface LlmTarget {
   vendor: LlmVendor;
@@ -49,6 +49,10 @@ interface LlmEnv {
   LLM_DIARY_BASE_URL?: string;
   LLM_DIARY_API_KEY?: string;
   LLM_DIARY_MODEL?: string;
+  LLM_JUDGE_PROVIDER?: string;
+  LLM_JUDGE_BASE_URL?: string;
+  LLM_JUDGE_API_KEY?: string;
+  LLM_JUDGE_MODEL?: string;
   LLM_FALLBACK_PROVIDER?: string;
   LLM_FALLBACK_BASE_URL?: string;
   LLM_FALLBACK_API_KEY?: string;
@@ -65,6 +69,7 @@ const KIND_KEY: Record<LlmKind, string> = {
   distill: 'DISTILL',
   summary: 'SUMMARY',
   diary: 'DIARY',
+  judge: 'JUDGE',
 };
 
 function str(v: unknown): string | undefined {
@@ -84,6 +89,9 @@ function defaultModel(env: LlmEnv, kind: LlmKind): string {
       return str(env.LLM_DISTILL_MODEL) || env.DISTILL_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL;
     case 'summary':
       return str(env.LLM_SUMMARY_MODEL) || env.SUMMARY_DEEPSEEK_MODEL || env.DEEPSEEK_MODEL;
+    case 'judge':
+      // 情绪判定是「判断题」：要读懂反讽、问句、转述，模型太小会一律答 none
+      return str(env.LLM_JUDGE_MODEL) || str(env.LLM_DISTILL_MODEL) || env.DEEPSEEK_MODEL;
     default:
       return env.DEEPSEEK_MODEL;
   }

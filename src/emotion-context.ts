@@ -192,6 +192,8 @@ export interface EmotionTurnInput {
   reviewEmpty?: boolean;
   /** share_pain 也送 AI 复核（2026-11-11：词典把问句、转述都记成他在诉苦） */
   reviewSharePain?: boolean;
+  /** 最近几轮（带「他：」「你：」标签）给判定 AI 当上下文 */
+  judgeContext?: string;
   /** 只算不记账：探针/回归（record=false）用，避免同一条测试语料反复给关系加分 */
   noPersist?: boolean;
 }
@@ -269,11 +271,12 @@ async function processEmotionTurnUnlocked(
   // 规则判出负向事件时也要复核：误判成「真生气」的代价不对称——
   // 她会对一句玩笑莫名其妙发火；反过来漏判只是没反应，代价小得多。
   const hasNegative = newEvents.some((e) => isNegativeEvent(e.type));
-  const hasSharePain = newEvents.some((e) => e.type === 'share_pain');
+  // 只复核 2 级以上诉苦：「有点累」这种 1 级不值得多等一次模型
+  const hasSharePain = newEvents.some((e) => e.type === 'share_pain' && e.intensity >= 2);
   const reviewPain = input.reviewSharePain === true && hasSharePain;
   if (input.allowAiReview && (userText ?? "").trim() && (hasNegative || reviewPain || input.reviewEmpty === true)) {
     try {
-      const aiEvents = await reviewEventsWithAI(input.env, userText, now);
+      const aiEvents = await reviewEventsWithAI(input.env, userText, now, input.judgeContext ?? '');
       if (hasNegative) {
         const aiHasNegative = aiEvents.some((e) => isNegativeEvent(e.type));
         if (aiHasNegative) {
@@ -496,19 +499,25 @@ export async function saveEmotionHistory(
  */
 export async function reviewDayEvents(
   env: Env,
-  texts: string[],
+  msgs: Array<{ role: string; content: string }>,
   at: number,
 ): Promise<EmotionEvent[]> {
   const out: EmotionEvent[] = [];
   let calls = 0;
-  for (const text of texts) {
+  for (let i = 0; i < msgs.length; i += 1) {
     if (calls >= 40) break;
-    const t = (text ?? '').trim();
+    if (msgs[i].role !== 'user') continue; // 只判他说的话
+    const t = (msgs[i].content ?? '').trim();
     if (t.length < 4) continue;
     const rule = extractEmotionEvents(t, at);
     if (!needsAiEventReview(t, rule)) continue;
+    // 带上前后两轮：判定 AI 需要知道「你：」里的台词不是他说的
+    const ctx = msgs
+      .slice(Math.max(0, i - 4), i)
+      .map((m) => (m.role === 'user' ? '他：' : '你：') + m.content.replace(/\s+/g, ' ').slice(0, 100))
+      .join('\n');
     calls += 1;
-    const ai = await reviewEventsWithAI(env, t, at);
+    const ai = await reviewEventsWithAI(env, t, at, ctx);
     for (const e of ai) out.push({ ...e, evidence: t.slice(0, 80) });
   }
   return out;

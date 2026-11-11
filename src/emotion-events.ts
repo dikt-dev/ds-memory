@@ -22,6 +22,8 @@
 import type { Env } from './types';
 import { EMOTION_MAX_STEP_PER_TURN, applyEmotionDelta, type EmotionVector } from './emotion-vector';
 import { logError, logWarn } from './error-log';
+import { logTrace } from './trace';
+import { buildBody, llmTargets } from './llm';
 
 export type EmotionEventType =
   | 'praise'
@@ -634,12 +636,18 @@ export function needsAiEventReview(text: string, events: EmotionEvent[]): boolea
 }
 
 /** AI 复核的系统提示词：要求只输出事件列表。 */
-const EVENT_VERIFY_SYSTEM = `你是情感分析器。阅读用户这句话，判断其中真实存在的情感事件。
-只输出事件，用英文逗号分隔，每个格式为「类型:强度」，强度 1-3。没有就输出 none。
-可用类型：praise(夸对方) thanks(感谢) apology(道歉) affection(表达喜欢/想念) insult(侮辱/贬低)
-rejection(拒绝话题) broken_promise(对方爽约/失信) share_joy(分享开心) share_pain(倾诉难过)
-deep_talk(交心/说心里话) tease(玩笑式损人) complaint(抱怨对方)
-注意否定与反讽，以最终真实情绪为准。不要解释。`;
+const EVENT_VERIFY_SYSTEM = `你在判断一段聊天里「他」最后这句话真实存在的情感事件。
+
+只判最后一行「他：」。前面标着「你：」的是她自己之前说的话，不是他说的，不要从里面抽事件。
+引号里的、以时间轴开头的（0:24 / 50秒）、[资料]/[BILI_META] 开头的内容都是引用别处的材料，不算他说的话。
+问句（问我、确认、反问）和请求（让我做事）不是情绪事件。
+反讽按反讽算：「你可真行」「真厉害啊」是挖苦，不是夸奖。
+
+只输出一行：类型:强度，多个用英文逗号分隔，强度 1-3；没有就输出 none。
+可选类型：praise thanks apology affection insult rejection broken_promise share_joy
+share_pain deep_talk tease complaint
+
+不要解释。`;
 
 /** 事件标签 → 中文类型（AI 输出容错）。 */
 export function parseAiEventLabels(raw: string, at: number): EmotionEvent[] {
@@ -693,14 +701,34 @@ function normalizeLabel(raw: string): EmotionEventType | null {
  * 失败时返回空数组，由调用方回退到词典结果——这条链路上 AI 永远是「补充」，
  * 不是「必须」；AI 挂了情感系统照样跑。
  */
-export async function reviewEventsWithAI(env: Env, text: string, at: number): Promise<EmotionEvent[]> {
+export async function reviewEventsWithAI(
+  env: Env,
+  text: string,
+  at: number,
+  /** 最近两三轮，带「他：」「你：」标签；没有就只判这一句 */
+  context = '',
+): Promise<EmotionEvent[]> {
   const t = stripQuotedMedia(text).trim();
   if (!t) return [];
+  const userContent = context.trim()
+    ? context.trim() + '\n他：' + t.slice(-500)
+    : t.slice(-500);
+
+  // ① 主办方模型（LLM_JUDGE_MODEL，默认跟提炼一样的千问大模型）：
+  //    3B 的 llama 读不懂反讽、问句和转述，判出来的结果和词典差不多。
+  try {
+    const raw = await judgeWithLlm(env, userContent);
+    if (raw) return parseAiEventLabels(raw, at);
+  } catch (e) {
+    logWarn('[emotion-events] 主办方复核失败，退回 Workers AI：', e);
+  }
+
+  // ② 兜底：Workers AI 小模型（原来的路径，判不准但不会让链路断）
   try {
     const res = await env.AI.run(env.DISTILL_MODEL, {
       messages: [
         { role: 'system', content: EVENT_VERIFY_SYSTEM },
-        { role: 'user', content: t.slice(-500) },
+        { role: 'user', content: userContent },
       ],
       max_tokens: 24,
       temperature: 0.1,
@@ -711,4 +739,38 @@ export async function reviewEventsWithAI(env: Env, text: string, at: number): Pr
     logWarn('[emotion-events] Workers AI 复核失败，回退词典结果：', e);
     return [];
   }
+}
+
+/** 调主办方模型做一次判定；没有任何 key 时返回空串，让调用方走兜底。 */
+async function judgeWithLlm(env: Env, userContent: string): Promise<string> {
+  const targets = llmTargets(env as never, 'judge');
+  for (const target of targets) {
+    if (!target.apiKey) continue;
+    const res = await fetch(target.url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${target.apiKey}` },
+      body: JSON.stringify(
+        buildBody(
+          target,
+          [
+            { role: 'system', content: EVENT_VERIFY_SYSTEM },
+            { role: 'user', content: userContent },
+          ],
+          // 只要一行判定，关思考；温度 0 保证同一句判得一样
+          { maxTokens: 40, thinking: false, temperature: 0 },
+        ),
+      ),
+    });
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => {});
+      continue;
+    }
+    const data = (await res.json()) as { choices?: { message?: { content?: unknown } }[] };
+    const content = data.choices?.[0]?.message?.content;
+    if (typeof content === 'string' && content.trim()) {
+      logTrace('emotion.judge', { msg: 'model=' + target.model + ' → ' + content.trim().slice(0, 40) });
+      return content;
+    }
+  }
+  return '';
 }

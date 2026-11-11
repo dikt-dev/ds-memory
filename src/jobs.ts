@@ -391,8 +391,8 @@ export async function archiveOneDay(
     try {
       const emotionState = await loadEmotionState(env, now.getTime());
       // Workers AI 只复核当天「有歧义」的消息（单日最多 8 条），补词典漏检
-      const dayUserTexts = rows.filter((r) => r.role === 'user').map((r) => r.content);
-      const extraEvents = await reviewDayEvents(env, dayUserTexts, now.getTime());
+      // 传整天的消息而不是只传他的话：判定 AI 要看到「你这句」才知道哪些不是他说的
+      const extraEvents = await reviewDayEvents(env, rows, now.getTime());
 
       let vector = emotionState.vector;
       const facetAccum: FacetAccum = { ...emotionState.facetDelta };
