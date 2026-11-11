@@ -222,7 +222,7 @@ function isNegatedAt(text: string, word: string): boolean {
  * 被记成强度 3 的侮辱，一次 +24 委屈——她记的其实是你的技术文档。
  */
 const COMPOUND_PREFIX: Record<string, Set<string>> = {
-  滚: new Set(['回', '翻', '打', '电', '滚']),
+  滚: new Set(['回', '翻', '打', '电', '滚', '摇']),
   蠢: new Set(['愚']),
 };
 
@@ -240,6 +240,40 @@ function isCompoundWord(text: string, word: string): boolean {
     }
     return false;
   }
+}
+
+/**
+ * 问句：他在问我，不是在陈述自己（2026-11-11）。
+ *
+ * 线上 33 条 share_pain 全部来自同一句「我最近在焦虑什么」——他在问我，
+ * 被词典的「焦虑」记成他天天在诉苦，然后她天天心疼一个不存在的事。
+ */
+const QUESTION_TAIL = /(什么|啥|吗|么|呢|几|哪|谁|多少|怎么|如何|是不是|有没有|对不对)[\s。！!~～]*$/;
+
+/** 问句里不成立的事件类型：这些词出现在问句里是「话题」不是「状态」。 */
+const QUESTION_SILENT: EmotionEventType[] = ['share_pain', 'share_joy', 'praise', 'deep_talk'];
+
+export function isQuestionText(text: string): boolean {
+  const t = (text ?? '').trim();
+  if (!t) return false;
+  if (/[？?]/.test(t)) return true;
+  // 只看最后一个分句：前面可能在说事，末尾才是提问
+  const last = t.split(/[。！!；;\n]/).filter((s) => s.trim()).pop() ?? t;
+  return QUESTION_TAIL.test(last);
+}
+
+/**
+ * 「没用我也要抱」里的「没用」是在说自己没用，不是骂她（2026-11-11 线上误判）。
+ * 判据：这个词后面紧跟第一人称/让步词，或前面两字里没有「你」。
+ */
+function isSelfDeprecating(text: string, word: string): boolean {
+  if (word !== '没用') return false;
+  const idx = text.indexOf(word);
+  if (idx === -1) return false;
+  const after = text.slice(idx + word.length, idx + word.length + 1);
+  const before = text.slice(Math.max(0, idx - 2), idx);
+  if (after && '我他它也都还就'.includes(after)) return true;
+  return !/你|他妈/.test(before);
 }
 
 /**「积累了不少经验」里的「累了」不是情绪，要排除。 */
@@ -309,10 +343,12 @@ export function extractEmotionEvents(text: string, at: number, target: EventTarg
 
   const events: EmotionEvent[] = [];
   const seen = new Set<EmotionEventType>();
+  const question = isQuestionText(trimmed);
 
   for (const rule of RULES) {
     if (events.length >= MAX_EVENTS_PER_MESSAGE) break;
     if (seen.has(rule.type)) continue;
+    if (question && QUESTION_SILENT.includes(rule.type)) continue;
 
     for (const word of rule.words) {
       if (!trimmed.includes(word)) continue;
@@ -320,6 +356,7 @@ export function extractEmotionEvents(text: string, at: number, target: EventTarg
       if (!rule.strong && isNegatedAt(trimmed, word)) continue;
       if (isLeiCompound(trimmed, word)) continue;
       if (isCompoundWord(trimmed, word)) continue;
+      if (isSelfDeprecating(trimmed, word)) continue;
 
       // 命令要过"这不是求她"这一关，否则委屈就会为一句撒娇买单
       if (rule.type === 'command' && !isRealCommand(trimmed)) continue;
@@ -340,7 +377,7 @@ export function extractEmotionEvents(text: string, at: number, target: EventTarg
 
   // 「被领导当众骂了一顿」这类：关键词表按连续子串匹配，中间隔字就漏。
   // 被动式 + 负面动词单独补一层，否则他真的受挫时她毫无反应。
-  if (events.length < MAX_EVENTS_PER_MESSAGE && !seen.has('share_pain')) {
+  if (events.length < MAX_EVENTS_PER_MESSAGE && !seen.has('share_pain') && !question) {
     const passive = /被[^，。！？,.!?\s]{0,6}(骂|批|批评|怼|嘲|罚|投诉|扣钱|开除)/.exec(trimmed);
     if (passive) {
       seen.add('share_pain');

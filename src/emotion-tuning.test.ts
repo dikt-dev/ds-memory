@@ -44,6 +44,21 @@ describe('情感事件抽取调优', () => {
       .some((e) => e.type === 'apology')).toBe(true);
   });
 
+  it('问句不是诉苦（2026-11-11：线上 33 条同一句误判）', () => {
+    expect(extractEmotionEvents('我最近在焦虑什么', T0).some((e) => e.type === 'share_pain')).toBe(false);
+    expect(extractEmotionEvents('我最近在焦虑什么？', T0).some((e) => e.type === 'share_pain')).toBe(false);
+    // 陈述照常
+    expect(extractEmotionEvents('我今天好累', T0).some((e) => e.type === 'share_pain')).toBe(true);
+    // 前半句说事、最后一句是问句：整条按问句处理前先看末端
+    expect(extractEmotionEvents('今天被老板骂了，我该怎么办呢', T0).some((e) => e.type === 'share_pain')).toBe(false);
+  });
+
+  it('「没用」「孤独摇滚」不是骂她', () => {
+    expect(extractEmotionEvents('没用我也要抱', T0).some((e) => e.type === 'insult')).toBe(false);
+    expect(extractEmotionEvents('孤独摇滚', T0).some((e) => e.type === 'insult')).toBe(false);
+    expect(extractEmotionEvents('你真没用', T0).some((e) => e.type === 'insult')).toBe(true);
+  });
+
   it('真的说「滚」仍然是 insult', () => {
     expect(extractEmotionEvents('滚', T0).some((e) => e.type === 'insult')).toBe(true);
   });

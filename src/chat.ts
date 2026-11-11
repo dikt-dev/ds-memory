@@ -285,6 +285,8 @@ export async function streamChat(
     wasIgnored: facts.wasIgnored,
     // 只在规则判出负向事件时才会真的调 AI（见 processEmotionTurn）
     allowAiReview: true,
+  // share_pain 也要复核：词典把问句和转述也记成「他在诉苦」，生效后她会莫名其妙心疼
+  reviewSharePain: true,
   });
 
   // ★ 铭记：常驻注入，不参与召回。KV 缓存，避免每轮查 D1。

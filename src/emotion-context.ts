@@ -190,6 +190,8 @@ export interface EmotionTurnInput {
   allowAiReview?: boolean;
   /** 规则没抽出事件时也调 AI 复核（每日归档任务用；聊天路径不开，否则每条消息都调） */
   reviewEmpty?: boolean;
+  /** share_pain 也送 AI 复核（2026-11-11：词典把问句、转述都记成他在诉苦） */
+  reviewSharePain?: boolean;
   /** 只算不记账：探针/回归（record=false）用，避免同一条测试语料反复给关系加分 */
   noPersist?: boolean;
 }
@@ -267,7 +269,9 @@ async function processEmotionTurnUnlocked(
   // 规则判出负向事件时也要复核：误判成「真生气」的代价不对称——
   // 她会对一句玩笑莫名其妙发火；反过来漏判只是没反应，代价小得多。
   const hasNegative = newEvents.some((e) => isNegativeEvent(e.type));
-  if (input.allowAiReview && (userText ?? "").trim() && (hasNegative || input.reviewEmpty === true)) {
+  const hasSharePain = newEvents.some((e) => e.type === 'share_pain');
+  const reviewPain = input.reviewSharePain === true && hasSharePain;
+  if (input.allowAiReview && (userText ?? "").trim() && (hasNegative || reviewPain || input.reviewEmpty === true)) {
     try {
       const aiEvents = await reviewEventsWithAI(input.env, userText, now);
       if (hasNegative) {
@@ -284,6 +288,10 @@ async function processEmotionTurnUnlocked(
         }
       } else if (aiEvents.length > 0) {
         newEvents = aiEvents;
+      }
+      // 诉苦也复核：AI 没认出来就当没这回事（他不难受，她也别乱心疼）
+      if (reviewPain && !aiEvents.some((e) => e.type === 'share_pain')) {
+        newEvents = newEvents.filter((e) => e.type !== 'share_pain');
       }
     } catch {
       // 复核失败就按规则来，不影响回复
